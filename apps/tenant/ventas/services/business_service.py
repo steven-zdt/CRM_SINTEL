@@ -490,14 +490,18 @@ class VentaBusinessService:
 
     @staticmethod
     @transaction.atomic
-    def procesar_y_facturar_venta(empresa, payload: dict, sede_id: int | None = None) -> tuple:
+    def procesar_y_facturar_venta(
+        empresa, payload: dict, sede_id: int | None = None, venta_existente: "Venta" = None,
+    ) -> tuple:
         """
         Flujo completo: crea Venta + genera Factura DIAN en una sola transaccion atomica.
 
         Pasos:
         1. DSV cliente e items.
         2. DSV resolucion + asignacion atomica del consecutivo (select_for_update).
-        3. Crear Venta + ItemVenta (estado BORRADOR) con numero_factura asignado.
+        3. Crear Venta + ItemVenta (estado BORRADOR) con numero_factura asignado --
+           o, si `venta_existente` fue pasada, PROMOVER esa misma fila en vez de
+           crear una nueva (COMERCIAL-04, ver mas abajo).
         4. Construir DTO canonico basado en la estructura XML UBL DIAN.
         5. Invocar FacturaBusinessService.crear_factura_desde_venta(empresa, dto).
         6. Vincular factura y cambiar estado a FACTURADA_DIAN.
@@ -511,8 +515,29 @@ class VentaBusinessService:
         patron que `cliente_uuid`/`venta_uuid`). `Venta` no tiene campo
         `sede` propio (F6: candidato plausible sin campo aun) - lo que se
         transporta es el contexto de QUIEN factura, no un campo de la Venta.
+
+        [COMERCIAL-04] `venta_existente` (opcional): cuando se pasa una
+        `Venta` ya persistida (llamada desde `VentaViewSet.procesar_facturar()`,
+        que opera sobre un `{uuid}` existente), esta operacion PROMUEVE esa
+        misma fila a FACTURADA_DIAN en vez de crear una `Venta` hermana nueva
+        -- corrige un bug de diseno real donde `POST /ventas/{uuid}/
+        procesar-facturar/` creaba siempre una Venta+Factura independientes y
+        dejaba la Venta del URL huerfana en BORRADOR para siempre (ver
+        docs/comercial/COMERCIAL_01_AUDITORIA.md §6 y
+        docs/comercial/COMERCIAL_04_IDEMPOTENCIA.md). Ademas resuelve la
+        idempotencia real: si `venta_existente` ya esta `FACTURADA_DIAN`
+        (reintento de red / doble-click), se retorna esa misma Venta sin
+        volver a ejecutar nada (200, no 201) -- el ancla de idempotencia es
+        `Venta.uuid`, ya presente en el URL, sin requerir un
+        `Idempotency-Key` nuevo del cliente. Una Venta `ANULADA` se rechaza.
         """
         try:
+            if venta_existente is not None:
+                if venta_existente.estado == Venta.Estado.FACTURADA_DIAN:
+                    return True, venta_existente, 200
+                if venta_existente.estado == Venta.Estado.ANULADA:
+                    return False, {"detail": "Una venta anulada no puede facturarse."}, 400
+
             # -- Validaciones previas --
             items_data = payload.get("items", [])
             if not items_data:
@@ -548,20 +573,28 @@ class VentaBusinessService:
                     resolucion_uuid=str(resolucion_uuid),
                 )
 
-            # -- Paso 3: crear registro Venta (BORRADOR) con resolucion y numero asignados --
-            venta = VentaCRUDService.crear_venta(
-                empresa=empresa,
-                cliente=cliente,
-                data={
-                    "fecha_emision": fecha_emision,
-                    "fecha_vencimiento": payload.get("fecha_vencimiento"),
-                    "observaciones": payload.get("observaciones", ""),
-                    "proyecto": proyecto,
-                    "resolucion": resolucion,
-                    "numero_factura": numero_factura,
-                },
-                items_data=items_validos,
-            )
+            # -- Paso 3: crear registro Venta (BORRADOR) con resolucion y numero
+            # asignados -- o, si venta_existente fue pasada, PROMOVER esa misma
+            # fila en vez de crear una hermana nueva (COMERCIAL-04, ver docstring).
+            if venta_existente is not None:
+                venta_existente.resolucion = resolucion
+                venta_existente.numero_factura = numero_factura
+                venta_existente.save(update_fields=["resolucion", "numero_factura"])
+                venta = venta_existente
+            else:
+                venta = VentaCRUDService.crear_venta(
+                    empresa=empresa,
+                    cliente=cliente,
+                    data={
+                        "fecha_emision": fecha_emision,
+                        "fecha_vencimiento": payload.get("fecha_vencimiento"),
+                        "observaciones": payload.get("observaciones", ""),
+                        "proyecto": proyecto,
+                        "resolucion": resolucion,
+                        "numero_factura": numero_factura,
+                    },
+                    items_data=items_validos,
+                )
 
             # -- Paso 4: construir DTO canonico DIAN (UBL 2.1 enriquecido) --
             dto_factura = VentaBusinessService._construir_dto_factura(

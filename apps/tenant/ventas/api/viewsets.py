@@ -133,11 +133,16 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
                 for item in venta.items.select_related("producto", "servicio").all()
             ]
 
-        ok, result, status_code = self.service_procesar_y_facturar(empresa, payload)
+        # [COMERCIAL-04] venta_existente=venta: promueve esta misma fila en
+        # vez de crear una hermana nueva; si ya estaba FACTURADA_DIAN, el
+        # service devuelve status_code=200 (idempotente, no re-procesa).
+        ok, result, status_code = self.service_procesar_y_facturar(
+            empresa, payload, venta_existente=venta,
+        )
         if not ok:
             return Response(result, status=status_code)
         out = VentaDetailSerializer(result, context=self.get_serializer_context())
-        return Response(out.data, status=status.HTTP_201_CREATED)
+        return Response(out.data, status=status_code)
 
     @action(detail=True, methods=["post"], url_path="anular")
     def anular(self, request, uuid=None):

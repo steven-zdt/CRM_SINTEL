@@ -21,7 +21,7 @@ class VentaServiceMixin(BaseServiceMixin):
     def service_crear_borrador(self, empresa, payload: dict):
         return self.business_service_class.crear_venta_borrador(empresa=empresa, payload=payload)
 
-    def service_procesar_y_facturar(self, empresa, payload: dict):
+    def service_procesar_y_facturar(self, empresa, payload: dict, venta_existente=None):
         """
         [OSF Fase F10] Resuelve la sede ACTIVA del usuario (OrganizationalContext,
         no OrganizationalScope - este es un caso de "defaultear un registro
@@ -31,6 +31,12 @@ class VentaServiceMixin(BaseServiceMixin):
         crear_factura_desde_venta()). `VentaServiceMixin` no hereda
         SintelDSVMixin (cae al singleton) - OrganizationalContext.resolve()
         duplica el algoritmo independientemente, por eso funciona igual aqui.
+
+        [COMERCIAL-04] `venta_existente`: pasada por
+        `VentaViewSet.procesar_facturar()` cuando la operacion es sobre una
+        Venta ya persistida (`{uuid}` en el URL) -- promueve esa misma fila
+        en vez de crear una hermana nueva, y resuelve idempotencia real por
+        `Venta.uuid`. Ver `VentaBusinessService.procesar_y_facturar_venta()`.
         """
         from apps.tenant.core.services.organizational_context import (
             OrganizationalContext,
@@ -41,7 +47,7 @@ class VentaServiceMixin(BaseServiceMixin):
         except OrganizationalContextError:
             sede_id = None
         return self.business_service_class.procesar_y_facturar_venta(
-            empresa=empresa, payload=payload, sede_id=sede_id,
+            empresa=empresa, payload=payload, sede_id=sede_id, venta_existente=venta_existente,
         )
 
     def service_anular_venta(self, venta_uuid: str, empresa_id: int):
