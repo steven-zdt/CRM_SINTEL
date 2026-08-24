@@ -1,7 +1,62 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.55.0
-**Ultima actualizacion:** 2026-08-24 (DOC-M42) — **Mision Ciclo Comercial,
+**Version:** 3.56.0
+**Ultima actualizacion:** 2026-08-24 (DOC-M43) — **Mision Ciclo Fiscal
+(FISCAL-01 a 05, 02A, 02B) + Mision Facturas Hub (FASE 0, 7-8, 32, 36-39)**,
+ambas posteriores a DOC-M42 (2026-08-24 10:12).
+
+**Mision Ciclo Fiscal — cerrar el tramo Factura→DIAN (`docs/fiscal/`):**
+FISCAL-01 (auditoria transporte DIAN, Escenario C confirmado -- no existe
+transporte real en ningun lado del proyecto; hallazgo nuevo: `DIANService`
+en `apps/services/integrations/` es codigo muerto del commit inicial,
+protocolo/endpoint incorrectos, cero consumidores). FISCAL-02
+(`ElectronicDocumentTransportPort` + `NullTransportAdapter`, honesto,
+nunca finge exito). FISCAL-03 (`Factura.Estado.ERROR_TRANSMISION` nuevo +
+`TRANSICIONES_VALIDAS`, deliberadamente NO conectada a
+`cambiar_estado()` -- decision del usuario, ese endpoint sigue siendo el
+mecanismo real de sincronizacion manual mientras no hay transporte real).
+FISCAL-04 (`ElectronicInvoiceApplicationService.transmitir()`, idempotencia
+real via el propio `Factura.estado`, patron de 2 transacciones para el
+caso de timeout -- nunca revierte a BORRADOR, nunca reintenta a ciegas).
+FISCAL-05 (`DIANAdapter` real, SOAP, marcado explicitamente
+`SKELETON_NO_VERIFICADO` -- no usar en produccion). **Correccion de rumbo
+explicita del usuario tras FISCAL-05**: no intentar integracion real con
+DIAN todavia -- FISCAL-02A construye `MockTransportAdapter` (5 escenarios
+simulados, cero conexion externa) + `TransmisionFactura` (historial
+completo de cada intento, `environment` TEST/PRODUCTION separado del
+`status`) + `reconciliar()`. FISCAL-02B expone `transmitir()`/`reconciliar()`
+via API real (`POST /facturas/{uuid}/transmitir|reconciliar/`) con una
+guarda de seguridad critica verificada explicitamente: sin
+`FISCAL_ALLOW_MOCK_TRANSPORT=True` (False por defecto), el endpoint
+SIEMPRE usa `NullTransportAdapter` -- nunca puede fingir una transmision
+DIAN real ante un usuario real, probado que el parametro `_mock_scenario`
+queda ignorado sin el flag. 1 modelo nuevo (`TransmisionFactura`), 2
+migraciones (0035, 0034), settings DIAN declarados explicitamente por
+primera vez (antes implicitos via `getattr` sin declaracion formal).
+
+**Mision Facturas Hub — consolidar `facturas` como motor receptor
+(`docs/facturas/`):** FASE 0 (auditoria exhaustiva) confirma que la
+mayoria de lo que la mision pedia YA EXISTIA: pipeline unico de
+importacion (`guardar_desde_dto()`), `_resolver_naturaleza()` como SSoT
+con una capa adicional de "Cascading Security" no documentada antes,
+idempotencia por CUFE con fallback real por numero, batch/preview/error
+management ya robustos (un archivo invalido no aborta el lote). Hallazgo
+notable: la vinculacion cliente/proveedor es MAS automatica de lo que la
+mision asumia -- `resolver_o_crear_desde_factura_venta/compra()` ya
+resuelve-o-crea el tercero en cada importacion, nunca deja un documento
+"sin vincular" (el estado manual que la mision proponia habria sido
+menos robusto, no se introdujo). FASE 32: duplicacion real encontrada
+(`services_mail_ingestion.py` reimplementa la regla de naturaleza para su
+preview, riesgo bajo, documentada sin corregir). FASES 7-8 (unico gap
+real de modelo): `Factura.origen` (INTERNO/EXTERNO) +
+`Factura.source_system`, poblados en los 2 unicos puntos de creacion
+reales, con migracion de backfill basada en `Venta.factura_asociada`
+(señal real, no suposicion) para datos existentes. FASE 36-39: documento
+de arquitectura final con Release Gate honesto -- 2 items explicitamente
+diferidos (convertir factura externa en Compra/Venta, UI del hub) con la
+razon documentada, ninguno oculto como completo sin estarlo.
+
+**Actualizacion previa:** 2026-08-24 (DOC-M42) — **Mision Ciclo Comercial,
 FASES COMERCIAL-01 a 04**, plan del usuario para auditar y consolidar la
 integracion `Ventas ↔ Facturas` (Venta = dueño comercial, Factura = dueño
 fiscal, Inventario = dueño stock, Bancos = dueño pagos, Contabilidad =
@@ -2397,7 +2452,18 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.55.0 — 2026-08-24, DOC-M42)
+## 12. Metricas del Proyecto (v3.56.0 — 2026-08-24, DOC-M43)
+
+**[DOC-M43]** Mision Ciclo Fiscal + Mision Facturas Hub agregan **1
+modelo tenant nuevo** (`TransmisionFactura`, `facturas`) y **4
+migraciones nuevas** en `facturas`: `0034_alter_factura_estado`
+(agrega `ERROR_TRANSMISION`), `0035_transmisionfactura` (modelo nuevo),
+`0036_factura_origen_factura_source_system` (2 campos nuevos, aditivos),
+`0037_backfill_origen_desde_venta` (data migration, sin cambio de
+esquema). 2 archivos de test nuevos con cobertura real
+(`test_dian_mock_transport.py`, `test_facturas_hub_origen.py`, entre
+otros de las mismas misiones). 12 documentos nuevos entre
+`docs/fiscal/` y `docs/facturas/`.
 
 **[DOC-M42]** Mision Ciclo Comercial (FASES COMERCIAL-01 a 04) no agrega
 modelos ni migraciones -- 3 archivos de codigo de produccion modificados
@@ -2601,8 +2667,8 @@ atribuidos a una app de negocio, no la suite completa incluyendo `tests/`.
 | Apps publicas activas | 5 |
 | Apps tenant registradas (`TENANT_APPS`) | 17 (15 con modelos de negocio + `core` + `landing`, ver §2.2/§2.3) |
 | Modelos publicos | 19 |
-| Modelos tenant | 72 concretos + 3 abstractos [DOC-M41: 71+1, `PeriodoNomina` (`empleados`)] [DOC-M14: 70+1, `ItemNotaCredito`] |
-| Total migraciones | 192 (183 tenant + 9 public) [DOC-M41: 191+1, `0014_periodonomina_devengo_periodo_and_more` (`empleados`) -- aditiva] [DOC-M16: 190+1, `0033_alter_notacredito_cude` -- aditiva, `null=True` en `NotaCredito.cude`] |
+| Modelos tenant | 73 concretos + 3 abstractos [DOC-M43: 72+1, `TransmisionFactura` (`facturas`)] [DOC-M41: 71+1, `PeriodoNomina` (`empleados`)] [DOC-M14: 70+1, `ItemNotaCredito`] |
+| Total migraciones | 196 (187 tenant + 9 public) [DOC-M43: 192+4, `0034`/`0035`/`0036`/`0037` en `facturas` -- todas aditivas] [DOC-M41: 191+1, `0014_periodonomina_devengo_periodo_and_more` (`empleados`) -- aditiva] [DOC-M16: 190+1, `0033_alter_notacredito_cude` -- aditiva, `null=True` en `NotaCredito.cude`] |
 | Endpoints API (prefijos en `api_urls.py`) | 17 modulos (16 tenant + 1 public) + endpoint `/mcp/` separado |
 | Archivos de test (atribuidos por app) | 269 [DOC-M14: 268+1] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
 | Dependencias Python | 20+ |
