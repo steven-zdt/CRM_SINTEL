@@ -56,6 +56,46 @@ class FacturaBusinessService:
     Servicio de logica de negocio para Facturas.
     """
 
+    # FISCAL-03 (docs/fiscal/FISCAL_03_ESTADOS.md): secuencia fiscal real
+    # BORRADOR -> ENVIADA -> ACEPTADA|RECHAZADA|ERROR_TRANSMISION, +ANULADA
+    # como excepcion desde cualquier estado no terminal. Unica fuente de
+    # verdad de que transicion es legitima -- pensada para que el pipeline
+    # de transmision real (FISCAL-05, cuando exista un adaptador detras de
+    # ElectronicDocumentTransportPort) la use al procesar una respuesta.
+    #
+    # WARNING: por decision explicita del usuario (FISCAL-03), esta matriz
+    # NO esta conectada a FacturaViewSet.cambiar_estado() -- ese endpoint
+    # sigue permitiendo cualquier transicion manual (hoy es el mecanismo
+    # real para sincronizar a mano el estado consultado en el portal de la
+    # DIAN, mientras no existe transporte real). validar_transicion_automatica()
+    # esta lista para cuando FISCAL-05 la necesite, sin bloquear el uso
+    # administrativo actual.
+    TRANSICIONES_VALIDAS = {
+        'BORRADOR':          {'ENVIADA', 'ANULADA'},
+        'ENVIADA':           {'ACEPTADA', 'RECHAZADA', 'ERROR_TRANSMISION', 'ANULADA'},
+        'ACEPTADA':          {'ANULADA'},
+        'RECHAZADA':         {'ENVIADA', 'ANULADA'},
+        'ERROR_TRANSMISION': {'ENVIADA', 'ANULADA'},
+        'ANULADA':           set(),
+    }
+
+    @staticmethod
+    def validar_transicion_automatica(factura: Factura, estado_destino: str) -> None:
+        """
+        Valida que `estado_destino` sea alcanzable desde `factura.estado`
+        segun TRANSICIONES_VALIDAS. Pensado para uso futuro del pipeline de
+        transmision real (FISCAL-05) al procesar un TransmissionResult --
+        NO se invoca desde FacturaViewSet.cambiar_estado() hoy (ver nota en
+        TRANSICIONES_VALIDAS). Lanza DRFValidationError si la transicion no
+        es legitima; no hace nada si lo es.
+        """
+        permitidos = FacturaBusinessService.TRANSICIONES_VALIDAS.get(factura.estado, set())
+        if estado_destino not in permitidos:
+            raise DRFValidationError({
+                'estado': f'No se puede pasar de {factura.estado} a {estado_destino}. '
+                          f'Transiciones validas desde {factura.estado}: {sorted(permitidos) or "ninguna"}.'
+            })
+
     @staticmethod
     @transaction.atomic
     def crear_factura_desde_venta(empresa, dto: dict):
@@ -882,10 +922,15 @@ class FacturaBusinessService:
         3. Si preview=False, persiste via guardar_desde_dto.
         """
         if HAS_DOCUMENT_INGEST and getattr(settings, 'FEATURE_DOCUMENT_PIPELINE', False):
-            result, code = ingest_document(
-                content=file_bytes, filename=filename,
-                preview=preview, async_mode=async_mode,
-            )
+            try:
+                result, code = ingest_document(
+                    content=file_bytes, filename=filename,
+                    preview=preview, async_mode=async_mode,
+                )
+            except Exception as e:
+                logger.exception("[FacturaBS] ingest_document fallo con excepcion no controlada")
+                return {"error": "parse_error", "message": str(e)}, 422
+
             # Si el parseo fallo o es preview, retornar tal cual
             if code >= 400 or preview:
                 return result, code

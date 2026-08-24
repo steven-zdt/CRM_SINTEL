@@ -28,6 +28,11 @@ class Factura(SintelTenantBaseModel):
         ENVIADA  = 'ENVIADA',  _('Enviada')
         ACEPTADA = 'ACEPTADA', _('Aceptada')
         RECHAZADA= 'RECHAZADA',_('Rechazada')
+        # FISCAL-03: distingue "la DIAN rechazo el documento" (RECHAZADA,
+        # respuesta real recibida) de "el intento de transmision fallo antes
+        # de obtener una respuesta" (timeout, adaptador no configurado, error
+        # de red -- ver ElectronicDocumentTransportPort.send(), FISCAL-02).
+        ERROR_TRANSMISION = 'ERROR_TRANSMISION', _('Error de transmisión')
         ANULADA  = 'ANULADA',  _('Anulada')
 
     class EstadoPago(models.TextChoices):
