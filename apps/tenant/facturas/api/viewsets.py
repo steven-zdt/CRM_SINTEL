@@ -71,6 +71,7 @@ from apps.tenant.facturas.api.mixins import FacturaUBLMixin, FacturaMailMixin, F
 from apps.tenant.facturas.inbox_state import update_inbox_state
 from apps.tenant.facturas.services import FacturaSelectors, FacturaServiceMixin, FacturaBusinessService, FacturaCRUDService
 from apps.tenant.facturas.services.selectors import InventarioItemBridge
+from apps.tenant.facturas.services.electronic_invoice_service import ElectronicInvoiceApplicationService
 from apps.tenant.facturas.utils.ubl_parser import fast_get_cufe
 from .serializers import (
     FacturaDetailSerializer,
@@ -694,6 +695,107 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
 
         serializer = FacturaDetailSerializer(factura, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def _resolver_transporte_dian(self, request):
+        """
+        FISCAL-02B: por defecto SIEMPRE `None` -> `ElectronicInvoiceApplicationService`
+        usa `NullTransportAdapter` (honesto: "no hay adaptador real
+        configurado", nunca finge una transmision). `MockTransportAdapter`
+        SOLO se activa si `settings.FISCAL_ALLOW_MOCK_TRANSPORT=True`
+        (debe estar desactivado en produccion, pensado para entornos de
+        desarrollo/QA) Y el request trae `?_mock_scenario=TEST_ACCEPTED`
+        explicito -- nunca implicito. Ver docs/fiscal/FISCAL_02B_VALIDACION_FUNCIONAL.md.
+        """
+        mock_scenario = request.query_params.get("_mock_scenario")
+        if mock_scenario and getattr(settings, "FISCAL_ALLOW_MOCK_TRANSPORT", False):
+            from apps.tenant.core.dian import MockTransportAdapter
+            return MockTransportAdapter(scenario=mock_scenario)
+        return None
+
+    @staticmethod
+    def _serializar_resultado_transmision(factura, resultado_dict, request):
+        resultado = resultado_dict["resultado"]
+        transmision = resultado_dict.get("transmision")
+        return {
+            "factura": FacturaDetailSerializer(factura, context={"request": request}).data,
+            "resultado": {
+                "success": resultado.success,
+                "status": resultado.status,
+                "track_id": resultado.track_id,
+                "response_code": resultado.response_code,
+                "response_message": resultado.response_message,
+                "errors": resultado.errors,
+            },
+            "transmision": {
+                "transmission_id": str(transmision.transmission_id),
+                "environment": transmision.environment,
+                "status": transmision.status,
+                "submitted_at": transmision.submitted_at,
+                "responded_at": transmision.responded_at,
+            } if transmision else None,
+        }
+
+    @action(detail=True, methods=["post"], url_path="transmitir")
+    def transmitir(self, request: Request, uuid=None) -> Response:
+        """
+        Transmite la factura al transporte electronico DIAN (FISCAL-02B).
+
+        POST /api/v1/facturas/{uuid}/transmitir/
+
+        Por defecto usa `NullTransportAdapter` -- SIEMPRE responde honesto
+        que no hay transporte real configurado (ver docs/fiscal/
+        DIAN_TRANSPORT_AUDIT.md). Nunca marca una factura como ACEPTADA
+        sin una respuesta real detras. Idempotente: si la factura ya esta
+        ENVIADA/ACEPTADA, retorna 400 explicito en vez de reenviar.
+        """
+        factura = self.get_object()
+        empresa_id = resolve_empresa_id_from_request(request)
+        if factura.empresa_id != empresa_id:
+            return Response(
+                {"error": "forbidden", "detail": "La factura no pertenece a la empresa activa."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            resultado = ElectronicInvoiceApplicationService.transmitir(
+                factura, transport=self._resolver_transporte_dian(request),
+            )
+        except ValueError as exc:
+            return Response({"error": "invalid_operation", "detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            self._serializar_resultado_transmision(resultado["factura"], resultado, request),
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="reconciliar")
+    def reconciliar(self, request: Request, uuid=None) -> Response:
+        """
+        Consulta el estado real de la ultima transmision de la factura
+        (FISCAL-02B) -- para resolver un intento AMBIGUO (timeout/error de
+        red sin confirmar). No crea un intento nuevo.
+
+        POST /api/v1/facturas/{uuid}/reconciliar/
+        """
+        factura = self.get_object()
+        empresa_id = resolve_empresa_id_from_request(request)
+        if factura.empresa_id != empresa_id:
+            return Response(
+                {"error": "forbidden", "detail": "La factura no pertenece a la empresa activa."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            resultado = ElectronicInvoiceApplicationService.reconciliar(
+                factura, transport=self._resolver_transporte_dian(request),
+            )
+        except ValueError as exc:
+            return Response({"error": "no_transmission", "detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(
+            self._serializar_resultado_transmision(resultado["factura"], resultado, request),
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=["get"], url_path="summary")
     def summary(self, request: Request) -> Response:

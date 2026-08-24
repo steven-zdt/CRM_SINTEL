@@ -907,6 +907,12 @@ DIAN_PROFILE_ID = os.getenv('DIAN_PROFILE_ID', 'DIAN 2.1')
 # DIANAdapter (FISCAL-05, NO VERIFICADO -- ver apps/tenant/core/dian/adapters.py)
 DIAN_WSDL_URL_HABILITACION = os.getenv('DIAN_WSDL_URL_HABILITACION', '')
 DIAN_WSDL_URL_PRODUCCION = os.getenv('DIAN_WSDL_URL_PRODUCCION', '')
+# FISCAL-02B: guarda de seguridad -- DEBE quedar False en produccion.
+# Solo si es True, el parametro ?_mock_scenario= de POST /facturas/{uuid}/
+# transmitir/ activa MockTransportAdapter (para validacion funcional via
+# API real en desarrollo/QA, sin riesgo de fingir una transmision DIAN
+# real ante un usuario real). Ver docs/fiscal/FISCAL_02B_VALIDACION_FUNCIONAL.md.
+FISCAL_ALLOW_MOCK_TRANSPORT = os.getenv('FISCAL_ALLOW_MOCK_TRANSPORT', 'False') == 'True'
 
 # Auditoría y Logging
 AUDIT_LOG_DIR = os.getenv('AUDIT_LOG_DIR', 'logs/audit')
