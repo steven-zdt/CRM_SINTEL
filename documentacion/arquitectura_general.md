@@ -1,7 +1,157 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.53.0
-**Ultima actualizacion:** 2026-08-21 (DOC-M40) — **Dos misiones de
+**Version:** 3.54.0
+**Ultima actualizacion:** 2026-08-24 (DOC-M41) — **5 hilos de trabajo
+independientes en la misma sesion larga**, todos posteriores a DOC-M40
+(2026-08-21 10:11): mision UX (16 apps), mision Access Context (OCF/OSF),
+mision Nomina (nucleo + frontend + 2 fases de contrato compartido DIAN),
+y 2 fixes puntuales sin relacion entre si ni con las misiones.
+
+**Mision UX ("MISION" phase-driven, 16 apps `apps/tenant/**`,
+`documentacion/ux/UX_PROGRAM_FINAL.md`, `COMPLETED_WITH_DEFERRED`):**
+transformacion de frontend autonoma -- nunca romper arquitectura
+backend/reglas de negocio, nunca exponer jerga tecnica (`schema_name`,
+`TenantProfile`, UUIDs) al usuario final, reutilizar infraestructura UI
+compartida antes de crear nueva. Cerrada con
+`documentacion/ux/UX_MASTER_BASELINE.md` (punto de partida),
+`MAPA_EXPERIENCIA_UX.md` (inventario), `UX_PROGRAM_FINAL.md` (cierre).
+Post-mision, 5 commits de fixes reales encontrados en produccion tras el
+cierre:
+- **Bug critico sistemico (11 archivos, 8 apps):** los comentarios
+  `{# ... #}` de Django **no soportan contenido multi-linea** (limitacion
+  real del motor, no un bug de sintaxis) -- el tokenizer no lo reconoce
+  como comentario y el texto crudo se filtra como contenido HTML visible.
+  Convertidos todos a `{% comment %}...{% endcomment %}`.
+- Footer del sitio superponiendose visualmente al sidebar sticky del
+  workspace -- `{% block footer %}{% endblock %}` override en
+  `workspace.html`.
+- Overflow del contenido del sidebar (`.ws-aside` sin `overflow-y: auto`)
+  -- efecto colateral de la fase de agrupacion por secciones, no un bug
+  nuevo no relacionado.
+- Cache de archivos estaticos desactualizado tras editar JS/CSS sin
+  reiniciar el contenedor `web` (`entrypoint.sh` ya corre `collectstatic
+  --clear` en cada arranque, pero editar un archivo a mitad de sesion no
+  dispara ese arranque por si solo).
+
+**Mision Access Context (`documentacion/ux/UX_ACCESS_CONTEXT_AUDIT.md`,
+FASE 4-14, `COMPLETED_WITH_DEFERRED`):** construir un "User Experience
+Access Context" unificado desde Usuario/Tenant/Empresa/Rol/Sedes/Areas/
+Permisos, con prohibicion explicita de construir un sistema RBAC nuevo. La
+auditoria de arranque encontro que una mision previa (2026-08-09) ya habia
+construido exactamente esto (`OrganizationalContext`/`OrganizationalScope`,
+OCF/OSF) con una compuerta "no proceder sin autorizacion" explicita --
+confirmado con el usuario antes de continuar, en vez de fabricar
+infraestructura duplicada. Entregado: `Sintel.Core.UserContext` (cliente
+JS que combina `/perfil/perfiles/me/` + `/core/contexto/` via
+`Promise.all`, sin infraestructura de backend nueva), banner de bienvenida
+en el header (nombre/rol/empresa), badge de alcance organizacional en
+movimientos de inventario ("Toda la empresa" / "Solo tus sedes asignadas").
+
+**Mision Nomina — nucleo (`docs/nomina/NOMINA_BASELINE.md` FASE 0,
+`NOMINA_FLUJO_EMPRESARIAL.md` FASE 28, `COMPLETED_WITH_DEFERRED`):**
+evolucionar `apps.tenant.empleados` de un modelo de "devengo atomico
+instantaneo" (sin concepto de periodo/lote) a un ciclo empresarial
+completo (Periodo -> Preliquidacion -> Revision -> Aprobacion -> Pago ->
+Cierre), **sin duplicar** el motor de calculo existente
+(`NominaCalculationService`, Decreto 2663/1950 + Ley 2101/2021, sin
+cambios) ni el modelo `Devengo` (solo se agrego `periodo` FK nullable).
+Nuevo modelo `PeriodoNomina` (1 modelo tenant nuevo, 1 migracion nueva en
+`empleados`) con maquina de estados validada en backend
+(`TRANSICIONES_VALIDAS`, unica fuente de verdad -- confirmado con prueba
+real: transicion invalida devuelve error explicito, no se ejecuta en
+silencio), constraint de BD para un solo periodo activo por
+empresa+mes (no burlable con una llamada concurrente), permisos por rol
+via `HasTenantRole` ya existente (sin clase de permiso nueva). Verificado
+end-to-end con datos reales via Django test Client + rollback: montos,
+transiciones de estado, y permisos por rol confirmados
+(`VISOR`/`OPERADOR` reciben 403 real en acciones que no les corresponden).
+
+**Mision Nomina — frontend** (mismo dia, incremento separado): sub-tab
+"Periodos de Nomina" en `empleados_list.html` siguiendo el patron
+django-tables2+HTMX ya establecido (Fase 5-BIS, mismo patron que
+Resoluciones DIAN) -- tabla server-rendered, offcanvas de creacion, y un
+offcanvas de detalle/gestion que consume `GET .../resumen/` y solo
+ofrece las acciones validas para el estado actual (la UI es guia de UX,
+la autoridad real de las transiciones sigue siendo el backend). Verificado
+con Django test Client + rollback contra datos reales del tenant
+`qaisotest`: render de pagina, tabla vacia/poblada, creacion real, resumen,
+y una transicion de estado ejecutada.
+
+**Deliberadamente diferido en Nomina (documentado, no inventado):** XML
+UBL 2.1 real de nomina electronica DIAN, PILA, integracion bancaria real
+para pago de nomina, modelo `Novedad` separado del `Devengo` -- los 4
+requieren decision normativa/de negocio o infraestructura que no existia
+al momento, ver `NOMINA_FLUJO_EMPRESARIAL.md` §5 para el detalle de que se
+necesita para desbloquear cada uno.
+
+**FASE NOMINA-02 (`docs/nomina/NOMINA_DIAN_AUDIT.md`, auditoria sin
+cambios de codigo):** responde con evidencia de codigo si la
+infraestructura DIAN de `facturas/services/dian/` (`CufeService`,
+`UBL21BuilderService`, `XadesSignerService`, `AttachedDocumentService`) es
+reutilizable para DSPNE (Documento Soporte de Pago de Nomina Electronica).
+**Dos hallazgos criticos no documentados antes en ningun doc previo del
+proyecto:** **(1)** ningun archivo del sistema transmite el XML firmado al
+webservice real de la DIAN -- ni para Factura ni para Nomina, confirmado
+por grep exhaustivo de todo el repo (`SendBillSync`/`zeep`/`SOAP`/`wsdl`,
+cero resultados) -- **reconfirma y extiende el hallazgo P1 de la Mision 1
+de DOC-M40** sobre `facturas` (que ya lo habia encontrado en esa auditoria)
+a DEUDA-11 de `empleados` (el mismo patron, ahi ya se sabia que faltaba la
+transmision, esta auditoria confirma que tampoco existe infraestructura
+compartida para construirla dos veces); **(2)** no existe **ningun**
+certificado DIAN configurado en `settings` en ningun entorno del
+proyecto -- el pipeline de Factura Electronica corre en modo borrador
+permanente (XML sin firmar), no solo en desarrollo.
+
+**FASE NOMINA-03 (`docs/nomina/NOMINA_DIAN_CONTRATO_COMPARTIDO.md`,
+`COMPLETED_WITH_DEFERRED`):** `XadesSignerService`/`AttachedDocumentService`
+movidos de `facturas/services/dian/` a un paquete neutral nuevo
+`apps/tenant/core/dian/` para que `empleados` los reutilice sin crear una
+dependencia `facturas<->empleados` (Bounded Context, AGENTS.md §17) --
+`AttachedDocumentService.build()` ahora acepta `document_type`
+parametrizable (antes hardcodeado a `"Invoice"`, default preserva el
+comportamiento exacto). Durante la implementacion se confirmo un
+acoplamiento cruzado ya existente y no documentado antes:
+`ventas/services/business_service.py` importaba estos servicios directo
+de `facturas.services.dian.*` -- corregido de paso, actualizado a la
+nueva ubicacion neutral. `CufeService`/`UBL21BuilderService` permanecen
+especificos de Factura (formula/estructura no reutilizables para
+CUNE/NominaIndividual, que tienen su propio anexo tecnico DIAN). El
+transporte SOAP real hacia la DIAN queda **diferido explicitamente como
+bloqueador de infraestructura** (sin WSDL/credenciales de habilitacion
+verificables en este entorno) -- decision explicita del usuario tras
+plantear el riesgo de construir un cliente SOAP "de memoria", mismo
+criterio que el resto de bloqueadores DIAN de esta mision. Verificado:
+`manage.py check` sin issues, regresion dirigida
+`test_scope_ventas_facturas_f10.py` (3/3 PASS, unico test que ejercita el
+pipeline `venta -> DTO DIAN -> CUFE/XML/firma/AttachedDocument ->
+Factura`).
+
+**2 fixes puntuales, sin relacion entre si ni con las misiones
+anteriores:**
+- **`ItemNotaCredito.save()`** (`apps/tenant/facturas/models.py`)
+  referenciaba campos inexistentes (`self.factura_id`/`self.impuestos` --
+  el modelo tiene `nota_credito`/`valor_iva`), copiado sin adaptar de
+  `ItemFactura.save()`. Enmascarado en el path normal porque
+  `guardar_desde_dto()` siempre pasa `empresa=`/`total=` explicitos
+  (short-circuit evita ambas ramas buggy), pero una linea de NC con
+  `subtotal=0`/`valor_iva=0` (item promocional/gratuito) habria disparado
+  `AttributeError` en produccion. La feature completa de devoluciones
+  reales (`NotaCredito -> ItemNotaCredito -> ENTRADA_DEVOLUCION`, DOC-M14)
+  resulto estar ya implementada y commiteada de una sesion anterior
+  (modelo, migracion, parser UBL `CreditNoteLine`, `_generar_entrada_
+  devolucion`, serializer, 5 tests) -- este fix es la unica correccion
+  real encontrada al re-auditarla. Verificado con la suite existente
+  (5/5 PASS).
+- **Healthcheck de nginx** (`docker-compose.yaml`) reportaba `unhealthy`
+  permanentemente pese a servir trafico real correctamente -- `wget
+  http://localhost:80/` resolvia `localhost` a `[::1]` (IPv6) dentro del
+  contenedor Alpine/musl antes que a `127.0.0.1`, y nginx solo escucha en
+  `0.0.0.0` (IPv4). Confirmado con `netstat` real dentro del contenedor
+  (`LISTEN` solo en `0.0.0.0:80/443`, nunca en `[::]`). Fix: `127.0.0.1`
+  explicito en el comando del healthcheck. Verificado: contenedor
+  recreado, `healthy` confirmado tras los reintentos.
+
+**Actualizacion previa:** 2026-08-21 (DOC-M40) — **Dos misiones de
 auditoria integral consecutivas, ambas sobre las 16 apps de
 `apps/tenant/**`, ambas cerradas.** Distintas de F33.15-B (Nivel 3,
 DOC-M39): esas eran de regresion de tests; estas dos son de
@@ -2165,7 +2315,21 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.53.0 — 2026-08-21, DOC-M40)
+## 12. Metricas del Proyecto (v3.54.0 — 2026-08-24, DOC-M41)
+
+**[DOC-M41]** Mision Nomina — nucleo agrega **1 modelo tenant nuevo**
+(`PeriodoNomina`, `empleados`) y **1 migracion nueva**
+(`0014_periodonomina_devengo_periodo_and_more.py`, aditiva). El resto de
+la sesion (mision UX, mision Access Context, frontend de Nomina, FASE
+NOMINA-02/03, fix `ItemNotaCredito`, fix healthcheck nginx) no agrega
+modelos ni migraciones -- ver header para el detalle completo de cada
+hilo. 1 archivo de codigo de produccion nuevo de infraestructura
+compartida (`apps/tenant/core/dian/` -- 3 archivos: `__init__.py`,
+`xades_signer.py`, `attached_document.py`, movidos desde `facturas`, no
+contados como "nuevos" en LOC neto ya que es un `rename` con una funcion
+generalizada). 4 documentos nuevos en `docs/nomina/`
+(`NOMINA_BASELINE.md`, `NOMINA_FLUJO_EMPRESARIAL.md`,
+`NOMINA_DIAN_AUDIT.md`, `NOMINA_DIAN_CONTRATO_COMPARTIDO.md`).
 
 **[DOC-M40]** Dos misiones de auditoria integral (mision 1 +
 F34, ambas 16/16 apps `apps/tenant/**`, ver header) no agregan
@@ -2347,8 +2511,8 @@ atribuidos a una app de negocio, no la suite completa incluyendo `tests/`.
 | Apps publicas activas | 5 |
 | Apps tenant registradas (`TENANT_APPS`) | 17 (15 con modelos de negocio + `core` + `landing`, ver §2.2/§2.3) |
 | Modelos publicos | 19 |
-| Modelos tenant | 71 concretos + 3 abstractos [DOC-M14: 70+1, `ItemNotaCredito`] |
-| Total migraciones | 191 (182 tenant + 9 public) [DOC-M16: 190+1, `0033_alter_notacredito_cude` -- aditiva, `null=True` en `NotaCredito.cude`] |
+| Modelos tenant | 72 concretos + 3 abstractos [DOC-M41: 71+1, `PeriodoNomina` (`empleados`)] [DOC-M14: 70+1, `ItemNotaCredito`] |
+| Total migraciones | 192 (183 tenant + 9 public) [DOC-M41: 191+1, `0014_periodonomina_devengo_periodo_and_more` (`empleados`) -- aditiva] [DOC-M16: 190+1, `0033_alter_notacredito_cude` -- aditiva, `null=True` en `NotaCredito.cude`] |
 | Endpoints API (prefijos en `api_urls.py`) | 17 modulos (16 tenant + 1 public) + endpoint `/mcp/` separado |
 | Archivos de test (atribuidos por app) | 269 [DOC-M14: 268+1] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
 | Dependencias Python | 20+ |
