@@ -584,11 +584,13 @@ class VentaBusinessService:
             xml_bytes = UBL21BuilderService.build(dto_factura, cufe, qr_string)
 
             # -- Paso 5c: firmar XAdES-EPES (no-op si no hay certificado configurado) --
-            from apps.tenant.facturas.services.dian.xades_signer import XadesSignerService
+            # NOMINA-03: XadesSignerService/AttachedDocumentService viven en
+            # apps.tenant.core.dian (genericos, compartidos con empleados/nomina).
+            from apps.tenant.core.dian import XadesSignerService
             xml_signed = XadesSignerService.sign(xml_bytes)
 
             # -- Paso 5d: envolver en AttachedDocument + ApplicationResponse --
-            from apps.tenant.facturas.services.dian.attached_document import AttachedDocumentService
+            from apps.tenant.core.dian import AttachedDocumentService
             attached_doc_bytes = AttachedDocumentService.build(xml_signed, dto_factura, cufe)
             app_response_bytes = AttachedDocumentService.build_application_response(
                 dto_factura, cufe, validation_code="02"

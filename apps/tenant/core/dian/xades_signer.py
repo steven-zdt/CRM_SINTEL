@@ -1,5 +1,5 @@
 """
-Firma XAdES-EPES para Factura Electronica DIAN.
+Firma XAdES-EPES para documentos electronicos DIAN (Colombia).
 
 Ref: Anexo Tecnico FE DIAN v1.9 seccion 5.5 (firma digital).
      Politica de firma: https://facturaelectronica.dian.gov.co/politicadefirma/v2/politicadefirmav2.pdf
@@ -31,6 +31,13 @@ o entornos de desarrollo sin certificado.
 Settings requeridos para firma real:
   DIAN_CERT_P12       -- ruta al archivo .p12 / .pfx del certificado
   DIAN_CERT_PASSWORD  -- contrasena del .p12 en texto plano (o vacío)
+
+# WARNING: NOMINA-03: movido desde apps.tenant.facturas.services.dian a este
+# paquete neutral (apps.tenant.core.dian) sin modificar su logica -- es
+# generico por diseño (opera sobre bytes XML crudos via un marcador string,
+# sin conocer Invoice/NominaIndividual/ningun schema especifico). Ver
+# docs/nomina/NOMINA_DIAN_AUDIT.md §2-3-6 para el razonamiento completo.
+# facturas y empleados lo importan por igual desde aqui.
 """
 import base64
 import hashlib
