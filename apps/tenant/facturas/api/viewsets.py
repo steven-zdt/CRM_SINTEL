@@ -181,7 +181,10 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = {
         "estado": ["exact"],
+        "estado_pago": ["exact"],
         "naturaleza": ["exact"],
+        "origen": ["exact"],          # Facturas Hub FASE 26
+        "source_system": ["exact"],   # Facturas Hub FASE 26
         "fecha_emision": ["date__gte", "date__lte", "date", "gte", "lte", "exact"],
         "cliente_uuid": ["exact"],
         "proveedor_uuid": ["exact"],

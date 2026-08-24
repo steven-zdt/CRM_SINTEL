@@ -29,6 +29,8 @@ LIST_FIELDS = (
     "uuid",
     "numero",
     "naturaleza",
+    "origen",          # Facturas Hub FASE 7
+    "source_system",   # Facturas Hub FASE 8
     "estado",
     "estado_pago",
     "dian_validation_desc",
@@ -67,6 +69,8 @@ DETAIL_FIELDS = (
     "tipo",
     "estado",
     "naturaleza",
+    "origen",          # Facturas Hub FASE 7
+    "source_system",   # Facturas Hub FASE 8
     "categoria",
     "fecha_emision",
     "fecha_vencimiento",

@@ -160,6 +160,11 @@ class FacturaBusinessService:
             "tipo": Factura.TipoFactura.FE,
             "estado": Factura.Estado.BORRADOR,
             "naturaleza": Factura.Naturaleza.VENTA,
+            # Facturas Hub FASE 7-8: crear_factura_desde_venta() nunca pasa
+            # por guardar_desde_dto() -- es el unico otro punto de creacion
+            # de Factura, siempre INTERNO/SINTEL (push real desde Ventas).
+            "origen": Factura.Origen.INTERNO,
+            "source_system": Factura.SourceSystem.SINTEL,
             "fecha_emision": timezone.now(),
             "fecha_vencimiento": dto.get("fecha_vencimiento") or None,
             "emisor_nit": emisor.get("nit", ""),
@@ -652,6 +657,13 @@ class FacturaBusinessService:
             "tipo": tipo,
             "estado": estado,
             "naturaleza": naturaleza,
+            # Facturas Hub FASE 7-8: guardar_desde_dto() es el unico punto
+            # de persistencia alcanzable desde importacion XML/upload
+            # (confirmado en docs/facturas/FACTURAS_HUB_BASELINE.md §1) --
+            # siempre EXTERNO. source_system solo si el DTO lo declara
+            # explicitamente (nunca inferido del contenido del XML).
+            "origen": Factura.Origen.EXTERNO,
+            "source_system": dto.get("source_system") or Factura.SourceSystem.DESCONOCIDO,
             # UBL metadata
             "ubl_version": dto.get("ubl_version", ""),
             "customization_id": dto.get("customization_id", ""),

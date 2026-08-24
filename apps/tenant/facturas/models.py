@@ -51,6 +51,27 @@ class Factura(SintelTenantBaseModel):
         SERVICIO = 'SERVICIO', _('Servicios')
         MIXTO    = 'MIXTO',    _('Mixto')
 
+    # Origen del documento (Facturas Hub FASE 7): distingue una Factura
+    # empujada por Ventas (crear_factura_desde_venta(), nunca pasa por
+    # guardar_desde_dto()) de una importada desde XML externo
+    # (guardar_desde_dto(), unico punto de persistencia de ambos endpoints
+    # de upload -- ver docs/facturas/FACTURAS_HUB_BASELINE.md §1/§9).
+    class Origen(models.TextChoices):
+        INTERNO = 'INTERNO', _('Interno (generado por Ventas en SINTEL)')
+        EXTERNO = 'EXTERNO', _('Externo (importado desde XML)')
+
+    # Sistema que produjo el documento (Facturas Hub FASE 8). Deliberadamente
+    # NO se infiere del contenido del XML (el Anexo Tecnico no garantiza un
+    # campo confiable para eso sin evidencia real) -- queda DESCONOCIDO salvo
+    # que el DTO de origen lo declare explicitamente. Nunca se usa como
+    # regla fiscal (solo informativo/trazabilidad).
+    class SourceSystem(models.TextChoices):
+        SINTEL = 'SINTEL', _('SINTEL (generado internamente)')
+        SIIGO = 'SIIGO', _('Siigo')
+        OTRO_FACTURADOR = 'OTRO_FACTURADOR', _('Otro facturador electrónico')
+        MANUAL = 'MANUAL', _('Cargado manualmente')
+        DESCONOCIDO = 'DESCONOCIDO', _('Desconocido')
+
     # [v2.61.4] empresa FK heredada de SintelTenantBaseModel
 
     # Identificador único (v3.7.1: requerido para API lookup)
@@ -82,6 +103,16 @@ class Factura(SintelTenantBaseModel):
         max_length=10, choices=Naturaleza.choices, null=True, blank=True,
         verbose_name=_('Naturaleza (venta/compra)'),
         help_text=_('VENTA si el tenant es emisor; COMPRA si el tenant es receptor. Se calcula automáticamente en importación UBL comparando NITs normalizados.')
+    )
+    origen = models.CharField(
+        max_length=10, choices=Origen.choices, default=Origen.EXTERNO, db_index=True,
+        verbose_name=_('Origen del documento'),
+        help_text=_('INTERNO si se generó desde una Venta de SINTEL; EXTERNO si se importó desde un XML.'),
+    )
+    source_system = models.CharField(
+        max_length=20, choices=SourceSystem.choices, default=SourceSystem.DESCONOCIDO,
+        verbose_name=_('Sistema de origen'),
+        help_text=_('Solo informativo/trazabilidad -- nunca se usa como regla fiscal.'),
     )
     categoria = models.CharField(
         max_length=10, choices=Categoria.choices, default=Categoria.SERVICIO,
@@ -1005,6 +1036,8 @@ XML_IMMUTABLE_FIELDS = {
     'consecutivo',
     'tipo',
     'naturaleza',
+    'origen',          # Facturas Hub FASE 7 -- refleja como se creo el documento, no editable
+    'source_system',   # Facturas Hub FASE 8 -- idem, solo trazabilidad
     'fecha_emision',
     'emisor_nit',
     'emisor_razon_social',
