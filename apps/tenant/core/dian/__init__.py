@@ -13,11 +13,11 @@ documentos electronicos DIAN (facturas, empleados/nomina).
 Modulos:
   xades_signer      -- Firma XAdES-EPES (ds:Signature) sobre bytes XML
   attached_document -- Contenedor AttachedDocument DIAN + ApplicationResponse
-  transport         -- Puerto de transporte (FISCAL-02, ver
-                        docs/fiscal/DIAN_TRANSPORT_AUDIT.md) + adaptador
-                        nulo honesto. Sin adaptador real (DIANAdapter/
-                        ProviderAdapter) -- bloqueado por falta de
-                        WSDL/credenciales verificables (Escenario C).
+  transport         -- Puerto de transporte (FISCAL-02) + NullTransportAdapter
+  adapters          -- DIANAdapter (FISCAL-05) -- implementacion SOAP real,
+                        **NO VERIFICADA** contra el ambiente DIAN real. Ver
+                        advertencia completa en adapters.py y
+                        docs/fiscal/FISCAL_05_DIAN_ADAPTER.md antes de usar.
 """
 from apps.tenant.core.dian.xades_signer import XadesSignerService
 from apps.tenant.core.dian.attached_document import AttachedDocumentService
@@ -27,6 +27,7 @@ from apps.tenant.core.dian.transport import (
     NullTransportAdapter,
     TransmissionResult,
 )
+from apps.tenant.core.dian.adapters import DIANAdapter
 
 __all__ = [
     "XadesSignerService",
@@ -35,4 +36,5 @@ __all__ = [
     "ElectronicDocumentTransportPort",
     "NullTransportAdapter",
     "TransmissionResult",
+    "DIANAdapter",
 ]

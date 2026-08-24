@@ -880,11 +880,33 @@ CELERY_TASK_ROUTES = {
 }
 
 # Integraciones Externas
-# DIAN
+# DIAN -- API_KEY/API_URL_*/AMBIENTE (abajo) solo las consume
+# apps/services/integrations/dian_service.py, confirmado codigo muerto sin
+# consumidores reales (docs/fiscal/DIAN_TRANSPORT_AUDIT.md §2) -- se
+# conservan sin tocar por compatibilidad, no se usan en el pipeline real.
 DIAN_API_KEY = os.getenv('DIAN_API_KEY', '')
 DIAN_API_URL_TEST = os.getenv('DIAN_API_URL_TEST', 'https://api-test.dian.gov.co')
 DIAN_API_URL_PRODUCTION = os.getenv('DIAN_API_URL_PRODUCTION', 'https://api.dian.gov.co')
 DIAN_AMBIENTE = os.getenv('DIAN_AMBIENTE', 'pruebas')  # 'pruebas' o 'produccion'
+
+# DIAN -- pipeline REAL (CufeService/UBL21BuilderService/XadesSignerService/
+# DIANAdapter). Ninguna declarada con valor real hoy en ningun entorno --
+# antes vivian solo como getattr(settings, 'X', default) implicito y
+# undiscoverable; declaradas aqui explicitamente (FISCAL-05) para que
+# quede claro que TODAS estan pendientes de configuracion real.
+DIAN_CERT_P12 = os.getenv('DIAN_CERT_P12', '')            # ruta al .p12/.pfx -- XadesSignerService
+DIAN_CERT_PASSWORD = os.getenv('DIAN_CERT_PASSWORD', '')  # XadesSignerService
+DIAN_TIP_AMB = os.getenv('DIAN_TIP_AMB', '2')              # "2" pruebas | "1" produccion -- CufeService, DIANAdapter
+DIAN_PROVIDER_ID = os.getenv('DIAN_PROVIDER_ID', '800197268')       # NIT proveedor tecnologico -- _leer_config_dian()
+DIAN_SOFTWARE_ID = os.getenv('DIAN_SOFTWARE_ID', '')                # UUID software registrado DIAN
+DIAN_SOFTWARE_PIN = os.getenv('DIAN_SOFTWARE_PIN', '')              # PIN del software
+DIAN_CL_TECN = os.getenv('DIAN_CL_TECN', '')                        # Clave tecnica (64 hex) de la resolucion
+DIAN_AUTHORIZATION_ID = os.getenv('DIAN_AUTHORIZATION_ID', '800197268')  # NIT DIAN
+DIAN_CUSTOMIZATION_ID = os.getenv('DIAN_CUSTOMIZATION_ID', '10')
+DIAN_PROFILE_ID = os.getenv('DIAN_PROFILE_ID', 'DIAN 2.1')
+# DIANAdapter (FISCAL-05, NO VERIFICADO -- ver apps/tenant/core/dian/adapters.py)
+DIAN_WSDL_URL_HABILITACION = os.getenv('DIAN_WSDL_URL_HABILITACION', '')
+DIAN_WSDL_URL_PRODUCCION = os.getenv('DIAN_WSDL_URL_PRODUCCION', '')
 
 # Auditoría y Logging
 AUDIT_LOG_DIR = os.getenv('AUDIT_LOG_DIR', 'logs/audit')
