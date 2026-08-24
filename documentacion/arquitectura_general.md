@@ -1,7 +1,89 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.54.0
-**Ultima actualizacion:** 2026-08-24 (DOC-M41) — **5 hilos de trabajo
+**Version:** 3.55.0
+**Ultima actualizacion:** 2026-08-24 (DOC-M42) — **Mision Ciclo Comercial,
+FASES COMERCIAL-01 a 04**, plan del usuario para auditar y consolidar la
+integracion `Ventas ↔ Facturas` (Venta = dueño comercial, Factura = dueño
+fiscal, Inventario = dueño stock, Bancos = dueño pagos, Contabilidad =
+dueño contable) antes de tocar UI. Todo posterior a DOC-M41
+(2026-08-24 09:52).
+
+**FASE COMERCIAL-01 (`docs/comercial/COMERCIAL_01_AUDITORIA.md`,
+auditoria sin cambios de codigo):** audita `Venta`/`ItemVenta`/`Factura`/
+`ItemFactura`, `VentaBusinessService`/`FacturaBusinessService`,
+`_construir_dto_factura()`, `crear_factura_desde_venta()`,
+`procesar_y_facturar_venta()`, referencias UUID, estados, atomicidad,
+idempotencia. 4 hallazgos reales: **(1)** un solo punto de construccion y
+calculo de impuestos, sin duplicacion; **(2)** `Venta.Estado` y
+`Factura.Estado` ya correctamente separados, nunca fusionados; **(3)**
+gemelo no auditado del bug de atomicidad que F23 ya habia corregido en
+`procesar_y_facturar_venta()` (`F23_FINAL_REPORT.md` §3, dejado
+explicitamente como riesgo no auditado): `crear_venta_borrador()` tenia el
+mismo patron `try/except` sin `transaction.set_rollback()`, explotable
+porque `VentaCRUDService.crear_venta()` hace 2 escrituras separadas
+(`venta.save()` + `bulk_create` de items) — corregido en el mismo dia
+(`anular_venta()` tiene el mismo patron de codigo pero no es explotable,
+una sola escritura, documentado el porque no se toco); **(4)** gap real de
+idempotencia confirmado: `crear_factura_desde_venta()` no tiene
+`get_or_create` ni proteccion contra doble-envio (a diferencia de
+`guardar_desde_dto()`, idempotente por CUFE). Ademas: `Venta.factura_
+asociada` es FK real (`OneToOneField`), unica excepcion documentada al
+patron soft-UUID que domina el resto del proyecto.
+
+**FASE COMERCIAL-02 (`docs/comercial/COMERCIAL_02_MATRIZ_SSOT.md`):**
+matriz SSoT con evidencia por dominio. Hallazgo real: `ventas` usa FK
+reales hacia `clientes`/`proyectos`/`facturas`/`inventario` (via
+`ItemVenta`), a diferencia de `facturas` que usa exclusivamente
+soft-UUID — inconsistencia documentada, no corregida (fuera de alcance
+del plan). `Inventario` es el dominio mas limpio: puerta unica de
+escritura (`KardexService.registrar_movimiento()`), cero excepciones
+encontradas. `Bancos→Facturas` es hibrido (push de notificacion +
+pull del dato real). `Contabilidad` es Pull puro confirmado por grep
+(cero escrituras directas a `AsientoContable`/`MovimientoContable` fuera
+de `contabilidad/`, en todo el repo).
+
+**FASE COMERCIAL-03 (`docs/comercial/COMERCIAL_03_CONTRATO_DTO.md`):**
+formaliza el contrato `VentaFacturaDTO` (dict, no clase nueva). Checklist
+del plan verificado: 0 DTOs duplicados, 0 construccion duplicada, 0
+calculo duplicado de totales de cabecera, 0 impuestos calculados
+diferente, 0 datos de cliente inconsistentes. Unico hallazgo: el calculo
+de subtotal/iva por linea se repite (misma formula, mismo `items_data`
+de entrada) entre `crear_venta()` y `_construir_dto_factura()` — DRY sin
+riesgo de divergencia, deuda tecnica menor no bloqueante. Documenta ademas
+que el DTO real tiene 2 etapas (base UBL + enriquecimiento posterior con
+cufe/xml/firma), no 1.
+
+**FASE COMERCIAL-04 (`docs/comercial/COMERCIAL_04_IDEMPOTENCIA.md`,
+implementada, no solo diseñada):** al conectar el mecanismo de
+idempotencia elegido con el usuario (Idempotency-Key HTTP, primera
+eleccion) se descubrio algo mas grave que el gap generico de COMERCIAL-01
+§6: **`POST /ventas/{uuid}/procesar-facturar/` nunca promovia la `Venta`
+del URL** — copiaba sus datos a un payload nuevo y creaba una
+`Venta`+`Factura` hermanas independientes via
+`VentaCRUDService.crear_venta()`, dejando la `Venta` original `BORRADOR`
+huerfana para siempre. No era "doble-click duplica", el flujo normal de
+un solo click ya duplicaba por diseño. Decision re-tomada con el usuario:
+usar `Venta.uuid` (ya presente en el URL) como ancla de idempotencia en
+vez de un header nuevo — corrige ambos problemas en el mismo cambio, sin
+tocar frontend. `procesar_y_facturar_venta()` acepta ahora
+`venta_existente` opcional (backward-compatible): `FACTURADA_DIAN` →
+replay idempotente (200, sin re-ejecutar nada); `ANULADA` → rechazado
+(400); `BORRADOR` → promueve esa misma fila en vez de crear una hermana.
+`VentaViewSet.procesar_facturar()` tambien dejo de hardcodear
+`HTTP_201_CREATED` siempre — ahora usa el `status_code` real devuelto.
+Verificado: suite nueva dedicada (3 tests) + regresion F23 + scope,
+15/15 PASS.
+
+**Pendiente del plan, no ejecutado en esta pasada:** COMERCIAL-05
+(matriz de maquina de estados integrada Venta↔Factura), COMERCIAL-06
+(revalidar flujo Inventario — ya en gran parte confirmado solido por
+COMERCIAL-02 §3), COMERCIAL-07 (facturacion fiscal DIAN end-to-end),
+COMERCIAL-08 (Pago/Bancos — ya confirmado correcto por COMERCIAL-02 §4),
+COMERCIAL-09 (Contabilidad — ya confirmado correcto por COMERCIAL-02 §5),
+COMERCIAL-10 (UI comercial unificada). Decision de como priorizar el
+resto pendiente de respuesta del usuario al cierre de esta sesion.
+
+**Actualizacion previa:** 2026-08-24 (DOC-M41) — **5 hilos de trabajo
 independientes en la misma sesion larga**, todos posteriores a DOC-M40
 (2026-08-21 10:11): mision UX (16 apps), mision Access Context (OCF/OSF),
 mision Nomina (nucleo + frontend + 2 fases de contrato compartido DIAN),
@@ -2315,7 +2397,15 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.54.0 — 2026-08-24, DOC-M41)
+## 12. Metricas del Proyecto (v3.55.0 — 2026-08-24, DOC-M42)
+
+**[DOC-M42]** Mision Ciclo Comercial (FASES COMERCIAL-01 a 04) no agrega
+modelos ni migraciones -- 3 archivos de codigo de produccion modificados
+(`apps/tenant/ventas/services/business_service.py`,
+`apps/tenant/ventas/services/api_mixins.py`,
+`apps/tenant/ventas/api/viewsets.py`), 1 archivo de test nuevo
+(`test_comercial_04_idempotencia.py`, +3 tests), 4 documentos nuevos en
+`docs/comercial/`. Ninguna fila de esta tabla cambia.
 
 **[DOC-M41]** Mision Nomina — nucleo agrega **1 modelo tenant nuevo**
 (`PeriodoNomina`, `empleados`) y **1 migracion nueva**
