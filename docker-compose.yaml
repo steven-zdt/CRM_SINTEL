@@ -127,9 +127,13 @@ services:
       web:
         condition: service_healthy
     restart: unless-stopped
-    # DEVOPS-M3: wget de busybox (incluido en nginx:alpine), sin dependencias extra
+    # DEVOPS-M3: wget de busybox (incluido en nginx:alpine), sin dependencias extra.
+    # 127.0.0.1 explicito (no "localhost"): musl/Alpine resuelve "localhost" a
+    # [::1] (IPv6) antes que a 127.0.0.1, y nginx solo escucha en 0.0.0.0 --
+    # el healthcheck fallaba con "connection refused" aunque nginx respondia
+    # correctamente en IPv4 (confirmado: netstat mostraba LISTEN en 0.0.0.0:80).
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80/"]
       interval: 10s
       timeout: 5s
       retries: 5
