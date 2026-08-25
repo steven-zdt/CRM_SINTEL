@@ -19,6 +19,7 @@ from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
 from rest_framework.authentication import SessionAuthentication
 from apps.tenant.empresa.models import MailInboxConfig
 from apps.tenant.facturas.api.serializers import (
+    DocumentProcessingSerializer,
     MailIngestionRunCreateSerializer,
     MailIngestionRunListSerializer,
 )
@@ -113,6 +114,35 @@ class MailIngestionRunsListAPIView(generics.ListAPIView):
             "naturaleza",
             "counts",
         ).order_by("-started_at")
+
+
+class MailIngestionRunDocumentsAPIView(generics.ListAPIView):
+    """
+    GET /api/v1/facturas/ingesta-correo/runs/<run_id>/documents/
+
+    MAIL-18: detalle por documento de una ejecución de ingesta (FASE 20/21 --
+    MailIngestionRun.counts da el agregado, esto da "que paso con cada XML").
+
+    # WARNING: PERMISOS: IsTenantAdminOrReadOnly (mismo criterio que el resto de este modulo)
+    """
+    authentication_classes = DUAL_AUTH_CLASSES
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    serializer_class = DocumentProcessingSerializer
+
+    def get_queryset(self):
+        from apps.tenant.facturas.models import DocumentProcessing
+        from apps.tenant.perfil.services.perfil_service import get_or_create_profile
+
+        empresa_id = get_or_create_profile(self.request.user).empresa_id
+        run_id = self.kwargs["run_id"]
+        # WARNING: aislamiento: filtra por empresa_id ademas de run_id -- un run_id de
+        # otro tenant nunca debe filtrar documentos (aunque ya esta protegido por schema).
+        return DocumentProcessing.objects.filter(
+            run_id=run_id, empresa_id=empresa_id
+        ).only(
+            "id", "filename", "document_type", "handler", "domain",
+            "status", "numero", "error_message", "created_at",
+        ).order_by("-created_at")
 
 
 class MailIngestionPreviewAPIView(APIView):

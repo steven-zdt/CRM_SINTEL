@@ -25,6 +25,7 @@ from rest_framework.routers import DefaultRouter
 from apps.tenant.facturas.api.views_mail_ingestion import (
     MailIngestionPreviewAPIView,
     MailIngestionRunCreateAPIView,
+    MailIngestionRunDocumentsAPIView,
     MailIngestionRunsListAPIView,
 )
 from apps.tenant.facturas.api.viewsets import FacturaViewSet, ItemFacturaViewSet, NotaCreditoViewSet
@@ -76,6 +77,7 @@ urlpatterns = router.urls
 urlpatterns += [
     path("ingesta-correo/run/", MailIngestionRunCreateAPIView.as_view(), name="facturas_mail_run"),
     path("ingesta-correo/runs/", MailIngestionRunsListAPIView.as_view(), name="facturas_mail_runs"),
+    path("ingesta-correo/runs/<int:run_id>/documents/", MailIngestionRunDocumentsAPIView.as_view(), name="facturas_mail_run_documents"),
     path("ingesta-correo/preview/", MailIngestionPreviewAPIView.as_view(), name="facturas_mail_preview"),
     # # WARNING: DEPRECATED v2.40: Endpoints DataTables eliminados.
     # Usar GET /api/v1/facturas/ con StandardResultsSetPagination (Tabulator Factory).

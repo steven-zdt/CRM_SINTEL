@@ -127,298 +127,6 @@ def persist_run_result(
     run.save(update_fields=["status", "finished_at", "counts", "summary"])
 
 
-def process_mail_ingestion_sync(
-    *,
-    config_id: int,
-    limit_messages: int = 50,
-) -> dict[str, Any]:
-    """
-    Procesa ingesta de facturas desde correo de forma síncrona (puente al maildigester).
-    
-    # WARNING: FUNCIÓN PUENTE: Actúa como intermediario entre la UI y el maildigester.
-    # WARNING: VALIDACIÓN DE NIT: Aplica validación de pertenencia al tenant antes de persistir.
-    # WARNING: PROCESAMIENTO INCREMENTAL: Usa MailInboxState para obtener last_seen_uid.
-    # WARNING: FILTRO DE ADJUNTOS: Busca específicamente archivos .zip o .xml.
-    # WARNING: DESCOMPRESIÓN: Si es ZIP, lo descomprime en memoria para buscar el archivo UBL interno.
-    
-    Flujo:
-    1. Consulta MailInboxState para obtener last_seen_uid (procesamiento incremental)
-    2. Llama a fetch_and_process_billing_mail pasando las credenciales del MailInboxConfig
-    3. Filtra adjuntos .zip o .xml (ya lo hace el pipeline internamente)
-    4. Si es ZIP, lo descomprime en memoria (ya lo hace el pipeline internamente)
-    5. Aplica validación de NIT antes de persistir (en guardar_factura_desde_dto)
-    
-    Args:
-        config_id: ID de MailInboxConfig de empresa (debe estar activa)
-        limit_messages: Número máximo de mensajes a procesar (default: 50)
-        
-    Returns:
-        Dict con resultado del procesamiento:
-        {
-            "ok": bool,
-            "processed": int,
-            "xml_detected": int,
-            "imported": int,
-            "duplicates": int,
-            "errors": int,
-            "rejected_by_validation": int,  # Facturas rechazadas por validación de NIT
-            "details": List[Dict],  # Detalles de cada factura procesada
-        }
-        
-    Raises:
-        ValueError: Si la configuración no existe o no está activa
-    """
-    from apps.services.maildigester import pipeline
-    from apps.services.maildigester.schemas import MailboxConfigDTO
-    from apps.tenant.empresa.services import (
-        EmpresaNotConfiguredError,
-        get_empresa_emisor_data,
-        get_mailbox_config,
-    )
-    from apps.tenant.facturas.services import guardar_factura_desde_dto, normalize_document_number
-    
-    # 1. Consulta de Estado: Obtener last_seen_uid para procesamiento incremental
-    try:
-        inbox_state = get_or_create_inbox_state(config_id)
-        start_uid = inbox_state.last_seen_uid  # None = histórico completo, int = incremental
-        logger.info(f"[process_mail_ingestion_sync] Estado del buzón obtenido: last_seen_uid={start_uid}")
-    except ValueError as e:
-        logger.error(f"[process_mail_ingestion_sync] Error obteniendo estado del buzón: {e}")
-        raise
-    
-    # 2. Obtener configuración del buzón (SSoT)
-    try:
-        mailbox_config_dict = get_mailbox_config(config_id)
-        # Convertir a MailboxConfigDTO para el pipeline
-        mailbox_config = MailboxConfigDTO(**mailbox_config_dict)
-        logger.debug(f"[process_mail_ingestion_sync] Configuración del buzón obtenida: {mailbox_config.get('host')}")
-    except Exception as e:
-        logger.error(f"[process_mail_ingestion_sync] Error obteniendo configuración del buzón: {e}")
-        raise ValueError(f"Configuración {config_id} no existe o no está activa: {e}")
-    
-    # 3. Obtener datos de la empresa del tenant (SSoT) para validación de NIT
-    try:
-        empresa_config = get_empresa_emisor_data()
-        nit_tenant = normalize_document_number(empresa_config.get("nit"))
-        logger.debug(f"[process_mail_ingestion_sync] Empresa SSoT obtenida: NIT={nit_tenant}")
-    except EmpresaNotConfiguredError as e:
-        logger.error(f"[process_mail_ingestion_sync] Empresa no configurada: {e}")
-        return {
-            "ok": False,
-            "error": "empresa_no_configurada",
-            "message": str(e),
-            "processed": 0,
-            "xml_detected": 0,
-            "imported": 0,
-            "duplicates": 0,
-            "errors": 0,
-            "rejected_by_validation": 0,
-            "details": []
-        }
-    
-    # 4. Llamada al Digester: Procesar correos y extraer XMLs
-    # # WARNING: El pipeline ya filtra adjuntos .zip o .xml y descomprime ZIPs en memoria
-    try:
-        if start_uid is not None:
-            # Procesamiento incremental: usar función que acepta start_uid
-            from apps.services.maildigester.pipeline import collect_invoice_xml_from_mailbox_by_uid
-            invoice_xmls, last_uid = collect_invoice_xml_from_mailbox_by_uid(
-                mailbox_config,
-                start_uid=start_uid,
-                limit_messages=limit_messages,
-                naturaleza=None  # Se determina automáticamente desde XML
-            )
-        else:
-            # Primera ejecución: procesar histórico completo
-            invoice_xmls = pipeline.collect_invoice_xml_from_mailbox(
-                mailbox_config,
-                limit_messages=limit_messages,
-                naturaleza=None  # Se determina automáticamente desde XML
-            )
-            last_uid = None
-        
-        logger.info(f"[process_mail_ingestion_sync] XMLs detectados: {len(invoice_xmls)}")
-    except Exception as e:
-        logger.error(f"[process_mail_ingestion_sync] Error procesando correos: {e}", exc_info=True)
-        return {
-            "ok": False,
-            "error": "mailbox_error",
-            "message": f"Error procesando correos: {str(e)}",
-            "processed": 0,
-            "xml_detected": 0,
-            "imported": 0,
-            "duplicates": 0,
-            "errors": 0,
-            "rejected_by_validation": 0,
-            "details": []
-        }
-    
-    # 5. Procesar cada XML y aplicar validación de NIT antes de persistir
-    counts = {
-        "processed": 0,
-        "xml_detected": len(invoice_xmls),
-        "imported": 0,
-        "duplicates": 0,
-        "errors": 0,
-        "rejected_by_validation": 0,
-    }
-    details = []
-    
-    for xml_item in invoice_xmls:
-        xml_text = xml_item.get("xml_text", "")
-        source_email_id = xml_item.get("source_email_id", "unknown")
-        source_filename = xml_item.get("source_filename", "unknown")
-        
-        counts["processed"] += 1
-        
-        try:
-            # # WARNING: PASO 5.1: Parsear XML y aplicar validación de NIT antes de persistir
-            # Usar el pipeline universal de document_ingest si está disponible, o parser UBL legacy
-            try:
-                from apps.services.document_ingest.ingest_service import ingest_document
-                HAS_DOCUMENT_INGEST = True
-            except ImportError:
-                HAS_DOCUMENT_INGEST = False
-                ingest_document = None
-            
-            if HAS_DOCUMENT_INGEST and ingest_document:
-                # Usar pipeline universal de document_ingest
-                xml_bytes = xml_text.encode('utf-8')
-                result = ingest_document(xml_bytes, file_type='xml')
-                if result and result.get("dto"):
-                    dto = result.get("dto")
-                    # Aplicar validación de NIT en guardar_factura_desde_dto
-                    payload, status_code = guardar_factura_desde_dto(
-                        dto,
-                        xml_text=xml_text,
-                        file_bytes=xml_bytes,
-                        file_type='xml'
-                    )
-                else:
-                    raise ValueError("No se pudo extraer DTO del XML usando document_ingest")
-            else:
-                # WARNING: [PERF-C3] Fallback: usar parser UBL legacy.
-                # importar_factura_desde_ubl() parsea Y PERSISTE (via FacturaCRUDService.crear,
-                # ahora atomico junto con sus ItemFactura) retornando la instancia de Factura ya
-                # creada -- NO un dict. Tratar su valor de retorno como dict (factura_data.get(...))
-                # lanzaba AttributeError en cada invocacion de esta rama, y ademas se reconstruia un
-                # "dto" para volver a persistir la MISMA factura una segunda vez via
-                # guardar_factura_desde_dto(), lo cual habria intentado un doble insert.
-                # NOTA: esta ruta de respaldo no replica la validacion de NIT-tenant
-                # (document_not_for_tenant) que sí aplica la ruta principal document_ingest;
-                # solo se activa cuando ese paquete no esta disponible en el entorno.
-                from apps.tenant.facturas.utils.ubl_parser import importar_factura_desde_ubl
-                from django.db import IntegrityError
-
-                try:
-                    factura_obj = importar_factura_desde_ubl(xml_text)
-                    payload, status_code = (
-                        {
-                            "id": str(factura_obj.uuid),
-                            "numero": factura_obj.numero,
-                            "naturaleza": factura_obj.naturaleza,
-                            "created": True,
-                        },
-                        201,
-                    )
-                except IntegrityError:
-                    payload, status_code = (
-                        {"error": "duplicate", "message": "Factura ya existe (numero/cufe duplicado)"},
-                        409,
-                    )
-                except ValueError as exc:
-                    payload, status_code = (
-                        {"error": "validation_error", "message": str(exc)},
-                        422,
-                    )
-            
-            # # WARNING: PASO 5.2: Verificar resultado de la validación
-            if status_code == 422:
-                # Error de validación (incluye validación de NIT)
-                if payload.get("error") == "document_not_for_tenant":
-                    counts["rejected_by_validation"] += 1
-                    details.append({
-                        "source_email_id": source_email_id,
-                        "source_filename": source_filename,
-                        "status": "rejected",
-                        "reason": "document_not_for_tenant",
-                        "message": payload.get("message", "Documento no pertenece al tenant")
-                    })
-                    logger.warning(f"[process_mail_ingestion_sync] Factura rechazada por validación de NIT: {source_filename}")
-                else:
-                    counts["errors"] += 1
-                    details.append({
-                        "source_email_id": source_email_id,
-                        "source_filename": source_filename,
-                        "status": "error",
-                        "reason": payload.get("error", "validation_error"),
-                        "message": payload.get("message", "Error de validación")
-                    })
-            elif status_code == 409:
-                # Duplicado (idempotencia)
-                counts["duplicates"] += 1
-                details.append({
-                    "source_email_id": source_email_id,
-                    "source_filename": source_filename,
-                    "status": "duplicate",
-                    "factura_id": payload.get("id"),
-                    "numero": payload.get("numero")
-                })
-            elif status_code in (200, 201):
-                # Importado exitosamente
-                counts["imported"] += 1
-                details.append({
-                    "source_email_id": source_email_id,
-                    "source_filename": source_filename,
-                    "status": "imported",
-                    "factura_id": payload.get("id"),
-                    "numero": payload.get("numero"),
-                    "naturaleza": payload.get("naturaleza"),
-                    "created": payload.get("created", False)
-                })
-            else:
-                # Otro error
-                counts["errors"] += 1
-                details.append({
-                    "source_email_id": source_email_id,
-                    "source_filename": source_filename,
-                    "status": "error",
-                    "reason": "unknown",
-                    "message": f"Error desconocido: {status_code}"
-                })
-                
-        except Exception as e:
-            counts["errors"] += 1
-            details.append({
-                "source_email_id": source_email_id,
-                "source_filename": source_filename,
-                "status": "error",
-                "reason": "exception",
-                "message": str(e)
-            })
-            logger.error(f"[process_mail_ingestion_sync] Error procesando XML {source_filename}: {e}", exc_info=True)
-    
-    # 6. Actualizar estado del buzón (último UID procesado)
-    if last_uid is not None:
-        update_inbox_state(config_id, last_uid, counts["processed"])
-        logger.info(f"[process_mail_ingestion_sync] Estado del buzón actualizado: last_uid={last_uid}")
-    
-    # 7. Retornar resultado
-    result = {
-        "ok": True,
-        "processed": counts["processed"],
-        "xml_detected": counts["xml_detected"],
-        "imported": counts["imported"],
-        "duplicates": counts["duplicates"],
-        "errors": counts["errors"],
-        "rejected_by_validation": counts["rejected_by_validation"],
-        "details": details
-    }
-    
-    logger.info(f"[process_mail_ingestion_sync] Procesamiento completado: {result}")
-    return result
-
-
 def preview_mail_ingestion(
     *,
     config_id: int,
@@ -487,9 +195,23 @@ def preview_mail_ingestion(
                 "details_list": []
             }
         
-        # Convertir a MailboxConfigDTO para el pipeline
-        mailbox_config = MailboxConfigDTO(**mailbox_config_dict)
-        logger.debug(f"[preview_mail_ingestion] Configuración del buzón obtenida: {mailbox_config.host}")
+        # WARNING: BUGFIX (hallado durante FASE 12): MailboxConfigDTO es un TypedDict -- llamarlo
+        # como constructor solo devuelve un dict plano, nunca un objeto con atributos. El acceso
+        # mailbox_config.host de mas abajo crasheaba SIEMPRE (AttributeError), exactamente igual
+        # que tasks.py ya usa el dict directamente sin envolverlo.
+        mailbox_config: MailboxConfigDTO = mailbox_config_dict
+        logger.debug(f"[preview_mail_ingestion] Configuración del buzón obtenida: {mailbox_config.get('host')}")
+
+        # WARNING: SSoT (FASE 12 Document Intake): resolver la MISMA empresa que usara la
+        # persistencia real (MailInboxConfig.empresa), no una config global independiente --
+        # antes se usaba get_empresa_emisor_data(), una fuente distinta que podia divergir.
+        from apps.tenant.empresa.models import MailInboxConfig as _MailInboxConfig
+        empresa_nit_tenant = (
+            _MailInboxConfig.objects.only("empresa__nit")
+            .select_related("empresa")
+            .get(id=config_id)
+            .empresa.nit
+        )
     except ValueError as e:
         # ValueError indica que la configuración no existe o no está activa
         logger.error(f"[preview_mail_ingestion] Error obteniendo configuración del buzón: {e}", exc_info=True)
@@ -688,9 +410,20 @@ def preview_mail_ingestion(
                 ingest_document = None
             
             if HAS_DOCUMENT_INGEST and ingest_document:
-                # Usar pipeline universal de document_ingest
+                # WARNING: BUGFIX (hallado durante FASE 12): ingest_document() no acepta
+                # file_type= (el kwarg real es mime_type=) y retorna una tupla (result,
+                # status_code), no un dict suelto -- esto hacia que TODA llamada real cayera
+                # al except de abajo, devolviendo pending_invoices=[] con ok=True (falso
+                # "sin facturas" en vez de un error real).
                 xml_bytes = xml_text.encode('utf-8')
-                result = ingest_document(xml_bytes, file_type='xml')
+                result, _ingest_status = ingest_document(
+                    xml_bytes,
+                    filename=source_filename,
+                    mime_type="application/xml",
+                    kind_hint="xml",
+                    preview=True,
+                    async_mode=False,
+                )
                 if result and result.get("dto"):
                     dto = result.get("dto")
                 else:
@@ -742,44 +475,44 @@ def preview_mail_ingestion(
             totales = dto.get("totales", {})
             identificadores = dto.get("identificadores", {})
             
-            # # WARNING: PASO 4.3: VALIDACIÓN DE NIT (Filtro Contable) - ANTES de mostrar al usuario
-            # # WARNING: FILTRO CONTABLE: Leer NIT del receptor y compararlo con NIT del Tenant (SSoT)
-            # Si no coinciden, marcar como "No pertenece a la empresa" para que el usuario lo vea
-            from apps.tenant.empresa.services import (
-                EmpresaNotConfiguredError,
-                get_empresa_emisor_data,
-            )
-            from apps.tenant.facturas.services import normalize_document_number
-            
+            # # WARNING: PASO 4.3: VALIDACIÓN DE NIT + naturaleza -- SSoT (FASE 12 Document Intake)
+            # Antes esta funcion reimplementaba su propia comparacion emisor/receptor == empresa
+            # (duplicando la regla de negocio VENTA/COMPRA). Ahora consulta el mismo servicio que
+            # usa la persistencia real (FacturaBusinessService), garantizando que preview y
+            # persistencia siempre den la misma naturaleza para el mismo documento.
+            # WARNING: BUGFIX (hallado durante FASE 12): normalize_document_number nunca estuvo
+            # exportado en apps.tenant.facturas.services (__init__.py) -- este import fallaba
+            # SIEMPRE, cayendo al except de abajo. El metodo real es
+            # FacturaBusinessService.normalize_document_number (staticmethod).
+            from apps.tenant.facturas.services.business_service import FacturaBusinessService
+
             belongs_to_tenant = None  # None = no validado, True = pertenece, False = no pertenece
             validation_message = None
-            
+
             try:
-                empresa_config = get_empresa_emisor_data()
-                nit_tenant = normalize_document_number(empresa_config.get("nit"))
-                emisor_nit = normalize_document_number(emisor.get("nit"))
-                receptor_nit = normalize_document_number(receptor.get("nit"))
-                
-                # Determinar naturaleza preliminar
-                if emisor_nit and nit_tenant and emisor_nit == nit_tenant:
-                    # Es VENTA (el tenant emite) - siempre válida
-                    belongs_to_tenant = True
-                    validation_message = "VENTA (emitida por esta empresa)"
-                elif receptor_nit and nit_tenant and receptor_nit == nit_tenant:
-                    # Es COMPRA (el tenant recibe) - válida si el receptor es el tenant
-                    belongs_to_tenant = True
-                    validation_message = "COMPRA (recibida por esta empresa)"
-                else:
-                    # No pertenece al tenant
+                nit_tenant = FacturaBusinessService.normalize_document_number(empresa_nit_tenant)
+                emisor_nit = FacturaBusinessService.normalize_document_number(emisor.get("nit"))
+                receptor_nit = FacturaBusinessService.normalize_document_number(receptor.get("nit"))
+
+                if not nit_tenant:
+                    belongs_to_tenant = None
+                    validation_message = "No se pudo validar (empresa no configurada)"
+                elif emisor_nit != nit_tenant and receptor_nit != nit_tenant:
+                    # Mismo guard que FacturaBusinessService.guardar_desde_dto(): si ni el
+                    # emisor ni el receptor coinciden con la empresa, el documento seria
+                    # rechazado en persistencia -- reflejarlo aqui identicamente.
                     belongs_to_tenant = False
-                    if receptor_nit and nit_tenant:
-                        validation_message = f"No pertenece a la empresa (Receptor NIT: {receptor_nit} != Tenant NIT: {nit_tenant})"
-                    else:
-                        validation_message = "No se pudo validar pertenencia (faltan datos de NIT)"
-                        
-            except EmpresaNotConfiguredError:
-                belongs_to_tenant = None
-                validation_message = "No se pudo validar (empresa no configurada)"
+                    validation_message = (
+                        f"No pertenece a la empresa (Emisor NIT: {emisor_nit}, "
+                        f"Receptor NIT: {receptor_nit} != Tenant NIT: {nit_tenant})"
+                    )
+                else:
+                    naturaleza = FacturaBusinessService._resolver_naturaleza(emisor_nit, nit_tenant)
+                    belongs_to_tenant = True
+                    validation_message = (
+                        "VENTA (emitida por esta empresa)" if naturaleza == "VENTA"
+                        else "COMPRA (recibida por esta empresa)"
+                    )
             except Exception as e:
                 logger.warning(f"[preview_mail_ingestion] Error validando NIT: {e}")
                 belongs_to_tenant = None

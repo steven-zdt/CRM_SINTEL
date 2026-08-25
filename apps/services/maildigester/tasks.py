@@ -1,12 +1,20 @@
 """
-Tareas Celery para ingesta asíncrona de facturas desde correo.
+Tareas Celery para ingesta asíncrona de correo -> Document Intake Service.
 
 WARNING: FASE 2: Tareas asíncronas multi-tenant friendly con Celery.
+WARNING: MAIL-16: este módulo YA NO importa ningún dominio consumidor
+(Facturas/Compras/...) directamente. Solo conoce ReceivedDocument /
+DocumentDispatcher (apps.services.document_intake) -- genérico, transversal.
+Cada dominio se auto-registra como consumidor desde su propio
+AppConfig.ready() (ver apps/tenant/facturas/apps.py,
+apps/tenant/compras/apps.py). Agregar un nuevo dominio consumidor nunca
+requiere modificar este archivo.
 
 Principios:
 - Multi-tenant por esquemas: Usa schema_context para aislamiento
-- SSoT: No duplica lógica de parsing; usa apps.tenant.facturas.services
-- Idempotencia: Delegada a upsert_factura_desde_ubl (por CUFE)
+- SSoT: No duplica lógica de parsing (document_ingest) ni de persistencia
+  de dominio (delegada al DocumentHandler registrado para cada tipo)
+- Idempotencia: Delegada al handler de dominio (ej. CUFE en Facturas)
 - Reintentos: Configurados con backoff solo para errores transitorios (red/IO)
 - Cancelación cooperativa: Lee estado CANCEL_REQUESTED desde BD (no usa self.is_aborted())
 - Logging estructurado: Logger dedicado 'maildigester' para trazabilidad (sin secretos)
@@ -17,12 +25,13 @@ import logging
 from typing import Any, TypedDict
 
 from celery import shared_task
-from django.db import transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, ProgrammingError, transaction
 from django.utils import timezone
 from django_tenants.utils import schema_context
 
-# Importar el servicio dueño de la lógica de importación UBL (SSoT en facturas)
-# No duplicar parsing aquí.
+from apps.services.document_intake import DocumentSource, ProcessingStatus, ReceivedDocument
+from apps.services.document_intake.dispatcher import dispatcher
 
 # WARNING: IMPORT LAZY: Importar funciones de estado desde módulo puro (evita ciclos)
 # Estas funciones se importan dentro de la función cuando se necesitan
@@ -91,6 +100,28 @@ def _update_run(tenant_schema: str, task_id: str, **fields):
         # No romper la tarea si falla la persistencia
         logger.warning("maildigester.update_run_error", extra={"task_id": task_id, "error": str(e)})
         return None
+
+
+def _clasificar_excepcion(exc: Exception) -> str:
+    """
+    Clasifica una excepcion de procesamiento de un documento (FASE 3).
+
+    Nunca debe usarse para decidir SI se loggea -- solo COMO se loggea y
+    se cuenta. Un error de "programming" o "security" siempre se loggea
+    con logger.error + exc_info=True (nunca silenciado bajo un warning
+    generico), el resto con logger.warning + exc_info=True.
+    """
+    if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+        return "transient"
+    if isinstance(exc, PermissionError):
+        return "security"
+    if isinstance(exc, (ImportError, AttributeError, ProgrammingError, NameError, TypeError)):
+        return "programming"
+    if isinstance(exc, IntegrityError):
+        return "domain"
+    if isinstance(exc, (DjangoValidationError, ValueError, KeyError)):
+        return "validation"
+    return "unknown"
 
 
 class MailDigesterResult(TypedDict, total=False):
@@ -188,11 +219,18 @@ def fetch_and_process_billing_mail(
         # 3) Resolver config desde BD (sin credenciales en payload)
         from apps.services.maildigester import pipeline
         from apps.tenant.empresa.services import get_mailbox_config
-        from apps.tenant.facturas import services as facturas_services
-        
+
         with schema_context(tenant_schema):
             mailbox_config = get_mailbox_config(config_id)
-            
+
+            # 3b) Resolver empresa_id del tenant (nunca se infiere desde el DTO)
+            from apps.tenant.empresa.models import MailInboxConfig
+            empresa_id = MailInboxConfig.objects.only("empresa_id").get(id=config_id).empresa_id
+
+            # 3c) MAIL-17: resolver run_id una sola vez para el detalle por documento
+            from apps.tenant.facturas.models import DocumentProcessing, MailIngestionRun
+            run_id = MailIngestionRun.objects.only("id").get(task_id=task_id).id
+
             # 4) Obtener estado del buzón (último UID procesado)
             # WARNING: IMPORT LAZY: Importar desde módulo puro (evita ciclos)
             from apps.tenant.facturas.inbox_state import get_or_create_inbox_state
@@ -261,8 +299,6 @@ def fetch_and_process_billing_mail(
                     
                     try:
                         # WARNING: v2.37: Usar pipeline universal SOLO para parsear/validar (NO persiste)
-                        from django.core.exceptions import ValidationError
-
                         from apps.services.document_ingest.ingest_service import ingest_document
                         
                         # Convertir XML texto a bytes
@@ -270,7 +306,7 @@ def fetch_and_process_billing_mail(
                         source_filename = item.get("source_filename", "ubl.xml")
                         
                         # Llamar al pipeline universal (SOLO parsing, preview=True para obtener DTO)
-                        result, status_code = ingest_document(
+                        parsed, status_code = ingest_document(
                             content=xml_bytes,
                             filename=source_filename,
                             mime_type="application/xml",
@@ -278,25 +314,36 @@ def fetch_and_process_billing_mail(
                             preview=True,  # Siempre preview - document_ingest NO persiste
                             async_mode=False
                         )
-                        
+
                         # Verificar si hubo error en el parsing
-                        if status_code != 200 or result.get("error"):
+                        if status_code != 200 or parsed.get("error"):
                             counts["errors"] += 1
-                            error_msg = result.get("message", "Error al parsear XML")
+                            error_msg = parsed.get("message", "Error al parsear XML")
                             logger.warning(
                                 "maildigester.parse_error",
                                 extra={
                                     "tenant_schema": tenant_schema,
                                     "task_id": task_id,
                                     "source_filename": source_filename,
-                                    "error": result.get("error", "unknown"),
-                                    "message": error_msg,
+                                    "error": parsed.get("error", "unknown"),
+                                    # WARNING: BUGFIX MAIL-17: "message" es un atributo reservado de
+                                    # logging.LogRecord -- usarlo como key de extra={} lanza
+                                    # KeyError("Attempt to overwrite 'message' in LogRecord") SIEMPRE
+                                    # que este codepath se ejecuta, enmascarando el parse_error real
+                                    # bajo un error de logging distinto. Bug preexistente, hallado al
+                                    # verificar MAIL-17 con un documento invalido real.
+                                    "error_detail": error_msg,
                                 }
                             )
+                            DocumentProcessing.objects.create(
+                                empresa_id=empresa_id, run_id=run_id,
+                                source="EMAIL", filename=source_filename,
+                                status="INVALID", error_message=error_msg,
+                            )
                             continue
-                        
+
                         # Obtener DTO del resultado
-                        dto = result.get("dto", {})
+                        dto = parsed.get("dto", {})
                         if not dto:
                             counts["errors"] += 1
                             logger.warning(
@@ -307,145 +354,112 @@ def fetch_and_process_billing_mail(
                                     "source_filename": source_filename,
                                 }
                             )
+                            DocumentProcessing.objects.create(
+                                empresa_id=empresa_id, run_id=run_id,
+                                source="EMAIL", filename=source_filename,
+                                status="INVALID", error_message="empty_dto",
+                            )
                             continue
                         
-                        # Determinar tipo de documento
-                        doc_type = dto.get("type") or dto.get("document_type", "").lower()
-                        
-                        # Persistir usando servicios de la app Facturas (CRUD aislado)
-                        if "creditnote" in doc_type or "nota" in doc_type:
-                            # Es una nota crédito
-                            try:
-                                nota_credito = facturas_services.guardar_nota_credito_desde_dto(
-                                    dto=dto,
-                                    xml_text=item["xml_text"]
-                                )
-                                counts["imported"] += 1
-                                logger.info(
-                                    "maildigester.imported_nc",
-                                    extra={
-                                        "tenant_schema": tenant_schema,
-                                        "task_id": task_id,
-                                        "cude": nota_credito.cude,
-                                        "numero": nota_credito.numero,
-                                    }
-                                )
-                            except ValidationError as e:
-                                # Verificar si es duplicado
-                                error_dict = e.message_dict if hasattr(e, 'message_dict') else {}
-                                error_code = error_dict.get("error", ["unknown"])[0] if isinstance(error_dict.get("error"), list) else error_dict.get("error", "unknown")
-                                if error_code == "duplicate":
-                                    counts["duplicates"] += 1
-                                    logger.info(
-                                        "maildigester.duplicate_nc",
-                                        extra={
-                                            "tenant_schema": tenant_schema,
-                                            "task_id": task_id,
-                                            "cude": dto.get("identificadores", {}).get("cude"),
-                                        }
-                                    )
-                                else:
-                                    counts["errors"] += 1
-                                    logger.warning(
-                                        "maildigester.import_error_nc",
-                                        extra={
-                                            "tenant_schema": tenant_schema,
-                                            "task_id": task_id,
-                                            "error": error_code,
-                                            "message": str(e),
-                                        }
-                                    )
-                            except Exception as e:
-                                counts["errors"] += 1
-                                logger.warning(
-                                    "maildigester.import_exception_nc",
-                                    exc_info=True,
-                                    extra={
-                                        "tenant_schema": tenant_schema,
-                                        "task_id": task_id,
-                                        "error": str(e),
-                                    }
-                                )
+                        # WARNING: MAIL-16: dispatch generico -- este modulo ya NO conoce
+                        # Facturas. El dto ya parseado viaja en metadata para que el handler
+                        # no tenga que volver a parsear el mismo XML (ver InvoiceHandler).
+                        # FacturaBusinessService.guardar_desde_dto() sigue siendo el SSoT real
+                        # de persistencia (FASE 1); solo cambio COMO se le llama, no que se
+                        # llama a el.
+                        doc_type = dto.get("type") or dto.get("document_type") or ""
+                        document = ReceivedDocument(
+                            tenant_schema=tenant_schema,
+                            source=DocumentSource.EMAIL,
+                            content=xml_bytes,
+                            filename=source_filename,
+                            mime_type="application/xml",
+                            document_type=doc_type,
+                            message_id=item.get("source_email_id"),
+                            metadata={"empresa_id": empresa_id, "dto": dto},
+                        )
+                        result = dispatcher.dispatch(document)
+
+                        # MAIL-17: fila de detalle por documento, siempre (SUCCESS incluido) --
+                        # sin esto no se puede responder "que paso con este XML especifico"
+                        # sin parsear MailIngestionRun.summary como texto libre.
+                        DocumentProcessing.objects.create(
+                            empresa_id=empresa_id,
+                            run_id=run_id,
+                            document_id=document.document_id,
+                            source=document.source,
+                            filename=document.filename,
+                            document_type=doc_type,
+                            handler=result.handler,
+                            domain=result.domain,
+                            status=result.status,
+                            numero=result.metadata.get("numero"),
+                            error_message="; ".join(result.errors) if result.errors else None,
+                        )
+
+                        if result.status == ProcessingStatus.SUCCESS:
+                            counts["imported"] += 1
+                            logger.info(
+                                "maildigester.imported",
+                                extra={
+                                    "tenant_schema": tenant_schema,
+                                    "task_id": task_id,
+                                    "handler": result.handler,
+                                    "numero": result.metadata.get("numero"),
+                                    "cufe": result.metadata.get("cufe"),
+                                }
+                            )
+                        elif result.status == ProcessingStatus.DUPLICATE:
+                            # Idempotencia real (por CUFE/CUDE o por numero) -- documento ya existia
+                            counts["duplicates"] += 1
+                            logger.info(
+                                "maildigester.duplicate",
+                                extra={
+                                    "tenant_schema": tenant_schema,
+                                    "task_id": task_id,
+                                    "handler": result.handler,
+                                    "numero": result.metadata.get("numero"),
+                                }
+                            )
                         else:
-                            # Es una factura (invoice)
-                            try:
-                                payload, status_code = facturas_services.guardar_factura_desde_dto(
-                                    dto=dto,
-                                    xml_text=item["xml_text"]
-                                )
-                                
-                                # Verificar resultado
-                                if status_code == 201:
-                                    counts["imported"] += 1
-                                    logger.info(
-                                        "maildigester.imported_invoice",
-                                        extra={
-                                            "tenant_schema": tenant_schema,
-                                            "task_id": task_id,
-                                            "numero": payload.get("numero"),
-                                            "cufe": dto.get("identificadores", {}).get("cufe"),
-                                        }
-                                    )
-                                elif status_code == 200:
-                                    # Ya existía (idempotente)
-                                    counts["imported"] += 1
-                                    logger.info(
-                                        "maildigester.existing_invoice",
-                                        extra={
-                                            "tenant_schema": tenant_schema,
-                                            "task_id": task_id,
-                                            "numero": payload.get("numero"),
-                                        }
-                                    )
-                                elif status_code == 409:
-                                    # Duplicado
-                                    counts["duplicates"] += 1
-                                    logger.info(
-                                        "maildigester.duplicate_invoice",
-                                        extra={
-                                            "tenant_schema": tenant_schema,
-                                            "task_id": task_id,
-                                            "numero": payload.get("numero"),
-                                        }
-                                    )
-                                else:
-                                    # Error de validación u otro
-                                    counts["errors"] += 1
-                                    logger.warning(
-                                        "maildigester.import_error_invoice",
-                                        extra={
-                                            "tenant_schema": tenant_schema,
-                                            "task_id": task_id,
-                                            "status_code": status_code,
-                                            "error": payload.get("error", "unknown"),
-                                            "message": payload.get("message", ""),
-                                        }
-                                    )
-                            except Exception as e:
-                                counts["errors"] += 1
-                                logger.warning(
-                                    "maildigester.import_exception_invoice",
-                                    exc_info=True,
-                                    extra={
-                                        "tenant_schema": tenant_schema,
-                                        "task_id": task_id,
-                                        "error": str(e),
-                                    }
-                                )
+                            # INVALID / FAILED / REQUIRES_REVIEW / PARTIAL -- ninguno es exito
+                            # (FASE 2: nunca SUCCESS falso). El dispatcher ya clasifico/loggeo
+                            # con exc_info=True cualquier excepcion real del handler.
+                            counts["errors"] += 1
+                            logger.warning(
+                                "maildigester.import_error",
+                                extra={
+                                    "tenant_schema": tenant_schema,
+                                    "task_id": task_id,
+                                    "status": result.status,
+                                    "handler": result.handler,
+                                    "domain": result.domain,
+                                    "errors": result.errors,
+                                }
+                            )
                     
                     except Exception as e:
+                        # FASE 3: clasificar tambien los errores de la etapa de parsing (previa a persistencia)
+                        error_type = _clasificar_excepcion(e)
                         counts["errors"] += 1
-                        logger.warning(
+                        log_fn = logger.error if error_type in ("programming", "security") else logger.warning
+                        log_fn(
                             "maildigester.process_error",
                             exc_info=True,
                             extra={
                                 "tenant_schema": tenant_schema,
                                 "task_id": task_id,
                                 "source_filename": item.get("source_filename", "unknown"),
+                                "error_type": error_type,
                                 "error": str(e),
                             }
                         )
-                
+                        DocumentProcessing.objects.create(
+                            empresa_id=empresa_id, run_id=run_id,
+                            source="EMAIL", filename=item.get("source_filename", "unknown"),
+                            status="FAILED", error_message=str(e),
+                        )
+
                 counts["xml_detected"] += len(xml_items)
                 total_messages_processed += batch_messages
                 
@@ -463,19 +477,30 @@ def fetch_and_process_billing_mail(
                 if batch_messages < batch_size:
                     break
             
-            # 6) SUCCESS
-            _update_run(tenant_schema, task_id, status="SUCCESS", counts=counts, finished_at=timezone.now())
+            # 6) Estado final segun resultados REALES (FASE 2 -- nunca SUCCESS falso)
+            imported = counts["imported"]
+            duplicates = counts["duplicates"]
+            errors = counts["errors"]
+            if errors == 0:
+                final_status = "SUCCESS"
+            elif imported > 0 or duplicates > 0:
+                final_status = "PARTIAL_SUCCESS"
+            else:
+                final_status = "FAILED"
+
+            _update_run(tenant_schema, task_id, status=final_status, counts=counts, finished_at=timezone.now())
             logger.info(
                 "maildigester.end",
                 extra={
                     "tenant_schema": tenant_schema,
                     "task_id": task_id,
                     "counts": counts,
+                    "status": final_status,
                     "last_uid": current_uid,
                     "mode": mode,
                 }
             )
-            return {"ok": True, "counts": counts, "last_uid": current_uid}
+            return {"ok": final_status != "FAILED", "status": final_status, "counts": counts, "last_uid": current_uid}
     
     except Exception as e:
         logger.error("maildigester.task_failure", exc_info=True, extra={"tenant_schema": tenant_schema, "task_id": task_id})

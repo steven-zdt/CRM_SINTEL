@@ -2006,10 +2006,171 @@
                 }
                 return;
             }
+
+            // MAIL-18: Botón "Historial de Ingestas" -- abre el offcanvas y carga runs recientes
+            const btnHistorial = e.target.closest('[data-action="historial-ingestas"], #btn-historial-ingestas');
+            if (btnHistorial) {
+                e.preventDefault();
+                e.stopPropagation();
+                await abrirHistorialIngestas();
+                return;
+            }
         };
 
         toolbar.addEventListener('click', toolbar._toolbarClickHandler);
         console.log(`${MOD} Event listeners de toolbar configurados`);
+    }
+
+    /**
+     * MAIL-18: Estados/iconos de ProcessingStatus para la UX de Historial de Ingestas.
+     * Mismo vocabulario que apps.services.document_intake.contracts.ProcessingStatus --
+     * no se inventa uno nuevo en el frontend.
+     */
+    const ESTADO_ICONOS = {
+        SUCCESS: { icon: 'bi-check-circle-fill', color: 'text-success', label: 'Importada' },
+        DUPLICATE: { icon: 'bi-arrow-repeat', color: 'text-info', label: 'Ya existía' },
+        PARTIAL_SUCCESS: { icon: 'bi-exclamation-circle-fill', color: 'text-warning', label: 'Parcial' },
+        REQUIRES_REVIEW: { icon: 'bi-exclamation-triangle-fill', color: 'text-warning', label: 'Requiere revisión' },
+        INVALID: { icon: 'bi-x-circle-fill', color: 'text-danger', label: 'Inválido' },
+        FAILED: { icon: 'bi-x-circle-fill', color: 'text-danger', label: 'Error' },
+        PARTIAL: { icon: 'bi-exclamation-circle-fill', color: 'text-warning', label: 'Parcial' },
+        PENDING: { icon: 'bi-hourglass-split', color: 'text-muted', label: 'Pendiente' },
+        RUNNING: { icon: 'bi-arrow-repeat', color: 'text-primary', label: 'En curso' },
+        CANCELED: { icon: 'bi-slash-circle-fill', color: 'text-muted', label: 'Cancelado' },
+        CANCEL_REQUESTED: { icon: 'bi-hourglass-split', color: 'text-muted', label: 'Cancelando...' },
+        ABORTED: { icon: 'bi-x-circle-fill', color: 'text-danger', label: 'Abortado' },
+    };
+
+    /**
+     * MAIL-18: escapa texto antes de interpolarlo en innerHTML. filename/error_message
+     * vienen de correos externos (nombre de adjunto, mensajes de parseo) -- contenido
+     * no confiable, nunca se inserta crudo en el DOM.
+     */
+    function _escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        const div = d.createElement('div');
+        div.textContent = String(str);
+        return div.innerHTML;
+    }
+
+    function _fmtFecha(iso) {
+        if (!iso) return '—';
+        try {
+            return new Date(iso).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+        } catch (e) {
+            return iso;
+        }
+    }
+
+    /**
+     * MAIL-18: abre el offcanvas de historial y carga los runs recientes.
+     * Nunca muestra "Ejecución exitosa" cuando imported=0 y errors>0 -- el resumen
+     * refleja los contadores reales (counts), igual que hace el backend (FASE 2).
+     */
+    async function abrirHistorialIngestas() {
+        const listEl = d.getElementById('historial-ingestas-list');
+        const offcanvasEl = d.getElementById('offcanvas-historial-ingestas');
+        if (!listEl || !offcanvasEl) {
+            console.warn(`${MOD} Offcanvas de historial de ingestas no encontrado en el DOM`);
+            return;
+        }
+
+        if (w.Sintel && w.Sintel.Core && typeof w.Sintel.Core.mostrarOffcanvasSeguro === 'function') {
+            w.Sintel.Core.mostrarOffcanvasSeguro(offcanvasEl);
+        }
+
+        listEl.innerHTML = '<div class="text-center text-muted p-4"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Cargando...</div>';
+
+        if (!w.facturasAPI || typeof w.facturasAPI.listMailRuns !== 'function') {
+            listEl.innerHTML = '<div class="text-center text-danger p-4">API no disponible</div>';
+            return;
+        }
+
+        const res = await w.facturasAPI.listMailRuns();
+        if (!res.ok) {
+            listEl.innerHTML = `<div class="text-center text-danger p-4">Error al cargar historial: ${res.data?.detail || res.status}</div>`;
+            return;
+        }
+
+        const runs = res.data?.results || res.data || [];
+        if (runs.length === 0) {
+            listEl.innerHTML = '<div class="text-center text-muted p-4">Sin ejecuciones registradas todavía.</div>';
+            return;
+        }
+
+        listEl.innerHTML = runs.map((run) => {
+            const c = run.counts || {};
+            const imported = c.imported || 0;
+            const duplicates = c.duplicates || 0;
+            const errors = c.errors || 0;
+            const xmlDetected = c.xml_detected || 0;
+            const estado = ESTADO_ICONOS[run.status] || ESTADO_ICONOS.PENDING;
+            return `
+              <button type="button" class="list-group-item list-group-item-action py-3"
+                      data-run-id="${run.id}" data-action="ver-detalle-ingesta">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                  <span class="fw-semibold"><i class="bi bi-envelope me-1"></i>${_fmtFecha(run.started_at)}</span>
+                  <span class="${estado.color}"><i class="bi ${estado.icon} me-1"></i>${estado.label}</span>
+                </div>
+                <div class="small text-muted mb-1">${xmlDetected} documento(s) detectado(s)</div>
+                <div class="d-flex gap-2 flex-wrap">
+                  ${imported ? `<span class="badge text-bg-success">${imported} importado(s)</span>` : ''}
+                  ${duplicates ? `<span class="badge text-bg-info">${duplicates} duplicado(s)</span>` : ''}
+                  ${errors ? `<span class="badge text-bg-danger">${errors} error(es)</span>` : ''}
+                  ${!imported && !duplicates && !errors ? '<span class="badge text-bg-secondary">Sin resultados</span>' : ''}
+                </div>
+                <div class="small text-muted mt-1"><i class="bi bi-chevron-right"></i> Ver detalle</div>
+              </button>
+            `;
+        }).join('');
+
+        listEl.querySelectorAll('[data-action="ver-detalle-ingesta"]').forEach((btn) => {
+            btn.addEventListener('click', () => abrirDetalleIngesta(btn.dataset.runId));
+        });
+    }
+
+    /**
+     * MAIL-18: abre el offcanvas de detalle por documento (DocumentProcessing) de un run.
+     */
+    async function abrirDetalleIngesta(runId) {
+        const listEl = d.getElementById('detalle-ingesta-list');
+        const offcanvasEl = d.getElementById('offcanvas-detalle-ingesta');
+        if (!listEl || !offcanvasEl) return;
+
+        if (w.Sintel && w.Sintel.Core && typeof w.Sintel.Core.mostrarOffcanvasSeguro === 'function') {
+            w.Sintel.Core.mostrarOffcanvasSeguro(offcanvasEl);
+        }
+
+        listEl.innerHTML = '<div class="text-center text-muted p-4"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Cargando...</div>';
+
+        const res = await w.facturasAPI.listRunDocuments(runId);
+        if (!res.ok) {
+            listEl.innerHTML = `<div class="text-center text-danger p-4">Error al cargar detalle: ${res.data?.detail || res.status}</div>`;
+            return;
+        }
+
+        const docs = res.data?.results || res.data || [];
+        if (docs.length === 0) {
+            listEl.innerHTML = '<div class="text-center text-muted p-4">Sin documentos registrados para esta ejecución.</div>';
+            return;
+        }
+
+        listEl.innerHTML = docs.map((doc) => {
+            const estado = ESTADO_ICONOS[doc.status] || ESTADO_ICONOS.PENDING;
+            const titulo = _escapeHtml(doc.numero ? `Factura ${doc.numero}` : (doc.filename || 'Documento'));
+            const filename = _escapeHtml(doc.filename);
+            const errorMsg = _escapeHtml(doc.error_message);
+            return `
+              <div class="list-group-item py-3">
+                <div class="d-flex justify-content-between align-items-start">
+                  <span class="fw-semibold">${titulo}</span>
+                  <span class="${estado.color}"><i class="bi ${estado.icon} me-1"></i>${estado.label}</span>
+                </div>
+                ${doc.filename ? `<div class="small text-muted">${filename}</div>` : ''}
+                ${doc.error_message ? `<div class="small text-danger mt-1">${errorMsg}</div>` : ''}
+              </div>
+            `;
+        }).join('');
     }
 
     /**

@@ -4,8 +4,31 @@ Provider SSoT para configuraciones de buzones de correo.
 # WARNING: SSoT: Este es el único lugar desde donde maildigester toma credenciales.
 # WARNING: CERO SIGNALS: Toda la lógica es explícita.
 """
+import logging
+
 from apps.services.maildigester.schemas import MailboxConfigDTO
 from apps.tenant.empresa.models import MailInboxConfig
+
+logger = logging.getLogger("apps.tenant.empresa.mailbox_provider")
+
+
+def _decrypt_graceful(value: str | None) -> str:
+    """
+    Descifra un secreto guardado con apps.services.security.crypto.encrypt_password().
+
+    Degrada de forma segura a texto plano si el descifrado falla (clave
+    rotada, o el valor nunca se cifro -- filas legacy anteriores a esta
+    fase): NUNCA loggea el valor en si, solo la ocurrencia. Mismo criterio
+    de graceful degradation ya usado en MailInboxConfigViewSet.test_connection_detail.
+    """
+    if not value:
+        return value or ""
+    try:
+        from apps.services.security.crypto import decrypt_password
+        return decrypt_password(value)
+    except Exception:
+        logger.warning("mailbox_provider.decrypt_fallback_to_raw")
+        return value
 
 
 def get_mailbox_config(config_id: int) -> MailboxConfigDTO:
@@ -90,17 +113,22 @@ def get_mailbox_config(config_id: int) -> MailboxConfigDTO:
         username = getattr(cfg, 'imap_username', None) or getattr(cfg, 'email_address', None) or getattr(cfg, 'username', None) or ""
     
     # Password: preferir imap_password, luego legacy password
-    password = getattr(cfg, 'imap_password', None) or getattr(cfg, 'password', None) or ""
-    
+    # WARNING: BUGFIX FASE 15: el serializer cifra imap_password/smtp_password con Fernet
+    # (apps.services.security.crypto) al guardar, pero esta funcion -- el UNICO lugar desde
+    # donde maildigester obtiene credenciales para conectar de verdad -- nunca las
+    # descifraba, por lo que cualquier MailInboxConfig creada via la API actual fallaba
+    # SIEMPRE la autenticacion IMAP real (se le enviaba el texto cifrado como password).
+    password = _decrypt_graceful(getattr(cfg, 'imap_password', None) or getattr(cfg, 'password', None) or "")
+
     # Mailbox: preferir imap_mailbox, luego legacy mailbox
     mailbox = getattr(cfg, 'imap_mailbox', None) or getattr(cfg, 'mailbox', None) or "INBOX"
-    
+
     # SMTP username: preferir smtp_username, luego email_address, luego imap_username
     # Para Gmail, smtp_username por defecto = email_address [docs.celeryq.dev]
     smtp_user = getattr(cfg, 'smtp_username', None) or getattr(cfg, 'email_address', None) or username
-    
-    # SMTP password: preferir smtp_password, luego imap_password
-    smtp_pass = getattr(cfg, 'smtp_password', None) or password
+
+    # SMTP password: preferir smtp_password, luego imap_password (ya descifrado arriba)
+    smtp_pass = _decrypt_graceful(getattr(cfg, 'smtp_password', None)) or password
     
     return {
         "provider": cfg.provider,

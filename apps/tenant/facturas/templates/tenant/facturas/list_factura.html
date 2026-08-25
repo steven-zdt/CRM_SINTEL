@@ -73,6 +73,11 @@ ya no Tabulator — ver apps/tenant/facturas/tables.py y views.py.
         <i class="bi bi-envelope-arrow-down me-1"></i>Sincronizar Buzón
         <span class="spinner-border spinner-border-sm d-none" id="sync-spinner" role="status"></span>
       </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              id="btn-historial-ingestas" data-action="historial-ingestas"
+              title="Historial de procesamiento de correo (MAIL-18)">
+        <i class="bi bi-clock-history me-1"></i>Historial de Ingestas
+      </button>
     </div>
     <div class="input-group input-group-sm" style="max-width:280px;">
       <span class="input-group-text bg-white border-end-0">
@@ -158,3 +163,35 @@ ya no Tabulator — ver apps/tenant/facturas/tables.py y views.py.
 
 {# Offcanvas pendientes correo #}
 {% include 'tenant/facturas/offcanvas_pendientes_factura.html' %}
+
+{# MAIL-18: Offcanvas Historial de Ingestas -- renderizado client-side (JSON), sin HTMX #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-historial-ingestas"
+     aria-labelledby="offcanvasHistorialIngestasLabel" style="width: 420px;">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvasHistorialIngestasLabel">
+      <i class="bi bi-clock-history me-2"></i>Historial de Ingestas
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body p-0">
+    <div id="historial-ingestas-list" class="list-group list-group-flush">
+      <div class="text-center text-muted p-4" id="historial-ingestas-loading">
+        <div class="spinner-border spinner-border-sm me-2" role="status"></div>Cargando...
+      </div>
+    </div>
+  </div>
+</div>
+
+{# MAIL-18: Offcanvas Detalle por Documento de un run -- renderizado client-side #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-detalle-ingesta"
+     aria-labelledby="offcanvasDetalleIngestaLabel" style="width: 420px;">
+  <div class="offcanvas-header border-bottom">
+    <h5 class="offcanvas-title" id="offcanvasDetalleIngestaLabel">
+      <i class="bi bi-file-earmark-text me-2"></i>Detalle de Ejecución
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body p-0">
+    <div id="detalle-ingesta-list" class="list-group list-group-flush"></div>
+  </div>
+</div>

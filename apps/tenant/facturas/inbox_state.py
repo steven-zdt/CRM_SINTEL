@@ -40,6 +40,7 @@ def get_or_create_inbox_state(config_id: int) -> MailInboxState:
     state, created = MailInboxState.objects.get_or_create(
         mailbox_config=config,
         defaults={
+            "empresa_id": config.empresa_id,
             "last_seen_uid": None,  # Primera ejecución = histórico completo
             "total_processed": 0,
         }
@@ -69,7 +70,11 @@ def update_inbox_state(config_id: int, last_uid: int | None, messages_processed:
     with transaction.atomic():
         state, _ = MailInboxState.objects.get_or_create(
             mailbox_config=config,
-            defaults={"last_seen_uid": None, "total_processed": 0}
+            defaults={
+                "empresa_id": config.empresa_id,
+                "last_seen_uid": None,
+                "total_processed": 0,
+            }
         )
         
         if last_uid is not None:

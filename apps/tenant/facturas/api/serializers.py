@@ -6,7 +6,7 @@ Serializers para la app facturas.
 """
 from rest_framework import serializers
 
-from apps.tenant.facturas.models import Factura, ItemFactura, ItemNotaCredito, MailIngestionRun, NotaCredito, FacturaImpuesto
+from apps.tenant.facturas.models import DocumentProcessing, Factura, ItemFactura, ItemNotaCredito, MailIngestionRun, NotaCredito, FacturaImpuesto
 from apps.tenant.facturas.services import DETAIL_FIELDS
 from apps.tenant.empresa.models import Sede
 
@@ -514,7 +514,7 @@ class MailIngestionRunCreateSerializer(serializers.Serializer):
 class MailIngestionRunListSerializer(serializers.ModelSerializer):
     """
     Serializer para listado de ejecuciones de ingesta.
-    
+
     # WARNING: MINIMAL: Solo campos esenciales para tabla de ejecuciones.
     """
     class Meta:
@@ -527,6 +527,30 @@ class MailIngestionRunListSerializer(serializers.ModelSerializer):
             "task_id",
             "naturaleza",
             "counts",
+        )
+        read_only_fields = fields
+
+
+class DocumentProcessingSerializer(serializers.ModelSerializer):
+    """
+    MAIL-18: detalle por documento de una ejecución de ingesta.
+
+    # WARNING: MINIMAL: expone solo lo necesario para la UI de detalle
+    # (numero/estado/handler/error por documento) -- no expone document_id
+    # interno (uuid) ni contenido del documento.
+    """
+    class Meta:
+        model = DocumentProcessing
+        fields = (
+            "id",
+            "filename",
+            "document_type",
+            "handler",
+            "domain",
+            "status",
+            "numero",
+            "error_message",
+            "created_at",
         )
         read_only_fields = fields
 

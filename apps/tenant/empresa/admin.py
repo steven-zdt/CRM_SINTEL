@@ -3,9 +3,47 @@ Admin para la app empresa (por tenant).
 
 # WARNING: v2.40: Alineado con arquitectura Tabulator Factory.
 """
+from django import forms
 from django.contrib import admin
 
 from .models import Empresa, MailInboxConfig
+
+# WARNING: SEGURIDAD FASE 15: los 5 campos de password (incluido el legacy `password`,
+# que NO se cifra -- solo imap_password/smtp_password lo hacen via el serializer) se
+# renderizaban con el widget de texto por defecto, mostrando el valor guardado (texto
+# plano en el caso legacy, ciphertext Fernet en los nuevos) visible en el admin.
+# PasswordInput(render_value=False) deja el campo vacio al cargar la pagina; solo se
+# sobreescribe el valor guardado si el operador escribe uno nuevo explicitamente.
+_PASSWORD_FIELDS = ("password", "imap_password", "smtp_password")
+
+
+class MailInboxConfigAdminForm(forms.ModelForm):
+    class Meta:
+        model = MailInboxConfig
+        fields = "__all__"
+        widgets = {field: forms.PasswordInput(render_value=False) for field in _PASSWORD_FIELDS}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in _PASSWORD_FIELDS:
+            self.fields[field].required = False
+
+    def clean(self):
+        # PasswordInput(render_value=False) siempre se muestra vacio en el HTML, asi que un
+        # valor no vacio aqui SOLO puede venir de que el operador lo escribio recien -- se
+        # cifra con el mismo helper que usa el serializer de la API. Si lo dejo en blanco
+        # (el caso normal al editar cualquier otro campo), se conserva el valor ya guardado
+        # (que puede ya estar cifrado) en vez de sobreescribirlo con "".
+        cleaned = super().clean()
+        from apps.services.security.crypto import encrypt_password
+
+        for field in _PASSWORD_FIELDS:
+            typed_value = cleaned.get(field)
+            if typed_value:
+                cleaned[field] = encrypt_password(typed_value)
+            elif self.instance.pk:
+                cleaned[field] = getattr(self.instance, field)
+        return cleaned
 
 
 @admin.register(Empresa)
@@ -43,7 +81,11 @@ class MailInboxConfigAdmin(admin.ModelAdmin):
     
     # WARNING: v2.40: Alineado con arquitectura Tabulator Factory.
     # WARNING: SEGURIDAD: Passwords nunca se muestran en list_display.
+    # WARNING: SEGURIDAD FASE 15: form = MailInboxConfigAdminForm oculta el valor guardado
+    # (PasswordInput) y save_model() cifra cualquier password nuevo escrito aqui con el
+    # mismo helper que usa el serializer -- el admin ya no puede guardar en texto plano.
     """
+    form = MailInboxConfigAdminForm
     list_display = ['nombre', 'email_address', 'provider', 'imap_host', 'imap_port', 'is_active', 'created_at']
     list_filter = ['provider', 'is_active', 'imap_ssl', 'created_at']
     search_fields = ['nombre', 'email_address', 'imap_host', 'imap_username']

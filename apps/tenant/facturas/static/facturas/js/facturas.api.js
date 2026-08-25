@@ -288,32 +288,48 @@
   }
 
   /**
-   * Sincroniza facturas desde buzón de correo
+   * Encola una ejecucion asincrona (Celery) de ingesta de correo -> Document Intake Service.
+   * ⚠️ MAIL-18 BUGFIX: apuntaba a /api/v1/core/maildigester/run/, un endpoint que nunca
+   * llego a existir (comentado "No existe" en apps/tenant/core/api/urls.py) -- 404 garantizado.
+   * El endpoint real, vivo, es POST /api/v1/facturas/ingesta-correo/run/.
    * @param {number} configId - ID de la configuración de buzón
    * @param {number} limitMessages - Límite de mensajes a procesar (default: 50)
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
   async function syncMailbox(configId, limitMessages = 50) {
-    return await Http.request('POST', `${CORE_API_BASE}/maildigester/run/`, {
+    return await Http.request('POST', `${API_BASE}/facturas/ingesta-correo/run/`, {
       config_id: configId,
       limit_messages: limitMessages,
     });
   }
 
   /**
-   * Lista configuraciones activas de buzones de correo
+   * Lista configuraciones activas de buzones de correo.
+   * ⚠️ Endpoint real de MailInboxConfig (empresa), no el "core/maildigester" comentado.
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
   async function listMailConfigs() {
-    return await Http.request('GET', `${CORE_API_BASE}/maildigester/configs/`);
+    return await Http.request('GET', `${API_BASE}/empresas/mail-inbox-config/?is_active=true&page_size=100`);
   }
 
   /**
-   * Lista ejecuciones recientes de sincronización de correo
+   * Lista ejecuciones recientes de sincronización de correo (MailIngestionRun).
+   * ⚠️ MAIL-18 BUGFIX: mismo problema que syncMailbox() -- apuntaba a un endpoint
+   * "core/maildigester/runs/" nunca implementado. El real es
+   * GET /api/v1/facturas/ingesta-correo/runs/.
    * @returns {Promise<{ok: boolean, status: number, data: any}>}
    */
   async function listMailRuns() {
-    return await Http.request('GET', `${CORE_API_BASE}/maildigester/runs/`);
+    return await Http.request('GET', `${API_BASE}/facturas/ingesta-correo/runs/`);
+  }
+
+  /**
+   * MAIL-18: detalle por documento de una ejecucion de ingesta (DocumentProcessing).
+   * @param {number} runId - ID de MailIngestionRun
+   * @returns {Promise<{ok: boolean, status: number, data: any}>}
+   */
+  async function listRunDocuments(runId) {
+    return await Http.request('GET', `${API_BASE}/facturas/ingesta-correo/runs/${runId}/documents/`);
   }
 
   // Exportar para uso global
@@ -335,6 +351,7 @@
       syncMailbox,
       listMailConfigs,
       listMailRuns,
+      listRunDocuments,  // MAIL-18: detalle por documento de una ejecucion
       // [v3.7.0] Buscador de cuentas PUC vinculadas a facturas
       searchCuentas: (search = '') => {
         const url = `/api/v1/contabilidad/cuentas-contables/?search=${encodeURIComponent(search)}&app_origen=facturas&solo_auxiliares=true`;

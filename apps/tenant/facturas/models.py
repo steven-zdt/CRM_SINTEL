@@ -546,6 +546,7 @@ class MailIngestionRun(SintelTenantBaseModel):
         ("PENDING", "PENDING"),
         ("RUNNING", "RUNNING"),
         ("SUCCESS", "SUCCESS"),
+        ("PARTIAL_SUCCESS", "PARTIAL_SUCCESS"),  # errors > 0 pero imported/duplicates > 0
         ("FAILED", "FAILED"),  # Cambiar de FAILURE a FAILED para consistencia
         ("CANCEL_REQUESTED", "CANCEL_REQUESTED"),  # ← Clave para cancelación cooperativa
         ("CANCELED", "CANCELED"),
@@ -660,6 +661,72 @@ class MailInboxState(SintelTenantBaseModel):
     def __str__(self):
         uid_str = str(self.last_seen_uid) if self.last_seen_uid else "NULL (histórico)"
         return f"MailInboxState(config={self.mailbox_config_id}, last_uid={uid_str})"
+
+
+# --- Detalle por documento de una ejecución de ingesta (MAIL-17) ---
+class DocumentProcessing(SintelTenantBaseModel):
+    """
+    Resultado del Document Intake Service para UN documento individual
+    dentro de un MailIngestionRun (MAIL-17, FASE 20/21).
+
+    # WARNING: MailIngestionRun.counts/summary dan el AGREGADO de una ejecucion
+    # completa (12 mensajes, 18 adjuntos, 5 importados...) pero no permiten
+    # responder "que paso especificamente con factura_037.xml" sin parsear un
+    # JSON de texto libre. DocumentProcessing es esa fila por documento.
+    # WARNING: CERO SIGNALS: se crea explicitamente desde tasks.py despues de
+    # dispatcher.dispatch(), nunca via signal.
+    # WARNING: STATUS_CHOICES espeja ProcessingStatus
+    # (apps.services.document_intake.contracts) -- mismo vocabulario, no
+    # uno nuevo inventado aqui.
+    """
+    STATUS_CHOICES = [
+        ("SUCCESS", "SUCCESS"),
+        ("DUPLICATE", "DUPLICATE"),
+        ("INVALID", "INVALID"),
+        ("REQUIRES_REVIEW", "REQUIRES_REVIEW"),
+        ("FAILED", "FAILED"),
+        ("PARTIAL", "PARTIAL"),
+    ]
+    SOURCE_CHOICES = [
+        ("EMAIL", "EMAIL"),
+        ("UPLOAD", "UPLOAD"),
+        ("API", "API"),
+        ("IMPORT", "IMPORT"),
+    ]
+
+    run = models.ForeignKey(
+        MailIngestionRun,
+        on_delete=models.CASCADE,
+        related_name="documents",
+        verbose_name=_("Ejecución de ingesta"),
+    )
+    document_id = models.CharField(
+        max_length=64,
+        db_index=True,
+        verbose_name=_("ID de documento"),
+        help_text=_("document_id del ReceivedDocument (uuid4)"),
+    )
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default="EMAIL", verbose_name=_("Canal"))
+    filename = models.CharField(max_length=255, blank=True, null=True, verbose_name=_("Archivo"))
+    document_type = models.CharField(max_length=50, blank=True, null=True, verbose_name=_("Tipo documental"))
+    handler = models.CharField(max_length=100, blank=True, null=True, verbose_name=_("Handler"))
+    domain = models.CharField(max_length=50, blank=True, null=True, verbose_name=_("Dominio consumidor"))
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, db_index=True, verbose_name=_("Estado"))
+    numero = models.CharField(max_length=100, blank=True, null=True, verbose_name=_("Número del documento creado"))
+    error_message = models.TextField(blank=True, null=True, verbose_name=_("Error"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creado"))
+
+    class Meta:
+        verbose_name = _("Procesamiento de Documento")
+        verbose_name_plural = _("Procesamientos de Documento")
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["run", "status"]),
+            models.Index(fields=["document_id"]),
+        ]
+
+    def __str__(self):
+        return f"DocumentProcessing(run={self.run_id}, {self.filename}, status={self.status})"
 
 
 class FacturaAnexos(SintelTenantBaseModel):
