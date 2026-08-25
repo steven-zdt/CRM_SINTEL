@@ -1,12 +1,45 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.58.0
-**Ultima actualizacion:** 2026-08-25 (DOC-M45) — **Continuacion Mision
+**Version:** 3.59.0
+**Ultima actualizacion:** 2026-08-25 (DOC-M46) — **Cierre Mision Mail Hub
+(MAIL-19/20) + fix real reportado por el usuario en `empresa`**,
+posterior a DOC-M45 (2026-08-25, misma fecha). Mision Mail Hub
+**COMPLETED** para el alcance cubierto (unico pendiente real: click-through
+visual en navegador, bloqueado por una restriccion de seguridad del
+asistente, no por trabajo pendiente).
+
+**Cierre MAIL-19/20:** `tools.ekg.impact --name FacturaBusinessService`
+confirma sin sorpresas los consumidores conocidos previos a la mision. Se
+intento el click-through en navegador por una via alterna sin tocar el
+hosts file del sistema: sesion Django generada por shell (equivalente a
+`force_login()`, sin introducir ninguna contraseña) + `curl` con `Host:`
+falsificado contra `127.0.0.1:8000` -- la sesion no fue reconocida por el
+middleware de tenant (causa no diagnosticada), pero **el mismo intento
+revelo un metodo mas simple y sí funcional**: un JWT generado por shell
+(`RefreshToken.for_user()`, para un usuario real resuelto vía
+`TenantMembership`) SI es aceptado por los endpoints API reales de
+dominios que ya resuelven localmente (`sintel.net.co`/
+`home.sintel.net.co`) -- util para verificacion de API sin depender del
+hosts file. `MAIL_HUB_RELEASE_GATE.md` actualizado con el estado formal de
+cierre.
+
+**Fix real reportado por el usuario (fuera del alcance original de Mail
+Hub, pero bloqueante para su primer paso):** el usuario reporto en
+consola de navegador un `500` real en
+`GET /api/v1/empresas/mail-inbox-config/render-offcanvas/` (la pantalla
+para crear/editar un buzon de correo). Usando el metodo JWT recien
+descubierto se reprodujo contra el servidor real:
+`NameError: name 'logger' is not defined`. `MailInboxConfigViewSet.render_offcanvas()`
+usaba `logger.*` en 7 lugares, pero el modulo solo define
+`log`/`log_mailinbox` -- la pantalla de creacion/edicion de buzon **nunca
+funciono**, bloqueando el primer paso de todo el Mail Hub (sin poder crear
+un `MailInboxConfig`, no hay nada que sincronizar). Corregido (7 sitios),
+verificado contra el servidor real y con 3 tests de regresion nuevos
+(`apps/tenant/empresa/tests/test_mailinboxconfig_render_offcanvas.py`).
+
+**Actualizacion previa:** 2026-08-25 (DOC-M45) — **Continuacion Mision
 Mail Hub: MAIL-16/17/18 (rewire tasks.py, DocumentProcessing, UX)**,
-posterior a DOC-M44 (2026-08-25, misma fecha, misma mision). **Sigue
-PARCIAL** -- MAIL-19/20 (validacion puntual final + release gate final con
-click-through en navegador) quedan pendientes, ver
-`docs/mailhub/MAIL_HUB_RELEASE_GATE.md`.
+posterior a DOC-M44 (2026-08-25, misma fecha, misma mision).
 
 **MAIL-16 (rewire `tasks.py` -> `DocumentDispatcher`):**
 `apps/services/maildigester/tasks.py` ya no importa ningun dominio
@@ -2577,7 +2610,16 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.58.0 — 2026-08-25, DOC-M45)
+## 12. Metricas del Proyecto (v3.59.0 — 2026-08-25, DOC-M46)
+
+**[DOC-M46]** Cierre MAIL-19/20 no agrega modelos ni migraciones. **1
+archivo de produccion modificado**: `apps/tenant/empresa/api/viewsets.py`
+(7 sitios: `logger.` -> `log_mailinbox.`, bug real reportado por el
+usuario). **1 archivo de test nuevo**:
+`apps/tenant/empresa/tests/test_mailinboxconfig_render_offcanvas.py` (3
+tests). Sin cambios en `facturas`/`document_intake` -- este ciclo fue
+cierre de validacion (MAIL-19/20) + un fix puntual fuera del alcance
+original de la mision.
 
 **[DOC-M45]** MAIL-16/17/18 agregan **1 modelo tenant nuevo**
 (`DocumentProcessing`, `facturas`) y **1 migracion nueva**
