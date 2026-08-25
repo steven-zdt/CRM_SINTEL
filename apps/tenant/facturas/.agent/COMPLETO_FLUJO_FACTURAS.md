@@ -1,10 +1,10 @@
 # [PORTAL] Auditoría Flujo Completo — Módulo Facturas
 
-**Versión:** v3.11.0
+**Versión:** v3.12.0
 **Estado:** ✅ PRODUCTION READY — 0 CRÍTICOS
 **Ubicación:** `apps/tenant/facturas/`
-**Última Auditoría:** 2026-06-04
-**Auditor:** Claude Sonnet 4.6 (Anthropic)
+**Última Auditoría:** 2026-08-07 (re-validación completa contra código real; v3.11.0 quedó desactualizada en varias áreas — ver Changelog)
+**Auditor:** Claude Sonnet 5 (Anthropic)
 
 ---
 
@@ -12,7 +12,7 @@
 
 | Documento | Descripción | Estado |
 | :--- | :--- | :--- |
-| [Este archivo](AUDITORIA_FLUJO_FACTURAS.md) | Portal SSoT + Resultados de Auditoría | ACTUALIZADO 2026-06-04 v3.11.0 |
+| Este archivo (`COMPLETO_FLUJO_FACTURAS.md`) | Portal SSoT + Resultados de Auditoría | ACTUALIZADO 2026-08-07 v3.12.0. **Corrección v3.12.0:** el link apuntaba a `AUDITORIA_FLUJO_FACTURAS.md`, un archivo que no existe en este directorio — nombre real es `COMPLETO_FLUJO_FACTURAS.md`. |
 
 ---
 
@@ -20,6 +20,7 @@
 
 | Versión | Fecha | Descripción |
 |---------|-------|-------------|
+| **v3.12.0** | 2026-08-07 | **Re-validación contra código real** (no incremental — este doc había quedado desactualizado desde v3.11.0). Corregido: `NotaCredito` **sí** hereda `SintelTenantBaseModel` (el doc decía que no). Documentado por primera vez: (1) **Vista HTML server-rendered `FacturaTableView`** (`views.py`/`tables.py`, Fase 5-BIS — Tabulator **retirado** de `facturas_list.js`, reemplazado por `django-tables2` + HTMX en `tabla/<naturaleza>/`); (2) `FacturaCRUDService` (`crud_service.py`) y `FacturaServiceMixin` (`api_mixins.py`), presentes desde antes pero nunca listados; (3) `services/dian/` (CUFE, UBL 2.1 builder, firma XAdES, AttachedDocument) — el pipeline DIAN real detrás de la "Responsabilidad Core #1", nunca desglosado en archivos; (4) `services_mail_ingestion.py` + `api/views_mail_ingestion.py` (3 vistas) para la ingesta por correo; (5) `crear_factura_desde_venta(empresa, dto)` en `FacturaBusinessService` — Ventas **empuja** una Factura de Venta provisional (`BORR-VTA-{uuid8}`) a partir de un DTO canónico, integración no documentada previamente; (6) 9 `@action` adicionales en `FacturaViewSet` (`por-estado`, `cambiar-estado`, `lista-centro-costos`, `obtener-retenciones`, `gestor-offcanvas`, `inventario-catalogo`, `trazabilidad-inventario`, `buscar-para-movimiento`) y el serializer `CatalogoItemInventarioSerializer`; (7) campos UBL de cabecera (`ubl_version`, `customization_id`, `profile_id`, `profile_execution_id`, `invoice_type_code`) en `Factura`, nunca listados. Confirmado sin cambios (verificado, no asumido): `sede` (DT-SEDE-02) sigue siendo un campo de reporte — usado solo en `selectors.py`/`serializers.py`, cero lectura en `business_service.py`/`viewsets.py` para scoping o reglas de negocio (mismo patrón que el resto de apps con `DT-SEDE-0X`, ver `docs/ADR-003-contexto-organizacional-sede-area.md`). |
 | **v3.11.0** | 2026-06-04 | **Integración Bancos↔Facturas** (Pull Model): `BancosBridge`, `@property total_pagado_bancos`, `@property saldo_pendiente` en `Factura`. `FacturaInterAppAPI.recalcular_estado_pago_automatico()`. Validación estado_pago en `actualizar_factura_limitado()`. Serializers exponen `total_pagado_bancos` + `saldo_pendiente`. Frontend: `data-total-pagado-bancos` + `data-saldo-pendiente` en form. `initResumenPagosBancos()` en `facturas_editor.js`. |
 | **v3.10.5** | 2026-06-03 | Auditoría validación completa. Campo `sede` FK documentado. `FacturaImpuesto` model agregado. 30 migraciones. |
 | **v3.10.4** | 2026-05-28 | Fixes varios. `facturas_editor.js` pre-carga `total_pagado_bancos`/`saldo_pendiente` desde `data-*` del form. |
@@ -72,6 +73,15 @@
 | `fecha_emision` | DateTimeField |
 | `fecha_vencimiento` | DateField, nullable |
 | `payment_due_date` | DateField, nullable |
+
+#### Campos UBL de Cabecera (no documentados hasta v3.12.0)
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| `ubl_version` | CharField(10) | nullable |
+| `customization_id` | CharField(50) | nullable |
+| `profile_id` | CharField(80) | nullable |
+| `profile_execution_id` | CharField(10) | nullable |
+| `invoice_type_code` | CharField(4) | nullable |
 
 #### Snapshots Emisor / Receptor (inmutables desde XML)
 | Grupo | Campos |
@@ -169,7 +179,7 @@ def tiene_nota_credito(self) -> bool: ...    # hasattr(self, 'nota_credito')
 
 ### `NotaCredito`
 
-OneToOne con `Factura` (PROTECT). Campos: `numero` (unique), `cude` (unique), `fecha_emision`, `moneda`, `subtotal`, `impuestos`, `total`, `retefuente`, `reteica`, `reteiva`, `motivo`, `ref_factura_numero`, `ref_factura_cufe`, `xml_content`. **No hereda** `SintelTenantBaseModel` — tiene `created_at`/`updated_at` propios.
+OneToOne con `Factura` (PROTECT). Campos: `numero` (unique), `cude` (unique), `fecha_emision`, `moneda`, `subtotal`, `impuestos`, `total`, `retefuente`, `reteica`, `reteiva`, `motivo`, `ref_factura_numero`, `ref_factura_cufe`, `xml_content`. **Corrección v3.12.0:** el doc v3.11.0 decía "no hereda `SintelTenantBaseModel`" — **incorrecto**, verificado contra el código actual: `class NotaCredito(SintelTenantBaseModel)`. Sí declara `created_at`/`updated_at` propios además (redundante pero inofensivo, mismo patrón que `FAC-DT-02`).
 
 **@property:** `factura_original` → alias de `self.factura`
 
@@ -257,6 +267,7 @@ result = TransaccionBancaria.objects.filter(
 
 | Método | Descripción |
 |--------|-------------|
+| **`crear_factura_desde_venta(empresa, dto)`** | **No documentado hasta v3.12.0.** `@atomic`. Ventas empuja aquí un DTO canónico (emisor/receptor/totales/líneas/`cliente_uuid`/`venta_uuid`, generado por `VentaBusinessService._construir_dto_factura()`) y esto crea una `Factura` de Venta provisional con número `BORR-VTA-{uuid8}`, pendiente de numeración/firma DIAN definitiva. Único punto del módulo donde otra app **escribe** una `Factura` directamente (el resto de integraciones son Pull Model o soft-reference — ver "Integración con Otros Módulos"). |
 | `normalize_document_number(value)` | Strip, sin espacios/puntos/guiones, uppercase |
 | `_resolver_naturaleza(emisor_nit, empresa_nit)` | `VENTA` si emisor_nit == empresa.nit, else `COMPRA` |
 | `obtener_retenciones_desde_cliente(cliente_nit, empresa_id)` | Lee config retenciones del cliente (Pull Model) |
@@ -320,9 +331,34 @@ factura.save(update_fields=['estado_pago'])
 
 ---
 
+### Archivos de Service Layer no documentados hasta v3.12.0
+
+| Archivo | Responsabilidad |
+|---|---|
+| `crud_service.py` (`FacturaCRUDService`) | Persistencia pura (Create/Delete) y acceso a QuerySets. Sin lógica de negocio — el ViewSet ya filtró `empresa_id` antes de llamarlo. |
+| `api_mixins.py` (`FacturaServiceMixin`) | Inyección de la Service Layer en `FacturaViewSet` (`get_qs_list`, `get_qs_detail`, `get_summary`, `service_eliminar`, `service_importar_documento`, ...). |
+| `services/dian/` | Pipeline DIAN UBL 2.1 real detrás de la Responsabilidad Core #1 — nunca desglosado por archivo antes de esta versión: `cufe.py` (cálculo CUFE, SHA-384 sobre campos fiscales, Anexo Técnico FE DIAN v1.9 §5.4.3), `ubl21_builder.py` (construcción del XML `Invoice` UBL 2.1), `xades_signer.py` (firma XAdES-EPES, requiere `lxml` + `cryptography`/`pyopenssl`), `attached_document.py` (contenedor `AttachedDocument` que envuelve el Invoice firmado para el envío a la DIAN). |
+| `services_mail_ingestion.py` | `enqueue_mail_ingestion()`, `persist_run_result()`, `process_mail_ingestion_sync()`, `preview_mail_ingestion()` — orquestación de la ingesta IMAP asíncrona (Celery), consumido por `MailIngestionRun`/`MailInboxState`. |
+| `api/filters.py` | Placeholder — sin `FilterSet` custom definido; el ViewSet usa `filterset_fields` inline. |
+| `api/permissions.py` | Re-exporta `IsTenantAdminOrReadOnly` desde `apps.tenant.api.permissions` (SSoT) — sin lógica propia, ya consolidado. |
+| `api/views_mail_ingestion.py` | `MailIngestionRunCreateAPIView`, `MailIngestionRunsListAPIView`, `MailIngestionPreviewAPIView` — vistas planas (no ViewSet) para los endpoints sueltos `/ingesta-correo/*`. |
+
+---
+
+## Vista HTML Server-Rendered (`views.py`/`tables.py`) — Fase 5-BIS, no documentado hasta v3.12.0
+
+Mismo patrón ya aplicado en `gastos`/`compras`: reemplaza el grid Tabulator del listado principal por `django-tables2` + HTMX. **Tabulator fue retirado** de `facturas_list.js` (confirmado en el código: comentario "Simplificación consciente respecto a la versión Tabulator: se retiró...") — la API DRF (`api/viewsets.py`) sigue viva para el resto de acciones (crear, editar, vincular, gestor-offcanvas, etc.), no para el listado.
+
+- `FacturaTableView` (`views.py`, `LoginRequiredMixin` + `SintelDSVMixin` + `SingleTableView`): una sola vista parametrizada por `naturaleza` (VENTA/COMPRA vía `<str:naturaleza>` en la URL) alimenta las 2 pestañas de `list_factura.html`. Filtra también por `estado_pago` (`?estado_pago=`) y búsqueda (`?q=`). Para COMPRA excluye la columna `cotizacion_numero` (`get_table_kwargs()`).
+- `FacturaTable` (`tables.py`): columnas `numero`, `contraparte` (cliente/proveedor, no ordenable), `vencimiento` (accessor `payment_due_date`), `total`, `estado` (DIAN), `estado_pago`, `cotizacion_numero`, `acciones`.
+- Ruta: `facturas:tabla` → `tabla/<str:naturaleza>/` (`urls.py`), consumida vía `hx-get` desde `list_factura.html` en ambas pestañas.
+- Test: `tests/test_multitenant_isolation_tabla_html.py` (ver sección Tests — no estaba categorizado en v3.11.0).
+
+---
+
 ## API Layer
 
-### Serializers (`api/serializers.py`) — 13 serializadores
+### Serializers (`api/serializers.py`) — 14 serializadores (corregido de 13 en v3.12.0)
 
 | Serializer | Uso | Notas clave |
 |---|---|---|
@@ -339,6 +375,7 @@ factura.save(update_fields=['estado_pago'])
 | `MailIngestionRunListSerializer` | GET runs correo | 7 campos read-only |
 | `NotaCreditoListSerializer` | GET NC list | Incluye `factura_numero`, `factura_cufe` |
 | `NotaCreditoDetailSerializer` | GET NC detail | Completo |
+| `CatalogoItemInventarioSerializer` | GET `inventario-catalogo` | No documentado hasta v3.12.0 — catálogo de productos/servicios de Inventario para vincular ítems de factura |
 
 ---
 
@@ -370,6 +407,13 @@ Permisos: IsTenantMember + IsTenantAdminOrReadOnly
 | `/api/v1/facturas/vincular-cotizacion/` | POST | link cotización (soft ref) |
 | `/api/v1/facturas/vincular-cliente/` | POST | link cliente VENTA (DSV via ClienteBridge) |
 | `/api/v1/facturas/vincular-proveedor/` | POST | link proveedor COMPRA (DSV via ProveedorBridge) |
+| `/api/v1/facturas/por-estado/` | GET | **No documentado hasta v3.12.0** — listado agrupado/filtrado por `estado` |
+| `/api/v1/facturas/{uuid}/cambiar-estado/` | POST | **No documentado hasta v3.12.0** — transición de `estado` (BORRADOR/ENVIADA/ACEPTADA/RECHAZADA/ANULADA) |
+| `/api/v1/facturas/lista-centro-costos/` | GET | **No documentado hasta v3.12.0** |
+| `/api/v1/facturas/obtener-retenciones/` | GET | **No documentado hasta v3.12.0** — expone `obtener_retenciones_desde_cliente/proveedor()` |
+| `/api/v1/facturas/inventario-catalogo/` | GET | **No documentado hasta v3.12.0** — catálogo Inventario para vincular ítems (`InventarioItemBridge.buscar_catalogo()`) |
+| `/api/v1/facturas/{uuid}/trazabilidad-inventario/` | GET | **No documentado hasta v3.12.0** |
+| `/api/v1/facturas/buscar-para-movimiento/` | GET | **No documentado hasta v3.12.0** |
 
 #### NotaCreditoViewSet, ItemFacturaViewSet
 
@@ -408,7 +452,7 @@ POST /ingesta-correo/preview/ → MailIngestionPreviewAPIView
 | `facturas.api.js` | SSoT endpoints. `window.http()` para todas las llamadas. |
 | `facturas.components.js` | Componentes reutilizables (badges, formatters) |
 | `facturas_main.js` | Orquestador principal. `tab-activated` listener. |
-| `features/facturas_list.js` | Tabulator grid — columnas, filtros, búsqueda, KPIs |
+| `features/facturas_list.js` | **Corregido v3.12.0** — el grid Tabulator fue **retirado** (Fase 5-BIS): el listado ahora es `FacturaTableView`/`FacturaTable` server-rendered (ver sección dedicada arriba). Este archivo retiene filtros/acciones y el listener de detalle vía HTMX (`gestor-offcanvas`) — ya no inicializa ningún grid. |
 | `features/facturas_editor.js` | Form editar. **v3.11.0**: `initResumenPagosBancos(form)` — lee `data-total-pagado-bancos` y `data-saldo-pendiente` del form; bloquea `#factura-estado-pago` según reglas medio_pago/bancos |
 | `features/ver_detalle_factura.js` | Panel detalle read-only |
 | `features/factura_inventario_vinculacion.js` | Vinculación ítems con Inventario (autocomplete) |
@@ -433,6 +477,7 @@ POST /ingesta-correo/preview/ → MailIngestionPreviewAPIView
 | `offcanvas_importar_factura.html` | Import batch XML |
 | `offcanvas_pendientes_factura.html` | Vista facturas pendientes |
 | `partials/assets_facturas.html` | Carga assets JS en orden |
+| `partials/tabla_facturas.html` | **No documentado hasta v3.12.0** — template de `FacturaTableView` (Fase 5-BIS), renderiza `FacturaTable` |
 
 ---
 
@@ -542,6 +587,7 @@ def _resolver_naturaleza(emisor_nit, empresa_nit):
 | Detalle/Anexos | `test_factura_detail_anexos_api.py` |
 | Integración | `test_services_ingest_integration.py`, `test_ssot_empresa_provider.py`, `test_xml_pipeline_canonical.py`, `test_upload_async_flow.py` |
 | Templates | `test_templates.py` |
+| Vista HTML (Fase 5-BIS) | `test_multitenant_isolation_tabla_html.py` — **no categorizado hasta v3.12.0**. Usa el mismo patrón `force_login()` + `schema_context()` que tiene un bug preexistente confirmado en `compras`/`gastos` (ver ADR-003, sección "Hallazgo importante" en `MEMORY.md` 2026-08-07); no se pudo re-ejecutar en esta auditoría porque una sesión separada del usuario tenía la base de datos de test en uso investigando ese mismo bug (`task_f84677b8`) — **estado real de este test no confirmado, no asumido como pasando**. |
 
 ---
 
@@ -564,6 +610,7 @@ def _resolver_naturaleza(emisor_nit, empresa_nit):
 | **Contabilidad** | Pull Model — Contabilidad lee de Facturas | `ExtractorFacturas` extrae datos. Facturas NUNCA importa Contabilidad. |
 | **Retenciones** | Pull Model — Facturas lee de Contabilidad | `@property total_retencion_fuente/reteica/reteiva` → `Retencion` table. |
 | **Bancos** | Pull Model — Facturas lee de Bancos | `BancosBridge.obtener_total_conciliado()` → `TransaccionBancaria`. Auto-recálculo via `FacturaInterAppAPI`. |
+| **Ventas** | **No documentado hasta v3.12.0** — Push: Ventas escribe una Factura | `FacturaBusinessService.crear_factura_desde_venta(empresa, dto)` — único caso del módulo donde otra app crea una `Factura` directamente (no soft-reference, no Pull Model). El DTO viene de `VentaBusinessService._construir_dto_factura()`. |
 | **Clientes** | Soft reference | `cliente_uuid` + `ClienteBridge` sin FK |
 | **Proveedores** | Soft reference | `proveedor_uuid` + `ProveedorBridge` sin FK |
 | **Cotizaciones** | Soft reference | `cotizacion_uuid` + `CotizacionBridge` sin FK |
@@ -574,17 +621,24 @@ def _resolver_naturaleza(emisor_nit, empresa_nit):
 
 ## Validaciones Actuales
 
+Re-ejecutado el 2026-08-07 contra el código real (no copiado de la versión anterior):
+
 ```
-python manage.py check          → 0 issues
-py_compile models.py            → OK
-py_compile api/viewsets.py      → OK
-py_compile services/business_service.py → OK
-makemigrations --check          → No changes detected
-Migraciones aplicadas           → 0001–0030 (30 total)
+python manage.py check                              → System check identified no issues (0 silenced)
+py_compile models.py                                → OK
+py_compile api/viewsets.py                          → OK
+py_compile services/business_service.py             → OK
+py_compile views.py, tables.py                       → OK
+makemigrations facturas --check --dry-run           → No changes detected
+Migraciones aplicadas                                → 0001–0030 (30 total, sin cambios desde v3.11.0)
+pytest test_multitenant_isolation_tabla_html.py     → NO EJECUTADO esta sesión (BD de test en uso por
+                                                        otra sesión del usuario investigando el bug
+                                                        force_login compartido con compras/gastos) —
+                                                        pendiente de confirmación real, no asumido OK.
 ```
 
 ---
 
-**Última Actualización:** 2026-06-04 (v3.11.0)
-**Auditor:** Claude Sonnet 4.6 (Anthropic)
-**Status:** ✅ PRODUCTION READY — 0 CRÍTICOS — 17/17 AGENTS.md COMPLIANCE
+**Última Actualización:** 2026-08-07 (v3.12.0 — re-validación completa contra código real)
+**Auditor:** Claude Sonnet 5 (Anthropic)
+**Status:** ✅ PRODUCTION READY — 0 CRÍTICOS — 17/17 AGENTS.md COMPLIANCE (re-verificado). Un test nuevo (`test_multitenant_isolation_tabla_html.py`) con estado no confirmado por un bug de infraestructura de tests preexistente y ajeno a este módulo — ver Tests.

@@ -21,8 +21,12 @@ def test_routing_devengos_list_after_include(client, admin_user, tenant):
     2. El include esté en config/api_urls.py
     3. El router esté registrado en apps/tenant/empleados/api/urls.py
     """
-    client.force_login(admin_user)
-    
+    # force_login debe escribir la sesion en el esquema del tenant: sessions
+    # esta en TENANT_APPS (aislado por esquema) y la request real solo la lee
+    # despues de que TenantMainMiddleware cambia de esquema (ver settings.py).
+    with schema_context(tenant.schema_name):
+        client.force_login(admin_user)
+
     # Si el include en TENANT_URLCONF está OK, debe ser 200 (aunque no haya datos)
     # Nota: El host del tenant se simula automáticamente por django-tenants en tests
     resp = client.get("/api/v1/empleados/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
@@ -75,10 +79,11 @@ def test_routing_devengos_list_with_data(client, admin_user, tenant):
             neto_pagar=Decimal("1070000.00")
         )
     
-    client.force_login(admin_user)
-    
+    with schema_context(tenant.schema_name):
+        client.force_login(admin_user)
+
     resp = client.get("/api/v1/empleados/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
-    
+
     if resp.status_code == 200:
         data = resp.json()
         # Verificar estructura de respuesta
@@ -97,7 +102,8 @@ def test_routing_resoluciones_dian_render_offcanvas_crear(client, admin_user, te
     """
     Verifica que el endpoint /api/v1/empleados/resoluciones-dian/render-offcanvas/crear/ responde correctamente (200).
     """
-    client.force_login(admin_user)
+    with schema_context(tenant.schema_name):
+        client.force_login(admin_user)
     resp = client.get(
         "/api/v1/empleados/resoluciones-dian/render-offcanvas/crear/",
         HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"

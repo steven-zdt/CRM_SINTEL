@@ -149,3 +149,98 @@ def test_no_dangling_edges():
     for edge in graph.edges:
         assert edge.source_id in graph.nodes, f"dangling source: {edge}"
         assert edge.target_id in graph.nodes, f"dangling target: {edge}"
+
+
+def test_model_inherits_cross_app_base_via_import_resolution():
+    """OrdenCompra(SedeAwareModel) - the base is imported from
+    apps.tenant.core.models, a different app than compras. Before this fix,
+    extract_models() only ever resolved a base class as
+    schema.model_id(<same app_label as the subclass>, base_name), so this
+    INHERITS edge silently never existed for ANY tenant model in the whole
+    project (every one of them inherits SintelTenantBaseModel from `core`,
+    directly or - since ADR-003 - transitively via SedeAwareModel). Pinned
+    as an external stub here (compras' own extraction can't know core has
+    since been extracted for real); test_cross_app_fk_stub_... in
+    test_build_graph.py already proves stubs correctly resolve to the real
+    node once both apps are merged - not re-proven here. OrdenCompra
+    switched from SintelTenantBaseModel to SedeAwareModel 2026-08-07
+    (ADR-003, contexto organizacional Sede/Area) - this assertion tracks
+    the real, current base, not a frozen snapshot."""
+    graph = _graph()
+    orden_compra = graph.nodes[schema.model_id("tenant_compras", "OrdenCompra")]
+    base_id = schema.model_id("tenant_core", "SedeAwareModel")
+    inherits = [
+        e for e in graph.edges
+        if e.source_id == orden_compra.id and e.rel_type == schema.REL_INHERITS
+    ]
+    assert [e.target_id for e in inherits] == [base_id]
+    assert graph.nodes[base_id].properties["external"] is True
+
+
+def test_viewset_inherits_cross_app_base_via_import_resolution():
+    """OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin,
+    SintelDSVMixin, BaseTenantViewSet) - OrdenCompraServiceMixin is a
+    same-app Service (resolves to a USES edge, already worked before this
+    fix); the other three are imported from apps.tenant.core/apps.tenant.api,
+    infrastructure apps this pilot does not extract as one of its 17
+    business apps (see documentacion/arquitectura_general.md Sec 2.3) - all
+    three must still produce an INHERITS edge to an external stub, not
+    silently vanish the way they did before this fix (confirmed missing on
+    a fresh extraction while building the EKG governance tooling).
+    OrganizationalContextMixin was added 2026-08-07 (OCF Fase 9, Migracion
+    Aplicacion por Aplicacion) - this assertion tracks the real, current
+    inheritance, not a frozen snapshot."""
+    graph = _graph()
+    viewset = graph.nodes[schema.viewset_id("compras", "OrdenCompraViewSet")]
+    inherits_targets = {
+        e.target_id for e in graph.edges
+        if e.source_id == viewset.id and e.rel_type == schema.REL_INHERITS
+    }
+    assert inherits_targets == {
+        schema.viewset_id("core", "OrganizationalContextMixin"),
+        schema.viewset_id("api", "SintelDSVMixin"),
+        schema.viewset_id("api", "BaseTenantViewSet"),
+    }
+    for target_id in inherits_targets:
+        assert graph.nodes[target_id].properties["external"] is True
+
+    uses_targets = {
+        e.target_id for e in graph.edges
+        if e.source_id == viewset.id and e.rel_type == schema.REL_USES
+    }
+    assert schema.service_id("compras", "api_mixins", "OrdenCompraServiceMixin") in uses_targets
+
+
+def test_real_viewset_node_explicitly_marks_external_false():
+    """A real ViewSet definition must set external=False explicitly (not
+    just omit the key), mirroring extract_models()'s real-Model nodes -
+    Graph.add_node's "external is monotonic" merge only forces false when
+    the EXISTING node in the graph already has external is False; omitting
+    the key entirely left a real ViewSet vulnerable to being silently
+    downgraded back to a stub if a cross-app INHERITS stub for that same
+    node (from another app, processed either before or after) merged in.
+    Found via the EKG governance sweep: a `core` app CoreViewSet correctly
+    resolved an INHERITS edge to a real tenant ViewSet, but that tenant
+    ViewSet still showed external=True after both apps were merged."""
+    graph = _graph()
+    viewset = graph.nodes[schema.viewset_id("compras", "OrdenCompraViewSet")]
+    assert viewset.properties["external"] is False
+
+
+def test_cross_app_base_resolution_ignores_non_tenant_imports():
+    """A base class imported from anywhere other than apps.tenant.* (a
+    Django/DRF builtin, a third-party library, stdlib) must not produce a
+    node/edge at all - only apps.tenant.* is within this pilot's scope
+    (see PILOT_REPORT.md roadmap item 8). Regression guard for
+    _resolve_cross_app_base_folder() being too eager."""
+    from tools.ekg.extract_python import _resolve_cross_app_base_folder
+
+    import_map = {
+        "SintelTenantBaseModel": "apps.tenant.core.models",
+        "models": "django.db",
+        "ModelViewSet": "rest_framework.viewsets",
+    }
+    assert _resolve_cross_app_base_folder("SintelTenantBaseModel", import_map) == "core"
+    assert _resolve_cross_app_base_folder("models", import_map) is None
+    assert _resolve_cross_app_base_folder("ModelViewSet", import_map) is None
+    assert _resolve_cross_app_base_folder("NeverImported", import_map) is None

@@ -298,6 +298,77 @@ Cambios aplicados al stack que afectan esta infraestructura:
 
 ---
 
+## Troubleshooting — "el navegador no conecta y no hay actividad en el log del contenedor" (2026-08-05)
+
+**Sintoma:** `http://home.sintel.net.co:8000/` (o cualquier subdominio) no carga en el navegador,
+y `docker compose logs web` no muestra NINGUNA linea nueva al recargar la pagina. Sin embargo,
+probar el mismo request desde dentro del contenedor (`curl -H "Host: home.sintel.net.co" ...`) o
+desde Windows contra `127.0.0.1:8000` con el header `Host` explicito SI funciona (200 OK).
+
+**Diagnostico:** si no hay NINGUNA actividad en el log, la request nunca llego a Docker — el
+problema esta 100% en la resolucion DNS del lado del cliente (navegador/SO), no en
+nginx/Django/Docker. No pierdas tiempo revisando middleware, ALLOWED_HOSTS o el tenant en la
+base de datos si el sintoma es "cero actividad en el log": eso siempre apunta a que el
+`Host:` header nunca salio de la maquina cliente.
+
+### Causa raiz mas comun: sintaxis invertida en el archivo hosts de Windows
+
+El archivo `C:\Windows\System32\drivers\etc\hosts` mapea **IP → hostname**, NO
+hostname → hostname. Un error facil de cometer (y que ya paso una vez en este proyecto) es
+escribir:
+
+```
+# INCORRECTO — "localhost" no es una IP, Windows ignora silenciosamente esta linea
+localhost       home.sintel.net.co
+localhost       sintel.net.co
+```
+
+Windows no reporta ningun error al parsear una linea invalida como esta — simplemente la
+ignora, y la resolucion cae de vuelta al DNS publico real (que para `home.sintel.net.co`
+devuelve `NXDOMAIN`, ya que el wildcard de Cloudflare/DNS publico documentado mas arriba en
+este archivo aun no esta activo en el entorno de desarrollo actual). El sintoma exacto es
+`Invoke-WebRequest`/el navegador reportando "no se puede resolver el nombre remoto".
+
+**Formato correcto** (IP primero, hostname despues):
+
+```
+127.0.0.1	sintel.net.co
+127.0.0.1	home.sintel.net.co
+127.0.0.1	cliente.sintel.net.co
+```
+
+Tras corregir: `ipconfig /flushdns` y volver a probar.
+
+### IP del servidor local: verificar, no asumir
+
+Este documento (y varios archivos de config: `.env`, `docker-compose.yaml` `extra_hosts`,
+`config/settings.py` `ALLOWED_HOSTS`/`_dev_hosts`, `ensure_tenant_dns.py` `SERVER_IP` default)
+asumen `192.168.2.15` como IP fija del servidor de desarrollo. **Esta IP puede quedar
+desactualizada** si el DHCP de la red reasigna una IP distinta a la maquina (confirmado en esta
+sesion: la IP real de la interfaz Ethernet resulto ser `192.168.2.200`, no `.15`). Antes de
+depurar problemas de conectividad de red asumiendo que `192.168.2.15` es correcta, verificar
+con:
+
+```powershell
+Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" }
+```
+
+Si la IP real difiere de `192.168.2.15` en los archivos de configuracion, actualizarla en todos
+los lugares listados arriba (no solo uno) para evitar inconsistencias entre lo que resuelve el
+navegador del cliente y lo que usan los contenedores internamente.
+
+### Alternativa mas simple para una sola maquina de desarrollo: hosts file en vez de Windows DNS Server
+
+Todo lo demas en este documento (Windows DNS Server, wildcard `* A 192.168.2.15`, DHCP
+distribuyendo ese DNS a toda la red) es la configuracion completa para que **cualquier maquina
+de la red local** acceda a los tenants sin configuracion individual. Si solo estas
+desarrollando desde una unica maquina (sin necesidad de que otras PCs de la red accedan), es
+mas simple usar el archivo hosts local de esa maquina (formato de arriba) apuntando a
+`127.0.0.1` — evita depender de un DNS Server separado y de que la IP del servidor se mantenga
+estable. Es el enfoque usado en esta sesion de troubleshooting.
+
+---
+
 ## Relacion con otras configuraciones
 
 - **ADR-002** (`docs/ADR-002-public-schema-api-dual-registration.md`): los endpoints llamados desde paginas estaticas en `home.sintel.net.co` deben estar registrados tanto en `urls_public.py` como en `urls_tenant.py`.

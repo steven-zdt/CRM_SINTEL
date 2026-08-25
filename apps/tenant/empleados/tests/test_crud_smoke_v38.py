@@ -141,8 +141,9 @@ class TestEmpleadoCRUDSmoke:
         uuid = create_resp.json()["uuid"]
 
         resp = client.delete(f"{self.URL}{uuid}/", HTTP_HOST=make_host(tenant))
-        # 204 = eliminado OK, 400 = tiene contratos activos (regla de negocio valida)
-        assert resp.status_code in (200, 204, 400), (
+        # 204 = eliminado OK, 400/409 = regla de negocio valida (ej: solo se
+        # puede eliminar un empleado en estado RETIRADO, no ACTIVO)
+        assert resp.status_code in (200, 204, 400, 409), (
             f"DELETE failed unexpectedly: {resp.status_code} {resp.content[:300]}"
         )
 
@@ -283,6 +284,28 @@ class TestNominaCRUDSmoke:
 
     def _setup(self, client, admin_user, tenant):
         """Helper: crea empleado + contrato y retorna IDs."""
+        # El service layer exige una ResolucionDIAN vigente que cubra la
+        # fecha_pago de DEVENGO_PAYLOAD_BASE (2025-01-30); sin ella,
+        # procesar_devengo() rechaza el POST con 400 (AGENTS.md 18/CONTAB).
+        with schema_context(tenant.schema_name):
+            from apps.tenant.empleados.models import ResolucionDIAN
+            from apps.tenant.empresa.models import Empresa
+
+            empresa = Empresa.objects.only("id").first()
+            ResolucionDIAN.objects.get_or_create(
+                empresa=empresa,
+                numero_resolucion="RES-SMOKE-NOMINA",
+                defaults={
+                    "prefijo": "SMK",
+                    "rango_desde": 1,
+                    "rango_hasta": 10000,
+                    "fecha_resolucion": "2025-01-01",
+                    "fecha_inicio": "2025-01-01",
+                    "fecha_fin": "2027-01-01",
+                    "vigente": True,
+                },
+            )
+
         emp_resp = client.post(
             self.URL_EMP,
             data=EMPLEADO_PAYLOAD,

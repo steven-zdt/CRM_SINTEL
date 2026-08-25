@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ekg-explorer-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8931", "--directory", "tools/ekg/out"],
+      "port": 8931
+    }
+  ]
+}

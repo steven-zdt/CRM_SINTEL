@@ -36,9 +36,13 @@ def test_empleados_list_smoke(client, admin_user, tenant):
             arl="ARL002"
         )
     
-    # Autenticar usuario global (según fixtures)
-    client.force_login(admin_user)
-    
+    # Autenticar usuario global (según fixtures). force_login debe escribir la
+    # sesion en el esquema del tenant: sessions esta en TENANT_APPS (aislado
+    # por esquema) y la request real solo la lee despues de que
+    # TenantMainMiddleware cambia de esquema (ver settings.py).
+    with schema_context(tenant.schema_name):
+        client.force_login(admin_user)
+
     # La ruta se incluirá más adelante en TENANT_URLCONF (/api/v1/empleados/)
     resp = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     
@@ -53,12 +57,13 @@ def test_empleados_create_smoke(client, admin_user, tenant):
     
     Verifica que el endpoint de creación responda correctamente.
     """
-    client.force_login(admin_user)
-    
+    with schema_context(tenant.schema_name):
+        client.force_login(admin_user)
+
     with schema_context(tenant.schema_name):
         from apps.tenant.empresa.models import Empresa
         empresa = Empresa.objects.first()
-    
+
     payload = {
         "empresa": str(empresa.id),
         "tipo_documento": "CC",
@@ -155,8 +160,13 @@ def test_empleados_multitenancy_isolation(client, admin_user, tenant, tenant_fac
             defaults={'rol': 'ADMIN'}
         )
     
-    client.force_login(admin_user)
-    
+    # force_login debe escribir la sesion en el esquema del tenant consultado:
+    # sessions esta en TENANT_APPS (aislado por esquema) y la request real
+    # solo la lee despues de que TenantMainMiddleware cambia de esquema, asi
+    # que se reescribe antes de cada request contra un host distinto.
+    with schema_context(tenant.schema_name):
+        client.force_login(admin_user)
+
     # Verificar que tenant1 solo ve su empleado (si el router está incluido)
     resp1 = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     if resp1.status_code == 200:
@@ -166,8 +176,10 @@ def test_empleados_multitenancy_isolation(client, admin_user, tenant, tenant_fac
             doc_numbers = [r.get("numero_documento") for r in results1 if isinstance(r, dict)]
             assert "1111111111" in doc_numbers or len(doc_numbers) == 0
             assert "2222222222" not in doc_numbers
-    
+
     # Verificar que tenant2 solo ve su empleado
+    with schema_context(tenant2.schema_name):
+        client.force_login(admin_user)
     resp2 = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant2.schema_name}.sintel.net.co")
     if resp2.status_code == 200:
         data2 = resp2.json()

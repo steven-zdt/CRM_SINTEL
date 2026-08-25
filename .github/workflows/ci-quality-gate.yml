@@ -106,3 +106,75 @@ jobs:
 
       - name: Run pytest
         run: pytest
+
+  ekg-graph-health:
+    name: EKG - extraccion + integridad del grafo
+    runs-on: ubuntu-latest
+    # [EKG-C1] Fase 8 del pedido de gobernanza (sincronizacion continua):
+    # antes de este job, el grafo solo se reconstruia manualmente
+    # (`make ekg-build`) - un cambio de codigo que rompiera la extraccion
+    # (ej. un error de sintaxis que tree-sitter no puede parsear, o que
+    # invalide una suposicion de ruta como apps/tenant/<app>/models.py)
+    # podia fusionarse sin que nadie lo notara hasta la proxima corrida
+    # manual. Corre en un job separado del gate principal (no bloquea
+    # tests/lint/security si el EKG tiene un problema) y sin Neo4j real
+    # (mas simple, mas rapido, sin secretos nuevos que gestionar) - solo
+    # valida que la extraccion (dry-run) y la integridad estructural
+    # (tools/ekg/validate.py) sigan siendo correctas. Los tests de
+    # tools/ekg/tests/ (logica de extraccion/gobernanza) ya corren dentro
+    # del job "test-and-quality" via el `pytest` generico, sin cambios.
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings
+      DJANGO_DEBUG: "False"
+      DJANGO_SECRET_KEY: ci-only-secret-key-not-for-production-0123456789abcdef0123456789
+      JWT_SECRET_KEY: Y2ktb25seS1qd3Qtc2VjcmV0LWtleS1ub3QtZm9yLXByb2R1Y3Rpb24tdXNl
+      TENANT_DOMAIN_BASE: sintel.net.co
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Extract every tenant app (dry-run, no Neo4j)
+        run: |
+          set -e
+          for app in bancos clientes compras contabilidad core cotizaciones dashboard empleados empresa facturas gastos inventario landing perfil proveedores proyectos ventas; do
+            echo "== $app =="
+            python -m tools.ekg.build_graph --app "$app" --dry-run --output "tools/ekg/out/$app.json"
+          done
+
+      - name: Extract every public app (dry-run, no Neo4j)
+        run: |
+          set -e
+          for app in accounts tenants impuestos console core; do
+            echo "== public/$app =="
+            python -m tools.ekg.build_graph --app "$app" --schema public --dry-run --output "tools/ekg/out/public_$app.json"
+          done
+
+      - name: Validate each tenant app's graph (dangling edges = hard fail)
+        run: |
+          set -e
+          for app in bancos clientes compras contabilidad core cotizaciones dashboard empleados empresa facturas gastos inventario landing perfil proveedores proyectos ventas; do
+            python -m tools.ekg.validate --app "$app" --graph "tools/ekg/out/$app.json"
+          done
+
+      - name: Governance sweep (informational - see tools/ekg/PILOT_REPORT.md for triage)
+        # No bloqueante todavia: de los 23 hallazgos actuales de
+        # viewsets_without_service_layer, varios ya son excepciones
+        # deliberadas confirmadas (EmpresaViewSet) o falsos positivos de
+        # extractor conocidos (mixin fuera de services/) - bloquear el
+        # build con esa lista sin depurar primero rompe PRs legitimos.
+        # Quitar continue-on-error una vez que el equipo triage/suprima
+        # los hallazgos no-accionables (ver documentacion/
+        # INFORME_FINAL_EKG_GOBERNANZA_2026-08-07.md Sec 4).
+        continue-on-error: true
+        run: python -m tools.ekg.governance --offline

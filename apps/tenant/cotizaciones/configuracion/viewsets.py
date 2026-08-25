@@ -11,6 +11,7 @@ from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
 from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.permissions import IsTenantMember
 
 from .models import ConfiguracionCotizacion
@@ -23,7 +24,7 @@ from .services import ConfiguracionServiceMixin
 logger = logging.getLogger(__name__)
 
 
-class ConfiguracionCotizacionViewSet(ConfiguracionServiceMixin, BaseTenantViewSet):
+class ConfiguracionCotizacionViewSet(SintelDSVMixin, ConfiguracionServiceMixin, BaseTenantViewSet):
     """
     ViewSet para Perfiles de Configuracion de Cotizaciones v2.62.0.
     """

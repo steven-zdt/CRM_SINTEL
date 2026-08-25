@@ -766,6 +766,53 @@
     }
 
     // ============================================
+    // MODAL: EDITAR TENANT
+    // ============================================
+
+    function resetTenantEditForm() {
+        const form = document.getElementById('tenant-form');
+        if (!form) return;
+
+        form.reset();
+        delete form.dataset.mode;
+        delete form.dataset.tenantId;
+
+        // Restaurar campos bloqueados
+        ['schema_name', 'dominio_fqdn', 'owner_email'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) { el.readOnly = false; el.disabled = false; }
+        });
+
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.textContent = 'Guardar cambios';
+    }
+
+    function closeTenantModal() {
+        const modalEl = document.getElementById('tenant-modal');
+        if (modalEl) modalEl.classList.add('hidden');
+        resetTenantEditForm();
+    }
+
+    function initTenantEditModal() {
+        const modalEl = document.getElementById('tenant-modal');
+        if (!modalEl) return;
+
+        const closeBtn = document.getElementById('tenant-modal-close');
+        const cancelBtn = document.getElementById('tenant-modal-cancel');
+        const backdrop = document.getElementById('tenant-modal-backdrop');
+
+        if (closeBtn) closeBtn.addEventListener('click', closeTenantModal);
+        if (cancelBtn) cancelBtn.addEventListener('click', closeTenantModal);
+        if (backdrop) backdrop.addEventListener('click', closeTenantModal);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modalEl.classList.contains('hidden')) {
+                closeTenantModal();
+            }
+        });
+    }
+
+    // ============================================
     // CREACIÓN DE TENANT (Onboarding)
     // ============================================
 
@@ -937,23 +984,13 @@
                     if (mode === 'edit') {
                         const modalEl = document.getElementById('tenant-modal') || document.querySelector('[role="dialog"]');
                         if (modalEl) modalEl.classList.add('hidden');
-                        
+
                         // Recargar tabla DataTables
                         if (typeof jQuery !== 'undefined' && jQuery.fn.dataTable) {
                             jQuery('#dt-tenants').DataTable().ajax.reload(null, false);
                         }
-                        
-                        // Reset form
-                        form.reset();
-                        delete form.dataset.mode;
-                        delete form.dataset.tenantId;
-                        
-                        // Restaurar campos bloqueados
-                        ['schema_name', 'dominio_fqdn', 'owner_email'].forEach((id) => {
-                            const el = document.getElementById(id);
-                            if (el) { el.readOnly = false; el.disabled = false; }
-                        });
-                        if (submitBtn) submitBtn.textContent = 'Crear Empresa';
+
+                        resetTenantEditForm();
                     } else {
                         // Redirigir después de un breve delay si es creación
                         setTimeout(() => {
@@ -1073,6 +1110,9 @@
 
         // Inicializar modal de activación manual
         initActivacionModal();
+
+        // Inicializar modal de edición de tenant
+        initTenantEditModal();
     });
 
 })();

@@ -220,50 +220,23 @@
     }
   }
 
-  /**
-   * Event delegation para botones de guardado
-   */
-  function attachEditorListeners() {
-    // Guardar crear
-    d.addEventListener('click', (ev) => {
-      const btn = ev.target.closest('#btn-guardar-cuenta-crear');
-      if (btn) {
-        ev.preventDefault();
-        handleSave('create');
-      }
-    });
+  // NOTA (remediacion doble-submit, auditoria 2026-08-06): el offcanvas de
+  // Crear/Editar Cuenta (apps/tenant/contabilidad/templates/tenant/contabilidad/
+  // partials/cuenta_offcanvas_form.html) trae su PROPIO <script> inline con su
+  // propia funcion guardarCuenta() -- que ademas SI valida campos requeridos y
+  // maneja estado de carga -- adjuntada directamente al mismo boton
+  // #btn-guardar-cuenta-crear/editar cada vez que el offcanvas se abre.
+  // Los listeners delegados que este modulo adjuntaba aqui (attachEditorListeners,
+  // ahora eliminado) competian con esa funcion: un solo click disparaba AMBAS
+  // implementaciones, generando 2 peticiones POST por click (una con los datos
+  // correctos via el script inline, otra vacia via collectFormData() de este
+  // archivo, que no comparte el mismo mecanismo de lectura de formulario).
+  // handleSave/collectFormData se conservan por si algun otro flujo los invoca
+  // directamente via CuentaEditor.save, pero YA NO se auto-adjuntan a los
+  // botones de Guardar -- esa responsabilidad es exclusiva del script inline
+  // del partial.
 
-    // Guardar editar
-    d.addEventListener('click', (ev) => {
-      const btn = ev.target.closest('#btn-guardar-cuenta-editar');
-      if (btn) {
-        ev.preventDefault();
-        handleSave('update');
-      }
-    });
-  }
-
-  /**
-   * Inicialización
-   */
-  function init() {
-    // Guard: attachEditorListeners() registra listeners delegados en `document`
-    // — sin este guard, cada recarga HTMX del modulo "cuenta" vuelve a ejecutar
-    // este script y duplica los listeners globales (FE-A1/A2).
-    if (d.body.dataset.cuentaEditorInitialized) return;
-    d.body.dataset.cuentaEditorInitialized = 'true';
-
-    attachEditorListeners();
-  }
-
-  // Inicializar cuando el DOM esté listo
-  if (d.readyState === 'loading') {
-    d.addEventListener('DOMContentLoaded', init, { once: true });
-  } else {
-    init();
-  }
-
-  // Exportar API pública
+  // Exportar API pública (CuentaEditor.delete sigue en uso desde cuenta_list.js)
   if (typeof w !== 'undefined') {
     w.CuentaEditor = Object.freeze({
       save: handleSave,

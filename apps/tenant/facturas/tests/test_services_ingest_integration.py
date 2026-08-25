@@ -83,32 +83,24 @@ class ServicesIngestIntegrationTests(TenantTestCase):
             self.assertIsNotNone(anexos.ubl_xml)
     
     def test_importar_ubl_sync_handles_parse_error(self):
-        """Verify that importar_ubl_sync handles parse errors from ingest_ubl_sync."""
-        # Hallazgo real: FacturaBusinessService.importar_documento() (rama
-        # del pipeline universal, activa por defecto -- FEATURE_DOCUMENT_
-        # PIPELINE default "true") llama a ingest_document() SIN
-        # try/except alrededor -- la conversion de excepciones a
-        # {"error": "parse_error", ...}, 422 solo existe en la rama
-        # "Fallback legacy" (except Exception al final de
-        # importar_documento()), que ya no es la rama activa. Con el
-        # patch corregido al target real (business_service.ingest_document)
-        # y side_effect=Exception, la excepcion se propagaria sin capturar
-        # -- este test verificaba manejo de errores que ya no aplica a la
-        # rama activa. Corregir el manejo de excepciones en produccion
-        # esta fuera de alcance de saneamiento de tests (cambio de
-        # comportamiento, no de test) -- flageado por separado.
-        self.skipTest(
-            "La rama del pipeline universal (activa por defecto) no "
-            "envuelve ingest_document() en try/except -- la conversion "
-            "a 422/parse_error solo existe en el fallback legacy, ya no "
-            "activo. Requiere decision de producto/arquitectura, no un "
-            "fix de test."
-        )
+        """Verify that importar_ubl_sync converts an unhandled ingest_document
+        exception into a clean 422 parse_error response.
+
+        FacturaBusinessService.importar_documento() (rama del pipeline
+        universal, activa por defecto) ahora envuelve la llamada a
+        ingest_document() en try/except, replicando el comportamiento de
+        la rama "Fallback legacy". El patch target real es
+        business_service.ingest_document (import directo, no el alias
+        apps.tenant.facturas.services.ingest_ubl_sync).
+        """
         xml_bytes = b'<invalid>xml'
 
-        with patch('apps.tenant.facturas.services.ingest_ubl_sync', side_effect=Exception("Parse error")):
+        with patch(
+            'apps.tenant.facturas.services.business_service.ingest_document',
+            side_effect=Exception("Parse error"),
+        ):
             payload, code = importar_ubl_sync(xml_bytes)
-            
+
             # Should return error response
             self.assertEqual(code, 422)
             self.assertIn('error', payload)

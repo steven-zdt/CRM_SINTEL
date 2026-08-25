@@ -32,7 +32,7 @@ def _setup_tenant(tenant, username, email, sufijo):
         empleado = Empleado.objects.create(
             empresa=emp, tipo_documento="CC", numero_documento=f"100{sufijo}",
             primer_nombre="Empleado", primer_apellido=sufijo,
-            email=f"empleado{sufijo}@t.com",
+            email=f"empleado{sufijo}@t.com", fecha_ingreso="2026-01-01",
             eps="EPS001", afp="AFP001", arl="ARL001",
         )
         contrato = Contrato.objects.create(
@@ -64,8 +64,7 @@ def test_multitenant_isolation_empleados_tablas_html(client, tenant1, tenant2):
 
     with schema_context(tenant1.schema_name):
         user1 = User.objects.get(username="euser1")
-
-    client.force_login(user1)
+        client.force_login(user1)
     host1 = f"{tenant1.schema_name}.sintel.net.co"
 
     # Empleados
@@ -109,8 +108,7 @@ def test_multitenant_isolation_empleados_master_detail_html(client, tenant1, ten
 
     with schema_context(tenant1.schema_name):
         user1 = User.objects.get(username="muser1")
-
-    client.force_login(user1)
+        client.force_login(user1)
     host1 = f"{tenant1.schema_name}.sintel.net.co"
 
     # Master de Nominas: solo empleados de tenant1

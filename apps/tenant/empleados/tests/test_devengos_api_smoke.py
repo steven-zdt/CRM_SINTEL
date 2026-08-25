@@ -380,8 +380,12 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
         )
 
     # 2. Login y peticion al endpoint
-    client.force_login(admin_user)
-    
+    # force_login debe escribir la sesion en el esquema del tenant: sessions
+    # esta en TENANT_APPS (aislado por esquema) y la request real solo la lee
+    # despues de que TenantMainMiddleware cambia de esquema (ver settings.py).
+    with schema_context(tenant.schema_name):
+        client.force_login(admin_user)
+
     # 2a. Validacion de parametros requeridos
     resp = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/",
@@ -461,7 +465,12 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
             empresa=empresa2,
             defaults={"rol": "ADMIN"}
         )
-        
+        # Las sesiones estan aisladas por esquema (TENANT_APPS): la sesion
+        # creada para tenant1 no es visible al cambiar de host a tenant2, asi
+        # que hay que autenticar de nuevo dentro del esquema de tenant2 (esto
+        # replica lo que haria un usuario real al cambiar de subdominio).
+        client.force_login(admin_user)
+
     # Peticion desde tenant2 no debe ver empleados de tenant1
     resp_tenant2 = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=2026-02-01&fecha_fin=2026-02-28",

@@ -7,29 +7,7 @@ COMANDOS PARA OPERAR EL PROYECTO SINtel - Multi-tenant SaaS
 
 📖 GUÍA COMPLETA: Ver archivo documentacion/CONFIGURACION_TERMINAL.md para instrucciones detalladas
 
-# MÉTODO RÁPIDO - Windows Terminal (Recomendado):
-# 1. Abrir Windows Terminal
-# 2. Presionar Ctrl + , (abre configuración)
-# 3. Buscar "Atajos de teclado" o "Keyboard shortcuts"
-# 4. Buscar "copy" y hacer clic en el ícono de lápiz
-# 5. Presionar Ctrl + C cuando pida la combinación
-# 6. Repetir para "paste" con Ctrl + V
-# 7. Guardar cambios
-
-# OPCIONES DISPONIBLES:
-# Opción A: Ctrl+Shift+C para copiar (mantiene Ctrl+C para interrumpir)
-# Opción B: Ctrl+C para copiar (pierde función de interrumpir)
-# Opción C: copyOnSelect: true (copia automáticamente al seleccionar)
-
-# Windows PowerShell/CMD - Atajos de teclado:
-# - COPIAR: Ctrl + Shift + C (o seleccionar texto y Enter)
-# - PEGAR: Ctrl + Shift + V (o clic derecho)
-
-# Alternativa: Usar Git Bash (incluido con Git for Windows)
-# - Ctrl+C: Copiar
-# - Ctrl+V: Pegar
-# - Ctrl+Insert: Copiar
-# - Shift+Insert: Pegar
+# 
 
 # PowerShell - Habilitar selección rápida (QuickEdit Mode):
 # Click derecho en la barra de título > Propiedades > Opciones
@@ -53,6 +31,10 @@ COMANDOS PARA OPERAR EL PROYECTO SINtel - Multi-tenant SaaS
 ================================================================================
 python -m venv venv
 venv\Scripts\activate
+.\venv\Scripts\Activate.ps1
+.\venv\Scripts\Activate.ps1
+
+
 pip install -r requirements.txt
     
 # 1. Copiar archivo de entorno (primera vez)

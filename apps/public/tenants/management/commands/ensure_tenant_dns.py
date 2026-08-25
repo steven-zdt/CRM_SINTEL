@@ -14,6 +14,23 @@ NOTA: Al agregar un nuevo tenant, ejecutar este comando y tambien agregar manual
 la linea correspondiente en docker-compose.yaml bajo extra_hosts:
     - "{schema_name}.sintel.net.co:<server_ip>"
 Y reiniciar los contenedores: docker compose restart web celery
+
+WARNING [2026-08-05]: Si SOLO estas desarrollando desde una unica maquina (sin necesitar
+que otras PCs de la red accedan), es mas simple registrar el hosts file local de Windows
+en vez de usar Windows DNS Server + este comando. El archivo hosts mapea IP -> hostname,
+NUNCA hostname -> hostname:
+    127.0.0.1   home.sintel.net.co          # CORRECTO
+    localhost   home.sintel.net.co          # INCORRECTO -- Windows ignora esta linea en
+                                             # silencio (sin error visible) porque
+                                             # "localhost" no es una IP valida en la
+                                             # primera columna. Sintoma: el navegador falla
+                                             # con "no se puede resolver el nombre remoto" y
+                                             # el log del contenedor no muestra NADA porque
+                                             # la request nunca sale de la maquina cliente.
+Ver documentacion/INFRA_RED_LOCAL_MULTI_TENANT.md, seccion "Troubleshooting", para el caso
+completo de diagnostico. Verificar tambien que SERVER_IP (default abajo) siga siendo la IP
+real de la maquina -- el DHCP puede reasignarla (confirmado: cambio de 192.168.2.15 a
+192.168.2.200 en este entorno sin que ningun archivo de config se actualizara).
 """
 import logging
 import subprocess

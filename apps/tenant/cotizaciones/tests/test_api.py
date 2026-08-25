@@ -52,3 +52,31 @@ def test_api_crear_cotizacion(tenant, factory_empresa, factory_cliente):
         response = client.post(url, payload, format='json')
         assert response.status_code in (200, 201), response.content
         assert Cotizacion.objects.filter(empresa_id=empresa.id).count() == 1
+
+
+@pytest.mark.urls('config.urls_tenant')
+@pytest.mark.django_db
+def test_api_listar_configuracion_cotizacion(tenant, factory_empresa):
+    """Regression: ConfiguracionCotizacionViewSet must resolve get_empresa_id
+    (requires SintelDSVMixin) instead of 500ing on every request."""
+    empresa = factory_empresa()
+    client = APIClient()
+
+    with schema_context(tenant.schema_name):
+        ConfiguracionCotizacion.objects.get_or_create(
+            empresa=empresa,
+            defaults={
+                'dias_validez': 15,
+                'nombre_configuracion': 'Perfil General',
+                'es_activo': True
+            }
+        )
+
+        User = get_user_model()
+        user = User.objects.filter(email="admin@test.local").first()
+        client.force_authenticate(user=user)
+
+        client.credentials(HTTP_HOST=f'{tenant.schema_name}.sintel.net.co')
+        url = reverse('configuracion-cotizacion-list')
+        response = client.get(url)
+        assert response.status_code == 200, response.content

@@ -1,7 +1,132 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.56.0
-**Ultima actualizacion:** 2026-08-24 (DOC-M43) — **Mision Ciclo Fiscal
+**Version:** 3.58.0
+**Ultima actualizacion:** 2026-08-25 (DOC-M45) — **Continuacion Mision
+Mail Hub: MAIL-16/17/18 (rewire tasks.py, DocumentProcessing, UX)**,
+posterior a DOC-M44 (2026-08-25, misma fecha, misma mision). **Sigue
+PARCIAL** -- MAIL-19/20 (validacion puntual final + release gate final con
+click-through en navegador) quedan pendientes, ver
+`docs/mailhub/MAIL_HUB_RELEASE_GATE.md`.
+
+**MAIL-16 (rewire `tasks.py` -> `DocumentDispatcher`):**
+`apps/services/maildigester/tasks.py` ya no importa ningun dominio
+consumidor directamente -- llama `dispatcher.dispatch(ReceivedDocument(...))`
+en vez de `FacturaBusinessService.guardar_desde_dto()` directo (la funcion
+SSoT sigue siendo la misma, cambio COMO se le llama). Cada dominio se
+auto-registra desde su propio `AppConfig.ready()`
+(`FacturasConfig`/`ComprasConfig`), mismo patron ya usado en
+`TenantCoreConfig.ready()` antes de esta mision. Verificado end-to-end
+contra BD real (creacion + idempotencia via el camino completo
+dispatcher->handler->FacturaBusinessService) y con el test committeado
+reescrito (`tests/services/maildigester/test_tasks.py`, 4 tests).
+
+**MAIL-17 (`DocumentProcessing`, registro por documento):** modelo nuevo
+(`apps/tenant/facturas/models.py`, migracion `0039_document_processing`) --
+una fila por documento procesado (run, filename, tipo, handler, estado,
+numero, error), donde antes solo existia el agregado de la ejecucion
+completa (`MailIngestionRun.counts`). Al verificarlo con un documento
+invalido real se encontro y corrigio un bug independiente: un log de
+`tasks.py` usaba `extra={"message": ...}`, que colisiona con el atributo
+reservado `LogRecord.message` y lanzaba `KeyError` en CADA error de
+parsing real, enmascarando el error real bajo uno de logging distinto y
+contandolo dos veces en las metricas.
+
+**MAIL-18 (UX -- Historial de Ingestas):** endpoint nuevo
+(`GET .../ingesta-correo/runs/<id>/documents/`) + UI nueva (botón
+"Historial de Ingestas", dos offcanvas: resumen de counts reales por
+ejecucion + detalle expandible por documento) en `list_factura.html` /
+`facturas_main.js`. En el camino se encontraron y corrigieron 2 endpoints
+de frontend muertos preexistentes, sin relacion con esta mision:
+`syncMailbox()`/`listMailRuns()` en `facturas.api.js` apuntaban a
+`/api/v1/core/maildigester/run|runs/`, endpoints que nunca llegaron a
+implementarse (comentados "No existe" en `core/api/urls.py`) --
+redirigidos a los endpoints reales de `facturas`. Verificacion: sintaxis
+JS valida (`new Function()` sobre el JS servido por el contenedor tras
+`collectstatic`), contenido desplegado coincide con el fuente, escapado
+HTML aplicado a campos con contenido no confiable (vienen de correos
+externos). **No verificado con click-through real en navegador**: el
+dominio del tenant de prueba (`qaisotest.sintel.net.co`) no resuelve en
+el hosts file local de este equipo, y agregarlo requeriria una accion de
+configuracion de sistema fuera del alcance permitido para el asistente --
+queda como el primer pendiente de MAIL-19/20.
+
+**Actualizacion previa:** 2026-08-25 (DOC-M44) — **Mision Mail Hub ->
+Document Intake Service (FASE 0-15, 22-24, 26, 28-30, 32-33 de 34)**,
+posterior a DOC-M43 (2026-08-24).
+
+**Mision Mail Hub -> Document Intake Service — evolucionar
+`apps/services/maildigester/` a un servicio transversal de recepcion de
+documentos (`docs/mailhub/`):** Bug real de produccion corregido (FASE 1):
+`tasks.py::fetch_and_process_billing_mail` llamaba
+`guardar_factura_desde_dto()`/`guardar_nota_credito_desde_dto()`,
+funciones inexistentes (`ImportError` real, verificado por ejecucion) --
+silenciadas bajo un `except Exception` que igual marcaba el run como
+`SUCCESS`, dejando la ingesta de correo a facturas sin funcionar en
+produccion mientras la UI reportaba exito. Reemplazado por una sola llamada
+a `FacturaBusinessService.guardar_desde_dto()` (SSoT real, cubre factura y
+nota credito internamente). FASE 2: estado final del run ahora es
+`SUCCESS`/`PARTIAL_SUCCESS` (valor nuevo)/`FAILED` segun contadores reales,
+nunca `SUCCESS` falso. FASE 3: `_clasificar_excepcion()` nuevo
+(transient/programming/domain/validation/security/unknown), nada se oculta
+bajo un `except Exception` generico sin loggear. FASE 4: 3 archivos/
+funciones `DEAD_CONFIRMED` eliminados -- `mail_service.py`,
+`process_mail_ingestion_sync()`, y un hallazgo no previsto:
+`apps/tenant/core/document_router.py`, un segundo dispatcher generico ya
+existente con el MISMO patron de bug (4 rutas de registro, las 4 rotas por
+imports/paths inexistentes, cero consumidores reales -- su unico llamador
+tenia el import comentado explicitamente desde un refactor previo). FASE
+6-10: contratos transversales nuevos (`apps/services/document_intake/`) --
+`ReceivedDocument`, `ProcessingResult`, `DocumentHandler` (Protocol),
+`DocumentDispatcher` -- deliberadamente sin conocimiento de Factura/Venta/
+Compra/Cliente/Proveedor/Inventario/Banco/Contabilidad. FASE 11/22:
+Facturas conectada como primer consumidor real via `InvoiceHandler`
+(`apps/tenant/facturas/document_intake/`), verificado con persistencia real
+contra BD (no mocks): creacion real, idempotencia real por CUFE, tipo no
+soportado y `empresa_id` ausente no crashean. FASE 12: `preview_mail_ingestion()`
+reimplementaba su propia regla VENTA/COMPRA con una fuente de empresa
+distinta a la real (`get_empresa_emisor_data()` en vez de la empresa real
+del `MailInboxConfig`) -- ahora consulta el mismo SSoT
+(`FacturaBusinessService._resolver_naturaleza()`); en el proceso se
+encontraron y corrigieron **3 bugs independientes adicionales** en esa
+misma funcion (uso incorrecto de un `TypedDict` como si tuviera atributos,
+`ingest_document()` llamado con un kwarg inexistente y tratado como si
+retornara un dict en vez de una tupla, un import de una funcion que nunca
+estuvo exportada) -- `preview_mail_ingestion()` nunca habia funcionado en
+produccion, todo call real caia en el except generico. FASE 15: el cifrado
+en reposo de `MailInboxConfig.password` (Fernet, `apps/services/security/crypto.py`,
+dependencia `cryptography` ya existente, sin libreria nueva) ya estaba
+parcialmente implementado (cifrado al guardar via el serializer) pero
+`get_mailbox_config()` -- el unico punto real desde donde se conecta al
+buzon -- nunca descifraba, por lo que cualquier config creada via la API
+actual fallaria siempre la autenticacion IMAP real; corregido con graceful
+degradation (clave rotada o fila legacy en texto plano no crashea). Admin
+de Django tambien exponia las 5 password en texto (ciphertext o plano
+segun el campo) -- corregido con `PasswordInput` + cifrado en `clean()`.
+FASE 23/24: Compras registrada como consumidor (`PurchaseDocumentHandler`)
+honestamente marcado "listo, no operativo" -- retorna `REQUIRES_REVIEW` en
+vez de fingir persistencia que no existe, porque la regla real de negocio
+(¿cuando un documento de compra genera Inventario?) no esta definida
+todavia y la mision prohibe expresamente inventarla. Verificado que
+agregar este segundo consumidor no toco Facturas, el dispatcher, ni
+`apps/services/maildigester/` (prueba de extensibilidad). **No completado
+en esta sesion, documentado explicitamente en el Release Gate:** FASE 27
+(UX de frontend), FASE 20/21 (registro `DocumentProcessing` por documento --
+evaluado, no implementado, se recomienda hacerlo junto con FASE 27),
+rewiring de `tasks.py` para usar el `DocumentDispatcher` en vez de llamar a
+Facturas directo (decision deliberada de no tocar el fix ya estabilizado de
+FASE 1 en la misma pasada). Governance CLI (`tools.ekg.governance --offline`):
+FAIL preexistente (23 `viewsets_without_service_layer` + 6
+`sede_or_area_field_without_sede_aware_model` + 2 `import_cycles_between_tenant_apps`),
+**ninguno introducido por esta mision** -- los archivos nuevos
+(`document_intake/`) no aparecen en ningun hallazgo. 1 migracion nueva
+(`0038_partial_success_status`, aditiva). 2 archivos de test nuevos con
+persistencia real contra BD (`tests/services/maildigester/test_tasks.py`
+reescrito -- el contrato anterior que probaba ya no existia --,
+`apps/tenant/facturas/tests/test_document_intake_invoice_handler.py`
+nuevo). 3 documentos nuevos en `docs/mailhub/` (`MAIL_HUB_BASELINE.md`,
+`MAIL_HUB_ARCHITECTURE.md`, `MAIL_HUB_RELEASE_GATE.md`).
+
+**Actualizacion previa:** 2026-08-24 (DOC-M43) — **Mision Ciclo Fiscal
 (FISCAL-01 a 05, 02A, 02B) + Mision Facturas Hub (FASE 0, 7-8, 32, 36-39)**,
 ambas posteriores a DOC-M42 (2026-08-24 10:12).
 
@@ -2452,7 +2577,41 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.56.0 — 2026-08-24, DOC-M43)
+## 12. Metricas del Proyecto (v3.58.0 — 2026-08-25, DOC-M45)
+
+**[DOC-M45]** MAIL-16/17/18 agregan **1 modelo tenant nuevo**
+(`DocumentProcessing`, `facturas`) y **1 migracion nueva**
+(`0039_document_processing`, `CreateModel`, FK `empresa` `PROTECT` + FK
+`run` `CASCADE`). **6 archivos de produccion modificados**:
+`apps/services/maildigester/tasks.py` (rewire a dispatcher + fix logging +
+DocumentProcessing), `apps/tenant/facturas/apps.py` +
+`apps/tenant/compras/apps.py` (`ready()` nuevo), `apps/tenant/facturas/models.py`,
+`apps/tenant/facturas/api/serializers.py` + `views_mail_ingestion.py` +
+`urls.py` (endpoint nuevo), `apps/tenant/facturas/document_intake/invoice_handler.py`
+(soporte dto pre-parseado via metadata). **2 archivos de frontend
+modificados**: `facturas.api.js` (bugfix 2 endpoints muertos + funcion
+nueva), `facturas_main.js` (UI nueva ~180 lineas). **1 template modificado**
+(`list_factura.html`, boton + 2 offcanvas nuevos). **1 archivo de test
+extendido** (`tests/services/maildigester/test_tasks.py`, +2 tests, total 4).
+
+**[DOC-M44]** Mision Mail Hub -> Document Intake Service no agrega
+modelos nuevos -- agrega **1 migracion nueva** en `facturas`
+(`0038_partial_success_status`, `AlterField` aditivo de metadata de
+choices sobre `MailIngestionRun.status`, sin cambio de esquema). **2
+paquetes de codigo de produccion nuevos**: `apps/services/document_intake/`
+(`contracts.py`, `dispatcher.py`, `__init__.py`) y los handlers de dominio
+`apps/tenant/facturas/document_intake/` +
+`apps/tenant/compras/document_intake/`. **3 archivos/funciones eliminadas**
+(`DEAD_CONFIRMED`): `apps/services/maildigester/mail_service.py`,
+`process_mail_ingestion_sync()`, `apps/tenant/core/document_router.py`.
+**5 archivos de produccion modificados**: `apps/services/maildigester/tasks.py`,
+`apps/tenant/facturas/services/services_mail_ingestion.py`,
+`apps/tenant/facturas/inbox_state.py`,
+`apps/tenant/empresa/impl/mailbox_provider.py`,
+`apps/tenant/empresa/admin.py`. **2 archivos de test** con persistencia
+real contra BD (`tests/services/maildigester/test_tasks.py` reescrito
+completo, `apps/tenant/facturas/tests/test_document_intake_invoice_handler.py`
+nuevo). **3 documentos nuevos** en `docs/mailhub/`.
 
 **[DOC-M43]** Mision Ciclo Fiscal + Mision Facturas Hub agregan **1
 modelo tenant nuevo** (`TransmisionFactura`, `facturas`) y **4

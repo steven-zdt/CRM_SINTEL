@@ -34,6 +34,12 @@ make test-file FILE="path/to/test_file.py"   # Single file
 make test-ingesta / test-etl / test-api      # Phase-specific
 make smoke                       # Smoke test suite
 ```
+**Testing Progresivo por Alcance (norma permanente, AGENTS.md §24.0):** escalar
+`test específico → componente → app → integración → suite global`. NUNCA correr `make test`
+(suite completa) por defecto tras un cambio pequeño — reservarlo para cierres de fase, cambios
+transversales (`apps/tenant/api/`, `apps/tenant/core/`, mixins heredados por 3+ apps) o releases.
+Verificar siempre `docker top <container> | grep pytest` antes de lanzar una nueva corrida (nunca
+en paralelo).
 
 ### Code quality
 ```bash

@@ -25,6 +25,17 @@ from apps.tenant.proveedores.services.services import crear_proveedor
 # Fixtures
 # ---------------------------------------------------------------------------
 
+def _dns_host(schema_name):
+    """
+    Convierte un schema_name (identificador Postgres, admite '_') en un host
+    DNS valido (RFC 1034/1035, no admite '_'). Django rechaza con
+    DisallowedHost cualquier Host header con guion bajo, incluso si coincide
+    con un wildcard en ALLOWED_HOSTS, asi que el subdominio del tenant NO
+    puede reutilizar schema_name tal cual cuando este contiene '_'.
+    """
+    return f"{schema_name.replace('_', '-')}.sintel.net.co"
+
+
 @pytest.fixture(scope="module")
 def tenant(django_db_setup, django_db_blocker):
     with django_db_blocker.unblock(), schema_context(get_public_schema_name()):
@@ -34,7 +45,7 @@ def tenant(django_db_setup, django_db_blocker):
             tenant = TenantModel(schema_name=schema_name, nombre='Test Proveedor Idempotence', is_active=True)
             tenant.save()
         Domain.objects.get_or_create(
-            domain=f'{schema_name}.sintel.net.co',
+            domain=_dns_host(schema_name),
             defaults={'tenant': tenant, 'is_primary': True},
         )
         return TenantModel.objects.only('id', 'schema_name').get(pk=tenant.pk)
@@ -83,8 +94,8 @@ def tenant_client(tenant, admin_user):
     TenantSecurityAndURLConfMiddleware seleccione TENANT_URLCONF.
     """
     client = TenantClient(tenant)
-    client.defaults['SERVER_NAME'] = f'{tenant.schema_name}.sintel.net.co'
-    client.defaults['HTTP_HOST'] = f'{tenant.schema_name}.sintel.net.co'
+    client.defaults['SERVER_NAME'] = _dns_host(tenant.schema_name)
+    client.defaults['HTTP_HOST'] = _dns_host(tenant.schema_name)
     client.force_login(admin_user)
     return client
 
@@ -98,8 +109,8 @@ def jwt_tenant_client(tenant, admin_user):
     TenantSecurityAndURLConfMiddleware seleccione TENANT_URLCONF.
     """
     client = TenantClient(tenant)
-    client.defaults['SERVER_NAME'] = f'{tenant.schema_name}.sintel.net.co'
-    client.defaults['HTTP_HOST'] = f'{tenant.schema_name}.sintel.net.co'
+    client.defaults['SERVER_NAME'] = _dns_host(tenant.schema_name)
+    client.defaults['HTTP_HOST'] = _dns_host(tenant.schema_name)
     access_token = str(AccessToken.for_user(admin_user))
     client.defaults['HTTP_AUTHORIZATION'] = f'Bearer {access_token}'
     return client
@@ -280,9 +291,15 @@ class TestHTTPStatusCodesProveedores:
         data = response.json()
         assert data.get('id') is not None, "Should return created proveedor ID"
 
-    def test_api_create_proveedor_http_200_second_post(self, tenant, jwt_tenant_client):
+    def test_api_create_proveedor_http_400_second_post_duplicado(self, tenant, jwt_tenant_client):
         """
-        v2.61.4: Second POST (idempotencia) = HTTP 200 OK
+        El endpoint POST /api/v1/proveedores/ crea (201) pero no actualiza:
+        un segundo POST con el mismo numero_documento debe ser rechazado con
+        400 por la validacion "Defensa-en-profundidad (FASE 3)" de
+        ProveedorBusinessService.crear_proveedor (ver business_service.py),
+        que bloquea documentos duplicados en vez de hacer upsert silencioso.
+        Este test reemplaza la expectativa original de v2.61.4 (200/upsert),
+        que quedo obsoleta cuando se endurecio esa validacion.
         """
         with schema_context(tenant.schema_name):
             _get_or_create_empresa()
@@ -309,18 +326,18 @@ class TestHTTPStatusCodesProveedores:
             f"First POST should return 201, got {response1.status_code}: {response1.content}"
         )
 
-        # Segundo POST: Update (idempotencia)
+        # Segundo POST con el mismo numero_documento: debe rechazarse (400),
+        # no actualizar en silencio.
         response2 = jwt_tenant_client.post(
             '/api/v1/proveedores/',
             data=json.dumps(payload),
             content_type='application/json',
         )
         response2_body = getattr(response2, 'data', None) or getattr(response2, 'content', b'')
-        assert response2.status_code == 200, (
-            f"Expected 200, got {response2.status_code}: {response2_body}"
+        assert response2.status_code == 400, (
+            f"Expected 400 (documento duplicado), got {response2.status_code}: {response2_body}"
         )
-        data2 = response2.json()
-        assert data2.get('id') == response1.json().get('id'), "Should be same proveedor"
+        assert 'numero_documento' in response2.json()
 
 
 # ---------------------------------------------------------------------------

@@ -186,9 +186,13 @@ def extract_skills(project_root: Path, app_names: list[str]) -> schema.Graph:
     return graph
 
 
-def extract_app_audit_doc(app_name: str, project_root: Path) -> schema.Graph:
+def extract_app_audit_doc(
+    app_name: str, project_root: Path, schema_root: str = "tenant", folder_name: str | None = None
+) -> schema.Graph:
+    """`app_name`/`folder_name` split for the same reason as
+    extract_python.py's extract_app_python() - see its docstring."""
     graph = schema.Graph()
-    agent_dir = project_root / "apps" / "tenant" / app_name / ".agent"
+    agent_dir = project_root / "apps" / schema_root / (folder_name or app_name) / ".agent"
     if not agent_dir.exists():
         return graph
 

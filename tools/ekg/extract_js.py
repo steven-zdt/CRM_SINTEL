@@ -142,9 +142,14 @@ def classify_literals(literals: list[str]) -> tuple[list[str], list[str]]:
     return endpoints, selectors
 
 
-def extract_app_js(app_name: str, project_root: Path) -> schema.Graph:
+def extract_app_js(
+    app_name: str, project_root: Path, schema_root: str = "tenant", folder_name: str | None = None
+) -> schema.Graph:
+    """`app_name`/`folder_name` split for the same reason as
+    extract_python.py's extract_app_python() - see its docstring."""
     graph = schema.Graph()
-    js_dir = project_root / "apps" / "tenant" / app_name / "static" / app_name / "js"
+    folder = folder_name or app_name
+    js_dir = project_root / "apps" / schema_root / folder / "static" / folder / "js"
     if not js_dir.exists():
         return graph
 

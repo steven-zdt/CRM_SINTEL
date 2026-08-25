@@ -211,7 +211,7 @@ health:
 	@curl -sS --fail-with-body "$(BASE_URL)/api/v1/core/health/" | jq .
 
 # ── Enterprise Knowledge Graph (EKG) — tools/ekg/ ───────────────────────────
-# Piloto: apps/tenant/compras. Ver tools/ekg/PILOT_REPORT.md para alcance actual.
+# Rollout completo: 17/17 apps tenant. Ver tools/ekg/PILOT_REPORT.md para alcance y limitaciones conocidas.
 .PHONY: ekg-build
 ekg-build:
 	@echo "🕸️  Construyendo y cargando el Knowledge Graph para APP=$(APP)..."
@@ -230,3 +230,29 @@ ekg-validate:
 .PHONY: ekg-ask
 ekg-ask:
 	@docker compose exec web python -m tools.ekg.queries --live "$(Q)"
+
+.PHONY: ekg-impact
+ekg-impact:
+	@echo "💥 Motor de impacto: que depende de NAME=$(NAME)? (offline, todas las apps fusionadas)"
+	@docker compose exec web python -m tools.ekg.impact --offline --name "$(NAME)"
+
+.PHONY: ekg-governance
+ekg-governance:
+	@echo "🏛️  Barrido de gobernanza (Fase 7): reglas de arquitectura verificables sobre el grafo completo"
+	@docker compose exec web python -m tools.ekg.governance --offline
+
+.PHONY: ekg-explorer
+ekg-explorer:
+	@echo "🗺️  Exportando explorador HTML navegable (Fase 9): grafo completo, offline, sin servidor"
+	@docker compose exec web python -m tools.ekg.export_html
+	@echo "Abrir tools/ekg/out/graph_explorer.html en un navegador."
+
+.PHONY: ekg-summary
+ekg-summary:
+	@echo "📊 Resumen de plataforma (Fase 10): cumplimiento de arquitectura + modulos desacoplados"
+	@docker compose exec web python -m tools.ekg.platform --summary
+
+.PHONY: ekg-dossier
+ekg-dossier:
+	@echo "📁 Expediente completo (Fase 10): impacto + cumplimiento para NAME=$(NAME)"
+	@docker compose exec web python -m tools.ekg.platform --dossier "$(NAME)"

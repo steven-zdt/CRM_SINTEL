@@ -660,7 +660,238 @@ running after this session; `nginx` reports `unhealthy` (its healthcheck expects
 `*.sintel.net.co` wildcard DNS setup this sandbox doesn't have) but doesn't block anything -
 `web`/`db`/`redis`/`neo4j`/`celery` are all healthy.
 
-## Roadmap (rollout done: 17/17 apps, live Neo4j load verified — remaining work is depth, not breadth)
+## DONE (2026-08-07): impact engine ("if I change this, what breaks?")
+
+Added `tools/ekg/impact.py` — a general-purpose reverse-dependency walker on top of the existing
+`schema.Graph`/live-Neo4j pair, answering the governance-spec question this pilot's `queries.py`
+didn't yet: given one starting node (by exact name, or by a file-path/route substring for
+Template/JS/Test/Document), what transitively depends on it, what it produces that's also
+affected, what tests already cover the blast radius, and which Applications/Rules/Docs to review.
+
+- `load_full_offline_graph()` merges all 17 real per-app dumps under `tools/ekg/out/` into one
+  `Graph` (explicitly excludes the `audit_*.json` scratch files left over from the dead-code
+  audit — those are query *results*, not extractor dumps, and would double-count nodes if merged
+  back in as if they were graph input).
+- `impact_of_offline()` does a layered BFS: reverse over `IMPORTS/INHERITS/USES/CALLS/CONSUMES/
+  REFERENCES` (dependents — the edge source depends on the target, per every extractor's actual
+  direction, confirmed by grep before writing a line of traversal code), then forward over
+  `EXPOSES/RENDERS` starting from *every* newly-impacted node, not just the original target — a
+  ViewSet only becomes impacted via the reverse walk, so the Endpoint it `EXPOSES` is only
+  reachable by then walking forward *from that ViewSet*.
+- `impact_of_live()` is the Cypher equivalent, run against the real, already-loaded Neo4j
+  instance (2,506 nodes / 3,730 edges, confirmed live — not the "not exercised in this
+  environment" caveat that applied when `load_neo4j.py` was first written).
+- CLI: `python -m tools.ekg.impact --offline --name <Name>` / `--path <fragment>` / `--live
+  --name <Name>`, plus `--json`. Wired into `Makefile` as `make ekg-impact NAME=...`.
+- 6 new tests in `tools/ekg/tests/test_impact.py`, built the same way every other test in this
+  suite is (`build_app_graph()` from real source, not a synthetic fixture) — 42/42 pass across
+  the whole `tools/ekg/tests/` suite after this change, zero regressions.
+
+**Two real bugs found and fixed by cross-checking `--live` against `--offline` on the same real
+model (`compras.OrdenCompra`) rather than trusting either implementation in isolation** — this is
+exactly the kind of bug the dual-implementation convention (see every `queries.py` question) is
+supposed to catch, and it worked:
+
+1. First draft of `build_live_cypher()` only walked `EXPOSES/RENDERS` forward from the original
+   `target`, never from the dependents discovered by the reverse walk — silently returned zero
+   Endpoints for `CuentaContable`/`OrdenCompra` even though `--offline` correctly found them via
+   their ViewSet. Fixed by collecting `impactedSoFar` after the reverse pass and `UNWIND`-ing it
+   before the forward pass.
+2. `collect(DISTINCT {name: coalesce(x.name, x.path, x.route, x.id), ...})` collapsed two
+   genuinely different Endpoint nodes into one, because both had `route=""` (a real, meaningful
+   value — the API root) and `coalesce()` only skips `NULL`, not empty strings — two structurally
+   identical display maps are one entry under `DISTINCT`. Fixed two ways: (a) a `CASE`-based
+   display expression that also skips `''`, matching `_display_name()`'s Python `or`-chain
+   semantics exactly; (b) every returned map now also carries the node's real, always-unique `id`
+   (see `schema.py`), so `DISTINCT` dedups by true identity even in cases the display-string fix
+   alone wouldn't cover.
+
+Verified: `--offline` and `--live` return the identical dependent/produced sets (by name and
+count) for both `compras.OrdenCompra` and `contabilidad.CuentaContable`.
+
+**Same known limitation as everywhere else in this report applies here too**: `GOVERNED_BY`/
+`DOCUMENTED_BY` are Application-level only (roadmap item 5 below), so "rules/docs to review" is
+always reported per-app, never pinpointed to the one AGENTS.md paragraph or ADR section that
+actually matters for the changed node — the engine says so explicitly in its own docstring and
+CLI output rather than implying a precision it doesn't have.
+
+## DONE (2026-08-07, continued): governance sweep + 4 extractor bugs found fixing it
+
+Added `tools/ekg/governance.py` (Fase 7 of the spec) on top of the corrected impact-engine graph.
+Building its first rule ("does every tenant Model inherit SintelTenantBaseModel?") immediately
+surfaced that the answer was "none of them, according to the graph" - not because the codebase is
+wrong, but because of a real, previously-undiscovered extractor bug. Chasing that one bug
+honestly (rather than building a governance rule on top of data already known to be wrong)
+surfaced three more, all fixed, all pinned with tests:
+
+1. **Cross-app `INHERITS` was never resolved for Models or ViewSets.** `extract_models()`/
+   `extract_viewsets()` only ever looked up a base class as `schema.model_id/viewset_id(<same
+   app as the subclass>, base_name)` - correct for a same-app sibling, but silently zero for the
+   single most common case in the entire project: every tenant model inherits
+   `apps.tenant.core.models.SintelTenantBaseModel`, and every tenant ViewSet inherits
+   `apps.tenant.api.base.BaseTenantViewSet` - both always live in a *different* app. Confirmed on
+   a **fresh** extraction (not a stale dump) before touching any code. Fixed with
+   `_build_import_map()` + `_resolve_cross_app_base_folder()`, resolving a bare base-class name to
+   the app it was actually `from ... import`ed from, mirroring the already-correct pattern
+   `resolve_model_target()` uses for FK strings (just via imports instead of dotted FK-string
+   syntax). Cross-app ViewSet bases living in `apps/tenant/api/` (an infrastructure app never
+   extracted as one of the 17 business apps, see `arquitectura_general.md` Sec 2.3) correctly
+   become permanent external stubs, same convention as `settings.AUTH_USER_MODEL`.
+2. **Real ViewSet nodes never explicitly set `external: False`** (unlike real Model nodes, which
+   always did). `Graph.add_node`'s "external is monotonic" merge only forces `false` when the
+   *existing* node already has `external is False` - omitting the key entirely (not just leaving
+   it `True`) let a cross-app stub silently downgrade an already-real ViewSet node depending on
+   merge order. Only surfaced because fix #1 started creating ViewSet stubs for the first time.
+3. **`models.TextChoices`/`IntegerChoices`/`Choices` subclasses were extracted as Model nodes.**
+   `apps/tenant/perfil/models.py`'s `RolTenant(models.TextChoices)` - a plain enum of role-name
+   string constants, not a Django Model - showed up as "doesn't inherit the base", a real
+   extractor false positive, not an architecture violation (confirmed by reading the source
+   before excluding it). Fixed with a small `_NON_MODEL_BASE_NAMES` guard in `extract_models()`.
+4. **Not yet fixed, found and documented instead**: `resolve_model_target()` (FK/`Meta.model`
+   resolution) has the same "assumes same app" blind spot as bug #1 did, but for *bare* (non-
+   string, imported-identifier) FK targets - e.g. `empresa = ForeignKey(Empresa, ...)` after
+   `from apps.tenant.empresa.models import Empresa`. Confirmed via `Model:tenant_empleados.
+   Empresa` / `Model:tenant_inventario.Empresa` / `Model:tenant_proveedores.Empresa` /
+   `Model:tenant_proyectos.Empresa` - four separate apps each producing their own wrongly-
+   namespaced, never-resolving placeholder for what should be one shared `Model:empresa.Empresa`
+   node. `governance.py`'s rules defensively skip any Model with no `defined_in` (i.e. any
+   unresolved placeholder, of either kind) rather than guess at these - see its module docstring.
+   **Left for a future pass**: applying the same import-map fix from #1 to
+   `resolve_model_target()` would very likely close this too, but wasn't attempted here to keep
+   this session's change scoped to what was actually needed to trust the governance rule's output.
+
+All 17 apps' dry-run dumps regenerated and the live Neo4j reloaded (idempotent `MERGE`, no data
+loss) after each fix; final state 2,520 nodes / 3,893 edges (up from 2,506 / 3,730 before this
+session - net of both new correct edges and one real node removed, `perfil.RolTenant`).
+
+**Governance sweep result** (`make ekg-governance` / `python -m tools.ekg.governance --offline`),
+after all four fixes:
+- `models_not_inheriting_tenant_base`: **0** (was 7, all false positives from bugs #1/#3/#4 above).
+- `js_outside_own_app_static_path` / `templates_outside_own_app_path`: **0 each** - a genuine,
+  verified-clean result (not "the rule never fires"; both rules are exercised and pass on real
+  compliant apps in `test_governance.py`).
+- `viewsets_without_service_layer`: **23**, after fixing the transitive-`INHERITS` gap that made
+  every ADR-002 `*CoreViewSet` public-facade a false positive (13 of the original 36). **Not all
+  23 have been individually verified** - one spot-check (`EmpresaViewSet(viewsets.ModelViewSet)`,
+  skipping `BaseTenantViewSet` entirely) turned up a genuinely ambiguous case: `empresa` is
+  documented elsewhere as the project's "REFERENCIA GOLDEN" module, so this may be a deliberate,
+  reviewed exception rather than a violation - a judgment call outside what a static graph query
+  can resolve alone. **Report the list, do not treat all 23 as confirmed findings** until each is
+  read against its source, the same discipline that caught the four bugs above.
+
+## DONE (2026-08-07, continued): extended coverage to `apps/public/*` (5 apps, 22 total)
+
+Roadmap item 8. Added an `app_name`/`folder_name`/`schema_root` split threaded through every
+extractor (`extract_python.py`, `extract_js.py`, `extract_docs.py`, `build_graph.py`) so a node's
+id-namespace (`app_name`, e.g. `"public_core"`) can differ from its on-disk directory
+(`folder_name`, e.g. `"core"`) - required because `apps/public/core` and `apps/tenant/core` share
+a bare folder name but are two unrelated apps, and naively passing the folder name into id
+construction collided them into one `Application:core` node on merge (found and fixed before it
+reached a report; see `_build_import_map`/text-matching functions using `[app_name]` not
+`[folder]`). Templates are skipped entirely for `schema_root != "tenant"` (public apps don't follow
+the `templates/tenant/<app>/` convention - not assumed, not extracted).
+
+`build_graph.py --app <name> --schema public` extracts one public app; `impact.py`'s
+`PUBLIC_APPS` tuple and `load_full_offline_graph()`'s default now merge all 22 apps (17 tenant +
+5 public: accounts, tenants, impuestos, console, core) for any impact/governance query. Merging
+public apps in immediately surfaced a real scoping bug in `governance.py` (19 public models and
+24 public ViewSets flagged by two tenant-only rules that were never stated to apply to the public
+schema per `arquitectura_general.md` Sec 3.2/4.2) - fixed with `_tenant_app_ids()`/
+`_belongs_to_tenant_app()`, verified the tenant-app-only counts (0 models / 23 ViewSets) were
+unchanged by adding public apps to the merge.
+
+## DONE (2026-08-07, continued): CI wiring for continuous graph-health checks (Fase 8)
+
+Roadmap item 6. Added a second, independent job `ekg-graph-health` to the existing
+`.github/workflows/ci-quality-gate.yml` (deliberately not folded into `test-and-quality`, so an
+EKG extraction problem never blocks an unrelated PR's tests/lint/security gate). Runs on every
+PR/push to `main`/`develop`:
+1. Dry-run extraction of all 17 tenant apps + all 5 public apps (no Neo4j - catches a parse
+   failure or a broken path assumption the moment it's introduced, not at the next manual
+   `make ekg-build`).
+2. `tools.ekg.validate --app <x> --graph <dump>` per tenant app - hard fail (no
+   `continue-on-error`) if `dangling_edges` is ever nonzero.
+3. `tools.ekg.governance --offline` - `continue-on-error: true` for now, since several of the 23
+   `viewsets_without_service_layer` findings are already-triaged legitimate exceptions or known
+   extractor false positives (see previous section and
+   `documentacion/INFORME_FINAL_EKG_GOBERNANZA_2026-08-07.md` Sec 4) that haven't been
+   individually suppressed yet - failing the build on unfiltered output would block legitimate
+   PRs. Remove `continue-on-error` once that triage is encoded as an explicit allowlist.
+
+`tools/ekg/tests/*.py` needed no CI change at all: `pyproject.toml` has no `testpaths` restriction,
+so the existing `test-and-quality` job's generic `pytest` step already discovers and runs them.
+Verified locally before considering this done: the workflow YAML parses
+(`yaml.safe_load`), and both new steps' exact CLI invocations were run against a real tenant app
+(`compras`) and a real public app (`public_core`) with the same arguments the workflow uses -
+`dangling_edges: 0`, exit 0, in both cases.
+
+## DONE (2026-08-07, continued): offline HTML graph explorer (Fase 9)
+
+Roadmap item for Fase 9 ("Visualizacion... Todo navegable"). Added
+`tools/ekg/export_html.py` / `make ekg-explorer`: a single, self-contained, offline HTML file
+(`tools/ekg/out/graph_explorer.html`) generated from the merged 22-app graph - no server, no CDN,
+no network access, opens straight from disk or any static file host. Lets a human search any node
+by name/path, filter by the 14 node labels the graph actually has data for, open one, read its
+full property table, and click through every incoming/outgoing relationship one hop at a time
+(browser back/forward works too, since navigation state is just `location.hash`).
+
+Explicitly does **not** claim tabs for Celery tasks, domain events/signals, or per-endpoint
+permission classes - `schema.py`'s `NODE_LABELS`/`REL_TYPES` (the graph's actual, exhaustive
+vocabulary) has no such node/relationship type, and no extractor populates one; inventing a
+placeholder view for data that doesn't exist would be exactly the "documentacion ficticia" the
+original spec prohibits. The explorer's own sidebar states this scope boundary up front instead
+of silently omitting it.
+
+**One real bug found and fixed while verifying this in an actual browser** (not the sandboxed
+preview tool - confirmed by serving the file over a plain `python -m http.server` and inspecting
+`document.scripts`/DOM child counts directly): several `Rule`/`Document` node `body` properties
+are AGENTS.md text quoted verbatim, including code examples containing the literal substring
+`<script>`. Embedding the graph's JSON directly inside the page's own `<script>` block let the
+first such `</script`-like substring close the real tag early - the browser then rendered the
+remaining JSON/markdown as plain page text instead of running the UI. Fixed by escaping `"</"` to
+`"<\/"` in the embedded JSON payload (byte-identical once JS parses it back, invisible to the HTML
+tokenizer); pinned with a regression test in `tools/ekg/tests/test_export_html.py` that asserts
+exactly one `</script>` survives in the rendered output, using a real extracted app (`core`) whose
+Rule bodies are confirmed (by the test itself) to contain a `</` substring - not a synthetic
+fixture that could pass without the fix.
+
+## DONE (2026-08-07, continued): unified platform CLI - dossier + compliance summary (Fase 10)
+
+Roadmap item for Fase 10 ("Plataforma Enterprise"). Not a new analysis engine and not a web
+dashboard - `tools/ekg/platform.py` (`make ekg-summary` / `make ekg-dossier NAME=...`) is a thin
+synthesis layer over `impact.py` (Fase 6) and `governance.py` (Fase 7), because most of the
+spec's example questions ("quien usa este modelo", "que rompe este cambio", "que pruebas/ADR
+aplican") are already answered by `impact_of_offline()`'s existing `ImpactReport` fields - the gap
+was only ever "run both tools and read the answer off one node", not "compute something new".
+Two genuinely new, narrow additions, both direct proxies over data the graph already has (not new
+extraction):
+- `compliance_summary()`: percentage of the *applicable* population passing each of
+  governance.py's 4 rules (e.g. tenant Models with a real `defined_in`, excluding placeholders and
+  public-schema ones - not "all Model nodes"). Explicitly labeled in its own docstring and CLI
+  output as "a proxy over 4 checkable rules, not a certified compliance score" - the spec's
+  broader "cumple la arquitectura" question also covers DSV/permissions/N+1/etc., which
+  `governance.py` already declared out of reach for a static extractor.
+- `decoupled_apps()`: Application nodes with zero cross-app `IMPORTS/INHERITS/USES/CALLS/
+  CONSUMES/REFERENCES` edge in either direction. **Found and fixed a real bug before trusting the
+  first result**: `apps/tenant/api/` (never extracted as one of the 22 apps - only ever appears as
+  an external stub target of other apps' cross-app `INHERITS`, e.g. `BaseTenantViewSet`) was
+  reported as "decoupled" purely because an external stub's members never get a `BELONGS_TO` edge
+  - the opposite of the truth (`BaseTenantViewSet` has 45 real `INHERITS` edges pointing at it
+  project-wide). Fixed by excluding `external: True` Application nodes from the candidate set
+  entirely (an app never extracted has no real coupling data one way or the other, so "decoupled"
+  would be a guess); pinned with a test that would have caught this. After the fix, the genuine
+  result is the 5 `apps/public/*` apps - real, fully-extracted apps with no static
+  `IMPORTS/INHERITS/USES/CALLS/CONSUMES/REFERENCES` edge connecting any of their members to a
+  tenant app's, which is plausible given the Bridge pattern (AGENTS.md Sec 17) routes through a
+  runtime membership service call rather than a static import - not re-verified against the
+  runtime behavior, reported as a graph-level observation only.
+
+Current summary on the full 22-app graph: `models_not_inheriting_tenant_base` 100% (69/69),
+`js_outside_own_app_static_path` / `templates_outside_own_app_path` 100% each,
+`viewsets_without_service_layer` 70.9% (56/79) - the same 23 findings from the governance section
+above, now expressed as a percentage of the tenant-ViewSet population instead of a raw count.
+
+## Roadmap (rollout done: 17/17 tenant + 5 public apps, live Neo4j load verified — remaining work is depth, not breadth)
 
 1. ~~Live Neo4j load~~ **DONE** (see above) - 2,506 nodes / 3,597 edges in the real database,
    exact match to the offline prediction.
@@ -686,14 +917,14 @@ running after this session; `nginx` reports `unhealthy` (its healthcheck expects
    was deferred - but do items 2-4 first, or the rule would bind the project to a graph with
    known, documented holes in exactly the areas (accounting integration, django-tables2 UI,
    nested sub-apps) most likely to matter for a real code change.
-6. Wire `make ekg-build` into a pre-commit or CI hook for the Fase 19 continuous-sync goal, so
-   the graph doesn't silently drift from the code the way this rollout found it hadn't yet.
+6. ~~Wire `make ekg-build` into a pre-commit or CI hook for the Fase 19 continuous-sync goal, so
+   the graph doesn't silently drift from the code the way this rollout found it hadn't yet.~~
+   **DONE** (see above) - `ekg-graph-health` CI job, dry-run + validate on every PR/push.
 7. GraphRAG/embeddings (Fase 18) only after the above - it indexes what's already extracted, it
    doesn't fix an incomplete graph.
-8. Extend past `apps/tenant/` - `apps/public/` (accounts, tenants, impuestos, console) and
-   `apps/services/` were never in scope for this pilot. The Bridge pattern (AGENTS.md §17) means
-   the public schema is architecturally significant to every tenant app's story, not a separate
-   concern.
+8. ~~Extend past `apps/tenant/` - `apps/public/` (accounts, tenants, impuestos, console) and
+   `apps/services/` were never in scope for this pilot.~~ **DONE for `apps/public/`** (see above,
+   5 apps, 22 total). **`apps/services/*` still entirely out of scope** - not attempted.
 9. Fix `apps/tenant/facturas/tests/test_xml_pipeline_canonical.py` (4/4 failing - pre-existing,
    unrelated to EKG, found while smoke-testing this work; see the smoke-test session note above)
    and investigate the ~1600 `audit_templates_and_branding.py` / 15
@@ -720,3 +951,136 @@ running after this session; `nginx` reports `unhealthy` (its healthcheck expects
     (noted for a future pass): JS-to-JS ES module `import` statements aren't tracked (only
     `<script src>`/`{% static %}` in HTML), and lazy/local imports inside function bodies aren't
     scanned for cross-app `IMPORTS` edges (only module-level imports are).
+12. ~~Apply the same import-map fix to `resolve_model_target()`~~ **DONE (2026-08-07)**. Bare
+    (non-string, imported-identifier) cross-app FK targets like `empresa = ForeignKey(Empresa,
+    ...)` after `from apps.tenant.empresa.models import Empresa` now resolve to the one real
+    `Model:empresa.Empresa` instead of 4 separate wrongly-namespaced, never-merging placeholders
+    (`Model:tenant_empleados.Empresa`, `tenant_inventario`, `tenant_proveedores`,
+    `tenant_proyectos`). Pinned in `test_governance.py::
+    test_bare_cross_app_fk_reference_resolves_to_the_real_model_id`. The 4 stale placeholder
+    nodes left behind in the live Neo4j by the old bug (idempotent `MERGE` never deletes a node
+    that stops being produced) were removed manually - a real, general limitation of the
+    load/merge model worth remembering: **a code fix that changes what id an extractor emits
+    requires a manual cleanup pass on the live graph, `make ekg-build` alone will not remove the
+    orphaned old id.**
+13. ~~Manually triage the 23 `viewsets_without_service_layer` findings~~ **DONE (2026-08-07)**,
+    read against source, not just names:
+    - **5 confirmed real findings** (no Service Layer mixin at all, direct or transitive):
+      `ResolucionDIANViewSet` in `empleados` (contrast with `gastos`' own same-named class, which
+      correctly has `ResolucionServiceMixin` - these are two different classes, not one bug),
+      `ConfiguracionRetencionesViewSet`, `ItemFacturaViewSet`, `NotaCreditoViewSet`,
+      `DepartamentoViewSet` (+ their 2 `*CoreViewSet` facades, which correctly inherit the finding).
+    - **3 further extractor false positives found via this triage** (same class of gap):
+      `LibroDiarioViewSet`/`ContabilidadServiceMixin`, `PerfilViewSet`/`PerfilServiceMixin`,
+      `ProyectoViewSet`/`ProyectoServiceMixin` (+ propagated `*CoreViewSet` facades) all reference
+      a real, correctly-named Service-Layer mixin that `extract_services()` cannot see because it
+      is defined directly under `api/mixins.py` or `api/viewsets.py`, not under `services/*.py` -
+      **not fixed** (would require `extract_services()` or a new pass to also scan `api/mixins.py`
+      for `BaseServiceMixin`-shaped classes; noted here rather than expanding scope further).
+      Collateral finding: `proyectos` has *two* classes both named `ProyectoServiceMixin` (one in
+      `api/mixins.py`, actually used by the ViewSet; one in `services/api_mixins.py`, unused by
+      it) - a naming collision worth a human's attention, not touched here.
+    - **2 deliberate, documented exceptions, not violations**: `EmpresaViewSet` and
+      `MailInboxConfigViewSet` (`apps/tenant/empresa/api/viewsets.py`) inherit
+      `viewsets.ModelViewSet` directly, skipping `BaseTenantViewSet` entirely - but `EmpresaViewSet`'s
+      own docstring explicitly documents its own manual Session-Auth/CSRF and
+      STAFF/ADMIN-only enforcement, i.e. a reviewed, intentional substitute, not an oversight
+      (`empresa` is elsewhere documented as the project's "REFERENCIA GOLDEN" module).
+    - **4 probable legitimate exceptions** (plain `ViewSet`, not `ModelViewSet` - not CRUD-shaped
+      by design): `CoreAuthViewSet`, `CoreLinksViewSet`, `DashboardSectionsViewSet`, `LandingViewSet`.
+    - **1 possible dead code, not a Service Layer question**: `apps/tenant/inventario/api/
+      viewsets.py`'s `BaseViewSet` has zero subclasses anywhere in that file (`grep "BaseViewSet)"`
+      found nothing) - looks unused, a candidate for the dead-code backlog, not this rule.
+    Net: of 23 raw hits, 5 are real, 8 are extractor false positives (now understood, not fixed),
+    2 are confirmed-intentional, 4 are probable-legitimate (not individually read line-by-line),
+    1 is a dead-code candidate, and the rest are `*CoreViewSet` facades whose status is inherited
+    from whichever of the above their real parent falls into.
+
+## DONE (2026-08-07, continued): verified EKG capture for ADR-003's `SedeAwareModel` (compras pilot)
+
+Fase 9 of the governance spec, applied to the new organizational-context feature
+(`docs/ADR-003-contexto-organizacional-sede-area.md`): re-extracted `compras`
+(`make ekg-dry-run APP=compras`) after `OrdenCompra` adopted the new `SedeAwareModel` mixin, to
+check whether the graph needs any new extractor code for this - it does not.
+
+- `INHERITS` correctly resolves cross-app to `Model:tenant_core.SedeAwareModel` (the same
+  cross-app-base-class resolution mechanism fixed earlier in this file's governance section works
+  correctly for a brand new abstract mixin, not just the two bases it was built against).
+- `sede` (explicitly redeclared in `OrdenCompra`'s own class body, to enforce `null=False` post-
+  hardening) is captured as a `Field` + `HAS_FIELD` edge, same as any other own-declared field.
+- `area` (only inherited from `SedeAwareModel`, never redeclared in `OrdenCompra`) is **not**
+  captured - verified this is a pre-existing, project-wide limitation of `extract_python.py`'s
+  field extraction (it walks the class body being parsed, not fields inherited from an abstract
+  base), **not** something this session's `SedeAwareModel` change introduced: `PlantillaOrdenCompra`
+  (unrelated to ADR-003, never touched this session) has the identical gap for `empresa`/
+  `created_at`/`updated_at`, all three inherited from `SintelTenantBaseModel` and never redeclared.
+  No extractor change made - fixing a project-wide, pre-existing gap was out of scope for this ADR.
+
+## DONE (2026-08-09): OSF Fase F15 - verified EKG reflects the now-stabilized organizational scope
+architecture (F0-F14 of the Organizational Scope Framework, `documentacion/ORGANIZATIONAL_SCOPE_MASTER_PLAN.md`)
+
+Same discipline as F6 of that project: verify the graph already captures reality before writing
+any new extractor code, rather than assuming it needs work.
+
+- **Confirmed (no code change needed):** `sede`/`area` fields on the 6 "candidato fuerte" apps
+  (`facturas.Factura`, `tenant_cotizaciones.Cotizacion`, `tenant_gastos.DocumentoSoporte`,
+  `tenant_inventario.MovimientoInventario`, `tenant_proyectos.Proyecto`,
+  `tenant_empleados.Empleado`) are captured automatically as `Field`/`HAS_FIELD`/`REFERENCES`
+  nodes and edges, same generic class-body-assignment mechanism as always - no extractor work was
+  ever needed for these fields, confirming F6's prediction from months earlier.
+- **Found stale dumps:** the committed `tools/ekg/out/core.json` predated
+  `apps/tenant/core/services/organizational_scope.py`/`organizational_filters.py`'s latest state
+  (both touched earlier the same day this phase ran) - anyone running `governance --offline` or
+  `impact.py` against the committed dumps got an incomplete picture of `core`. Fixed by
+  re-running `ekg-dry-run` for `core` plus the 6 candidato-fuerte apps (`facturas`, `cotizaciones`,
+  `gastos`, `inventario`, `proyectos`, `empleados`).
+- **Confirmed blind spot, not fixed (out of scope):** `organizational_filters.py` (module-level
+  functions only - `filter_by_context`/`filter_by_scope`/`filter_by_scope_null_safe`) is entirely
+  invisible to the graph, because `extract_services()` only extracts classes.
+  `organizational_scope.py`/`organizational_context.py` ARE visible (their public API is class-based:
+  `OrganizationalScope`/`OrganizationalContext`/their `*Error`/`*Mixin` companions). Extending the
+  extractor to cover module-level functions is a pre-existing, much broader roadmap item (already
+  noted earlier in this report) - not scoped to this one file, not built here.
+- **Governance re-run** (`ekg-governance --offline`, 2912 nodes / 4587 edges after the refresh
+  above) confirmed `sede_or_area_field_without_sede_aware_model` (OCF Fase 11 rule, see governance
+  section above) still fails for exactly the same 6 candidato-fuerte apps. Evaluated deliberately
+  and NOT fixed: those apps use intentional NULL-safe scoping (100% of real `sede` data is NULL,
+  per OSF F7's own empirical audit and explicit user decision) - forcing `SedeAwareModel`
+  inheritance would mean changing 6 models' field declarations (`null`/`blank`), generating
+  migrations with real risk to the NULL-safe behavior validated across OSF F7-F14. A schema/model
+  change, not a knowledge-graph task - left as a flagged architectural decision for a possible
+  future dedicated phase, consistent with this report's own practice of not silently expanding
+  scope (see the `viewsets_without_service_layer` triage above, which took the same stance).
+
+## DONE (2026-08-09): OSF Fase F16 - "gobernanza automatica ampliada", closing phase of the
+Organizational Scope Framework - new import-cycle governance rule
+
+Mapped the original F16 wishlist ("Nueva recomendación arquitectónica.md", FASE 16) item-by-item
+against what `governance.py` already implements, what OSF Fase F14's runtime test suite already
+covers (query/service/bridge semantic scope checks - exactly the category this module's own
+docstring already declines as "not honestly checkable from structural graph data"), and what's
+genuinely new and buildable without touching an extractor. Only "Import circular" qualified.
+
+- **Built**: `find_import_cycles_between_tenant_apps()` - 3-color DFS cycle detection over the
+  App-App subgraph induced by `IMPORTS` edges (already populated by `extract_services()` for
+  `apps.tenant.<other_app>` imports inside `services/` - zero extractor changes). Added to
+  `governance.py`'s `run()` sweep. 2 new tests in `test_governance.py`: one synthetic (proves the
+  algorithm itself, independent of current app state so the test doesn't silently go stale if the
+  real finding below is ever fixed) and one against the real merged `core`+`empresa`+`perfil`
+  graph (proves it fires on real data).
+- **Real finding, investigated before reporting**: running the new rule against the full 17-app
+  graph (2912 nodes / 4587 edges) surfaced 2 genuine cycles - `core -> empresa -> perfil -> core`
+  and `empresa -> perfil -> empresa`. Inspected the actual edge properties (module/name/line, not
+  just the app-level summary) before concluding anything: all 4 underlying imports are of *Model*
+  classes (`Empresa`, `TenantProfile`, `Area`), never a *Service* class - one of the four
+  (`perfil -> core.services.membership.check_membership_by_schema`) is in fact the *correct*
+  Bridge pattern AGENTS.md §17 recommends. Model-level cross-app FK references are normal Django
+  practice, not the Service-to-Service coupling the Bridge/Soft-Reference pattern exists to
+  prevent between peer business-domain apps (facturas<->gastos, not the foundational
+  core/empresa/perfil trio). **Not fixed** - refactoring 3 foundational apps' cross-imports is a
+  real architectural change with real risk, out of scope for a governance-rule-writing phase - left
+  as a documented, evaluated finding, with a note in the rule's own docstring that a future
+  refinement could distinguish Model-import cycles (likely acceptable) from Service-import cycles
+  (a real violation) if this ever needs sharper precision.
+- Full EKG test suite (69 -> 71 tests after the 2 additions) still green; `ruff check` clean on
+  both touched files.

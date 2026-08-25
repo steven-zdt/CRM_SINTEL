@@ -33,6 +33,11 @@ _PARSER = Parser(PY_LANGUAGE)
 
 FK_FIELD_SUFFIXES = ("ForeignKey", "OneToOneField", "ManyToManyField")
 META_LIST_PROPS = ("indexes", "constraints", "unique_together", "ordering")
+# Base classes that mean "this top-level class in models.py is NOT a Django
+# Model" - e.g. `class RolTenant(models.TextChoices):`, a plain enum of
+# string constants (a common, legitimate pattern for choice fields), not a
+# model requiring SintelTenantBaseModel or a database table of its own.
+_NON_MODEL_BASE_NAMES = frozenset({"TextChoices", "IntegerChoices", "Choices"})
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +98,52 @@ def _extract_base_names(bases_node: TSNode, src: bytes) -> list[str]:
         if c.type in ("identifier", "attribute"):
             names.append(_text(c, src))
     return names
+
+
+def _build_import_map(root: TSNode, src: bytes) -> dict[str, str]:
+    """Map a name visible in this file to the dotted module it was imported
+    from, e.g. {"SintelTenantBaseModel": "apps.tenant.core.models"} for
+    `from apps.tenant.core.models import SintelTenantBaseModel`. Used by
+    _resolve_cross_app_base() below to find the real app a base class/mixin
+    lives in when it isn't defined in the current file - see that
+    function's docstring for the bug this closes."""
+    import_map: dict[str, str] = {}
+    for module_text, imported_name, _line in iter_imports(root, src):
+        if imported_name and imported_name != "*":
+            import_map[imported_name] = module_text
+    return import_map
+
+
+def _resolve_cross_app_base_folder(base_name: str, import_map: dict[str, str]) -> str | None:
+    """Given a bare base-class name (e.g. "SintelTenantBaseModel",
+    "BaseTenantViewSet") and this file's import map, return the
+    apps/tenant/<folder> name it's actually imported from, or None if it
+    isn't imported from apps.tenant.* at all (a Django/DRF builtin like
+    models.Model, a third-party class, or a name this pass genuinely can't
+    place). Callers that need a Model id must convert this folder name to
+    a real app_label via resolve_app_label() first (Model ids are keyed by
+    app_label); callers that need a ViewSet id use the folder name as-is
+    (ViewSet ids are keyed by the apps/tenant/<folder> name, see schema.py).
+
+    Bug this closes: extract_models()/extract_viewsets() used to resolve
+    EVERY base class as schema.model_id/viewset_id(<same app as subclass>,
+    base_name) - i.e. assumed the base always lives in the *same* app as
+    the subclass. That is correct for a same-app sibling (e.g. one model
+    inheriting another in the same models.py) but silently produces zero
+    INHERITS edge for the single most common case in the whole project:
+    every tenant model inheriting apps.tenant.core.models.
+    SintelTenantBaseModel, and every tenant ViewSet inheriting
+    apps.tenant.api.base.BaseTenantViewSet - both always live in a
+    *different* app. Confirmed missing for
+    `compras.OrdenCompra(SintelTenantBaseModel)` even on a fresh extraction
+    (not a stale dump) while building the EKG impact/governance tooling -
+    see documentacion/REMEDIACION_FASES2-8_AUDITORIA_ENTERPRISE.md."""
+    module_text = import_map.get(base_name)
+    if not module_text or not module_text.startswith("apps.tenant."):
+        return None
+    remainder = module_text[len("apps.tenant.") :]
+    folder = remainder.split(".", 1)[0]
+    return folder or None
 
 
 def _base_class_name(base: str) -> str:
@@ -250,7 +301,13 @@ def iter_imports(root: TSNode, src: bytes):
 
 
 def resolve_model_target(
-    ref_node: TSNode, src: bytes, app_name: str, app_label: str, graph: schema.Graph
+    ref_node: TSNode,
+    src: bytes,
+    app_name: str,
+    app_label: str,
+    graph: schema.Graph,
+    import_map: dict[str, str] | None = None,
+    project_root: Path | None = None,
 ) -> str | None:
     """Given a FK-target or Meta.model reference node, return the Model
     node id it points to, creating an external stub node if the target
@@ -263,7 +320,20 @@ def resolve_model_target(
     created here must use the exact same id a direct extraction of that
     other app would produce, or the two never merge into one node once
     both apps' graphs are loaded together. See resolve_app_label() and the
-    PILOT_REPORT.md "cross-app id consistency" note."""
+    PILOT_REPORT.md "cross-app id consistency" note.
+
+    `import_map`/`project_root` (optional, both call sites always pass
+    them) close a second instance of the same bug _resolve_cross_app_base_
+    folder() fixes for base classes: Django allows `ForeignKey(SomeModel,
+    ...)` with a real imported class reference, not only the dotted
+    "app_label.Model" string form. A bare identifier used to be assumed
+    same-app unconditionally - wrong for e.g. `empresa = ForeignKey(Empresa,
+    ...)` after `from apps.tenant.empresa.models import Empresa` in
+    empleados/inventario/proveedores/proyectos, each producing its own
+    wrongly-namespaced, never-merging placeholder
+    (`Model:tenant_empleados.Empresa` etc.) instead of the one real
+    `Model:empresa.Empresa`. Found via the EKG governance sweep - see
+    documentacion/REMEDIACION_FASES2-8_AUDITORIA_ENTERPRISE.md."""
     text: str | None
     if ref_node.type == "string":
         text = string_literal_value(ref_node, src)
@@ -276,6 +346,11 @@ def resolve_model_target(
         label_part, _, model_part = text.rpartition(".")
     else:
         label_part, model_part = app_label, text
+        if import_map is not None and project_root is not None:
+            cross_app_folder = _resolve_cross_app_base_folder(text, import_map)
+            if cross_app_folder is not None:
+                label_part = resolve_app_label(cross_app_folder, project_root)
+                model_part = text
 
     if label_part == app_label:
         node_id = schema.model_id(app_label, model_part)
@@ -309,9 +384,20 @@ def extract_models(
         return
     root, src = parse_source(path)
     app_node_id = schema.application_id(app_name)
+    import_map = _build_import_map(root, src)
 
     for name_node, bases, body_node, class_node in iter_top_level_classes(root, src):
         class_name = _text(name_node, src)
+        if any(_base_class_name(b) in _NON_MODEL_BASE_NAMES for b in bases):
+            # e.g. `class RolTenant(models.TextChoices):` in
+            # apps/tenant/perfil/models.py - a plain enum of string
+            # constants, not a Django Model, despite living in models.py
+            # (a common, legitimate Django pattern for choice fields).
+            # Found via the EKG governance sweep flagging RolTenant as "does
+            # not inherit SintelTenantBaseModel" - a real extractor false
+            # positive, not an architecture violation - see
+            # documentacion/REMEDIACION_FASES2-8_AUDITORIA_ENTERPRISE.md.
+            continue
         model_node_id = schema.model_id(app_label, class_name)
         graph.add_node(
             schema.Node(
@@ -332,9 +418,24 @@ def extract_models(
         )
         graph.add_edge(schema.Edge(model_node_id, app_node_id, schema.REL_BELONGS_TO))
         for base in bases:
-            base_id = schema.model_id(app_label, _base_class_name(base))
+            base_name = _base_class_name(base)
+            base_id = schema.model_id(app_label, base_name)
             if base_id in graph.nodes:
                 graph.add_edge(schema.Edge(model_node_id, base_id, schema.REL_INHERITS))
+                continue
+            cross_app_folder = _resolve_cross_app_base_folder(base_name, import_map)
+            if cross_app_folder is not None:
+                cross_app_label = resolve_app_label(cross_app_folder, project_root)
+                cross_base_id = schema.model_id(cross_app_label, base_name)
+                if cross_base_id not in graph.nodes:
+                    graph.add_node(
+                        schema.Node(
+                            cross_base_id,
+                            schema.NODE_MODEL,
+                            {"name": base_name, "app_label": cross_app_label, "external": True},
+                        )
+                    )
+                graph.add_edge(schema.Edge(model_node_id, cross_base_id, schema.REL_INHERITS))
 
         meta_node = find_nested_class(body_node, src, "Meta")
         meta_props: dict[str, str] = {}
@@ -366,7 +467,8 @@ def extract_models(
                 target_ref = first_positional_or_kwarg(args_node, src, "to")
                 if target_ref is not None:
                     target_model_id = resolve_model_target(
-                        target_ref, src, app_name, app_label, graph
+                        target_ref, src, app_name, app_label, graph,
+                        import_map=import_map, project_root=project_root,
                     )
                     if target_model_id is not None:
                         graph.add_edge(
@@ -537,6 +639,7 @@ def extract_serializers(
         return class_to_node
     root, src = parse_source(path)
     app_node_id = schema.application_id(app_name)
+    import_map = _build_import_map(root, src)
 
     for name_node, bases, body_node, class_node in iter_top_level_classes(root, src):
         class_name = _text(name_node, src)
@@ -563,7 +666,8 @@ def extract_serializers(
             for meta_field_name, meta_right in iter_class_level_assignments(meta_body, src):
                 if meta_field_name == "model":
                     target_model_id = resolve_model_target(
-                        meta_right, src, app_name, app_label, graph
+                        meta_right, src, app_name, app_label, graph,
+                        import_map=import_map, project_root=project_root,
                     )
                     if target_model_id is not None:
                         graph.add_edge(
@@ -646,6 +750,18 @@ def extract_viewsets(
                         "kind": _viewset_kind_for(class_name, bases),
                         "defined_in": _defined_in(path, project_root, class_node),
                         "bases": bases,
+                        # Explicit False (not just "key absent"), mirroring
+                        # extract_models()'s real-Model nodes: Graph.add_node's
+                        # "external is monotonic" merge only forces false when
+                        # the EXISTING node already has external is False -
+                        # omitting the key here would let a same-app-processed-
+                        # later stub (from a cross-app ViewSet INHERITS
+                        # resolved by another app before this one merges)
+                        # silently downgrade this real node back to external.
+                        # Found while building the EKG governance sweep - a
+                        # CoreViewSet inheriting a real tenant ViewSet showed
+                        # up as still "external" after both apps were merged.
+                        "external": False,
                     },
                 )
             )
@@ -655,6 +771,7 @@ def extract_viewsets(
     # Pass 2: resolve bases (INHERITS to sibling ViewSet-family classes,
     # USES to service-layer mixins) and Serializer references.
     for _path, root, src in parsed_files:
+        import_map = _build_import_map(root, src)
         for name_node, bases, body_node, _class_node in iter_top_level_classes(root, src):
             class_name = _text(name_node, src)
             node_id = class_to_node.get(class_name)
@@ -670,6 +787,33 @@ def extract_viewsets(
                 mixin_id = service_nodes.get(base_name)
                 if mixin_id is not None:
                     graph.add_edge(schema.Edge(node_id, mixin_id, schema.REL_USES))
+                    continue
+                # Cross-app ViewSet-family base not resolvable from this
+                # app's own class_to_node/service_nodes maps - e.g.
+                # BaseTenantViewSet/SintelDSVMixin, both defined in
+                # apps/tenant/api/, a separate "infrastructure" app this
+                # pilot does not extract as one of its 17 business apps
+                # (see documentacion/arquitectura_general.md §2.3). Recorded
+                # as an external stub rather than left with zero edge at
+                # all, same convention as an unresolved cross-app FK - see
+                # _resolve_cross_app_base_folder()'s docstring for the bug
+                # this closes.
+                cross_app_folder = _resolve_cross_app_base_folder(base_name, import_map)
+                if cross_app_folder is not None:
+                    cross_base_id = schema.viewset_id(cross_app_folder, base_name)
+                    if cross_base_id not in graph.nodes:
+                        graph.add_node(
+                            schema.Node(
+                                cross_base_id,
+                                schema.NODE_VIEWSET,
+                                {
+                                    "name": base_name,
+                                    "kind": schema.VIEWSET_KIND_MIXIN,
+                                    "external": True,
+                                },
+                            )
+                        )
+                    graph.add_edge(schema.Edge(node_id, cross_base_id, schema.REL_INHERITS))
 
             if body_node is not None:
                 for serializer_name in identifiers_by_suffix(body_node, src, "Serializer"):
@@ -843,7 +987,9 @@ def extract_tests(app_name: str, project_root: Path, app_dir: Path, graph: schem
 # ---------------------------------------------------------------------------
 
 
-def resolve_app_label(app_name: str, project_root: Path) -> str:
+def resolve_app_label(
+    app_name: str, project_root: Path, schema_root: str = "tenant", folder_name: str | None = None
+) -> str:
     """Read the real Django app_label from apps.py's AppConfig.label,
     falling back to Django's own default (the last path segment, i.e.
     app_name itself) when an app does not override it.
@@ -855,8 +1001,12 @@ def resolve_app_label(app_name: str, project_root: Path) -> str:
     cotizaciones, dashboard, empleados, empresa, landing, perfil). A FK
     string like "facturas.Factura" is correct for the un-overridden apps;
     hardcoding "tenant_<app_name>" here would misclassify it as an
-    external stub instead of resolving same-app references correctly."""
-    path = project_root / "apps" / "tenant" / app_name / "apps.py"
+    external stub instead of resolving same-app references correctly.
+
+    `schema_root`/`folder_name` (added when extending coverage to
+    apps/public/* - see extract_app_python()'s docstring for why `app_name`
+    and the on-disk folder name are no longer always the same string)."""
+    path = project_root / "apps" / schema_root / (folder_name or app_name) / "apps.py"
     if not path.exists():
         return app_name
     root, src = parse_source(path)
@@ -869,13 +1019,46 @@ def resolve_app_label(app_name: str, project_root: Path) -> str:
     return app_name
 
 
-def extract_app_python(app_name: str, project_root: Path) -> schema.Graph:
+def extract_app_python(
+    app_name: str, project_root: Path, schema_root: str = "tenant", folder_name: str | None = None
+) -> schema.Graph:
+    """`app_name` is the id-namespace used for every node this pass creates
+    (Application/Model/Service/ViewSet/... ids all key off it - see
+    schema.py's id helpers); `folder_name` (defaults to `app_name`) is the
+    on-disk directory name, only ever used to build a Path. They differ
+    only for apps/public/* apps: `apps/tenant/core` and `apps/public/core`
+    are two entirely different, unrelated apps that happen to share the
+    bare folder name "core" - extracting the public one with app_name=
+    "core" would collide its Application/ViewSet/JS/... ids with the
+    tenant one's (Model ids are safe either way, they key off the real
+    Django app_label, and apps/tenant/core deliberately overrides its
+    label to "tenant_core" for exactly this reason - see
+    resolve_app_label()'s docstring). Callers extracting a public app must
+    pass a namespaced `app_name` (e.g. "public_core") and the real
+    `folder_name` ("core") separately."""
     graph = schema.Graph()
-    app_dir = project_root / "apps" / "tenant" / app_name
-    app_label = resolve_app_label(app_name, project_root)
+    app_dir = project_root / "apps" / schema_root / (folder_name or app_name)
+    app_label = resolve_app_label(app_name, project_root, schema_root, folder_name)
 
     graph.add_node(
-        schema.Node(schema.application_id(app_name), schema.NODE_APPLICATION, {"name": app_name, "app_label": app_label})
+        schema.Node(
+            schema.application_id(app_name),
+            schema.NODE_APPLICATION,
+            # Explicit False, not just "key absent" - same fix, same reason,
+            # as the real ViewSet node fix above: another app's Service
+            # extraction can create an `external: True` Application stub
+            # for THIS app (see the "other_app_node_id" stub a few hundred
+            # lines up) when it references a cross-app Service by receiver
+            # name; without this, merge order could silently downgrade a
+            # real Application back to looking external.
+            {
+                "name": app_name,
+                "app_label": app_label,
+                "external": False,
+                "schema": schema_root,
+                "folder": folder_name or app_name,
+            },
+        )
     )
 
     extract_models(app_name, app_label, app_dir / "models.py", graph, project_root)
