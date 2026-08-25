@@ -321,3 +321,38 @@ eliminados, NIT original restaurado. Ningún dato de producción real fue
 afectado (schema `qaisotest` es un tenant de QA, no de cliente real), pero
 se documenta como lección operativa para el resto de esta misión y
 misiones futuras.
+
+### Hallazgo posterior -- `MailInboxConfigViewSet.render_offcanvas()` roto (bug encontrado por el usuario, no por auditoría)
+
+Fuera de `apps/services/maildigester/` y `apps/tenant/facturas/`, pero
+directamente bloqueante para todo el flujo Mail Hub: el usuario reportó un
+`500 Internal Server Error` real en consola de navegador al abrir el
+offcanvas de "Nueva Configuración de Correo"
+(`GET /api/v1/empresas/mail-inbox-config/render-offcanvas/`). Reproducido
+con autenticación JWT real contra el contenedor `web` local
+(`home.sintel.net.co:8000`): `{"message": "name 'logger' is not defined"}`.
+
+`apps/tenant/empresa/api/viewsets.py::MailInboxConfigViewSet.render_offcanvas()`
+usaba `logger.debug/warning/error(...)` en 7 lugares, pero el módulo solo
+define `log`/`log_mailinbox` (`logging.getLogger(...)`) -- `logger` nunca
+existió. **La pantalla de creación/edición de buzón de correo nunca
+funcionó** -- sin poder crear un `MailInboxConfig`, no hay nada que el
+resto del Mail Hub pueda procesar. Corregido (`logger.` ->
+`log_mailinbox.` en los 7 sitios), verificado con curl+JWT real contra el
+servidor vivo (200 OK en modo creación, modo edición con id real, y modo
+"id no encontrado") y con un test de regresión nuevo
+(`apps/tenant/empresa/tests/test_mailinboxconfig_render_offcanvas.py`, 3
+tests, `pytest-django` + `force_login`).
+
+**Nota metodológica**: este hallazgo también resolvió el problema de
+verificación en navegador documentado en el Release Gate -- `curl` con
+`Authorization: Bearer <JWT generado por shell para un usuario real
+resuelto vía TenantMembership>` contra `http://<tenant>.sintel.net.co:8000/`
+permite probar endpoints reales sin tocar el hosts file del sistema (los
+dominios `sintel.net.co`/`home.sintel.net.co` ya resuelven localmente en
+este equipo). El acceso a nivel de PÁGINA completa (no solo API) sigue
+requiriendo una sesión de navegador válida -- se intentó generar una
+sesión Django por shell para inyectarla como cookie, pero el middleware la
+rechazó de forma consistente (causa no diagnosticada, posiblemente
+relacionada con `_auth_user_hash`/backend de sesión específico del
+proyecto) -- limpiada sin dejar rastro en ambos intentos.

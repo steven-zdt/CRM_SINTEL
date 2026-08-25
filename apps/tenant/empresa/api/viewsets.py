@@ -824,14 +824,14 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
                     'imap_host', 'imap_port', 'imap_username', 'imap_ssl', 'imap_starttls',
                     'imap_mailbox', 'imap_mark_as_seen', 'imap_max_attachment_mb', 'imap_move_processed_to'
                 ).get(id=config_id)
-                logger.debug(f"[render_offcanvas] Configuración {config_id} cargada exitosamente")
+                log_mailinbox.debug(f"[render_offcanvas] Configuración {config_id} cargada exitosamente")
             except MailInboxConfig.DoesNotExist:
                 # # WARNING: MANEJO GRACIAL: Si no existe, simplemente no cargar datos (modo creación)
-                logger.warning(f"[render_offcanvas] Configuración con ID {config_id} no encontrada para este tenant")
+                log_mailinbox.warning(f"[render_offcanvas] Configuración con ID {config_id} no encontrada para este tenant")
                 error_message = f"La configuración con ID {config_id} no existe o no pertenece a este tenant."
             except Exception as e:
                 # # WARNING: MANEJO DE ERRORES: Capturar cualquier error inesperado
-                logger.error(f"[render_offcanvas] Error al obtener configuración: {str(e)}", exc_info=True)
+                log_mailinbox.error(f"[render_offcanvas] Error al obtener configuración: {str(e)}", exc_info=True)
                 error_message = f"Error al cargar la configuración: {str(e)}"
         
         context = {
@@ -846,19 +846,19 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
                 if instance else
                 'tenant/empresa/offcanvas_crear_mailinboxconfig.html'
             )
-            logger.debug(f"[render_offcanvas] template={template_name}, config={instance is not None}, error={error_message}")
+            log_mailinbox.debug(f"[render_offcanvas] template={template_name}, config={instance is not None}, error={error_message}")
             html = render_to_string(
                 template_name,
                 context,
                 request=request
             )
-            logger.debug(f"[render_offcanvas] Template renderizado exitosamente, tamaño: {len(html)} caracteres")
+            log_mailinbox.debug(f"[render_offcanvas] Template renderizado exitosamente, tamaño: {len(html)} caracteres")
             # # WARNING: IMPORTANTE: Retornar HTML directamente sin TemplateHTMLRenderer
             # TemplateHTMLRenderer requiere template_name en la respuesta, pero nosotros ya renderizamos el HTML
             return HttpResponse(html, content_type='text/html')
         except TemplateDoesNotExist as e:
             # # WARNING: ERROR DE TEMPLATE: Si el template no existe, retornar error estructurado con error_handler
-            logger.error(f"[render_offcanvas] Template no encontrado: {str(e)}")
+            log_mailinbox.error(f"[render_offcanvas] Template no encontrado: {str(e)}")
             try:
                 # Intentar renderizar error_handler.html desde el template base
                 error_context = {
@@ -886,7 +886,7 @@ class MailInboxConfigViewSet(viewsets.ModelViewSet):
             return HttpResponse(error_html, content_type='text/html', status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             # # WARNING: ERROR GENERAL: Capturar cualquier error inesperado en el renderizado
-            logger.error(f"[render_offcanvas] Error inesperado al renderizar template: {str(e)}", exc_info=True)
+            log_mailinbox.error(f"[render_offcanvas] Error inesperado al renderizar template: {str(e)}", exc_info=True)
             try:
                 # Intentar renderizar error_handler.html desde el template base
                 error_context = {
