@@ -1041,13 +1041,14 @@ class ContabilidadBusinessService:
         o activaciones manuales de sincronización contable.
         """
         from apps.tenant.contabilidad.integracion.extractores import (
-            ExtractorGastos, ExtractorFacturas, ExtractorNomina
+            ExtractorGastos, ExtractorFacturas, ExtractorNomina, ExtractorInventario
         )
-        
+
         extractores = [
             ExtractorGastos(empresa_id),
             ExtractorFacturas(empresa_id),
             ExtractorNomina(empresa_id),
+            ExtractorInventario(empresa_id),
         ]
         
         resumen = {

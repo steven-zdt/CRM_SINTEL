@@ -224,12 +224,16 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
                 documento_origen_app='gastos',
                 documento_origen_modelo='DocumentoSoporte',
                 documento_origen_id=instance.id,
+                empresa_id=empresa_id,
             ):
                 if r.tipo in ('RETEFUENTE', 'RETEICA', 'RETEIVA'):
                     pct_norm = Decimal(str(r.porcentaje)).normalize()
                     retenciones_fracciones[r.tipo] = _choices_map.get(pct_norm, '0.00')
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "[GastoViewSet:render_offcanvas_editar] No se pudieron cargar retenciones "
+                "para documento id=%s: %s", instance.id, e,
+            )
 
         context = {
             'instance': instance,
