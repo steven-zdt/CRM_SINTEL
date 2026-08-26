@@ -242,6 +242,14 @@ class CuentasPagar(SintelTenantBaseModel):
         null=True, blank=True, db_index=True,
         help_text="UUID de la Factura COMPRA de origen (soft reference, sin FK).",
     )
+    # Referencia blanda — sin FK directa a app compras. Poblado cuando la
+    # CxP se genera automaticamente al aprobar una Orden de Compra que no
+    # tiene (o todavia no tiene) una Factura electronica asociada -- ver
+    # OrdenCompraBusinessService._sincronizar_cuenta_por_pagar().
+    orden_compra_uuid = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        help_text="UUID de la Orden de Compra de origen (soft reference, sin FK).",
+    )
     fecha_emision = models.DateField(
         help_text="Fecha de expedicion de la factura de compra",
     )
@@ -296,6 +304,7 @@ class CuentasPagar(SintelTenantBaseModel):
             models.Index(fields=["numero_factura"]),
             models.Index(fields=["fecha_vencimiento"]),
             models.Index(fields=["factura_uuid"]),
+            models.Index(fields=["orden_compra_uuid"]),
         ]
 
     def __str__(self):

@@ -258,16 +258,17 @@ class CuentasPagarViewSet(OrganizationalContextMixin, CuentasPagarServiceMixin, 
 
     def list(self, request, *args, **kwargs):
         """
-        Lista facturas de compra (Cuentas por Pagar) de la empresa.
-
-        Fuente: Factura.naturaleza='COMPRA' — fuente de verdad (Bounded Context §18).
-        El modelo CuentasPagar se usa para gestionar abonos manuales.
+        Lista Cuentas por Pagar de la empresa: Facturas de compra + CxP sin
+        Factura asociada (generadas al aprobar una Orden de Compra o creadas
+        a mano) — ver CuentasPagarSelector.qs_list_unificado() (hallazgo real
+        2026-08-26: esta vista antes ignoraba por completo el modelo
+        CuentasPagar salvo para abonos).
 
         Filtros opcionales:
-          ?proveedor_uuid=<uuid>  — filtrar por proveedor (Factura.proveedor_uuid)
+          ?proveedor_uuid=<uuid>  — filtrar por proveedor
           ?estado_pago=SIN_PAGO|PARCIAL|PAGADA
-          ?vencidas=true          — solo facturas vencidas no pagadas
-          ?search=<texto>         — numero de factura, razon social o NIT del proveedor
+          ?vencidas=true          — solo obligaciones vencidas no pagadas
+          ?search=<texto>         — numero de factura/CxP, razon social o NIT del proveedor
         """
         empresa = self.get_empresa()
         proveedor_uuid = request.query_params.get("proveedor_uuid") or request.query_params.get("proveedor_id")
@@ -275,7 +276,7 @@ class CuentasPagarViewSet(OrganizationalContextMixin, CuentasPagarServiceMixin, 
         vencidas       = request.query_params.get("vencidas", "").lower() == "true"
         search         = (request.query_params.get("search") or "").strip() or None
 
-        qs = self.cuentas_pagar_selector.qs_list_facturas_compra(
+        qs = self.cuentas_pagar_selector.qs_list_unificado(
             empresa_id=empresa.id,
             proveedor_uuid=proveedor_uuid,
             estado_pago=estado_pago,

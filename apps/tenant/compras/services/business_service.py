@@ -1,5 +1,6 @@
 import logging
 import uuid as uuid_lib
+from datetime import timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Tuple
 
@@ -347,12 +348,53 @@ class OrdenCompraBusinessService:
                 return False, {"error": "orden_no_encontrada", "message": "La orden de compra no existe."}, 404
 
             orden = OrdenCompraCRUDService.cambiar_estado(orden, nuevo_estado)
+            if nuevo_estado == 'APROBADA':
+                OrdenCompraBusinessService._sincronizar_cuenta_por_pagar(orden)
             return True, orden, 200
         except ValidationError as e:
             return False, e.detail, 400
         except Exception as e:
             logger.error(f"Error en cambiar_estado_orden_compra: {e}", exc_info=True)
             return False, {"detail": f"Error interno del servidor: {str(e)}"}, 500
+
+    @staticmethod
+    def _sincronizar_cuenta_por_pagar(orden: OrdenCompra) -> None:
+        """
+        Bridge Compras -> Proveedores (import local dentro del metodo, mismo
+        patron usado por RecepcionCompraBusinessService.confirmar_recepcion()
+        para el bridge a Inventario). Genera/recupera la Cuenta por Pagar al
+        aprobar la orden -- decision explicita: el punto de reconocimiento
+        de la obligacion es APROBADA, no RECIBIDA ni la existencia de una
+        Factura DIAN (muchas compras de este ERP nunca generan una factura
+        electronica, solo quedan respaldadas por un DocumentoSoporte
+        opcional o ninguno -- ver hallazgo real: 0 CuentasPagar existian en
+        el tenant `home` pese a tener una OrdenCompra APROBADA/BORRADOR).
+
+        Idempotente: CuentasPagarBusinessService.registrar_cuenta_pagar()
+        hace get_or_create sobre (empresa, proveedor, numero_factura) -- una
+        reaprobacion o reintento no duplica el registro.
+
+        Fuera de alcance deliberado (mismo criterio que
+        RecepcionCompraBusinessService.anular_recepcion): si la orden se
+        anula despues de aprobada, la CxP ya generada NO se reversa aqui.
+        """
+        from apps.tenant.proveedores.services.business_service import CuentasPagarBusinessService
+
+        numero = orden.numero_documento or f"OC-{orden.consecutivo}"
+        fecha_vencimiento = orden.fecha + timedelta(days=orden.proveedor.plazo_pago_dias)
+
+        CuentasPagarBusinessService.registrar_cuenta_pagar(
+            proveedor=orden.proveedor,
+            empresa_id=orden.empresa_id,
+            datos_cuenta_pagar={
+                "numero_factura": numero,
+                "fecha_emision": orden.fecha,
+                "fecha_vencimiento": fecha_vencimiento,
+                "valor_total": orden.total,
+                "observaciones": f"Generado automaticamente al aprobar Orden de Compra {numero}.",
+                "orden_compra_uuid": orden.uuid,
+            },
+        )
 
     @staticmethod
     @transaction.atomic

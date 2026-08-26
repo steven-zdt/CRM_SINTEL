@@ -1,6 +1,6 @@
 # AUDITORIA DE FLUJO DE TRABAJO - MODULO DE COMPRAS
 
-**Version auditada:** v3.10.5 → corregida 2026-06-18  
+**Version auditada:** v3.10.5 → corregida 2026-06-18 → sincronizacion CxP 2026-08-26  
 **Auditor:** Claude Code  
 **Estado actual:** 6 bugs criticos/altos corregidos — 3 items de deuda tecnica pendientes
 
@@ -349,7 +349,53 @@ DOMContentLoaded
 
 ---
 
-## 10. Reglas de Mantenimiento
+## 10. Bridge Compras -> Proveedores: sincronizacion de Cuentas por Pagar (2026-08-26)
+
+**Hallazgo real:** reportado en vivo por el usuario — una compra creada en el
+tenant `home` (`OC-QA-1`) no aparecia en `workspace/#proveedores` > Cuentas
+por Pagar. Auditoria confirmo `CuentasPagar` con 0 registros en toda la
+historia del tenant: el unico llamador de
+`CuentasPagarBusinessService.registrar_cuenta_pagar()` era el endpoint
+manual `POST /api/v1/proveedores/cuentas-pagar/`. Ningun flujo de Compras
+lo disparaba (mismo patron confirmado, simetricamente, en
+`clientes.Cartera` — tampoco tiene trigger automatico desde Ventas).
+
+**Fix:** `OrdenCompraBusinessService.cambiar_estado_orden_compra()`
+(`services/business_service.py:339`) ahora llama a
+`_sincronizar_cuenta_por_pagar(orden)` cuando `nuevo_estado == 'APROBADA'`.
+Decision explicita del usuario: el punto de reconocimiento de la obligacion
+es la aprobacion de la orden, no la recepcion ni la existencia de una
+Factura DIAN (la mayoria de compras de este ERP no generan factura
+electronica).
+
+```python
+orden = OrdenCompraCRUDService.cambiar_estado(orden, nuevo_estado)
+if nuevo_estado == 'APROBADA':
+    OrdenCompraBusinessService._sincronizar_cuenta_por_pagar(orden)
+```
+
+`_sincronizar_cuenta_por_pagar()` importa `CuentasPagarBusinessService`
+localmente dentro del metodo (mismo patron de bridge cross-app que
+`RecepcionCompraBusinessService.confirmar_recepcion()` usa para Inventario).
+Construye `numero_factura = orden.numero_documento or f"OC-{consecutivo}"`,
+`fecha_vencimiento = orden.fecha + proveedor.plazo_pago_dias`, y pasa
+`orden_compra_uuid=orden.uuid` (campo nuevo en `CuentasPagar`, migracion
+`proveedores/0019`, soft reference sin FK — mismo patron que `factura_uuid`).
+
+**Idempotente:** `registrar_cuenta_pagar()` hace `get_or_create()` sobre
+`(empresa, proveedor, numero_factura)` — reaprobar o reintentar no duplica.
+
+**Fuera de alcance deliberado:** si la orden se anula despues de aprobada,
+la CxP ya generada no se reversa automaticamente (mismo criterio que
+`anular_recepcion()`, que tampoco reversa `MovimientoInventario` de una
+recepcion CONFIRMADA — ver `services/business_service.py`,
+`RecepcionCompraBusinessService.anular_recepcion()`).
+
+Tests: `apps/tenant/compras/tests/test_sincronizacion_cuentas_pagar.py`.
+
+---
+
+## 11. Reglas de Mantenimiento
 
 1. **Agregar traversal al selector** cuando se agregue un campo `source='fk__campo'` en un serializer list.
 2. **Nunca `new bootstrap.Offcanvas(el)` mas de una vez** por elemento — el `htmx:beforeCleanupElement` llama `dispose()` antes de cada swap.

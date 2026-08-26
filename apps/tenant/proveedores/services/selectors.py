@@ -394,6 +394,115 @@ class CuentasPagarSelector:
 
         return qs.order_by('payment_due_date', '-fecha_emision')
 
+    # Factura.EstadoPago <-> CuentasPagar.estado_pago: mismos 3 estados,
+    # nombres distintos. Reutilizado por qs_list_facturas_compra() (arriba,
+    # direccion CxP->Factura) y por _adaptar_cuentas_pagar_a_forma_factura()
+    # (abajo, direccion Factura->CxP) -- una sola tabla, sin duplicar.
+    _ESTADO_CXP_A_FACTURA = {'SIN_PAGO': 'NO_PAGADA', 'PARCIAL': 'PAGO_PARCIAL', 'PAGADA': 'PAGADA'}
+
+    @staticmethod
+    def _adaptar_cuentas_pagar_a_forma_factura(empresa_id: int, proveedor_uuid=None, estado_pago=None, vencidas: bool = False, search=None):
+        """
+        Hallazgo real (2026-08-26): CuentasPagarViewSet.list()/CuentasPagarTableView
+        leen EXCLUSIVAMENTE de Factura.naturaleza='COMPRA' (qs_list_facturas_compra) --
+        el modelo CuentasPagar "solo se usa para persistir abonos" (ver comentario
+        original en tables.py). Esto deja invisibles en la grilla: (a) CxP creadas a
+        mano via POST /cuentas-pagar/, y (b) CxP generadas automaticamente al aprobar
+        una Orden de Compra (v3.18.0, orden_compra_uuid) -- ninguna de las dos tiene
+        Factura asociada.
+
+        Complementa qs_list_facturas_compra(): SOLO los registros de CuentasPagar
+        SIN factura_uuid (para no duplicar los que si tienen Factura, que ya salen
+        por la otra query). Adapta cada fila a la MISMA forma que un objeto Factura
+        (mismos nombres de atributo: numero, emisor_razon_social, emisor_nit, total,
+        payment_due_date, fecha_emision, estado_pago con los choices de Factura) para
+        poder reutilizar sin cambios FacturaCxPListSerializer y CuentasPagarTable.
+        """
+        from datetime import datetime
+        from types import SimpleNamespace
+
+        from django.utils import timezone
+
+        qs = (
+            CuentasPagar.objects
+            .filter(empresa_id=empresa_id, factura_uuid__isnull=True)
+            .select_related("proveedor")
+            .only(
+                "uuid", "numero_factura", "fecha_emision", "fecha_vencimiento",
+                "valor_total", "estado_pago", "proveedor_id",
+                "proveedor__razon_social", "proveedor__numero_documento",
+            )
+        )
+        if proveedor_uuid:
+            qs = qs.filter(proveedor__uuid=proveedor_uuid)
+        if estado_pago:
+            qs = qs.filter(estado_pago=estado_pago)
+        if vencidas:
+            hoy = timezone.now().date()
+            qs = qs.filter(fecha_vencimiento__lt=hoy).exclude(estado_pago="PAGADA")
+        if search:
+            qs = qs.filter(
+                Q(numero_factura__icontains=search) |
+                Q(proveedor__razon_social__icontains=search) |
+                Q(proveedor__numero_documento__icontains=search)
+            )
+
+        mapa = CuentasPagarSelector._ESTADO_CXP_A_FACTURA
+        return [
+            SimpleNamespace(
+                uuid=c.uuid,
+                numero=c.numero_factura,
+                emisor_razon_social=c.proveedor.razon_social,
+                emisor_nit=c.proveedor.numero_documento,
+                total=c.valor_total,
+                payment_due_date=c.fecha_vencimiento,
+                # Factura.fecha_emision es DateTimeField (aware);
+                # CuentasPagar.fecha_emision es DateField -- convertir para
+                # que FacturaCxPListSerializer.fecha_emision (DateTimeField)
+                # no reciba un date() plano (AttributeError: 'date' object
+                # has no attribute 'utcoffset' en DRF DateTimeField.enforce_timezone).
+                fecha_emision=timezone.make_aware(datetime.combine(c.fecha_emision, datetime.min.time()))
+                    if c.fecha_emision else None,
+                estado_pago=mapa.get(c.estado_pago, "NO_PAGADA"),
+            )
+            for c in qs
+        ]
+
+    @staticmethod
+    def qs_list_unificado(empresa_id: int, proveedor_uuid=None, estado_pago=None, vencidas: bool = False, search=None):
+        """
+        Fuente unificada para la grilla de Cuentas por Pagar: Facturas de
+        compra + CxP generadas desde Compras o creadas a mano (sin Factura).
+        Consumido por CuentasPagarViewSet.list() (API DRF) y
+        CuentasPagarTableView (HTMX/django-tables2) -- misma SSoT para ambas.
+
+        No es un QuerySet real (mezcla dos modelos) -- una lista Python ya
+        ordenada replicando qs_list_facturas_compra().order_by('payment_due_date',
+        '-fecha_emision') via dos sorts estables encadenados (ambos consumidores
+        solo iteran/paginan, nunca llaman .filter()/.order_by() de nuevo sobre
+        el resultado).
+        """
+        from datetime import date, datetime
+
+        facturas = list(CuentasPagarSelector.qs_list_facturas_compra(
+            empresa_id=empresa_id, proveedor_uuid=proveedor_uuid, estado_pago=estado_pago,
+            vencidas=vencidas, search=search,
+        ))
+        extra = CuentasPagarSelector._adaptar_cuentas_pagar_a_forma_factura(
+            empresa_id=empresa_id, proveedor_uuid=proveedor_uuid, estado_pago=estado_pago,
+            vencidas=vencidas, search=search,
+        )
+        combinado = facturas + extra
+
+        def _a_fecha(valor):
+            if isinstance(valor, datetime):
+                return valor.date()
+            return valor
+
+        combinado.sort(key=lambda r: _a_fecha(r.fecha_emision) or date.min, reverse=True)
+        combinado.sort(key=lambda r: (r.payment_due_date is None, r.payment_due_date or date.max))
+        return combinado
+
     @staticmethod
     def qs_list(empresa_id: int, proveedor_id=None, estado_pago=None, vencidas: bool = False):
         """

@@ -62,6 +62,7 @@ CuentasPagar(SintelTenantBaseModel)
 ├── proveedor         FK → Proveedor (CASCADE, related_name="carteras")
 ├── numero_factura    CharField — número de factura de compra
 ├── factura_uuid      UUIDField null/blank — soft reference Factura (sin FK directa)
+├── orden_compra_uuid UUIDField null/blank — soft reference OrdenCompra (v3.18.0, sin FK directa)
 ├── fecha_emision     DateField
 ├── fecha_vencimiento DateField db_index
 ├── valor_total       DecimalField(18,2) — monto original
@@ -134,6 +135,7 @@ Meta: UniqueConstraint(empresa, proveedor, numero_documento)
 | **0015** | `update_cuentaspagar_verbose_name` | verbose_name = "Cuentas por Pagar" |
 | 0016–0017 | (gap) | Migraciones de otros módulos |
 | **0018** | `representante_and_more` | **CreateModel Representante (v3.17.0) + constraint** |
+| **0019** | `cuentaspagar_orden_compra_uuid_and_more` | **Agrega `orden_compra_uuid` (v3.18.0) — soft reference para la sincronizacion automatica desde Compras** |
 
 ---
 
@@ -211,11 +213,11 @@ class ProveedorBusinessService:
     obtener_o_crear_proveedor(empresa_id, data)
 
 class CuentasPagarBusinessService:
-    registrar_cartera(proveedor, numero_factura, fecha_emision,
-                      fecha_vencimiento, valor_total, ...)
+    registrar_cuenta_pagar(proveedor, empresa_id, datos_cuenta_pagar)
         → get_or_create idempotente por (empresa, proveedor, numero_factura)
-    registrar_abono(cartera_uuid, monto, observaciones, empresa_id)
-        → select_for_update() + cartera.valor_pagado += monto + save()
+        → datos_cuenta_pagar acepta orden_compra_uuid opcional (v3.18.0)
+    registrar_abono(cuenta_pagar_uuid, monto, observaciones, empresa_id)
+        → select_for_update() + cuenta_pagar.valor_pagado += monto + save()
         → save() auto-recalcula saldo y estado_pago
 
 class RepresentanteBusinessService:
@@ -561,6 +563,41 @@ POST /api/v1/proveedores/cuentas-pagar/{uuid}/registrar-abono/
     ↓ 200 OK + CuentasPagarDetailSerializer
 ```
 
+### Sincronizacion automatica desde Compras (v3.18.0)
+
+**Hallazgo real (2026-08-26):** `CuentasPagar` tenia 0 registros en el tenant
+`home` pese a existir una OrdenCompra real, porque `registrar_cuenta_pagar()`
+solo se llamaba desde el endpoint manual — ningun flujo de Compras/Facturas/
+Gastos lo disparaba. Confirmado que el mismo patron (100% manual, sin
+trigger) existe simetricamente en `clientes.Cartera` (cuentas por cobrar).
+
+Decision explicita del usuario: el punto de reconocimiento de la obligacion
+es la transicion de la Orden de Compra a **APROBADA** (no RECIBIDA, no la
+existencia de una Factura DIAN — muchas compras de este ERP nunca generan
+una factura electronica).
+
+```
+POST /api/v1/compras/{uuid}/cambiar-estado/  {"estado": "APROBADA"}
+    ↓ OrdenCompraBusinessService.cambiar_estado_orden_compra()
+    ↓ OrdenCompraCRUDService.cambiar_estado(orden, 'APROBADA')
+    ↓ si nuevo_estado == 'APROBADA':
+        OrdenCompraBusinessService._sincronizar_cuenta_por_pagar(orden)
+            ↓ numero_factura = orden.numero_documento (o "OC-{consecutivo}")
+            ↓ fecha_vencimiento = orden.fecha + proveedor.plazo_pago_dias
+            ↓ CuentasPagarBusinessService.registrar_cuenta_pagar(
+                  proveedor=orden.proveedor, empresa_id=orden.empresa_id,
+                  datos_cuenta_pagar={..., "orden_compra_uuid": orden.uuid})
+                  ↓ get_or_create(empresa, proveedor, numero_factura) — idempotente
+```
+
+**Alcance deliberado:** si la orden se anula despues de aprobada, la CxP ya
+generada NO se reversa automaticamente (mismo criterio que
+`RecepcionCompraBusinessService.anular_recepcion()`, que tampoco reversa
+`MovimientoInventario` de una recepcion CONFIRMADA).
+
+Ver `apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md` para el lado
+Compras del bridge.
+
 ### Representantes — Directorio Global
 
 ```
@@ -688,7 +725,8 @@ apps/tenant/proveedores/
 | v3.16.0 | 2026-06-03 | CuentasPagar unificado (CuentaPorPagar + Cartera) |
 | v3.16.1 | 2026-06-03 | Rename Cartera → CuentasPagar en cascada (14 archivos) |
 | v3.17.0 | 2026-06-10 | Representante model + full CRUD (5 FASES): Modelos + Services + API + Frontend + Docs |
-| **v3.17.1** | **2026-06-10** | **5 bugs críticos ViewSet + redesign offcanvas + directorio representantes + propagación proveedorNombre** |
+| v3.17.1 | 2026-06-10 | 5 bugs críticos ViewSet + redesign offcanvas + directorio representantes + propagación proveedorNombre |
+| **v3.18.0** | **2026-08-26** | **Sincronizacion automatica CuentasPagar al aprobar OrdenCompra (bug real: 0 CxP pese a compras existentes) — campo `orden_compra_uuid` + `OrdenCompraBusinessService._sincronizar_cuenta_por_pagar()`** |
 
 ---
 

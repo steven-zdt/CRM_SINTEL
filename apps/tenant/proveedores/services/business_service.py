@@ -257,6 +257,7 @@ class CuentasPagarBusinessService:
             "fecha_vencimiento": datos_cuenta_pagar.get("fecha_vencimiento"),
             "valor_total": Decimal(str(datos_cuenta_pagar.get("valor_total", 0))),
             "observaciones": datos_cuenta_pagar.get("observaciones", ""),
+            "orden_compra_uuid": datos_cuenta_pagar.get("orden_compra_uuid"),
         }
 
         cuenta_pagar_obj, created = CuentasPagar.objects.get_or_create(

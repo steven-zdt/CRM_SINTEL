@@ -13,7 +13,6 @@ from django_tables2 import SingleTableView
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from apps.tenant.api.mixins import SintelDSVMixin
-from apps.tenant.facturas.models import Factura
 from apps.tenant.proveedores.models import Proveedor
 from apps.tenant.proveedores.services.selectors import CuentasPagarSelector, ProveedorSelector
 from apps.tenant.proveedores.tables import CuentasPagarTable, ProveedorTable
@@ -79,9 +78,9 @@ class CuentasPagarTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView)
     def get_queryset(self):
         empresa_id = self._resolver_empresa_id()
         if not empresa_id:
-            return Factura.objects.none()
+            return []
         search = (self.request.GET.get("q") or "").strip() or None
         estado_pago = (self.request.GET.get("estado_pago") or "").strip() or None
-        return CuentasPagarSelector.qs_list_facturas_compra(
+        return CuentasPagarSelector.qs_list_unificado(
             empresa_id=empresa_id, estado_pago=estado_pago, search=search,
         )

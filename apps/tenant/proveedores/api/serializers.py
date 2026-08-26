@@ -218,7 +218,18 @@ class FacturaCxPListSerializer(serializers.Serializer):
     fecha_emision    = serializers.DateTimeField(read_only=True)
     estado_pago      = serializers.SerializerMethodField()
     estado_pago_display = serializers.SerializerMethodField()
-    factura_uuid     = serializers.UUIDField(source='uuid', read_only=True)
+    factura_uuid     = serializers.SerializerMethodField()
+
+    def get_factura_uuid(self, obj):
+        """
+        obj.uuid == su propio uuid solo cuando obj es realmente una Factura.
+        Para filas adaptadas desde CuentasPagar (qs_list_unificado, v3.18.0 --
+        CxP sin Factura real: generadas desde Compras o creadas a mano),
+        `uuid` es el uuid de la CxP -- devolverlo aqui como "factura_uuid"
+        seria engañoso (implica una Factura electronica que no existe).
+        """
+        from apps.tenant.facturas.models import Factura
+        return obj.uuid if isinstance(obj, Factura) else None
 
     def get_estado_pago(self, obj):
         """Traduce estado Factura → estado CxP para el JS."""
@@ -290,6 +301,8 @@ class CuentasPagarDetailSerializer(ProveedorNormalizationMixin, serializers.Mode
             "proveedor",
             "proveedor_nombre",
             "numero_factura",
+            "factura_uuid",
+            "orden_compra_uuid",
             "fecha_emision",
             "fecha_vencimiento",
             "valor_total",
@@ -302,12 +315,14 @@ class CuentasPagarDetailSerializer(ProveedorNormalizationMixin, serializers.Mode
             "updated_at",
         )
         read_only_fields = (
-            "uuid", 
-            "saldo", 
-            "estado_pago", 
-            "estado_pago_display", 
-            "created_at", 
-            "updated_at"
+            "uuid",
+            "factura_uuid",
+            "orden_compra_uuid",
+            "saldo",
+            "estado_pago",
+            "estado_pago_display",
+            "created_at",
+            "updated_at",
         )
 
     def validate(self, attrs):

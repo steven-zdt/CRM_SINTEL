@@ -273,8 +273,9 @@ window.Sintel.Proveedores.CuentasPagarList — tabla CxP (cartera_list.js)
 ### NP-PROV-002 — Backfill de Facturas COMPRA → CuentasPagar
 
 **Severidad:** INFORMATIVO
-**Descripción:** No existe management command que cree registros `CuentasPagar` desde Facturas COMPRA existentes. El listado inline usa Facturas directamente (Fase 2 funciona), pero el tab de gestión `CuentasPagar` muestra solo los registros creados manualmente.
-**Acción (futuro):** Crear `management/commands/backfill_cuentas_pagar.py` que itere `Factura.naturaleza='COMPRA'` y llame a `CuentasPagarBusinessService.registrar_cartera()`.
+**Estado (2026-08-26):** PARCIALMENTE RESUELTO — ver `AUDITORIA_FLUJO_PROVEEDORES.md` §"Sincronizacion automatica desde Compras (v3.18.0)". El bridge real construido cubre OrdenCompra → APROBADA, no Facturas. Este item especifico (Factura naturaleza=COMPRA → CuentasPagar) sigue sin trigger automatico ni backfill.
+**Descripción:** No existe management command que cree registros `CuentasPagar` desde Facturas COMPRA existentes. El listado inline usa Facturas directamente (Fase 2 funciona), pero el tab de gestión `CuentasPagar` muestra solo los registros creados manualmente o generados desde Compras (v3.18.0).
+**Acción (futuro):** Crear `management/commands/backfill_cuentas_pagar.py` que itere `Factura.naturaleza='COMPRA'` y llame a `CuentasPagarBusinessService.registrar_cuenta_pagar()`.
 
 ---
 

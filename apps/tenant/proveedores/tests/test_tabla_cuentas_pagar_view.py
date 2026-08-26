@@ -18,6 +18,8 @@ Nota: esta migracion corrigio de paso dos bugs funcionales pre-existentes:
   soporte real de busqueda en CuentasPagarSelector.qs_list_facturas_compra()
   y en el ViewSet.
 """
+from decimal import Decimal
+
 import pytest
 from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context
@@ -26,7 +28,7 @@ from apps.public.tenants.models import TenantMembership
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
 from apps.tenant.perfil.models import TenantProfile
-from apps.tenant.proveedores.models import Proveedor
+from apps.tenant.proveedores.models import CuentasPagar, Proveedor
 
 User = get_user_model()
 
@@ -110,3 +112,46 @@ def test_tabla_cuentas_pagar_busqueda(client, tenant, _admin_con_cxp):
     html = r.content.decode("utf-8")
     assert "FCOMPRA-001" in html
     assert "FCOMPRA-002" not in html
+
+
+@pytest.fixture
+def _admin_con_cxp_sin_factura(tenant):
+    """
+    Hallazgo real (2026-08-26): CuentasPagar sin factura_uuid (generadas al
+    aprobar una Orden de Compra, o creadas a mano) eran invisibles en esta
+    tabla porque solo leia Factura.naturaleza='COMPRA'. Este fixture no crea
+    ninguna Factura -- solo un CuentasPagar suelto, como quedaria una compra
+    real sin factura electronica.
+    """
+    with schema_context(tenant.schema_name):
+        empresa = Empresa.objects.only('id').first()
+        proveedor = Proveedor.objects.create(
+            empresa=empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
+            numero_documento="800777888", razon_social="Proveedor Sin Factura SAS",
+            regimen_tributario="ORDINARIO", activo=True,
+        )
+        CuentasPagar.objects.create(
+            empresa=empresa, proveedor=proveedor, numero_factura="OC-SIN-FACTURA-1",
+            fecha_emision="2026-06-01", fecha_vencimiento="2026-07-01",
+            valor_total=Decimal("11900.00"),
+        )
+
+        admin_user = User.objects.create(username="admin_cxp_sf", email="admin_cxp_sf@example.com")
+        TenantProfile.objects.create(user=admin_user, empresa=empresa, rol="ADMIN")
+
+    TenantMembership.objects.create(client=tenant, user=admin_user, is_active=True, rol="ADMIN")
+    return admin_user
+
+
+@pytest.mark.django_db
+def test_tabla_cuentas_pagar_incluye_cxp_sin_factura(client, tenant, _admin_con_cxp_sin_factura):
+    with schema_context(tenant.schema_name):
+        client.force_login(_admin_con_cxp_sin_factura)
+
+    r = client.get("/ui/proveedores/cuentas-pagar/tabla/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+
+    assert r.status_code == 200
+    html = r.content.decode("utf-8")
+    assert "OC-SIN-FACTURA-1" in html
+    assert "Proveedor Sin Factura SAS" in html
+    assert "Sin Pago" in html
