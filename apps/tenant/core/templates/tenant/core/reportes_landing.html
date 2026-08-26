@@ -1,0 +1,22 @@
+{% load static %}
+{# "Reportes" -- entrada unica al Reporting Hub (mision Reporting Hub Frontend, FASE 13). #}
+<div class="ui-module ui-reportes">
+  <div class="d-flex align-items-center mb-4">
+    <div class="bg-primary bg-opacity-10 p-3 rounded-3 me-3">
+      <i class="bi bi-bar-chart-line text-primary fs-3"></i>
+    </div>
+    <div>
+      <h4 class="mb-0 fw-bold">Reportes</h4>
+      <p class="text-muted small mb-0">Consulta, filtra y exporta datos de todas las areas de la empresa.</p>
+    </div>
+  </div>
+
+  <div id="reportes-content">
+    <div class="text-center py-5">
+      <div class="spinner-border text-primary opacity-50" role="status"></div>
+      <p class="text-muted mt-2">Cargando catalogo de reportes...</p>
+    </div>
+  </div>
+</div>
+
+<script src="{% static 'core/js/reportes_landing.js' %}"></script>

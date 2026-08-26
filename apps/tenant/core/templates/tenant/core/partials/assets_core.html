@@ -59,6 +59,14 @@
 <!-- REQUERIDO: cargar antes de cualquier modulo que abra offcanvas. -->
 <script src="{% static 'core/js/common/offcanvas.helper.js' %}"></script>
 
+<!-- ========================================== -->
+<!-- 3.6) REPORTING API CLIENT - Global        -->
+<!-- ========================================== -->
+<!-- SSoT: window.Sintel.Reporting.API -- cliente unico para -->
+<!-- /api/v1/reporting/, usado por cualquier app que consuma el Reporting -->
+<!-- Hub (mision Reporting Hub Frontend). Requiere Sintel.Core.Http. -->
+<script src="{% static 'core/js/common/reporting.api.js' %}"></script>
+
 <!-- ====================== -->
 <!-- 4) SHIM __DEBUG__      -->
 <!-- ====================== -->

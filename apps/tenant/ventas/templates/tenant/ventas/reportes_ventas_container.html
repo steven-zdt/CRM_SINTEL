@@ -1,0 +1,66 @@
+{% load static %}
+{# Reporte "Resumen de Ventas" -- consume el Reporting Hub (dataset ventas.resumen). #}
+<div class="ui-module ui-ventas-reportes">
+
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <button type="button" class="btn btn-sm btn-outline-secondary" data-reportes-volver>
+      <i class="bi bi-arrow-left"></i> Reportes
+    </button>
+    <h5 class="mb-0 fw-bold">
+      <i class="bi bi-bag-check text-success me-1"></i> Resumen de Ventas
+    </h5>
+  </div>
+
+  <form id="filtros-reportes-ventas" class="card border-0 shadow-sm mb-3"
+        hx-get="{% url 'ventas:reportes-tabla' %}"
+        hx-target="#reportes-ventas-panel"
+        hx-trigger="load, submit, change delay:300ms from:select"
+        hx-swap="innerHTML">
+    <div class="card-body p-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-6 col-md-2">
+          <label class="form-label x-small text-uppercase fw-bold text-muted mb-1">Desde</label>
+          <input type="date" name="fecha_inicio" class="form-control form-control-sm">
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label x-small text-uppercase fw-bold text-muted mb-1">Hasta</label>
+          <input type="date" name="fecha_fin" class="form-control form-control-sm">
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label x-small text-uppercase fw-bold text-muted mb-1">Estado</label>
+          <select name="estado" class="form-select form-select-sm">
+            <option value="">Todos</option>
+            <option value="BORRADOR">Borrador</option>
+            <option value="FACTURADA_DIAN">Facturada DIAN</option>
+            <option value="ANULADA">Anulada</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="form-label x-small text-uppercase fw-bold text-muted mb-1">Agrupar por</label>
+          <select name="group_by" class="form-select form-select-sm">
+            <option value="fecha">Fecha</option>
+            <option value="cliente">Cliente</option>
+            <option value="estado">Estado</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-1">
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-arrow-repeat"></i>
+          </button>
+        </div>
+        <div class="col-6 col-md-2 text-md-end" id="reportes-ventas-export">
+          {# Se puebla via JS (reportes_ventas.js) con la URL de export real, segun los filtros vigentes. #}
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <div id="reportes-ventas-panel">
+    <div class="text-center py-5">
+      <div class="spinner-border text-primary opacity-50" role="status"></div>
+      <p class="text-muted mt-2">Cargando reporte...</p>
+    </div>
+  </div>
+</div>
+
+<script src="{% static 'ventas/js/reportes_ventas.js' %}"></script>

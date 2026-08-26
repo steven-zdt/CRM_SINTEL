@@ -41,6 +41,8 @@
     <ul class="nav flex-column" id="nav">
       <li class="nav-section-header">Inicio</li>
       <li class="nav-item"><a href="#dashboard" data-tab="dashboard" class="nav-link"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a></li>
+      {# Reporting Hub -- entrada unica de reportes transversales (mision Reporting Hub Frontend) #}
+      <li class="nav-item"><a href="#reportes" data-tab="reportes" class="nav-link"><i class="bi bi-bar-chart-line me-2"></i>Reportes</a></li>
 
       <li class="nav-section-header">Configuración</li>
       <li class="nav-item"><a href="#perfil" data-tab="perfil" class="nav-link"><i class="bi bi-person-circle me-2"></i>Usuarios y roles</a></li>
@@ -84,6 +86,11 @@
       {# Módulo Dashboard Ejecutivo v3.9.5 #}
       <section id="tab-dashboard" class="workspace-tab" style="display: none;">
         {% include 'tenant/dashboard/list_dashboard.html' %}
+      </section>
+
+      {# Reporting Hub -- catalogo transversal de reportes (mision Reporting Hub Frontend) #}
+      <section id="tab-reportes" class="workspace-tab" style="display: none;">
+        {% include 'tenant/core/reportes_landing.html' %}
       </section>
 
       {# Módulo Empresa (REFERENCIA GOLDEN v2.61.4) #}
