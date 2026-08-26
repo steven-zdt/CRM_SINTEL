@@ -16,3 +16,6 @@ class FacturasConfig(AppConfig):
         """
         from apps.tenant.facturas.document_intake import register
         register()
+
+        from apps.tenant.facturas.reporting import register as register_reporting
+        register_reporting()
