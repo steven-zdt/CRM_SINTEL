@@ -100,7 +100,7 @@ Al construir el tercer dataset del loop de expansion (`inventario.movimientos`, 
 
 | Item | Por que se difiere |
 |---|---|
-| Datasets Inventario/Facturas/Gastos/Empleados (FASE 15-18) | Patron ya probado con 2 datasets reales (Ventas + Contabilidad); replicable mecanicamente via §8 sin mas diseño — se prioriza dejar el contrato solido sobre construir 6 datasets a medio probar |
+| Dataset Empleados (FASE 15-18) | Patron ya probado con 6 datasets reales (Ventas, Contabilidad, tax.iva, tax.retenciones, Inventario, Gastos, Facturas via §8); replicable mecanicamente sin mas diseño — se prioriza construir cuando haya consumidor real |
 | Exportacion PDF (FASE 21) | Sin libreria instalada (`reportlab`/`weasyprint`); agregar una dependencia nueva requiere decision explicita, no se asume |
 | Ejecucion asincrona + `ReportExecution`/historial (FASE 22-23) | Sin evidencia de que una query en vivo sea insuficiente (ver §6) -- Regla Absoluta #7 prohibe construir esto sin evidencia concreta |
 | UI transversal de Reportes (FASE 24-26) | Esta pasada es backend-only; ningun consumidor de UI existe todavia que lo requiera |

@@ -81,9 +81,24 @@
 | **Export** | json, csv, xlsx |
 | **Validado con datos reales** | Si — test con 3 `DocumentoSoporte` reales (incluido uno `anulado=True` que correctamente no cuenta) |
 
+## `facturas.resumen`
+
+| | |
+|---|---|
+| **Owner app** | `facturas` |
+| **Provider** | `apps/tenant/facturas/reporting/provider_resumen.py::FacturasResumenReportProvider` |
+| **Descripcion** | Todas las Facturas/Notas (cualquier `estado` y `tipo`), a diferencia de `tax.iva` que solo cuenta `ACEPTADA`. Visibilidad operativa del ciclo documental completo. |
+| **Dimensiones** | `fecha`, `naturaleza`, `estado`, `tipo` (FE/NC/ND) |
+| **Medidas** | `cantidad_documentos` (COUNT), `subtotal` (SUM), `impuestos` (SUM), `total` (SUM) |
+| **Filtros** | `fecha_inicio`, `fecha_fin`, `naturaleza`, `estado`, `tipo` |
+| **Scope** | `empresa`, `sede` |
+| **Export** | json, csv, xlsx |
+| **Validado con datos reales** | Si — test con 3 Facturas reales (VENTA ACEPTADA, COMPRA ACEPTADA, VENTA RECHAZADA), confirma que RECHAZADA SI cuenta aqui (comportamiento inverso a `tax.iva`) |
+| **Deliberadamente no incluido** | medida "saldo pendiente" — `Factura.saldo_pendiente` es una property que consulta `BancosBridge` por factura individual (1 query/fila); no existe metodo bulk, construirlo duplicaria logica de Bancos. Diferido si Bancos expone un metodo bulk real. |
+
 ## Diferidos (no registrados todavia)
 
-`facturas.resumen` (documento/estado/saldo, distinto de `tax.iva`), `empleados.*`, `contabilidad.estado_resultados`, `contabilidad.libro_diario` — ver `REPORTING_ARCHITECTURE.md` §9 para la razon de cada diferimiento y §8 para el procedimiento de alta.
+`empleados.*`, `contabilidad.estado_resultados`, `contabilidad.libro_diario` — ver `REPORTING_ARCHITECTURE.md` §9 para la razon de cada diferimiento y §8 para el procedimiento de alta.
 
 ---
 
