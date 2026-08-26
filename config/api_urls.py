@@ -87,6 +87,14 @@ except Exception as e:
     logger.error(f"ERROR: ERROR INESPERADO cargando URLs de contabilidad: {e}", exc_info=True)
     raise
 
+# Reporting Hub -- servicio transversal expuesto bajo /api/v1/reporting/
+# (mision Reporting Hub: apps/services/reporting/, ver docs/reporting/)
+try:
+    urlpatterns.append(path('reporting/', include('apps.services.reporting.api.urls')))
+    logger.info("OK: URLs de reporting registradas correctamente: /api/v1/reporting/")
+except (ImportError, AttributeError) as e:
+    logger.warning(f"WARNING: No se pudieron cargar URLs de reporting: {e}")
+
 try:
     urlpatterns.append(path('inventario/', include('apps.tenant.inventario.api.urls')))
     logger.info("OK: URLs de inventario registradas correctamente: /api/v1/inventario/")

@@ -6,3 +6,7 @@ class VentasConfig(AppConfig):
     name = "apps.tenant.ventas"
     label = "tenant_ventas"
     verbose_name = "Ventas"
+
+    def ready(self) -> None:
+        from apps.tenant.ventas.reporting import register
+        register()
