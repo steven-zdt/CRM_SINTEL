@@ -6,3 +6,7 @@ class GastosConfig(AppConfig):
     name = "apps.tenant.gastos"
     label = "tenant_gastos"  # evita colisiones de labels
     verbose_name = "Gastos"
+
+    def ready(self) -> None:
+        from apps.tenant.gastos.reporting import register
+        register()

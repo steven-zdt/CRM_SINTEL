@@ -6,3 +6,7 @@ class InventarioConfig(AppConfig):
     name = "apps.tenant.inventario"
     label = "tenant_inventario"  # evitar colisiones con apps públicas
     verbose_name = "Inventario (Tenant)"
+
+    def ready(self) -> None:
+        from apps.tenant.inventario.reporting import register
+        register()

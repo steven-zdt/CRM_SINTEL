@@ -90,6 +90,12 @@ Ejecucion en vivo contra el tenant `home` (dataset real, sin indices adicionales
 
 **No se requiere volver a auditar arquitectura** para cada nuevo dataset — el contrato ya esta cerrado y probado.
 
+### 8.1. Bug real encontrado al agregar `inventario.movimientos` — alias de medida vs. nombre de campo
+
+Al construir el tercer dataset del loop de expansion (`inventario.movimientos`, sobre `MovimientoInventario`) se encontro un bug real, confirmado en vivo: una medida cuyo NOMBRE PUBLICO coincide con el nombre real de un campo del modelo (`cantidad`, tanto la medida como `MovimientoInventario.cantidad`) rompe cuando OTRA medida en el mismo `annotate()`/`aggregate()` referencia ese campo dentro de una expresion compuesta (`costo_total = Sum(F('cantidad') * F('costo_unitario'))`). Django resuelve el `F('cantidad')` contra el ALIAS ya agregado en la misma llamada (que es en si mismo un `Sum(...)`), no contra el campo crudo, y lanza `FieldError: '...' is an aggregate`.
+
+**Fix aplicado (en `inventario/reporting/provider.py`, replicable para cualquier provider futuro con medidas compuestas):** los alias internos usados en `.annotate()`/`.aggregate()` se prefijan (`m__<medida>`) para que NUNCA coincidan con un nombre de campo real, remapeando al nombre publico de la medida solo al leer los resultados. `ventas.resumen`/`tax.iva`/`tax.retenciones` no lo necesitaron porque ninguna de sus medidas usa una expresion compuesta que referencie OTRO campo por nombre -- este patron se vuelve necesario en cuanto un Provider tiene una medida tipo "cantidad × precio". Documentado aqui para que el proximo dataset con una medida compuesta no repita el mismo diagnostico.
+
 ## 9. Deuda diferida (explicita, no oculta)
 
 | Item | Por que se difiere |

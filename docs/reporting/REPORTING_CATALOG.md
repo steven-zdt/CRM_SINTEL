@@ -33,9 +33,57 @@
 | **Export** | json, csv, xlsx |
 | **Validado en vivo** | Si — tenant `home`, periodo 2026-08/09, cifras identicas a la validacion en vivo de CONT-19 (6 cuentas, debito=credito=$3,050,000) |
 
+## `tax.iva`
+
+| | |
+|---|---|
+| **Owner app** | `facturas` |
+| **Provider** | `apps/tenant/facturas/reporting/provider.py::FacturasTaxReportProvider` |
+| **Descripcion** | IVA generado (ventas) y descontable (compras), desde `FacturaImpuesto`. Detalle completo: `docs/tax/TAX_DATASETS.md`. |
+| **Validado en vivo** | Si — catalogo/detalle/query contra `home` (vacio, real: 0 filas confirmadas por consulta directa a BD); validacion funcional completa via test con datos reales |
+
+## `tax.retenciones`
+
+| | |
+|---|---|
+| **Owner app** | `contabilidad` |
+| **Provider** | `apps/tenant/contabilidad/reporting/provider.py::ContabilidadReportProvider` |
+| **Descripcion** | RETEFUENTE/RETEICA/RETEIVA, desde `Retencion` (SSoT real de `RetencionesService`). Detalle completo: `docs/tax/TAX_DATASETS.md`. |
+| **Validado en vivo** | Si — catalogo/detalle/query contra `home` (vacio, real); validacion funcional completa via test con datos reales, incluida una reversa |
+
+## `inventario.movimientos`
+
+| | |
+|---|---|
+| **Owner app** | `inventario` |
+| **Provider** | `apps/tenant/inventario/reporting/provider.py::InventarioReportProvider` |
+| **Descripcion** | Entradas/salidas/traslados de producto (Kardex), leidos de `MovimientoInventario` — `KardexService` sigue siendo el SSoT de escritura. Escopeado a movimientos de producto (`producto__isnull=False`); movimientos de ActivoFijo quedan fuera (dominio distinto). |
+| **Dimensiones** | `fecha`, `sede`, `producto`, `categoria`, `tipo` |
+| **Medidas** | `cantidad_movimientos` (COUNT), `cantidad` (SUM), `costo_total` (SUM de `cantidad × costo_unitario`) |
+| **Filtros** | `fecha_inicio`, `fecha_fin`, `tipo`, `producto_id` |
+| **Scope** | `empresa`, `sede` |
+| **Export** | json, csv, xlsx |
+| **Validado en vivo** | Si — catalogo/detalle contra `home` (vacio, real); validacion funcional completa via test con datos reales (`KardexService.registrar_movimiento`, ENTRADA_COMPRA + SALIDA_VENTA) |
+| **Deliberadamente no incluido** | medida "stock actual" — es un saldo/snapshot, no un dato agregable por periodo; se deja como dataset futuro si hay demanda real |
+| **Bug real encontrado y corregido** | alias de medida `cantidad` colisionaba con el campo real `MovimientoInventario.cantidad` dentro de la medida compuesta `costo_total` — ver `REPORTING_ARCHITECTURE.md` §8.1 |
+
+## `gastos.resumen`
+
+| | |
+|---|---|
+| **Owner app** | `gastos` |
+| **Provider** | `apps/tenant/gastos/reporting/provider.py::GastosReportProvider` |
+| **Descripcion** | `DocumentoSoporte` agregado por fecha, sede, categoria contable y/o proveedor. No incluye IVA (el modelo no lo tiene, confirmado en la mision Tax Service) ni retenciones (ver `tax.retenciones`). |
+| **Dimensiones** | `fecha`, `sede`, `categoria_contable`, `proveedor` |
+| **Medidas** | `cantidad_documentos` (COUNT), `subtotal` (SUM), `total` (SUM) |
+| **Filtros** | `fecha_inicio`, `fecha_fin`, `categoria_contable`, `proveedor_id` |
+| **Scope** | `empresa`, `sede` |
+| **Export** | json, csv, xlsx |
+| **Validado con datos reales** | Si — test con 3 `DocumentoSoporte` reales (incluido uno `anulado=True` que correctamente no cuenta) |
+
 ## Diferidos (no registrados todavia)
 
-`inventario.*`, `facturas.*`, `gastos.*`, `empleados.*`, `contabilidad.estado_resultados`, `contabilidad.libro_diario` — ver `REPORTING_ARCHITECTURE.md` §9 para la razon de cada diferimiento y §8 para el procedimiento de alta.
+`facturas.resumen` (documento/estado/saldo, distinto de `tax.iva`), `empleados.*`, `contabilidad.estado_resultados`, `contabilidad.libro_diario` — ver `REPORTING_ARCHITECTURE.md` §9 para la razon de cada diferimiento y §8 para el procedimiento de alta.
 
 ---
 
