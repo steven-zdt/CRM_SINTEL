@@ -1,7 +1,8 @@
-# AUDITORIA COMPLETA - CONTABILIDAD APP v3.17.0
+# AUDITORIA COMPLETA - CONTABILIDAD APP v3.19.0
 
-**Fecha de auditoria:** 2026-06-10 (sincronizada con models.py local — 13 modelos)
-**Estado:** Implementado y funcional. AUD-CONT-008 RESUELTO. AUD-CONT-012 RESUELTO. Motor Fase 3 Autodescubrimiento COMPLETO (v3.17.0).
+**Fecha de auditoria:** 2026-08-26 (v3.19.0 — CONT-19: cierre del ciclo contable end-to-end, validado en vivo)
+**Actualizacion previa:** 2026-08-25 (v3.18.0 — auditoria completa de superficie + fix critico de reportes financieros)
+**Estado:** Implementado y funcional. AUD-CONT-007 RESUELTO. AUD-CONT-008 RESUELTO. AUD-CONT-012 RESUELTO. Motor Fase 3 Autodescubrimiento COMPLETO. AUD-CONT-013 RESUELTO (bug critico reportes, 2026-08-25). CONT-19 = COMPLETED_WITH_DEFERRED (ciclo end-to-end validado en vivo, 2026-08-26).
 **Arquitectura:** Feature-Sliced Design (FSD) + Service Layer
 **Compliance:** AGENTS.md + NIIF PYMES Colombia
 
@@ -10,6 +11,15 @@
 > Nota de auditoria 2026-06-05 (v3.16.2): Motor de Plantillas Contables Fase 3 — `PlantillaContable` modo dual + nuevo modelo `LineaPlantilla` + metodo `contabilizar_con_plantilla()`. Ver §16.
 > **Nota de auditoria 2026-06-05 (v3.16.3) — RESOLUCION AUD-CONT-012:** API CRUD `PlantillaContableViewSet` + UI tab Plantillas + Integracion Pendientes (auto-aplicar plantillas). Fase 3 COMPLETA. Ver §17.
 > **Nota de auditoria 2026-06-10 (v3.16.4) — Auditoria de seguridad cross-tenant:** Conteo de modelos corregido a 13 (no 14). Migraciones 0012+0013 documentadas. AUD-CONT-008 RESUELTO — `RetencionesService` ya implementa `empresa_id` obligatorio con Zero-Trust en todos los metodos publicos. Fix critico en `apps/tenant/api/permissions.py`: `IsTenantMember` y demas clases ya bloquean usuarios no autenticados incluso en `DEBUG=True`. Fix critico en cache Redis: claves ahora incluyen `connection.schema_name` para aislar datos entre tenants (dashboard + gastos). Ver §18.
+> **Nota de auditoria 2026-08-25 (v3.18.0) — Auditoria completa + fix critico de reportes:** Bug confirmado y corregido con datos reales: `Contabilizador._construir_asiento()` (camino real de TODOS los extractores) solo llena `MovimientoContable.cuenta_codigo` (string), nunca el FK legacy `cuenta`. Tres extractores (`facturas.py`, `gastos.py`, `nomina.py`) y los dos selectores de reportes financieros (`balance_prueba_selector`, `estado_resultados_selector` en `services/selectors.py`) leian/filtraban exclusivamente por `cuenta`/`cuenta__*` — Balance de Prueba y Estado de Resultados quedaban vacios (y Libro Diario mostraba `SIN_CUENTA`) para CUALQUIER tenant usando la integracion actual. Fix: mismo patron de fallback que `inventario.py` ya usaba correctamente; selectores reescritos a agregacion Python (un intento previo con `Coalesce` SQL en `annotate/values/annotate` no agrupaba correctamente en este Django). Verificado extremo a extremo con un Asiento real aprobado (3 filas correctas en Balance de Prueba, ingreso real en Estado de Resultados). Regresion: `tests/test_f27_cuenta_codigo_reportes_bugfix.py` (3 tests, datos reales, sin mocks).
+>
+> Fix adicional de consistencia (no vulnerabilidad activa — ver nota): `CuentaContableViewSet`/`PeriodoContableViewSet`/`MovimientoContableViewSet` resolvian objetos por id/uuid sin exigir `empresa_id` en `destroy`/`update`/offcanvas/`cerrar` y en `get_mutation_queryset()` (BUG-4 de §"api/viewsets.py" ya documentaba el gap en `get_queryset()`'s list/retrieve, pero no en los identifier-lookups). Se investigo inicialmente como IDOR cross-empresa confirmado; la verificacion con test real (crear una segunda `Empresa` en el mismo esquema) probo que **no es explotable hoy**: `Empresa` tiene singleton DB-enforced por schema (`unique_singleton_empresa_per_schema`, `apps/tenant/empresa/models.py`), asi que nunca coexisten dos empresas en un mismo esquema de tenant. El fix se conserva de todas formas — alinea estos 3 ViewSets con el patron ya correcto de `AsientoContableViewSet` y con la regla general de AGENTS.md ("empresa_id en toda query") — como endurecimiento/consistencia ante un futuro cambio de modelo, no como remediacion de un hallazgo explotable. Regresion: suite existente `tests/test_api_contabilidad.py` (12/12 sin cambios).
+>
+> Tambien corregido en `api/serializers.py`: `MovimientoContableListSerializer.cuenta_nombre/cuenta_codigo` via `source='cuenta.nombre'/'cuenta.codigo'` desaparecian silenciosamente del JSON (DRF `SkipField`) para todo movimiento automatico — reemplazado por `SerializerMethodField` con el mismo fallback. `MovimientoContableDetailSerializer.get_cuenta_nombre` devolvia `cuenta_codigo` (un codigo PUC) como si fuera el nombre cuando el FK es null — corregido a usar `descripcion`.
+>
+> Auditoria de superficie completa (crud_service.py, api/viewsets.py, api/serializers.py, tasks.py, choices/choices.py, admin.py, tables.py, views_ui.py) no encontro otros bugs de correctitud confirmados mas alla de los anteriores. `get_libro_diario_periodo()` solo agrega `ExtractorFacturas/Gastos/Nomina` (no `ExtractorInventario`) — gap de alcance, no bug, pendiente de confirmar si es deliberado. `crud_service.py` mantiene el patron de `.objects.get(id=...)` sin `empresa_id` en varios metodos (`actualizar_asiento`, `eliminar_asiento`, etc.) — seguro hoy porque todos los IDs que llegan ya fueron resueltos via un selector/identifier-lookup scoped por empresa en la capa ViewSet, pero es deuda tecnica de arquitectura (la "Doble Verificacion Semantica" deberia vivir en `business_service.py`, no depender de que cada ViewSet la aplique correctamente aguas arriba).
+>
+> **Nota de auditoria 2026-08-26 (v3.19.0) — CONT-19 cierre del ciclo contable end-to-end:** validacion funcional real (no mocks) contra el tenant `home` con JWT real de usuario ADMIN. Ciclo completo probado en vivo: Gasto + Devengo reales -> backfill -> Libro Diario (sin `SIN_CUENTA`, confirma en produccion el fix del 2026-08-25) -> aprobacion -> Balance de Prueba + Estado de Resultados cuadrados. Idempotencia confirmada en vivo (backfill repetido = 0 nuevos). Se cerro un `PeriodoContable` obsoleto (2025-02) y se abrio uno vigente (2026-08/09) via API real, con autorizacion explicita del usuario por ser accion irreversible. Se sembraron `ReglaContable`/`TarifaImpuesto`/`TipoComprobante` para la empresa (nunca se habian poblado). Bug nuevo encontrado y corregido: `seed_reglas_contables.py --dry-run` ejecutaba escrituras reales (el flag solo suprimia el log de exito) — confirmado en vivo (escribio 62 reglas + 19 tarifas antes del fix), corregido a verificacion de solo-lectura en modo dry-run. AUD-CONT-007 corregido de "Abierto" a "RESUELTO" tras verificar que `tasks.py` ya tenia `max_retries`+DLQ (el doc estaba desactualizado, no el codigo). Compras/Ventas/Bancos confirmados como NO_APLICA para contabilizacion directa — alimentan Contabilidad solo via Inventario/Facturas, sin riesgo de doble conteo (reforzado por constraint unico en BD). Detalle completo: `docs/contabilidad/CONT-19_BASELINE.md` y `docs/contabilidad/CONT-19_END_TO_END.md`. Estado: **CONT-19 = COMPLETED_WITH_DEFERRED** (Retenciones y UX visual quedan diferidos, sin bloqueo critico).
 
 
 ## 📑 Documentación Especializada (SSoT)
@@ -1041,6 +1051,8 @@ function applyFilters() {
 
 **Problema:** `PeriodoContableSelector.get_qs_list()` y `get_qs_detail()` se llamaban sin `empresa_id` — el selector acepta `empresa_id=None` y en ese caso omite el filtro. Aunque django-tenants garantiza aislamiento por esquema, el filtro por `empresa_id` es mandatorio por AGENTS.md (DSV).
 
+> **Addendum 2026-08-25:** el fix de abajo cubrio `list`/`retrieve`, pero `update`/`destroy`/`cerrar`/ambos offcanvas seguian llamando `get_periodo_by_identifier()` sin `empresa_id` (mismo gap en `get_cuenta_by_identifier()` de `CuentaContableViewSet` y en `get_mutation_queryset()`, usado por ambos ViewSets). Cerrado en la auditoria 2026-08-25 (ver nota superior) — no era explotable como IDOR real porque `Empresa` es singleton DB-enforced por schema, pero es la brecha que este mismo BUG-4 ya identificaba, solo que incompleta.
+
 **Fix:**
 ```python
 def get_queryset(self):
@@ -1439,7 +1451,7 @@ El `DocumentosPendientesViewSet.list()` procesea los items del timeline de inven
 | No emojis en .py | CONFORME — validado con `py_compile` |
 | empresa_id en toda query tenant | CONFORME — AUD-CONT-008 RESUELTO 2026-06-10 |
 | TabulatorFactory obligatorio | CONFORME en modulos inspeccionados |
-| Celery con DLQ y reintentos | NO CONFORME — AUD-CONT-007 |
+| Celery con DLQ y reintentos | CONFORME — AUD-CONT-007 RESUELTO (verificado 2026-08-26) |
 | Cero archivos .py no autorizados | CONFORME — estructura services/ canononica |
 | Re-exports explicitos en `__init__.py` | CONFORME — sin wildcard imports |
 
@@ -1579,7 +1591,7 @@ AlterModelOptions ordering=['-created_at']
 |----|-----------|---------|----------|--------|
 | AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | Abierto |
 | AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | Abierto |
-| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | Abierto |
+| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | **RESUELTO (verificado 2026-08-26)** — `ejecutar_integracion_contable_task` ya tiene `max_retries=3` + `registrar_failed_task`/DLQ. Doc estaba desactualizado. |
 | AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | ✅ RESUELTO 2026-06-10 |
 | AUD-CONT-009 | Baja | `api/viewsets.py` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` | Abierto |
 | AUD-CONT-010 | Baja | `api/viewsets.py` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | Abierto |
@@ -1824,7 +1836,7 @@ Cuadratura: ΣDebe = 1.035.000 ≠ ΣHaber = 1.190.000 → **DESCUADRE** (el eje
 |----|-----------|---------|----------|--------|
 | AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | Abierto |
 | AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | Abierto |
-| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | Abierto |
+| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | **RESUELTO (verificado 2026-08-26)** — `ejecutar_integracion_contable_task` ya tiene `max_retries=3` + `registrar_failed_task`/DLQ. Doc estaba desactualizado. |
 | AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | ✅ RESUELTO 2026-06-10 |
 | AUD-CONT-009 | Baja | `api/viewsets.py` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` | Abierto |
 | AUD-CONT-010 | Baja | `api/viewsets.py` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | Abierto |
@@ -2089,7 +2101,7 @@ El documento anterior marcaba "14 modelos". Conteo real via `grep "^class " mode
 |----|-----------|---------|----------|--------|
 | AUD-CONT-005 | Baja | `api/datatables.py` | Archivo legacy no expuesto | Abierto |
 | AUD-CONT-006 | Baja | `scratch/` | Scripts no productivos dentro de la app | Abierto |
-| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | Abierto |
+| AUD-CONT-007 | Media | `tasks.py` | Sin `max_retries` ni DLQ en tareas Celery | **RESUELTO (verificado 2026-08-26)** — `ejecutar_integracion_contable_task` ya tiene `max_retries=3` + `registrar_failed_task`/DLQ. Doc estaba desactualizado. |
 | AUD-CONT-008 | Media | `services/retenciones_service.py` | Queries sin filtro `empresa_id` en metodos publicos | ✅ RESUELTO 2026-06-10 |
 | AUD-CONT-009 | Baja | `api/viewsets.py` | `ConfiguracionRetencionesViewSet.lookup_field = 'id'` expone PK | Abierto |
 | AUD-CONT-010 | Baja | `api/viewsets.py` | `LibroDiarioViewSet` hereda `viewsets.ViewSet` no `BaseTenantViewSet` | Abierto |
@@ -2115,7 +2127,7 @@ El documento anterior marcaba "14 modelos". Conteo real via `grep "^class " mode
 | UUID lookup (no exponer PK) | PARCIAL — `ConfiguracionRetencionesViewSet` usa `id` (AUD-CONT-009) |
 | No emojis en .py | CONFORME — validado con `py_compile` |
 | empresa_id en toda query tenant | CONFORME — AUD-CONT-008 RESUELTO |
-| Celery con DLQ y reintentos | NO CONFORME — AUD-CONT-007 |
+| Celery con DLQ y reintentos | CONFORME — AUD-CONT-007 RESUELTO (verificado 2026-08-26) |
 | Cache Redis con schema_name | CONFORME — patron documentado; contabilidad no usa cache directa |
 | IsTenantMember bloquea anonimos en DEBUG | CONFORME — fix aplicado 2026-06-10 en `apps/tenant/api/permissions.py` |
 

@@ -193,9 +193,12 @@ class ExtractorNomina(AbstractExtractor):
                 dto.asiento_uuid = str(asiento.uuid)
                 dto.asiento_numero = asiento.numero
                 dto.movimientos = [
+                    # WARNING: BUGFIX: Contabilizador solo llena cuenta_codigo (string),
+                    # nunca el FK legacy `cuenta` -- leer solo m.cuenta.codigo mostraba
+                    # SIN_CUENTA para todo movimiento real.
                     MovimientoResumen(
-                        cuenta_codigo=m.cuenta.codigo if m.cuenta else 'SIN_CUENTA',
-                        cuenta_nombre=m.cuenta.nombre if m.cuenta else 'Sin Cuenta',
+                        cuenta_codigo=m.cuenta_codigo or (m.cuenta.codigo if m.cuenta else 'SIN_CUENTA'),
+                        cuenta_nombre=(m.cuenta.nombre if m.cuenta else (m.descripcion or 'Sin Cuenta')),
                         debe=m.debe,
                         haber=m.haber
                     ) for m in asiento.movimientos.all()

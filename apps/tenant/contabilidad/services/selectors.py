@@ -578,7 +578,7 @@ def get_tercero_movimiento(tipo_tercero: str, tercero_id: int) -> Optional[Any]:
 def balance_prueba_selector(empresa_id: int, fecha_inicio: Any, fecha_fin: Any):
     """
     Calcula el Balance de Prueba (Saldos y Movimientos) para un periodo.
-    
+
     Retorna una lista de dicts con:
     - codigo, nombre, nivel
     - saldo_anterior
@@ -586,78 +586,95 @@ def balance_prueba_selector(empresa_id: int, fecha_inicio: Any, fecha_fin: Any):
     - nuevo_saldo
     """
     from apps.tenant.contabilidad.models import MovimientoContable
-    from django.db.models import Sum, Case, When, Value, DecimalField, F
-    
+
+    # WARNING: BUGFIX: Contabilizador._construir_asiento() (el camino real de
+    # todos los extractores -- facturas/gastos/nomina/inventario) solo llena
+    # cuenta_codigo (string), nunca el FK legacy `cuenta`. Agrupar por
+    # cuenta__codigo via SQL (annotate+values+annotate con Coalesce sobre una
+    # relacion nullable) excluia TODO movimiento real de la agregacion --
+    # Balance de Prueba quedaba vacio para cualquier tenant usando la
+    # integracion actual, verificado con datos reales. Se agrega en Python:
+    # menos elegante pero robusto frente a la ambiguedad de agrupar por una
+    # expresion Coalesce sobre un JOIN opcional.
+    def _codigo_efectivo(mov_dict):
+        return mov_dict['cuenta_codigo'] or mov_dict['cuenta__codigo']
+
     # 1. Movimientos del periodo
-    qs_periodo = MovimientoContable.objects.filter(
+    movimientos_periodo = MovimientoContable.objects.filter(
         asiento__empresa_id=empresa_id,
         asiento__fecha__range=(fecha_inicio, fecha_fin),
         asiento__estado='APROBADO'
-    ).exclude(
-        cuenta__isnull=True
-    ).values(
-        'cuenta__codigo',
-        'cuenta__nombre',
-        'cuenta__nivel'
-    ).annotate(
-        debito=Sum('debe'),
-        credito=Sum('haber')
-    )
+    ).values('cuenta_codigo', 'cuenta__codigo', 'debe', 'haber')
+
+    acumulado_periodo: dict[str, dict[str, Decimal]] = {}
+    for mov in movimientos_periodo:
+        codigo = _codigo_efectivo(mov)
+        if not codigo:
+            continue
+        acc = acumulado_periodo.setdefault(codigo, {'debito': Decimal('0'), 'credito': Decimal('0')})
+        acc['debito'] += mov['debe'] or Decimal('0')
+        acc['credito'] += mov['haber'] or Decimal('0')
 
     # 2. Saldos anteriores (fecha < fecha_inicio)
-    qs_anterior = MovimientoContable.objects.filter(
+    movimientos_anteriores = MovimientoContable.objects.filter(
         asiento__empresa_id=empresa_id,
         asiento__fecha__lt=fecha_inicio,
         asiento__estado='APROBADO'
-    ).exclude(
-        cuenta__isnull=True
-    ).values(
-        'cuenta__codigo'
-    ).annotate(
-        total_debe_ant=Sum('debe'),
-        total_haber_ant=Sum('haber')
-    )
+    ).values('cuenta_codigo', 'cuenta__codigo', 'debe', 'haber')
 
-    anteriores_map = {x['cuenta__codigo']: x for x in qs_anterior}
-    
+    anteriores_map: dict[str, dict[str, Decimal]] = {}
+    for mov in movimientos_anteriores:
+        codigo = _codigo_efectivo(mov)
+        if not codigo:
+            continue
+        acc = anteriores_map.setdefault(codigo, {'total_debe_ant': Decimal('0'), 'total_haber_ant': Decimal('0')})
+        acc['total_debe_ant'] += mov['debe'] or Decimal('0')
+        acc['total_haber_ant'] += mov['haber'] or Decimal('0')
+
+    # 3. Nombre/nivel: cuenta_codigo es un string suelto (sin FK) -- resolver
+    # por lote contra CuentaContable en vez de depender del JOIN implicito.
+    codigos_todos = set(acumulado_periodo.keys()) | set(anteriores_map.keys())
+    cuentas_map = {
+        c.codigo: c
+        for c in CuentaContable.objects.filter(empresa_id=empresa_id, codigo__in=codigos_todos)
+        .only('codigo', 'nombre', 'nivel')
+    }
+
     resultado = []
     # Usamos todas las cuentas que tienen movimientos en el periodo o saldo anterior
     # Por simplicidad en esta v1, iteramos sobre las del periodo
     # TODO: Unir ambos QuerySets para cubrir cuentas con saldo pero sin movimiento
-    
-    for item in qs_periodo:
-        codigo = item['cuenta__codigo']
-        if not codigo:
-            continue
 
+    for codigo, item in acumulado_periodo.items():
         ant = anteriores_map.get(codigo, {'total_debe_ant': Decimal('0'), 'total_haber_ant': Decimal('0')})
 
-        debito_ant = ant['total_debe_ant'] or Decimal('0')
-        credito_ant = ant['total_haber_ant'] or Decimal('0')
+        debito_ant = ant['total_debe_ant']
+        credito_ant = ant['total_haber_ant']
 
-        debito_p = item['debito'] or Decimal('0')
-        credito_p = item['credito'] or Decimal('0')
+        debito_p = item['debito']
+        credito_p = item['credito']
 
         # Determinar naturaleza por primer digito
         naturaleza = 'D' if codigo[0] in ['1', '5', '6'] else 'C'
-        
+
         if naturaleza == 'D':
             saldo_ant = debito_ant - credito_ant
             nuevo_saldo = saldo_ant + debito_p - credito_p
         else:
             saldo_ant = credito_ant - debito_ant
             nuevo_saldo = saldo_ant + credito_p - debito_p
-            
+
+        cuenta_obj = cuentas_map.get(codigo)
         resultado.append({
             'codigo': codigo,
-            'nombre': item['cuenta__nombre'],
-            'nivel': item['cuenta__nivel'],
+            'nombre': cuenta_obj.nombre if cuenta_obj else f'Cuenta {codigo}',
+            'nivel': cuenta_obj.nivel if cuenta_obj else len(codigo),
             'saldo_anterior': saldo_ant,
             'debito': debito_p,
             'credito': credito_p,
             'nuevo_saldo': nuevo_saldo,
         })
-        
+
     return sorted(resultado, key=lambda x: x['codigo'])
 
 
@@ -667,48 +684,58 @@ def estado_resultados_selector(empresa_id: int, fecha_inicio: Any, fecha_fin: An
     Filtra cuentas de Clase 4 (Ingresos), 5 (Gastos) y 6 (Costos).
     """
     from apps.tenant.contabilidad.models import MovimientoContable
-    from django.db.models import Sum
-    
-    # Movimientos del periodo para cuentas de resultado (4, 5, 6)
-    qs = MovimientoContable.objects.filter(
+    import re
+
+    # WARNING: BUGFIX: mismo problema que balance_prueba_selector -- filtrar por
+    # cuenta__codigo (FK legacy, via annotate+Coalesce sobre un JOIN opcional)
+    # excluia todo movimiento real (Contabilizador solo llena cuenta_codigo),
+    # verificado con datos reales. Se agrega en Python por la misma razon.
+    movimientos = MovimientoContable.objects.filter(
         asiento__empresa_id=empresa_id,
         asiento__fecha__range=(fecha_inicio, fecha_fin),
         asiento__estado='APROBADO',
-        cuenta__codigo__regex=r'^[456]'
-    ).values(
-        'cuenta__codigo', 
-        'cuenta__nombre', 
-        'cuenta__nivel'
-    ).annotate(
-        debito=Sum('debe'),
-        credito=Sum('haber')
-    ).order_by('cuenta__codigo')
-    
+    ).values('cuenta_codigo', 'cuenta__codigo', 'debe', 'haber')
+
+    acumulado: dict[str, dict[str, Decimal]] = {}
+    for mov in movimientos:
+        codigo = mov['cuenta_codigo'] or mov['cuenta__codigo']
+        if not codigo or not re.match(r'^[456]', codigo):
+            continue
+        acc = acumulado.setdefault(codigo, {'debito': Decimal('0'), 'credito': Decimal('0')})
+        acc['debito'] += mov['debe'] or Decimal('0')
+        acc['credito'] += mov['haber'] or Decimal('0')
+
+    cuentas_map = {
+        c.codigo: c.nombre
+        for c in CuentaContable.objects.filter(empresa_id=empresa_id, codigo__in=acumulado.keys()).only('codigo', 'nombre')
+    }
+
     ingresos = []
     gastos = []
     costos = []
-    
+
     total_ingresos = Decimal('0')
     total_gastos = Decimal('0')
     total_costos = Decimal('0')
-    
-    for item in qs:
-        codigo = item['cuenta__codigo']
-        debito = item['debito'] or Decimal('0')
-        credito = item['credito'] or Decimal('0')
-        
+
+    for codigo in sorted(acumulado.keys()):
+        item = acumulado[codigo]
+        nombre = cuentas_map.get(codigo, f'Cuenta {codigo}')
+        debito = item['debito']
+        credito = item['credito']
+
         # Valor neto según naturaleza
         if codigo.startswith('4'): # Ingresos (C)
             valor = credito - debito
-            ingresos.append({'codigo': codigo, 'nombre': item['cuenta__nombre'], 'valor': valor})
+            ingresos.append({'codigo': codigo, 'nombre': nombre, 'valor': valor})
             total_ingresos += valor
         elif codigo.startswith('5'): # Gastos (D)
             valor = debito - credito
-            gastos.append({'codigo': codigo, 'nombre': item['cuenta__nombre'], 'valor': valor})
+            gastos.append({'codigo': codigo, 'nombre': nombre, 'valor': valor})
             total_gastos += valor
         elif codigo.startswith('6'): # Costos (D)
             valor = debito - credito
-            costos.append({'codigo': codigo, 'nombre': item['cuenta__nombre'], 'valor': valor})
+            costos.append({'codigo': codigo, 'nombre': nombre, 'valor': valor})
             total_costos += valor
             
     utilidad_bruta = total_ingresos - total_costos

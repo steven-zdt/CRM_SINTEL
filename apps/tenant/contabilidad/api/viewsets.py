@@ -122,9 +122,13 @@ class ContabilidadServiceMixin(SintelServiceMixin):
     mutation_lookup_fields = ("id", "uuid")
 
     def get_mutation_queryset(self, model_class, *extra_fields):
+        # WARNING: BUGFIX: sin este filtro, self.get_object() resolvia por
+        # uuid/id sin exigir empresa_id -- cualquier miembro del tenant podia
+        # editar/eliminar cuentas, periodos o movimientos de OTRA empresa del
+        # mismo esquema (IDOR confirmado, auditoria 2026-08-25).
         fields = list(self.mutation_lookup_fields)
         fields.extend(extra_fields)
-        return model_class.objects.only(*fields)
+        return model_class.objects.filter(empresa_id=self.get_empresa_id()).only(*fields)
 
 
 class CuentaContableViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
@@ -203,9 +207,12 @@ class CuentaContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabil
     
     def update(self, request, *args, **kwargs):
         try:
-            cuenta_id = kwargs.get('pk') or self.get_object().id
+            # WARNING: BUGFIX: self.get_object().id (no kwargs.get('pk')) para
+            # forzar la resolucion via get_mutation_queryset(), ya scoped por
+            # empresa_id -- ver nota en ContabilidadServiceMixin.
+            cuenta_id = self.get_object().id
             payload = request.data.copy()
-            
+
             resultado = self.service.crud.actualizar_cuenta(cuenta_id, payload)
             
             cuenta = CuentaContable.objects.get(id=resultado.id)
@@ -217,7 +224,7 @@ class CuentaContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabil
     def destroy(self, request, *args, **kwargs):
         try:
             cuenta_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            cuenta = get_cuenta_by_identifier(cuenta_identifier)
+            cuenta = get_cuenta_by_identifier(cuenta_identifier, empresa_id=self.get_empresa_id())
             self.service.eliminar_cuenta(cuenta.id)
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Exception as e:
@@ -242,7 +249,7 @@ class CuentaContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabil
         """HTMX: Carga offcanvas de edición."""
         try:
             cuenta_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            cuenta = get_cuenta_by_identifier(cuenta_identifier)
+            cuenta = get_cuenta_by_identifier(cuenta_identifier, empresa_id=self.get_empresa_id())
             serializer = self.get_serializer(cuenta)
             return Response({'cuenta': serializer.data}, template_name='tenant/contabilidad/partials/cuenta_offcanvas_form.html')
         except Exception as e:
@@ -254,7 +261,7 @@ class CuentaContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabil
         """HTMX: Carga offcanvas de detalle."""
         try:
             cuenta_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            cuenta = get_cuenta_by_identifier(cuenta_identifier)
+            cuenta = get_cuenta_by_identifier(cuenta_identifier, empresa_id=self.get_empresa_id())
             serializer = self.get_serializer(cuenta)
             return Response({'cuenta': serializer.data}, template_name='tenant/contabilidad/partials/cuenta_offcanvas_detalle.html')
         except Exception as e:
@@ -526,18 +533,22 @@ class MovimientoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Cont
         return MovimientoContableListSerializer
     
     def get_queryset(self):
-        # Campos mínimos para LIST (Zero Waste)
+        # WARNING: BUGFIX: sin filtro empresa_id cualquier miembro del tenant
+        # podia listar/ver/editar/eliminar movimientos de OTRA empresa del
+        # mismo esquema (IDOR confirmado, auditoria 2026-08-25).
         list_fields = ('id', 'asiento', 'cuenta', 'orden', 'debe', 'haber', 'descripcion')
-        return MovimientoContable.objects.only(*list_fields).select_related('cuenta').order_by('asiento', 'orden')
+        return MovimientoContable.objects.filter(
+            empresa_id=self.get_empresa_id()
+        ).only(*list_fields).select_related('cuenta').order_by('asiento', 'orden')
 
     def create(self, request, *args, **kwargs):
         try:
             empresa_id = self.get_empresa_id()
             payload = request.data.copy()
             payload['empresa_id'] = empresa_id
-            
+
             resultado = self.service.crud.crear_movimiento(empresa_id, payload)
-            
+
             serializer = MovimientoContableDetailSerializer(resultado, context={'request': request})
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
@@ -545,11 +556,13 @@ class MovimientoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Cont
 
     def update(self, request, *args, **kwargs):
         try:
-            mov_id = kwargs.get('pk') or self.get_object().id
+            # WARNING: BUGFIX: self.get_object().id (no kwargs.get('pk')) para
+            # forzar la resolucion via get_queryset(), ya scoped por empresa_id.
+            mov_id = self.get_object().id
             payload = request.data.copy()
-            
+
             resultado = self.service.crud.actualizar_movimiento(mov_id, payload)
-            
+
             serializer = MovimientoContableDetailSerializer(resultado, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
@@ -557,7 +570,7 @@ class MovimientoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Cont
 
     def destroy(self, request, *args, **kwargs):
         try:
-            mov_id = kwargs.get('pk') or self.get_object().id
+            mov_id = self.get_object().id
             self.service.crud.eliminar_movimiento(mov_id)
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Exception as e:
@@ -663,7 +676,7 @@ class PeriodoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabi
     def update(self, request, *args, **kwargs):
         try:
             periodo_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            periodo = get_periodo_by_identifier(periodo_identifier)
+            periodo = get_periodo_by_identifier(periodo_identifier, empresa_id=self.get_empresa_id())
             resultado = self.service.actualizar_periodo(periodo.id, request.data)
             periodo = PeriodoContableSelector.get_qs_detail().get(id=resultado['id'])
             serializer = PeriodoContableDetailSerializer(periodo, context={'request': request})
@@ -674,7 +687,7 @@ class PeriodoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabi
     def destroy(self, request, *args, **kwargs):
         try:
             periodo_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            periodo = get_periodo_by_identifier(periodo_identifier)
+            periodo = get_periodo_by_identifier(periodo_identifier, empresa_id=self.get_empresa_id())
             self.service.eliminar_periodo(periodo.id)
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Exception as e:
@@ -685,7 +698,7 @@ class PeriodoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabi
         """POST /periodos-contables/{uuid}/cerrar/ — Cierra un periodo ABIERTO."""
         try:
             periodo_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            periodo = get_periodo_by_identifier(periodo_identifier)
+            periodo = get_periodo_by_identifier(periodo_identifier, empresa_id=self.get_empresa_id())
             resultado = self.service.cerrar_periodo(periodo.id, request.data)
             periodo_obj = PeriodoContableSelector.get_qs_detail().get(id=resultado['id'])
             serializer = PeriodoContableDetailSerializer(periodo_obj, context={'request': request})
@@ -703,7 +716,7 @@ class PeriodoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabi
         """HTMX: Carga offcanvas de edición."""
         try:
             periodo_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            periodo = get_periodo_by_identifier(periodo_identifier)
+            periodo = get_periodo_by_identifier(periodo_identifier, empresa_id=self.get_empresa_id())
             serializer = self.get_serializer(periodo)
             return Response({'periodo': serializer.data}, template_name='tenant/contabilidad/partials/periodo_offcanvas_form.html')
         except Exception as e:
@@ -715,7 +728,7 @@ class PeriodoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabi
         """HTMX: Carga offcanvas de detalle."""
         try:
             periodo_identifier = kwargs.get('uuid') or kwargs.get('pk')
-            periodo = get_periodo_by_identifier(periodo_identifier)
+            periodo = get_periodo_by_identifier(periodo_identifier, empresa_id=self.get_empresa_id())
             serializer = self.get_serializer(periodo)
             return Response({'periodo': serializer.data}, template_name='tenant/contabilidad/partials/periodo_offcanvas_detalle.html')
         except Exception as e:

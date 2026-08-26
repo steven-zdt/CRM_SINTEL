@@ -697,9 +697,19 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.WARNING(f'    Warning: Could not check tables: {e}'))
 
                 # Seed TipoComprobante v3.6
+                # WARNING: BUGFIX: get_or_create() ejecutaba el INSERT real sin
+                # importar --dry-run (el flag solo suprimia el mensaje de exito)
+                # -- confirmado en vivo: una corrida "--dry-run" contra el tenant
+                # home escribio 62 ReglaContable + 19 TarifaImpuesto reales
+                # (auditoria CONT-19, 2026-08-26). En dry_run solo se verifica
+                # existencia (.exists()), nunca se llama get_or_create().
                 comprobantes_created = 0
                 for comp_dict in COMPROBANTES_DEFECTO:
                     try:
+                        if dry_run:
+                            if not TipoComprobante.objects.filter(empresa=empresa, codigo=comp_dict['codigo']).exists():
+                                comprobantes_created += 1
+                            continue
                         comp, created = TipoComprobante.objects.get_or_create(
                             empresa=empresa,
                             codigo=comp_dict['codigo'],
@@ -712,12 +722,11 @@ class Command(BaseCommand):
                         )
                         if created:
                             comprobantes_created += 1
-                            if not dry_run:
-                                self.stdout.write(
-                                    self.style.SUCCESS(
-                                        f'    [OK] Created voucher type: {comp.codigo} ({comp.nombre})'
-                                    )
+                            self.stdout.write(
+                                self.style.SUCCESS(
+                                    f'    [OK] Created voucher type: {comp.codigo} ({comp.nombre})'
                                 )
+                            )
                     except Exception as e:
                         self.stdout.write(self.style.ERROR(f'    Error creating voucher type: {e}'))
 
@@ -725,6 +734,12 @@ class Command(BaseCommand):
                 reglas_created = 0
                 for regla_dict in REGLAS_DEFECTO:
                     try:
+                        if dry_run:
+                            if not ReglaContable.objects.filter(
+                                tipo_transaccion=regla_dict['tipo_transaccion'], concepto=regla_dict['concepto']
+                            ).exists():
+                                reglas_created += 1
+                            continue
                         regla, created = ReglaContable.objects.get_or_create(
                             tipo_transaccion=regla_dict['tipo_transaccion'],
                             concepto=regla_dict['concepto'],
@@ -737,12 +752,11 @@ class Command(BaseCommand):
                         )
                         if created:
                             reglas_created += 1
-                            if not dry_run:
-                                self.stdout.write(
-                                    self.style.SUCCESS(
-                                        f'    [OK] Created rule: {regla.tipo_transaccion} + {regla.concepto} → {regla.cuenta_codigo}'
-                                    )
+                            self.stdout.write(
+                                self.style.SUCCESS(
+                                    f'    [OK] Created rule: {regla.tipo_transaccion} + {regla.concepto} → {regla.cuenta_codigo}'
                                 )
+                            )
                     except Exception as e:
                         self.stdout.write(self.style.ERROR(f'    Error creating rule: {e}'))
 
@@ -750,6 +764,14 @@ class Command(BaseCommand):
                 tarifas_created = 0
                 for tarifa_dict in TARIFAS_DEFECTO:
                     try:
+                        if dry_run:
+                            if not TarifaImpuesto.objects.filter(
+                                tipo=tarifa_dict['tipo'],
+                                valor_porcentaje=tarifa_dict['valor_porcentaje'],
+                                fecha_inicio=tarifa_dict['fecha_inicio'],
+                            ).exists():
+                                tarifas_created += 1
+                            continue
                         tarifa, created = TarifaImpuesto.objects.get_or_create(
                             tipo=tarifa_dict['tipo'],
                             valor_porcentaje=tarifa_dict['valor_porcentaje'],
@@ -764,12 +786,11 @@ class Command(BaseCommand):
                         )
                         if created:
                             tarifas_created += 1
-                            if not dry_run:
-                                self.stdout.write(
-                                    self.style.SUCCESS(
-                                        f'    [OK] Created rate: {tarifa.tipo} {tarifa.valor_porcentaje}%'
-                                    )
+                            self.stdout.write(
+                                self.style.SUCCESS(
+                                    f'    [OK] Created rate: {tarifa.tipo} {tarifa.valor_porcentaje}%'
                                 )
+                            )
                     except Exception as e:
                         self.stdout.write(self.style.ERROR(f'    Error creating rate: {e}'))
 

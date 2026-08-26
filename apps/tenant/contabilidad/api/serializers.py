@@ -81,11 +81,25 @@ class MovimientoContableListSerializer(serializers.ModelSerializer):
     
     WARNING: NORMATIVA: Incluye campos básicos de terceros para trazabilidad.
     """
-    cuenta_nombre = serializers.CharField(source='cuenta.nombre', read_only=True)
-    cuenta_codigo = serializers.CharField(source='cuenta.codigo', read_only=True)
+    # WARNING: BUGFIX: cuenta.nombre/cuenta.codigo via source= dejaba estos
+    # campos ausentes del JSON (DRF SkipField silencioso) para todo movimiento
+    # creado por Contabilizador -- solo llena cuenta_codigo (string), nunca el
+    # FK legacy `cuenta`. SerializerMethodField con fallback explicito.
+    cuenta_nombre = serializers.SerializerMethodField()
+    cuenta_codigo = serializers.SerializerMethodField()
     tercero_nit = serializers.CharField(read_only=True)
     tercero_razon_social = serializers.CharField(read_only=True)
-    
+
+    def get_cuenta_nombre(self, obj):
+        if obj.cuenta:
+            return obj.cuenta.nombre
+        return obj.descripcion or 'Cuenta no especificada'
+
+    def get_cuenta_codigo(self, obj):
+        if obj.cuenta:
+            return obj.cuenta.codigo
+        return obj.cuenta_codigo or 'SIN_CUENTA'
+
     class Meta:
         model = MovimientoContable
         fields = (
@@ -154,9 +168,11 @@ class MovimientoContableDetailSerializer(serializers.ModelSerializer):
     )
     
     def get_cuenta_nombre(self, obj):
+        # WARNING: BUGFIX: devolver cuenta_codigo (un codigo PUC) como si fuera
+        # el nombre confundia al usuario -- fallback correcto es descripcion.
         if obj.cuenta:
             return obj.cuenta.nombre
-        return obj.cuenta_codigo or "Cuenta no especificada"
+        return obj.descripcion or "Cuenta no especificada"
 
     class Meta:
         model = MovimientoContable
