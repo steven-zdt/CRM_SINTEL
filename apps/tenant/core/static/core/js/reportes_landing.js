@@ -97,5 +97,18 @@
     w.Sintel.Core = w.Sintel.Core || {};
     w.Sintel.Core.ReportesLanding = { showCatalog: showCatalog };
 
-    showCatalog();
+    // WARNING: BUGFIX: este <script> vive dentro de #tab-reportes, que el
+    // DOM recorre ANTES que assets_core.html (incluido al final de
+    // workspace.html -- ver comentario en workspace.html:279 "HTMX debe
+    // cargarse ANTES de assets_core.html"). Llamar showCatalog() de forma
+    // sincrona aqui corria antes de que Sintel.Core.Http/Reporting.API
+    // existieran -- confirmado en vivo: "No fue posible cargar el catalogo
+    // de reportes." en cada carga real. DOMContentLoaded solo se dispara
+    // despues de que TODOS los <script> del documento (incluidos los de
+    // assets_core.html, mas abajo en el DOM) ya se ejecutaron.
+    if (d.readyState === 'loading') {
+        d.addEventListener('DOMContentLoaded', showCatalog);
+    } else {
+        showCatalog();
+    }
 })(window, document);
