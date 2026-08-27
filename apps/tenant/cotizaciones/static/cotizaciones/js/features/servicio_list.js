@@ -11,27 +11,23 @@
   var ServicioList = {
     init: function (containerId) {
       var api = w.Sintel.Cotizaciones.api;
-      if (!api || !w.Tabulator) return;
+      if (!api || !w.TabulatorFactory) return;
 
-      var table = new w.Tabulator('#' + containerId, {
-        ajaxURL: api.serviciosUrl,
-        ajaxConfig: { headers: api.getHeaders() },
-        layout: 'fitColumns',
-        pagination: 'remote',
-        paginationSize: 10,
-        columns: [
-          { title: 'Nombre', field: 'nombre' },
-          { title: 'Precio', field: 'precio_venta', formatter: 'money' },
-          { 
-            title: 'Acciones', 
-            formatter: function() { return '<button class="btn btn-sm btn-primary btn-edit-serv">Editar</button>'; },
-            cellClick: function(e, cell) {
-              var data = cell.getRow().getData();
-              ServicioList.onEdit(data.uuid);
-            }
+      // Antes: new w.Tabulator(...) crudo -- mismo bug real que
+      // producto_list.js/configuracion_list.js (2026-08-27). Fix: usar
+      // TabulatorFactory (SSoT).
+      var table = w.TabulatorFactory.create('#' + containerId, api.serviciosUrl, [
+        { title: 'Nombre', field: 'nombre' },
+        { title: 'Precio', field: 'precio_venta', formatter: 'money' },
+        {
+          title: 'Acciones',
+          formatter: function() { return '<button class="btn btn-sm btn-primary btn-edit-serv">Editar</button>'; },
+          cellClick: function(e, cell) {
+            var data = cell.getRow().getData();
+            ServicioList.onEdit(data.uuid);
           }
-        ]
-      });
+        }
+      ], { layout: 'fitColumns', paginationSize: 10 });
       this.table = table;
     },
     onEdit: function(uuid) {

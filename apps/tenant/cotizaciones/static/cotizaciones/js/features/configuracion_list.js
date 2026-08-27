@@ -11,25 +11,26 @@
   var ConfiguracionList = {
     init: function (containerId) {
       var api = w.Sintel.Cotizaciones.api;
-      if (!api || !w.Tabulator) return;
+      if (!api || !w.TabulatorFactory) return;
 
-      var table = new w.Tabulator('#' + containerId, {
-        ajaxURL: api.configuracionUrl,
-        ajaxConfig: { headers: api.getHeaders() },
-        layout: 'fitColumns',
-        columns: [
-          { title: 'Nombre', field: 'nombre_configuracion' },
-          { title: 'Activa', field: 'es_activo', formatter: 'tickCross' },
-          { 
-            title: 'Acciones', 
-            formatter: function() { return '<button class="btn btn-sm btn-primary">Editar</button>'; },
-            cellClick: function(e, cell) {
-              var data = cell.getRow().getData();
-              ConfiguracionList.onEdit(data.uuid);
-            }
+      // Antes: new w.Tabulator(...) crudo con ajaxURL directo, sin adaptar
+      // la forma paginada de DRF ({count, next, previous, results}) --
+      // Tabulator esperaba un array y recibia un objeto ("Data Loading
+      // Error - Expecting: array, Received: object"). Bug real reportado
+      // en vivo, 2026-08-27. Fix: usar TabulatorFactory (SSoT ya usado por
+      // cotizaciones.table.js), que si sabe traducir la respuesta de DRF.
+      var table = w.TabulatorFactory.create('#' + containerId, api.configuracionUrl, [
+        { title: 'Nombre', field: 'nombre_configuracion' },
+        { title: 'Activa', field: 'es_activo', formatter: 'tickCross' },
+        {
+          title: 'Acciones',
+          formatter: function() { return '<button class="btn btn-sm btn-primary">Editar</button>'; },
+          cellClick: function(e, cell) {
+            var data = cell.getRow().getData();
+            ConfiguracionList.onEdit(data.uuid);
           }
-        ]
-      });
+        }
+      ], { layout: 'fitColumns' });
       this.table = table;
     },
     onEdit: function(uuid) {
