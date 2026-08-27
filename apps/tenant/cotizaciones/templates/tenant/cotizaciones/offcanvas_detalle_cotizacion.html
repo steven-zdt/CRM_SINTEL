@@ -103,8 +103,8 @@
                         </thead>
                         <tbody>
                             {% for item in cotizacion.items.all %}
-                                {% if item.tipo_item == 'INFRAESTRUCTURA' %}
-                                <tr data-tipo="INFRAESTRUCTURA" data-subtotal="{{ item.subtotal_linea }}">
+                                {% if item.tipo_item == 'MATERIAL' %}
+                                <tr data-tipo="MATERIAL" data-subtotal="{{ item.subtotal_linea }}">
                                     <td class="ps-3">{{ item.descripcion }}</td>
                                     <td class="text-center">{{ item.cantidad }}</td>
                                     <td class="text-end pe-3 fw-medium text-dark">{{ item.subtotal_linea|currency_cop }}</td>
@@ -215,7 +215,7 @@
         let total1 = 0, total2 = 0, total3 = 0;
         
         document.querySelectorAll('tr[data-tipo="PRODUCTO"]').forEach(tr => total1 += parseFloat(tr.dataset.subtotal || 0));
-        document.querySelectorAll('tr[data-tipo="INFRAESTRUCTURA"]').forEach(tr => total2 += parseFloat(tr.dataset.subtotal || 0));
+        document.querySelectorAll('tr[data-tipo="MATERIAL"]').forEach(tr => total2 += parseFloat(tr.dataset.subtotal || 0));
         document.querySelectorAll('tr[data-tipo="SERVICIO"]').forEach(tr => total3 += parseFloat(tr.dataset.subtotal || 0));
 
         document.getElementById('det-subtotal-1').textContent = formatCurrency(total1);

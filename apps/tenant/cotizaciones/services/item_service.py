@@ -69,41 +69,49 @@ class CotizacionItemBusinessService:
 
     @classmethod
     @transaction.atomic
-    def registrar(cls, empresa_id, data, instance=None):
+    def registrar(cls, empresa_id, data, instance=None, recalcular=True):
         from .business_service import CotizacionService  # WARNING: IMPORT LAZY — circular: business_service imports CotizacionItemBusinessService from this module
 
         cantidad = Decimal(str(data.get('cantidad') or 0))
         costo = Decimal(str(data.get('costo_unitario') or 0))
         utilidad = Decimal(str(data.get('porcentaje_utilidad') or 0))
-        
+
         precio_venta, subtotal = cls.calcular_precios(cantidad, costo, utilidad)
-        
+
         data['precio_unitario_venta'] = precio_venta
         data['subtotal_linea'] = subtotal
-        
+
         # Limpieza de datos antes de persistir
         data.pop('id', None)
         data.pop('uuid', None)
-        
+
         if instance:
             # Asegurar que no cambiamos la cotizacion del item
             data.pop('cotizacion', None)
             item = CotizacionItemCRUDService.actualizar(instance, data)
         else:
             item = CotizacionItemCRUDService.crear(empresa_id, data)
-        
-        # Recalcular totales de la cotizacion
-        CotizacionService.calcular_totales(item.cotizacion_id)
-        
+
+        # recalcular=False: usado por CotizacionService._sync_items(), que ya
+        # recalcula una sola vez al final del loop completo -- antes cada
+        # item del loop disparaba su propio recalculo (2 SELECT + 1 UPDATE
+        # cada uno) que se descartaba de inmediato, N+1 real (hallazgo real,
+        # auditoria de modernizacion, 2026-08-27). El contrato para
+        # CotizacionItemViewSet (item individual via API) no cambia --
+        # sigue recalculando de inmediato por defecto.
+        if recalcular:
+            CotizacionService.calcular_totales(item.cotizacion_id)
+
         return item
 
     @classmethod
     @transaction.atomic
-    def eliminar_item(cls, instance):
+    def eliminar_item(cls, instance, recalcular=True):
         from .business_service import CotizacionService  # WARNING: IMPORT LAZY — circular
         cotizacion_id = instance.cotizacion_id
         CotizacionItemCRUDService.eliminar(instance)
-        CotizacionService.calcular_totales(cotizacion_id)
+        if recalcular:
+            CotizacionService.calcular_totales(cotizacion_id)
         return True
 
 class CotizacionItemServiceMixin:

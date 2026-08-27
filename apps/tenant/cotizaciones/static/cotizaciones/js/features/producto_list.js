@@ -33,8 +33,16 @@
       this.table = table;
     },
     onEdit: function(uuid) {
-        // Lógica para mostrar editor de producto
-        console.log('Editando producto:', uuid);
+        // Antes: solo console.log, sin efecto -- boton "Editar" inerte
+        // (hallazgo real, auditoria de modernizacion, 2026-08-27). Mismo
+        // patron HTMX ya usado por ConfiguracionList.onEdit.
+        var btn = d.createElement('button');
+        btn.setAttribute('hx-get', '/api/v1/cotizaciones/productos/' + uuid + '/render-offcanvas/editar/');
+        btn.setAttribute('hx-target', '#offcanvas-container');
+        d.body.appendChild(btn);
+        if (w.htmx) w.htmx.process(btn);
+        btn.click();
+        btn.remove();
     }
   };
 

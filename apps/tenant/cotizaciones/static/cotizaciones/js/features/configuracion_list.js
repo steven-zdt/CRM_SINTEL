@@ -42,6 +42,15 @@
         if (w.htmx) w.htmx.process(btn);
         btn.click();
         btn.remove();
+    },
+    reload: function () {
+        // Antes: configuracion_editor.js llamaba a este metodo tras
+        // crear/editar, pero no existia -- la lista de Plantillas nunca se
+        // refrescaba sola (hallazgo real, auditoria de modernizacion,
+        // 2026-08-27).
+        if (this.table && typeof this.table.replaceData === 'function') {
+            this.table.replaceData();
+        }
     }
   };
 

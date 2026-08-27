@@ -152,16 +152,24 @@ class CotizacionService:
 
             if instance:
                 matched_pks.add(instance.pk)
-                CotizacionItemBusinessService.registrar(cotizacion.empresa_id, item_data, instance=instance)
+                CotizacionItemBusinessService.registrar(cotizacion.empresa_id, item_data, instance=instance, recalcular=False)
             else:
                 item_data['cotizacion'] = cotizacion
-                new_item = CotizacionItemBusinessService.registrar(cotizacion.empresa_id, item_data)
+                new_item = CotizacionItemBusinessService.registrar(cotizacion.empresa_id, item_data, recalcular=False)
                 matched_pks.add(new_item.pk)
 
         # 3. Eliminar remanentes (items que no vinieron en el payload)
         for item in list(existing_by_id.values()):
             if item.pk not in matched_pks:
-                CotizacionItemBusinessService.eliminar_item(item)
+                CotizacionItemBusinessService.eliminar_item(item, recalcular=False)
+
+        # N+1 real corregido (auditoria de modernizacion, 2026-08-27): antes
+        # cada registrar()/eliminar_item() del loop de arriba recalculaba
+        # los totales por su cuenta (2 SELECT + 1 UPDATE cada uno,
+        # descartados de inmediato). recalcular=False deja el unico
+        # recalculo real a cargo de crear_preforma()/actualizar_cotizacion(),
+        # que ya llaman cls.calcular_totales() justo despues de _sync_items()
+        # -- no se duplica aqui.
 
     @classmethod
     @transaction.atomic

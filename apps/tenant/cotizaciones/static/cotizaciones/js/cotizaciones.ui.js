@@ -188,9 +188,12 @@
       var target = evt.detail.target;
       if (target && target.id === OFFCANVAS_ID) {
         showOffcanvas();
-        // Bind forms dentro del offcanvas (cada formulario chequea si ya esta bound)
-        bindForm('form-cotizacion-crear');
-        bindForm('form-cotizacion-editar');
+        // Bind forms dentro del offcanvas (cada formulario chequea si ya esta bound).
+        // form-cotizacion-crear/-editar removidos (auditoria de
+        // modernizacion, 2026-08-27): sus templates
+        // (offcanvas_crear_cotizacion.html/offcanvas_editar_cotizacion.html)
+        // eran huerfanos -- ningun view los renderizaba, el flujo real de
+        // Cotizacion usa editor_cotizacion.html + cotizacion_editor.js.
         bindForm('form-configuracion-crear');
         bindForm('form-configuracion-editar');
         // Procesar HTMX en contenido nuevo

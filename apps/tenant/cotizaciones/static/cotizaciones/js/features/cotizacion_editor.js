@@ -495,7 +495,14 @@
         body: JSON.stringify(payload)
       })
       .then(function (r) {
-        if (!r.ok) return r.json().then(function (e) { throw e; });
+        // Bug real (auditoria de modernizacion, 2026-08-27): antes se
+        // lanzaba el body JSON crudo del error (ej. {"cliente": ["..."]})
+        // en vez de la forma {ok,status,data} que UIManager.handleError
+        // espera (documentada en cotizaciones.api.js) -- el usuario siempre
+        // veia "Error desconocido" sin importar el error real de validacion.
+        if (!r.ok) return r.json().catch(function () { return {}; }).then(function (e) {
+          throw { ok: false, status: r.status, data: e };
+        });
         return r.json();
       })
       .then(function (data) {

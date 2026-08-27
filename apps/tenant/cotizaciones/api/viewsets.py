@@ -74,6 +74,17 @@ class ProductoViewSet(OrganizationalContextMixin, SintelDSVMixin, ProductoServic
         self.service_eliminar_producto(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer],
+            url_path='render-offcanvas/editar')
+    def render_offcanvas_editar(self, request, **kwargs):
+        """El backend ya soportaba PATCH; el boton 'Editar' de la grilla era
+        un stub (console.log, sin efecto) porque nunca existio esta vista ni
+        su template de edicion -- hallazgo real, auditoria de modernizacion
+        Cotizaciones, 2026-08-27. Reutiliza el mismo template de creacion
+        (Regla Absoluta #1: no crear un segundo formulario)."""
+        instance = self.get_object()
+        return Response({'instance': instance}, template_name='tenant/cotizaciones/offcanvas_crear_producto.html')
+
 
 class ServicioViewSet(OrganizationalContextMixin, SintelDSVMixin, ServicioServiceMixin, BaseTenantViewSet):
     serializer_class = ServicioSerializer
@@ -105,6 +116,14 @@ class ServicioViewSet(OrganizationalContextMixin, SintelDSVMixin, ServicioServic
         instance = self.get_object()
         self.service_eliminar_servicio(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer],
+            url_path='render-offcanvas/editar')
+    def render_offcanvas_editar(self, request, **kwargs):
+        """Ver ProductoViewSet.render_offcanvas_editar -- mismo hallazgo y
+        mismo fix (boton 'Editar' era un stub sin vista de edicion)."""
+        instance = self.get_object()
+        return Response({'instance': instance}, template_name='tenant/cotizaciones/offcanvas_crear_servicio.html')
 
 
 class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionServiceMixin, BaseTenantViewSet):

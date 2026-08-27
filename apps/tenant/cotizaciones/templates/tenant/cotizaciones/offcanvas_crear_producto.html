@@ -1,23 +1,30 @@
 {% load static %}
 <div class="offcanvas-header">
-  <h5 class="offcanvas-title">Nuevo Producto</h5>
+  <h5 class="offcanvas-title">{% if instance %}Editar Producto{% else %}Nuevo Producto{% endif %}</h5>
   <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
 </div>
 <div class="offcanvas-body">
-  <form id="form-producto-crear" data-endpoint="/api/v1/cotizaciones/productos/" data-method="POST">
+  <form id="form-producto-crear"
+        data-endpoint="{% if instance %}/api/v1/cotizaciones/productos/{{ instance.uuid }}/{% else %}/api/v1/cotizaciones/productos/{% endif %}"
+        data-method="{% if instance %}PATCH{% else %}POST{% endif %}">
     <div class="mb-3">
       <label for="producto-codigo" class="form-label">Código</label>
-      <input type="text" id="producto-codigo" name="codigo" class="form-control" required>
+      <input type="text" id="producto-codigo" name="codigo" class="form-control" value="{{ instance.codigo|default:'' }}" required>
     </div>
     <div class="mb-3">
       <label for="producto-nombre" class="form-label">Nombre</label>
-      <input type="text" id="producto-nombre" name="nombre" class="form-control" required>
+      <input type="text" id="producto-nombre" name="nombre" class="form-control" value="{{ instance.nombre|default:'' }}" required>
     </div>
     <div class="mb-3">
       <label for="producto-precio-venta" class="form-label">Precio de Venta</label>
-      <input type="number" step="0.01" id="producto-precio-venta" name="precio_venta" class="form-control" required>
+      {# default_if_none antes de stringformat:"s" -- stringformat solo
+         (str() de Python, sin la coma decimal que el locale es-CO le pone
+         a un Decimal via {{ }} normal: bug real encontrado en vivo,
+         value="100,00" invalida un input type=number) convertiria None en
+         el string literal "None" en modo creacion. #}
+      <input type="number" step="0.01" id="producto-precio-venta" name="precio_venta" class="form-control" value="{{ instance.precio_venta|default_if_none:''|stringformat:'s' }}" required>
     </div>
-    <button type="submit" class="btn btn-primary w-100">Guardar Producto</button>
+    <button type="submit" class="btn btn-primary w-100">{% if instance %}Guardar Cambios{% else %}Guardar Producto{% endif %}</button>
   </form>
 </div>
 

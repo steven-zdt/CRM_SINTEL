@@ -82,8 +82,21 @@ class ConfiguracionCotizacion(SintelTenantBaseModel):
     def __str__(self):
         return f"{self.nombre_configuracion}"
 
-    class Meta: 
+    class Meta:
         app_label = 'tenant_cotizaciones'
         db_table = 'tenant_cotizaciones_configuracion'
         verbose_name = _('Perfil de Configuracion')
         verbose_name_plural = _('Perfiles de Configuracion')
+        constraints = [
+            # Antes solo se validaba en ConfiguracionCotizacionDetailSerializer.validate()
+            # (query + ValidationError, sin select_for_update) -- misma
+            # condicion de carrera real que tenia Producto.codigo antes del
+            # fix de hoy (hallazgo real, auditoria de modernizacion,
+            # 2026-08-27). nombre_configuracion no es blank=True, a
+            # diferencia de Producto.codigo, asi que el constraint no
+            # necesita excluir vacios.
+            models.UniqueConstraint(
+                fields=['empresa', 'nombre_configuracion'],
+                name='uniq_configuracion_nombre_por_empresa',
+            ),
+        ]
