@@ -273,3 +273,33 @@ class CotizacionService:
         _generar_pdf_sincronizado(updated_instance, empresa)
 
         return updated_instance
+
+    @classmethod
+    def eliminar_cotizacion(cls, instance):
+        """
+        DELETE fisico -- pero bloqueado si existe trazabilidad real que
+        romperia: una Factura vinculada via Factura.cotizacion_uuid (bridge
+        de solo-enlace, CotizacionBridge en
+        apps/tenant/facturas/services/selectors.py). Sin este chequeo,
+        borrar la cotizacion dejaba el cotizacion_uuid de la Factura
+        apuntando a un registro inexistente sin ningun error (hallazgo real,
+        auditoria REL Cotizaciones FASE 5, 2026-08-26).
+
+        Lectura Pull directa (mismo patron ya usado por los extractores de
+        Contabilidad: import local + filtro empresa_id explicito, sin pasar
+        por el Service Layer de Facturas ya que es solo lectura).
+        """
+        from rest_framework.exceptions import ValidationError
+
+        from apps.tenant.facturas.models import Factura
+
+        tiene_factura_vinculada = Factura.objects.filter(
+            empresa_id=instance.empresa_id, cotizacion_uuid=instance.uuid,
+        ).exists()
+        if tiene_factura_vinculada:
+            raise ValidationError({
+                "error": "cotizacion_vinculada",
+                "message": "Esta cotizacion ya fue vinculada a una factura y no puede eliminarse.",
+            })
+
+        CotizacionCRUDService.delete_cotizacion(instance)

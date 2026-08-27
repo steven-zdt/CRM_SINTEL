@@ -96,9 +96,3 @@ class CotizacionPDFExportService:
     def generar_pdf_publico(cls, cotizacion, empresa, request=None):
         context = cls.preparar_contexto(cotizacion, empresa, request)
         return cls.render_to_pdf('tenant/cotizaciones/pdf/formato_profesional.html', context)
-
-    @classmethod
-    def generar_pdf_interno(cls, cotizacion, empresa, request=None):
-        context = cls.preparar_contexto(cotizacion, empresa, request)
-        # Aqui se podrian anadir campos internos al contexto si fuera necesario
-        return cls.render_to_pdf('tenant/cotizaciones/pdf/formato_interno.html', context)

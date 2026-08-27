@@ -16,3 +16,8 @@ class ConfiguracionBusinessService:
     def actualizar_configuracion(instance, datos):
         """Logica de negocio para actualizar configuracion."""
         return ConfiguracionCRUDService.update_configuracion(instance, **datos)
+
+    @staticmethod
+    def eliminar_configuracion(instance):
+        """Logica de negocio para eliminar configuracion."""
+        return ConfiguracionCRUDService.delete_configuracion(instance)

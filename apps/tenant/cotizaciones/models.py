@@ -5,6 +5,7 @@ import uuid
 from decimal import Decimal
 
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.tenant.core.models import SintelTenantBaseModel  # [v2.61.4] Herencia SSoT
@@ -13,6 +14,14 @@ from apps.tenant.empresa.models import Empresa
 
 def _cotizacion_anexo_upload_path(instance, filename):
     return f"cotizaciones/anexos/{filename}"
+
+
+def _hoy():
+    """Default explicito para Cotizacion.fecha_emision -- mismo fallback
+    que CotizacionService._build_header_fields() ya usa cuando el payload
+    no trae una fecha (ver models.py, hallazgo real auditoria REL
+    Cotizaciones, 2026-08-26)."""
+    return timezone.now().date()
 
 class Producto(SintelTenantBaseModel):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
@@ -24,7 +33,22 @@ class Producto(SintelTenantBaseModel):
     precio_venta = models.DecimalField(max_digits=15, decimal_places=2)
     activo = models.BooleanField(default=True)
 
-    class Meta: db_table = 'tenant_cotizaciones_producto'
+    class Meta:
+        db_table = 'tenant_cotizaciones_producto'
+        constraints = [
+            # Antes solo se validaba en ProductoBusinessService.registrar()
+            # (query + ValueError, sin select_for_update) -- condicion de
+            # carrera real entre el check y el create() (hallazgo real,
+            # auditoria REL Cotizaciones FASE 2, 2026-08-26). codigo es
+            # blank=True (no null) -- la condicion excluye vacios para no
+            # romper productos sin codigo, mismo criterio que la validacion
+            # de aplicacion existente (`if codigo:`).
+            models.UniqueConstraint(
+                fields=['empresa', 'codigo'],
+                condition=models.Q(codigo__gt=''),
+                name='uniq_producto_codigo_por_empresa',
+            ),
+        ]
 
 class Servicio(SintelTenantBaseModel):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
@@ -65,7 +89,16 @@ class Cotizacion(SintelTenantBaseModel):
         related_name='cotizaciones'
     )
     tipo_cotizacion = models.CharField(max_length=20, default='MIXTO')
-    fecha_emision = models.DateField(auto_now_add=True)
+    # NO auto_now_add: CotizacionService._build_header_fields() siempre
+    # calcula y pasa fecha_emision explicitamente (payload o
+    # timezone.now().date() por defecto) -- con auto_now_add=True, Django
+    # ignoraba ese valor en el INSERT y usaba timezone.now() sin importar
+    # lo que el service calculara (bug real encontrado en auditoria REL
+    # Cotizaciones, FASE 0/6, 2026-08-26). default= (no auto_now_add) deja
+    # el campo escribible explicitamente mientras conserva un valor
+    # implicito para callers que no lo pasan (ORM directo, tests, etc.) --
+    # mismo calculo de fallback que _build_header_fields() ya usaba.
+    fecha_emision = models.DateField(default=_hoy)
     fecha_vencimiento = models.DateField()
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.BORRADOR)
     

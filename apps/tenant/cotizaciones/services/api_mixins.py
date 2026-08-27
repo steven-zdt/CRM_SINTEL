@@ -71,3 +71,6 @@ class CotizacionServiceMixin(BaseServiceMixin):
             instance=instance,
             datos=serializer.validated_data,
         )
+
+    def service_eliminar_cotizacion(self, instance):
+        return self.business_service_class.eliminar_cotizacion(instance)

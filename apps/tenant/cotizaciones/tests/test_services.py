@@ -42,3 +42,11 @@ def test_crear_cotizacion_valida(tenant, factory_empresa, factory_cliente):
         assert cotizacion.cliente_id == cliente.id
         assert cotizacion.total_con_impuestos == Decimal("1309.00")
         assert Cotizacion.objects.filter(empresa_id=empresa.id).count() == 1
+        # Regresion real (auditoria REL Cotizaciones FASE 0/6, 2026-08-26):
+        # fecha_emision tenia auto_now_add=True en el modelo, asi que Django
+        # ignoraba silenciosamente el valor calculado aqui y siempre
+        # persistia timezone.now().date(). Este test ya mandaba una fecha
+        # explicita en el payload (2026-03-30) pero nunca la aseveraba --
+        # por eso el bug nunca se detecto.
+        assert cotizacion.fecha_emision == datetime.date(2026, 3, 30)
+        assert cotizacion.fecha_vencimiento == datetime.date(2026, 3, 30) + datetime.timedelta(days=15)

@@ -1,10 +1,57 @@
 # Auditoría Flujo Completo — Módulo Cotizaciones
 
-**Versión auditada:** v3.10.3  
-**Fecha:** 2026-05-25  
-**Estado:** ✅ OPERATIVO (0 CRÍTICOS)  
-**Auditor:** Claude Code (claude-sonnet-4-6)  
+**Versión auditada:** v3.10.3 → correcciones CRUD 2026-08-26
+**Fecha:** 2026-05-25 (actualizado 2026-08-26)
+**Estado:** ✅ OPERATIVO (0 CRÍTICOS) — ver actualización de auditoría CRUD abajo
+**Auditor:** Claude Code (claude-sonnet-4-6)
 **Ubicación:** `apps/tenant/cotizaciones/`
+
+---
+
+## ACTUALIZACIÓN 2026-08-26 — Auditoría CRUD completa (misión REL Cotizaciones)
+
+Auditoría exhaustiva de CREATE/READ/UPDATE/DELETE para los 5 modelos reales
+(`Cotizacion`, `CotizacionItem`, `Producto`, `Servicio`, `ConfiguracionCotizacion`).
+Documentos completos en `documentacion/audits/cotizaciones/`:
+`CRUD_BASELINE.md`, `CRUD_COMPLETE_REPORT.md`, `MATRIZ_ESTADOS_COTIZACION.md`,
+`CRUD_MATRIX.md`.
+
+**Nota importante sobre este documento:** sus secciones `.agent/docs/*.md`
+hermanas (`cotizaciones_business_logic.md`, `cotizaciones_flow_map.md`)
+estaban desactualizadas respecto al código real (mencionaban campos
+eliminados en el refactor v2.60 "User-Driven" y un `CotizacionPDFViewSet`
+que no existe) — tratar como aspiracionales, no como estado real.
+
+**Bugs reales encontrados y corregidos:**
+1. `Cotizacion.fecha_emision` tenía `auto_now_add=True` — Django ignoraba
+   silenciosamente cualquier fecha calculada por el service. Corregido
+   (migración `0006`, con un segundo ajuste en `0008` tras detectar una
+   regresión real de 12 tests -- ver `CRUD_COMPLETE_REPORT.md`).
+2. DELETE de `Cotizacion`/`Producto`/`Servicio`/`ConfiguracionCotizacion`
+   bypaseaba el Service Layer (hard-delete directo desde el ViewSet o el
+   `destroy()` por defecto de DRF). Corregido: los 5 modelos ahora pasan
+   por `BusinessService`. `Cotizacion` además bloquea el DELETE si existe
+   una `Factura` vinculada (`Factura.cotizacion_uuid`).
+3. `Producto.codigo` solo se validaba como único a nivel de aplicación
+   (condición de carrera real). Se agregó `UniqueConstraint` de BD.
+4. Código muerto eliminado: `CotizacionPDFExportService.generar_pdf_interno()`
+   (apuntaba a un template inexistente, cero call-sites).
+
+**Deuda documentada, no cerrada (decisión explícita, no un olvido):**
+- `estado` de `Cotizacion` es decorativo — sin máquina de estados, sin
+  evidencia de negocio para construir una sin inventarla.
+- `Producto`/`Servicio` propios de Cotizaciones son `DUPLICATE_CANDIDATE`
+  frente a `inventario.Producto/Servicio`, pero con propósito diferenciado
+  defendible (catálogo especulativo). No se migra/elimina sin decisión de
+  negocio.
+- Conversión Cotización→Venta: confirmado que NO existe (evidencia
+  negativa). Solo existe un bridge manual de solo-enlace vía
+  `Factura.cotizacion_uuid`.
+
+Veredicto: `COTIZACIONES_CRUD = COMPLETED_WITH_DEFERRED` (ver `CRUD_MATRIX.md`
+para el detalle completo del release gate).
+
+---
 
 ---
 

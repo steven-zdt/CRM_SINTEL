@@ -1,6 +1,6 @@
 import logging
 from decimal import Decimal
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from rest_framework.exceptions import PermissionDenied
 
@@ -66,9 +66,21 @@ class ProductoBusinessService:
             if exists.exists():
                 raise ValueError(f"El codigo {codigo} ya esta en uso.")
         
-        if instance:
-            return ProductoCRUDService.actualizar(instance, data)
-        return ProductoCRUDService.crear(empresa_id, data)
+        try:
+            if instance:
+                return ProductoCRUDService.actualizar(instance, data)
+            return ProductoCRUDService.crear(empresa_id, data)
+        except IntegrityError as exc:
+            # Ultima linea de defensa contra la condicion de carrera que el
+            # chequeo de arriba no cubre (uniq_producto_codigo_por_empresa,
+            # ver models.py) -- mismo mensaje de negocio, sin exponer SQL.
+            if 'uniq_producto_codigo_por_empresa' in str(exc):
+                raise ValueError(f"El codigo {codigo} ya esta en uso.") from exc
+            raise
+
+    @staticmethod
+    def eliminar(instance):
+        return ProductoCRUDService.eliminar(instance)
 
 class ProductoServiceMixin:
     @property
@@ -95,3 +107,6 @@ class ProductoServiceMixin:
     def service_actualizar_producto(self, instance, serializer):
         empresa_id = self.get_empresa_id()
         return self.business_service_class.registrar(empresa_id, serializer.validated_data, instance=instance)
+
+    def service_eliminar_producto(self, instance):
+        return self.business_service_class.eliminar(instance)

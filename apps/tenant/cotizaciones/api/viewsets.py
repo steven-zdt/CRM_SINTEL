@@ -50,7 +50,10 @@ class ProductoViewSet(OrganizationalContextMixin, SintelDSVMixin, ProductoServic
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        instance = self.service_crear_producto(serializer)
+        try:
+            instance = self.service_crear_producto(serializer)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(instance).data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
@@ -58,12 +61,17 @@ class ProductoViewSet(OrganizationalContextMixin, SintelDSVMixin, ProductoServic
         partial = kwargs.get('partial', False)
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-        updated = self.service_actualizar_producto(instance, serializer)
+        try:
+            updated = self.service_actualizar_producto(instance, serializer)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(updated).data)
 
     def destroy(self, request, *args, **kwargs):
+        """DELETE via Service Layer (antes bypaseaba a business/crud service --
+        hallazgo real, auditoria REL Cotizaciones FASE 5, 2026-08-26)."""
         instance = self.get_object()
-        instance.delete()
+        self.service_eliminar_producto(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -92,8 +100,10 @@ class ServicioViewSet(OrganizationalContextMixin, SintelDSVMixin, ServicioServic
         return Response(self.get_serializer(updated).data)
 
     def destroy(self, request, *args, **kwargs):
+        """DELETE via Service Layer (antes bypaseaba a business/crud service --
+        hallazgo real, auditoria REL Cotizaciones FASE 5, 2026-08-26)."""
         instance = self.get_object()
-        instance.delete()
+        self.service_eliminar_servicio(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -136,6 +146,16 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         serializer.is_valid(raise_exception=True)
         updated = self.service_actualizar_cotizacion(instance, serializer)
         return Response(self.get_serializer(updated).data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        """DELETE via Service Layer -- antes usaba el destroy() por defecto
+        de DRF (hard-delete directo, sin ningun chequeo de trazabilidad).
+        Bloqueado si la cotizacion ya fue vinculada a una Factura (ver
+        CotizacionService.eliminar_cotizacion) -- hallazgo real, auditoria
+        REL Cotizaciones FASE 5, 2026-08-26."""
+        instance = self.get_object()
+        self.service_eliminar_cotizacion(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['get'], url_path='exportar-pdf')
     def exportar_pdf(self, request, **kwargs):

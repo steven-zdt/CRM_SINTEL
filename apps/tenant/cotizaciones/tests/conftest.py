@@ -48,7 +48,10 @@ def tenant(db):
         cur.execute(f'CREATE SCHEMA IF NOT EXISTS {tenant_obj.schema_name}')
 
     # Migrate tenant apps required for cotizaciones tests
-    required_apps = ['empresa', 'perfil', 'tenant_clientes', 'tenant_cotizaciones']
+    # 'facturas' agregado para el test de bloqueo de DELETE por Factura
+    # vinculada (Factura.cotizacion_uuid) -- auditoria REL Cotizaciones
+    # FASE 5, 2026-08-26.
+    required_apps = ['empresa', 'perfil', 'tenant_clientes', 'tenant_cotizaciones', 'facturas']
     for app in required_apps:
         call_command('migrate_schemas', '--tenant', '-s', tenant_obj.schema_name, app, '--noinput', verbosity=0)
 

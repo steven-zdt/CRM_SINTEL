@@ -22,6 +22,10 @@ class CotizacionCRUDService:
         cotizacion.items.all().delete()
 
     @staticmethod
+    def delete_cotizacion(instance):
+        instance.delete()
+
+    @staticmethod
     def get_cotizacion_for_totals(cotizacion_id):
         cotizacion = (
             Cotizacion.objects.filter(id=cotizacion_id)

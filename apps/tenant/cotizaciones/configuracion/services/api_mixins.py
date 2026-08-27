@@ -35,3 +35,7 @@ class ConfiguracionServiceMixin(BaseServiceMixin):
             instance,
             serializer.validated_data,
         )
+
+    def service_eliminar_configuracion(self, instance):
+        """Elimina configuracion usando business service."""
+        return self.business_service_class.eliminar_configuracion(instance)

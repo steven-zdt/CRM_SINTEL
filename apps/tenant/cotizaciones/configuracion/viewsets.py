@@ -135,6 +135,14 @@ class ConfiguracionCotizacionViewSet(SintelDSVMixin, ConfiguracionServiceMixin, 
             )
 
 
+    def destroy(self, request, *args, **kwargs):
+        """DELETE via Service Layer (antes bypaseaba a business/crud service:
+        el destroy() por defecto de DRF llamaba instance.delete() directo --
+        hallazgo real, auditoria REL Cotizaciones FASE 5, 2026-08-26)."""
+        instance = self.get_object()
+        self.service_eliminar_configuracion(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=['post'], url_path='activar')
     def activar(self, request, pk=None):
         """

@@ -53,6 +53,10 @@ class ServicioBusinessService:
             return ServicioCRUDService.actualizar(instance, data)
         return ServicioCRUDService.crear(empresa_id, data)
 
+    @staticmethod
+    def eliminar(instance):
+        return ServicioCRUDService.eliminar(instance)
+
 class ServicioServiceMixin:
     @property
     def selector_class(self):
@@ -78,3 +82,6 @@ class ServicioServiceMixin:
     def service_actualizar_servicio(self, instance, serializer):
         empresa_id = self.get_empresa_id()
         return self.business_service_class.registrar(empresa_id, serializer.validated_data, instance=instance)
+
+    def service_eliminar_servicio(self, instance):
+        return self.business_service_class.eliminar(instance)
