@@ -24,8 +24,19 @@
 
   // getHeaders() se conserva por compatibilidad hacia atras (exportada
   // publicamente como w.Sintel.Cotizaciones.api.getHeaders).
+  //
+  // Bug real (2026-08-26): faltaba 'Content-Type': 'application/json'.
+  // Los 3 consumidores que hacen fetch() crudo con body: JSON.stringify(...)
+  // (cotizacion_editor.js, producto_editor.js, servicio_editor.js) mandaban
+  // el body como texto plano sin declarar su tipo -- el navegador por
+  // defecto NO asume application/json para un body de tipo string, y DRF
+  // respondia 415 Unsupported Media Type en cada POST/PATCH, bloqueando
+  // por completo la creacion/edicion de Cotizacion/Producto/Servicio. El
+  // propio fallback de cotizaciones.ui.js:59 (cuando getHeaders() no esta
+  // disponible) ya incluia este header -- confirma que era un olvido, no
+  // una decision deliberada.
   function getHeaders() {
-    var headers = {};
+    var headers = { 'Content-Type': 'application/json' };
     var csrf = w.Sintel && w.Sintel.Core && w.Sintel.Core.Http && w.Sintel.Core.Http.csrf
       ? w.Sintel.Core.Http.csrf()
       : null;
