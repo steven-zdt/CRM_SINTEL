@@ -40,6 +40,23 @@ class GastoBusinessService:
             if documento.anulado:
                 return False, {"detail": "El documento ya se encuentra anulado."}, 400
 
+            # REM P0-02 (docs/remediation/REM-P0-02.md): PeriodoContable.__doc__
+            # afirma "Bloquea edicion/anulacion de Facturas y Gastos en
+            # periodos cerrados", pero verificar_periodo_cerrado() nunca se
+            # invocaba desde gastos -- un documento podia anularse libremente
+            # con fecha dentro de un periodo ya cerrado, descuadrando
+            # reportes ya emitidos de ese periodo.
+            from apps.tenant.contabilidad.services.selectors import verificar_periodo_cerrado
+            cerrado, periodo_nombre = verificar_periodo_cerrado(documento.fecha, empresa_id or documento.empresa_id)
+            if cerrado:
+                return False, {
+                    "detail": (
+                        f"No se puede anular este documento: su fecha "
+                        f"({documento.fecha}) pertenece al periodo contable "
+                        f"'{periodo_nombre}', que ya esta CERRADO."
+                    )
+                }, 400
+
             # Logica de negocio: Anulacion es irreversible. v2.62: Trazabilidad
             DocumentoCRUDService.anular_documento(documento, motivo, usuario)
             

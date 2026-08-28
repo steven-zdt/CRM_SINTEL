@@ -531,26 +531,33 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
     
     def destroy(self, request: Request, *args, **kwargs) -> Response:
         """
-        Eliminación directa de facturas (sin restricciones de inmutabilidad).
-        
-        # WARNING: NUEVA POLÍTICA v2.95:
-        - Se habilita la eliminación directa de facturas sin restricciones.
+        Eliminación directa de facturas — SOLO para facturas en BORRADOR.
+
+        # REM P0-01 (2026-08-28, docs/remediation/REM-P0-01.md): la política
+        v2.95 de abajo (histórica) permitía hard-delete sin restricciones,
+        incluso de una factura ACEPTADA con CUFE ya reconocido por la DIAN,
+        dejando huérfano el AsientoContable ya extraído por Contabilidad
+        (que solo extrae facturas en estado ACEPTADA). Corregido: ahora
+        FacturaBusinessService.eliminar_factura() bloquea el DELETE si
+        `estado != BORRADOR`. Para anular una factura ya enviada/aceptada,
+        use `cambiar_estado` → ANULADA (preserva trazabilidad fiscal).
+
+        # WARNING: POLÍTICA v2.95 (histórica, ya NO vigente sin más):
         - La factura puede eliminarse incluso si tiene notas de crédito asociadas.
-        - No hay validaciones que bloqueen la eliminación por vínculos contables o documentos relacionados.
         - La inmutabilidad solo aplica para EDICIÓN (update/partial_update), no para eliminación.
-        
-        # WARNING: OBJETIVO: Simplificar el manejo del ciclo de facturación permitiendo la depuración 
-        y gestión operativa sin restricciones innecesarias.
-        
+        - Esto sigue siendo cierto ÚNICAMENTE para facturas en BORRADOR.
+
         # WARNING: MAPEO DE ERRORES:
         - 404 si no existe (DRF maneja automáticamente)
+        - 400 si el estado no es BORRADOR (REM P0-01)
         - 409 si hay dependencias protegidas a nivel de base de datos (ProtectedError/IntegrityError)
         - 204 si borra ok
-        
+
         # WARNING: v2.95: Service Layer Pattern - Usa services.eliminar_factura()
-        
+
         Returns:
             204 No Content si se elimina exitosamente
+            400 Bad Request si la factura no está en BORRADOR (REM P0-01)
             409 Conflict solo si hay restricciones de integridad a nivel de BD (muy raro)
             500 Internal Server Error solo para errores inesperados
         """
@@ -602,6 +609,19 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
             return Response(
                 {"error": "integrity_error", "message": "No se puede eliminar por restricciones de integridad de base de datos."},
                 status=status.HTTP_409_CONFLICT
+            )
+        except ValidationError as ex:
+            # REM P0-01: FacturaBusinessService.eliminar_factura() bloquea el
+            # hard-delete de facturas fuera de BORRADOR. Sin esta rama, el
+            # except Exception generico de abajo la convertia en un 500
+            # enganoso ("No fue posible eliminar la factura") en vez de un
+            # 400 con el mensaje real ("use anulacion, no DELETE").
+            log_del.info("delete_blocked_by_estado", extra=safe_extra({
+                "detail": str(ex.detail)[:200],
+            }))
+            return Response(
+                {"error": "invalid_state", "message": ex.detail},
+                status=status.HTTP_400_BAD_REQUEST
             )
         except Exception:
             # Loggea el ex pero no expongas detalles sensibles
@@ -686,6 +706,28 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
                 {"error": "forbidden", "detail": "La factura no pertenece a la empresa activa."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        # REM P0-02 (docs/remediation/REM-P0-02.md): anular (estado ->
+        # ANULADA) es la "anulacion" explicita que PeriodoContable.__doc__
+        # dice que debe bloquearse en periodos cerrados. Otras transiciones
+        # (ENVIADA/ACEPTADA/RECHAZADA/ERROR_TRANSMISION) quedan fuera de este
+        # guard -- son parte del ciclo administrativo de sincronizacion con
+        # el portal DIAN, no una "edicion" de negocio del documento.
+        if nuevo_estado == Factura.Estado.ANULADA:
+            from apps.tenant.contabilidad.services.selectors import verificar_periodo_cerrado
+            cerrado, periodo_nombre = verificar_periodo_cerrado(factura.fecha_emision, empresa_id)
+            if cerrado:
+                return Response(
+                    {
+                        "error": "periodo_cerrado",
+                        "detail": (
+                            f"No se puede anular esta factura: su fecha de emision "
+                            f"({factura.fecha_emision}) pertenece al periodo contable "
+                            f"'{periodo_nombre}', que ya esta CERRADO."
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         try:
             factura = FacturaCRUDService.actualizar(factura, {"estado": nuevo_estado})

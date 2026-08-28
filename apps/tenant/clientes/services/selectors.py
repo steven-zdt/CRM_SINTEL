@@ -363,21 +363,11 @@ class CarteraSelector:
             'total_count':     agg['total_count'],
         }
 
-    @staticmethod
-    def get_cartera_kpis(empresa_id: int) -> dict:
-        """Returns aggregate KPI counts and sums for Cartera."""
-        from ..models import Cartera
-        from django.db.models import Sum, Count, Q
-        from decimal import Decimal
-        res = Cartera.objects.filter(empresa_id=empresa_id).aggregate(
-            pendiente_monto=Sum('saldo'),
-            pendiente_count=Count('id', filter=Q(estado_pago__in=['SIN_PAGO', 'PARCIAL'])),
-            pagado_monto=Sum('valor_pagado'),
-            total_count=Count('id')
-        )
-        return {
-            "pendiente_monto": str(res.get("pendiente_monto") or Decimal("0")),
-            "pendiente_count": res.get("pendiente_count") or 0,
-            "pagado_monto": str(res.get("pagado_monto") or Decimal("0")),
-            "total_count": res.get("total_count") or 0,
-        }
+    # REM P3-05 (docs/remediation/REM-P3-05.md): get_cartera_kpis() (KPIs
+    # agregados sobre el modelo Cartera) fue eliminado -- DEAD_CONFIRMED,
+    # cero consumidores reales (grep repo-wide, solo su propia definicion).
+    # El SSoT real y activo es get_cartera_kpis_facturas_venta() (arriba),
+    # ya usado por clientes/api/viewsets.py:786. El modelo Cartera en si
+    # sigue vivo y en uso real (CRUD de abonos, serializers, JS, templates,
+    # tests) -- solo este metodo de KPIs agregados estaba huerfano, no se
+    # tocó el resto de Cartera.

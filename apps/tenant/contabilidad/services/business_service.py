@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 
 from apps.tenant.contabilidad.models import AsientoContable, CatalogoMaestroNIIF, CuentaContable, MovimientoContable, PeriodoContable, TipoComprobante
@@ -347,12 +347,93 @@ class ContabilidadBusinessService:
         return {'status': 'deleted'}
 
     @transaction.atomic
+    def pre_close_validation(self, periodo) -> Dict[str, Any]:
+        """
+        REM P1-05 (docs/remediation/REM-P1-05.md): checklist real antes de
+        cerrar un periodo -- antes, cerrar_periodo() solo verificaba que el
+        periodo no estuviera ya CERRADO, sin comprobar pendientes ni
+        descuadres. Retorna {puede_cerrar, bloqueos: [...]}, cada bloqueo
+        con que falta, donde, y la accion recomendada (no solo "no se puede
+        cerrar").
+        """
+        from apps.tenant.contabilidad.integracion.extractores.facturas import ExtractorFacturas
+        from apps.tenant.contabilidad.integracion.extractores.gastos import ExtractorGastos
+        from apps.tenant.contabilidad.integracion.extractores.inventario import ExtractorInventario
+        from apps.tenant.contabilidad.integracion.extractores.nomina import ExtractorNomina
+
+        bloqueos = []
+
+        # 1. Asientos descuadrados dentro del periodo (defensivo -- por
+        # diseño, Contabilizador._validar_cuadratura() ya impide crear un
+        # asiento descuadrado, pero se verifica igual antes de cerrar).
+        descuadrados = AsientoContable.objects.filter(
+            periodo_contable=periodo,
+        ).exclude(debe_total=F('haber_total')).count()
+        if descuadrados:
+            bloqueos.append({
+                'tipo': 'asientos_descuadrados',
+                'app': 'contabilidad',
+                'cantidad': descuadrados,
+                'detalle': f'{descuadrados} asiento(s) del periodo {periodo.periodo} tienen debe != haber.',
+                'accion_recomendada': 'Revisar y corregir los asientos descuadrados antes de cerrar.',
+            })
+
+        # 2. Documentos pendientes de contabilizar cuya fecha cae dentro del
+        # periodo (cada extractor ya es la SSoT de "que falta contabilizar"
+        # de su propia app -- no se reimplementa esa logica aqui, solo se
+        # filtra por fecha del periodo).
+        extractores = [
+            ('facturas', ExtractorFacturas),
+            ('gastos', ExtractorGastos),
+            ('inventario', ExtractorInventario),
+            ('nomina', ExtractorNomina),
+        ]
+        for nombre_app, ExtractorClass in extractores:
+            try:
+                pendientes = ExtractorClass(periodo.empresa_id).extraer_pendientes()
+            except Exception as exc:
+                bloqueos.append({
+                    'tipo': 'error_integracion',
+                    'app': nombre_app,
+                    'cantidad': None,
+                    'detalle': f'Error al consultar pendientes de {nombre_app}: {exc}',
+                    'accion_recomendada': f'Revisar el extractor de {nombre_app} antes de cerrar.',
+                })
+                continue
+
+            en_periodo = [
+                dto for dto in pendientes
+                if dto.fecha is not None and periodo.fecha_inicio <= dto.fecha <= periodo.fecha_fin
+            ]
+            if en_periodo:
+                bloqueos.append({
+                    'tipo': 'documentos_sin_contabilizar',
+                    'app': nombre_app,
+                    'cantidad': len(en_periodo),
+                    'detalle': (
+                        f'{len(en_periodo)} documento(s) de {nombre_app} con fecha dentro '
+                        f'del periodo {periodo.periodo} aun no se han contabilizado.'
+                    ),
+                    'accion_recomendada': f'Ejecutar la contabilizacion pendiente de {nombre_app} antes de cerrar.',
+                })
+
+        return {'puede_cerrar': len(bloqueos) == 0, 'bloqueos': bloqueos}
+
     def cerrar_periodo(self, periodo_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Cierra un periodo ABIERTO. Una vez cerrado no se puede reabrir."""
         from apps.tenant.contabilidad.models import PeriodoContable
         periodo = PeriodoContable.objects.get(id=periodo_id)
         if periodo.estado == 'CERRADO':
             raise ValidationError({'detail': 'El periodo ya esta cerrado.'})
+
+        # REM P1-05: gate real antes de cerrar.
+        validacion = self.pre_close_validation(periodo)
+        if not validacion['puede_cerrar']:
+            raise ValidationError({
+                'detail': 'No se puede cerrar el periodo: existen pendientes o inconsistencias.',
+                'bloqueos': validacion['bloqueos'],
+            })
+
         data = {'estado': 'CERRADO'}
         observaciones = payload.get('observaciones', '')
         if observaciones:

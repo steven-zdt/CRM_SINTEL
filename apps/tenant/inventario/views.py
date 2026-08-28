@@ -80,8 +80,14 @@ class ProductoTableView(_InventarioTableViewBase):
             # trae campos de relacion via .only() (categoria__nombre) rompe con
             # "Field Producto.categoria cannot be both deferred and traversed using
             # select_related at the same time" (FieldError real, encontrado en F31.6).
+            #
+            # REM P3-04 (docs/remediation/REM-P3-04.md): filtrar por activo=True,
+            # mismo criterio que InventarioExtractor.extraer_metricas() (dashboard) --
+            # antes este KPI sumaba tambien productos inactivos, dando una cifra de
+            # "valor de inventario" distinta a la que se muestra en el Dashboard para
+            # el mismo concepto de negocio.
             context["kpi_valor_total"] = sum(
-                (p.stock_actual or 0) * (p.costo_promedio or 0) for p in qs
+                (p.stock_actual or 0) * (p.costo_promedio or 0) for p in qs if p.activo
             )
         return context
 

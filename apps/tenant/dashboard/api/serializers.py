@@ -124,7 +124,7 @@ class WidgetGastosSerializer(serializers.Serializer):
     """Serializer para métricas de Gastos (WidgetGastosDTO)."""
     total_gastos_mes = serializers.DecimalField(max_digits=15, decimal_places=2)
     gastos_pendientes = serializers.IntegerField()
-    gastos_vencidos = serializers.IntegerField()
+    gastos_anulados = serializers.IntegerField()  # REM P3-03: antes gastos_vencidos, mal etiquetado
     gasto_promedio = serializers.DecimalField(max_digits=15, decimal_places=2)
 
 

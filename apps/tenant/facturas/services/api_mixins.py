@@ -6,7 +6,6 @@ desde el ViewSet, asegurando la inyección de empresa_id (Anti-IDOR).
 """
 
 from apps.tenant.facturas.services.business_service import FacturaBusinessService
-from apps.tenant.facturas.services.crud_service import FacturaCRUDService
 from apps.tenant.facturas.services.selectors import FacturaSelectors
 
 
@@ -30,8 +29,13 @@ class FacturaServiceMixin:
 
     # --- Acceso a CRUD Service ---
     def service_eliminar(self, instance):
-        """Elimina una factura y sus relacionados."""
-        return FacturaCRUDService.eliminar(instance)
+        """
+        Elimina una factura y sus relacionados -- solo si esta en BORRADOR
+        (REM P0-01, docs/remediation/REM-P0-01.md). Delegado a
+        FacturaBusinessService.eliminar_factura() para que la validacion de
+        estado viva en la capa de negocio, no en el CRUD puro.
+        """
+        return FacturaBusinessService.eliminar_factura(instance)
 
     # --- Acceso a Business Service ---
     def service_importar_documento(self, file_bytes, **kwargs):

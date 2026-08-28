@@ -41,7 +41,12 @@ class WidgetGastosDTO:
     """DTO para métricas de Gastos."""
     total_gastos_mes: Decimal
     gastos_pendientes: int
-    gastos_vencidos: int
+    # REM P3-03 (docs/remediation/REM-P3-03.md): antes se llamaba
+    # gastos_vencidos pero el valor real era el conteo de gastos ANULADOS,
+    # no de gastos vencidos (DocumentoSoporte no tiene fecha_vencimiento ni
+    # estado_pago -- el concepto "vencido" no existe en el modelo de datos
+    # real). Renombrado para reflejar lo que el dato realmente es.
+    gastos_anulados: int
     gasto_promedio: Decimal
 
 

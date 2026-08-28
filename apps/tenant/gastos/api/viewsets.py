@@ -9,7 +9,6 @@ v2.62.0: ARQUITECTURA ESTABILIZADA.
 import logging
 from decimal import Decimal
 
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, render
 from django_filters.rest_framework import DjangoFilterBackend
@@ -95,7 +94,36 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
         except Exception:
             context['empresa_id'] = None
         return context
-    
+
+    def perform_update(self, serializer):
+        """
+        REM P0-02 (docs/remediation/REM-P0-02.md): PeriodoContable.__doc__
+        afirma que edicion de Gastos en periodos cerrados esta bloqueada,
+        pero el PATCH por defecto (DRF UpdateModelMixin, sin hook propio)
+        nunca lo verificaba. Se bloquea si la fecha actual del documento, o
+        la nueva fecha si se esta editando, cae en un periodo CERRADO.
+        """
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+
+        from apps.tenant.contabilidad.services.selectors import verificar_periodo_cerrado
+
+        instance = serializer.instance
+        empresa_id = self.get_empresa_id()
+        nueva_fecha = serializer.validated_data.get('fecha', instance.fecha)
+
+        for fecha_a_validar in {instance.fecha, nueva_fecha}:
+            cerrado, periodo_nombre = verificar_periodo_cerrado(fecha_a_validar, empresa_id)
+            if cerrado:
+                raise DRFValidationError({
+                    "detail": (
+                        f"No se puede editar este documento: la fecha "
+                        f"{fecha_a_validar} pertenece al periodo contable "
+                        f"'{periodo_nombre}', que ya esta CERRADO."
+                    )
+                })
+
+        super().perform_update(serializer)
+
     def create(self, request, *args, **kwargs):
         """Crea un nuevo Gasto via Service Layer."""
         try:
@@ -122,18 +150,23 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
             return Response({"error": "error_interno", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def destroy(self, request, *args, **kwargs):
-        """Elimina un gasto fisicamente."""
-        try:
-            if not settings.DEBUG:
-                # En produccion, el gasto debe estar anulado primero
-                instance = self.get_object()
-                if not instance.anulado:
-                    return Response(
-                        {"detail": "El gasto debe estar anulado antes de eliminar."},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+        """
+        Elimina un gasto fisicamente.
 
+        REM P1-02 (docs/remediation/REM-P1-02.md): antes de esta correccion,
+        el guard "debe estar anulado antes de eliminar" se saltaba por
+        completo cuando settings.DEBUG=True -- la integridad del dato no
+        debe depender de una variable de entorno. Corregido: el guard aplica
+        siempre, en DEBUG y en produccion por igual.
+        """
+        try:
             instance = self.get_object()
+            if not instance.anulado:
+                return Response(
+                    {"detail": "El gasto debe estar anulado antes de eliminar."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             success, result, status_code = self.service_class.eliminar_gasto(
                 instance.id,
                 empresa_id=self.get_empresa_id()

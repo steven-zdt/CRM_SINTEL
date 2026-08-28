@@ -30,6 +30,36 @@ class OrdenCompraBusinessService:
     Realiza la Double Semantic Verification (DSV) y orquesta transacciones.
     """
 
+    # REM P1-01 (docs/remediation/REM-P1-01.md): OrdenCompraCRUDService.
+    # cambiar_estado() solo validaba que el estado destino existiera en
+    # ESTADO_CHOICES, nunca que la transicion desde el estado actual fuera
+    # valida -- permitia saltos arbitrarios (ej. RECIBIDA -> BORRADOR).
+    #
+    # Diseño basado en evidencia real, no asumido: test_sincronizacion_
+    # cuentas_pagar.py (existente) confirma 2 comportamientos reales que la
+    # primera version de esta matriz rompia por asumir un flujo lineal
+    # BORRADOR->PENDIENTE->APROBADA que el codigo real no impone:
+    #   1. BORRADOR->APROBADA directo es un flujo legitimo y probado
+    #      ("Decision explicita del usuario: el trigger es la transicion a
+    #      estado APROBADA" -- comentario del propio archivo de test).
+    #   2. Re-aplicar el MISMO estado (ej. APROBADA->APROBADA) debe ser un
+    #      no-op idempotente (test_reaprobar_es_idempotente_no_duplica), no
+    #      un error de transicion invalida.
+    # Por eso cada estado se permite a si mismo (self-loop). PARCIAL/RECIBIDA
+    # nunca se alcanzan por esta via manual (los asigna
+    # RecepcionCompraBusinessService.confirmar_recepcion() -- ver
+    # business_service.py:596,598), asi que solo se permiten a si mismos
+    # (no-op) -- una vez la orden entra en el flujo de recepcion,
+    # cambiar_estado() manual no puede sacarla de ese flujo.
+    TRANSICIONES_VALIDAS = {
+        'BORRADOR':   {'BORRADOR', 'PENDIENTE', 'APROBADA', 'ANULADA'},
+        'PENDIENTE':  {'PENDIENTE', 'APROBADA', 'BORRADOR', 'ANULADA'},
+        'APROBADA':   {'APROBADA', 'ANULADA'},
+        'PARCIAL':    {'PARCIAL'},
+        'RECIBIDA':   {'RECIBIDA'},
+        'ANULADA':    {'ANULADA'},
+    }
+
     @staticmethod
     def _obtener_entidad_por_id_o_uuid(model_class, lookup_value, empresa_id: int):
         """
@@ -346,6 +376,16 @@ class OrdenCompraBusinessService:
             orden = OrdenCompra.objects.filter(uuid=orden_uuid, empresa_id=empresa_id).first()
             if not orden:
                 return False, {"error": "orden_no_encontrada", "message": "La orden de compra no existe."}, 404
+
+            permitidos = OrdenCompraBusinessService.TRANSICIONES_VALIDAS.get(orden.estado, set())
+            if nuevo_estado not in permitidos:
+                return False, {
+                    "error": "transicion_invalida",
+                    "message": (
+                        f"No se puede pasar de '{orden.estado}' a '{nuevo_estado}'. "
+                        f"Transiciones validas desde '{orden.estado}': {sorted(permitidos) or 'ninguna'}."
+                    ),
+                }, 400
 
             orden = OrdenCompraCRUDService.cambiar_estado(orden, nuevo_estado)
             if nuevo_estado == 'APROBADA':

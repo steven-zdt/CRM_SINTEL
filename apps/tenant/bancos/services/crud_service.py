@@ -129,6 +129,36 @@ class TransaccionBancariaCRUDService:
     def conciliar_transaccion(transaccion: TransaccionBancaria, data: dict) -> TransaccionBancaria:
         """Vincula una transaccion con factura_uuid, proveedor_uuid y/o cliente_uuid."""
         CAMPOS_CONCILIACION = ("factura_uuid", "proveedor_uuid", "cliente_uuid", "conciliado", "notas_conciliacion")
+
+        # REM P1-04 (docs/remediation/REM-P1-04.md): sin validacion previa,
+        # se podia vincular una transaccion bancaria (pago) con una factura
+        # emitida DESPUES de la fecha del pago -- un pago no puede ocurrir
+        # antes de que exista el documento que paga. Solo se valida cuando
+        # se esta vinculando/cambiando factura_uuid (no proveedor_uuid/
+        # cliente_uuid, que enlazan a un tercero completo, no a un documento
+        # con fecha propia). Si la factura no resuelve (soft-reference sin
+        # match), no se bloquea -- mismo criterio ya usado en todo el
+        # proyecto para soft-references (Kardex, Retenciones): un dato
+        # incompleto no bloquea la operacion, solo un dato claramente
+        # inconsistente lo hace.
+        nueva_factura_uuid = data.get("factura_uuid")
+        if nueva_factura_uuid and nueva_factura_uuid != transaccion.factura_uuid:
+            from apps.tenant.facturas.services.business_service import FacturaInterAppAPI
+            factura = FacturaInterAppAPI.get_by_id(factura_uuid=nueva_factura_uuid)
+            if factura is not None and factura.fecha_emision is not None:
+                fecha_pago = data.get("fecha", transaccion.fecha)
+                fecha_doc = factura.fecha_emision
+                if hasattr(fecha_doc, 'date'):
+                    fecha_doc = fecha_doc.date()
+                if fecha_pago < fecha_doc:
+                    raise ValidationError({
+                        "factura_uuid": (
+                            f"La fecha de la transaccion ({fecha_pago}) es anterior a la "
+                            f"fecha de emision de la factura ({fecha_doc}). Un pago no "
+                            f"puede ocurrir antes del documento que paga."
+                        )
+                    })
+
         campos_a_guardar = []
         for field in CAMPOS_CONCILIACION:
             if field in data:

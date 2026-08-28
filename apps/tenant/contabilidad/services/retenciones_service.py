@@ -16,6 +16,7 @@ Pull Model:
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+from django.db import IntegrityError, transaction
 from django.db.models import Q, Sum
 from django.utils.translation import gettext_lazy as _
 
@@ -201,7 +202,31 @@ class RetencionesService:
             notas=notas,
         )
 
-        retencion.save()
+        # REM P0-03 (docs/remediation/REM-P0-03.md): idempotencia real --
+        # mismo patron que KardexService.registrar_movimiento() (inventario):
+        # un retry/doble-click que intente crear la misma retencion activa
+        # (mismo documento_origen+tipo, no reversada) devuelve la fila ya
+        # existente en vez de fallar o duplicar el monto. El UniqueConstraint
+        # de BD (uniq_retencion_documento_origen_tipo_activa) es el respaldo
+        # real ante condicion de carrera concurrente; este try/except cubre
+        # el caso normal de reintento secuencial con un mensaje de error mas
+        # claro que un IntegrityError crudo.
+        try:
+            with transaction.atomic():
+                retencion.save()
+        except IntegrityError as exc:
+            if 'uniq_retencion_documento_origen_tipo_activa' in str(exc) and documento_origen_id:
+                existente = Retencion.objects.filter(
+                    empresa_id=ret_empresa_id,
+                    documento_origen_app=documento_origen_app,
+                    documento_origen_modelo=documento_origen_modelo,
+                    documento_origen_id=documento_origen_id,
+                    tipo=tipo,
+                    reversada=False,
+                ).first()
+                if existente is not None:
+                    return existente
+            raise
         return retencion
 
     @staticmethod
@@ -417,6 +442,7 @@ class RetencionesService:
         return resultado
 
     @staticmethod
+    @transaction.atomic
     def reversar_retencion(
         retencion: Retencion,
         documento_reversada_app: str = None,
@@ -447,6 +473,18 @@ class RetencionesService:
         if not ret_empresa_id:
             raise ValueError("empresa or empresa_id is required for Zero-Trust tenant isolation")
 
+        # REM P0-03: marcar el original como reversada=True ANTES de crear la
+        # fila de reversal (antes se hacia en el orden opuesto). El nuevo
+        # UniqueConstraint (uniq_retencion_documento_origen_tipo_activa) solo
+        # permite UNA fila activa (reversada=False) por documento_origen+tipo
+        # -- si el original todavia no esta marcado reversada=True al insertar
+        # la fila de reversal con el mismo documento_origen+tipo (caso "in
+        # place", sin documento_reversada_id distinto), la insercion violaria
+        # el constraint. El efecto neto committeado es identico; solo cambia
+        # el orden dentro de la misma transaccion atomica.
+        retencion.reversada = True
+        retencion.save(update_fields=['reversada'])
+
         # Crear retención de reversal (monto negativo)
         retencion_reversal = Retencion(
             empresa=empresa or retencion.empresa,
@@ -465,10 +503,8 @@ class RetencionesService:
         )
         retencion_reversal.save()
 
-        # Marcar original como reversada
-        retencion.reversada = True
         retencion.retencion_reversada_por = retencion_reversal
-        retencion.save(update_fields=['reversada', 'retencion_reversada_por'])
+        retencion.save(update_fields=['retencion_reversada_por'])
 
         return retencion_reversal
 

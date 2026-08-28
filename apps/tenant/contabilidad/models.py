@@ -11,7 +11,7 @@ import uuid
 from decimal import Decimal
 
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
 
 from apps.tenant.core.models import SintelTenantBaseModel
@@ -223,11 +223,28 @@ class TipoComprobante(SintelTenantBaseModel):
         return f"{self.codigo} - {self.nombre}"
 
     def obtener_siguiente_numero(self):
-        """Retorna el siguiente número formateado con prefijo."""
-        numero = str(self.consecutivo_actual).zfill(5)
-        self.consecutivo_actual += 1
-        self.save(update_fields=['consecutivo_actual'])
-        return f"{self.prefijo}{numero}" if self.prefijo else numero
+        """
+        Retorna el siguiente número formateado con prefijo.
+
+        REM P0-04 (docs/remediation/REM-P0-04.md): antes de esta correccion,
+        este metodo era el UNICO generador de numeracion de todo el sistema
+        sin select_for_update() -- leia self.consecutivo_actual (que pudo
+        haberse cargado antes en memoria, potencialmente obsoleto), lo
+        incrementaba y guardaba, sin bloqueo de fila. Bajo concurrencia real
+        (2 usuarios contabilizando al mismo tiempo) esto podia generar
+        IntegrityError no controlado (choque contra el unique=True de
+        AsientoContable.numero) o saltar un consecutivo. Se re-obtiene la fila
+        bajo select_for_update() dentro del propio metodo -- mismo patron ya
+        usado en cotizaciones/compras/ventas/empleados -- para que sea seguro
+        sin importar como el llamador haya obtenido `self`.
+        """
+        with transaction.atomic():
+            locked = TipoComprobante.objects.select_for_update().get(pk=self.pk)
+            numero = str(locked.consecutivo_actual).zfill(5)
+            locked.consecutivo_actual += 1
+            locked.save(update_fields=['consecutivo_actual'])
+        self.consecutivo_actual = locked.consecutivo_actual
+        return f"{locked.prefijo}{numero}" if locked.prefijo else numero
 
 
 class AsientoContable(SintelTenantBaseModel):
@@ -1090,6 +1107,29 @@ class Retencion(SintelTenantBaseModel):
             models.Index(fields=['tipo', 'reversada']),
             models.Index(fields=['naturaleza']),
             models.Index(fields=['asiento_contable']),
+        ]
+        constraints = [
+            # REM P0-03 (docs/remediation/REM-P0-03.md): antes de esta
+            # correccion, Retencion no tenia ninguna proteccion contra
+            # duplicados (ni constraint de BD ni chequeo de aplicacion) --
+            # un retry/doble-click/reprocesamiento de
+            # crear_retenciones_desde_dict() podia duplicar silenciosamente
+            # el monto de retencion de un documento. La clave real (docstring
+            # de este modelo: "Multiples retenciones (RETEFUENTE+RETEICA+
+            # RETEIVA) pueden existir para el mismo documento") es
+            # documento_origen + tipo, NO solo documento_origen. Se excluyen
+            # las filas reversada=True porque reversar_retencion() crea una
+            # SEGUNDA fila con el mismo documento_origen+tipo cuando no se
+            # pasa un documento_reversada_id distinto (reversal "in place")
+            # -- es una reversa legitima, no un duplicado. documento_origen_id
+            # se excluye cuando es 0 (sentinel de "sin origen real", nunca
+            # una clave de negocio valida).
+            models.UniqueConstraint(
+                fields=['empresa', 'documento_origen_app', 'documento_origen_modelo',
+                        'documento_origen_id', 'tipo'],
+                condition=models.Q(reversada=False) & ~models.Q(documento_origen_id=0),
+                name='uniq_retencion_documento_origen_tipo_activa',
+            ),
         ]
 
     def __str__(self):

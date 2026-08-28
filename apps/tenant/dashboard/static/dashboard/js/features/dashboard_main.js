@@ -163,7 +163,7 @@
             metricCol('Total Mes', COP(g.total_gastos_mes), 'text-warning') +
             metricCol('Promedio', COP(g.gasto_promedio), '') +
             metricCol('Pendientes', num(g.gastos_pendientes), 'text-warning') +
-            metricCol('Vencidos', num(g.gastos_vencidos), 'text-danger')
+            metricCol('Anulados', num(g.gastos_anulados), 'text-danger')
         );
     }
 

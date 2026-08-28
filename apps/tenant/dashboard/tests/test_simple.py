@@ -59,7 +59,7 @@ class DTOTests(TestCase):
         dto = WidgetGastosDTO(
             total_gastos_mes=Decimal('100000.00'),
             gastos_pendientes=5,
-            gastos_vencidos=1,
+            gastos_anulados=1,
             gasto_promedio=Decimal('20000.00')
         )
         self.assertEqual(dto.total_gastos_mes, Decimal('100000.00'))
@@ -121,7 +121,7 @@ class DTOTests(TestCase):
         )
         gastos = WidgetGastosDTO(
             total_gastos_mes=Decimal('100000'), gastos_pendientes=5,
-            gastos_vencidos=1, gasto_promedio=Decimal('20000')
+            gastos_anulados=1, gasto_promedio=Decimal('20000')
         )
 
         dto = DashboardMetricasDTO(

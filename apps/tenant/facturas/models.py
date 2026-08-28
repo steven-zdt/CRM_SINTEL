@@ -88,7 +88,14 @@ class Factura(SintelTenantBaseModel):
         help_text=_('Numero UBL: puede ser alfanumerico (FAxxxx) o hash SHA256 (96 chars). Max real encontrado: 96.')
     )
     prefijo = models.CharField(max_length=10, blank=True, null=True, verbose_name=_('Prefijo'))
-    consecutivo = models.IntegerField(verbose_name=_('Consecutivo'))
+    consecutivo = models.IntegerField(
+        verbose_name=_('Consecutivo'),
+        help_text=_(
+            'Consecutivo INTERNO (Origen.INTERNO). Para Origen.EXTERNO vale 0 '
+            '(sentinel de "no aplica", nunca un consecutivo real -- ver REM-P3-08). '
+            'La identidad fiscal real de la factura es siempre "numero", no este campo.'
+        ),
+    )
 
     tipo = models.CharField(max_length=2, choices=TipoFactura.choices,
                             default=TipoFactura.FE, verbose_name=_('Tipo'))

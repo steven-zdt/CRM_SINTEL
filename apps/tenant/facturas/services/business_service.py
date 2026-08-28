@@ -98,6 +98,41 @@ class FacturaBusinessService:
 
     @staticmethod
     @transaction.atomic
+    def eliminar_factura(factura: Factura) -> None:
+        """
+        REM P0-01 (docs/remediation/REM-P0-01.md): antes de esta correccion,
+        FacturaViewSet.destroy() permitia hard-delete incondicional -- incluso
+        de una factura ACEPTADA con CUFE ya reconocido por la DIAN, dejando
+        huerfano el AsientoContable ya extraido (el extractor de Contabilidad
+        solo toma estado='ACEPTADA', ver
+        apps/tenant/contabilidad/integracion/extractores/facturas.py:52,71).
+
+        Solo BORRADOR es eliminable de forma destructiva: es el unico estado
+        con evidencia real de que no hay extraccion contable posible (nunca
+        fue ENVIADA, no tiene CUFE aceptado). Para cualquier otro estado, la
+        via sancionada es la anulacion (transicion a ANULADA via
+        cambiar_estado(), ya alcanzable desde todo estado no terminal segun
+        TRANSICIONES_VALIDAS) -- nunca DELETE fisico, mismo criterio que
+        Venta.anular_venta()/Gasto.anular_documento() en sus apps.
+
+        No revierte automaticamente AsientoContable/MovimientoInventario ya
+        extraidos al anular -- eso queda fuera del alcance minimo de esta
+        correccion (ver docs/remediation/REM-P0-01.md "Deuda pendiente").
+        """
+        if factura.estado != Factura.Estado.BORRADOR:
+            raise DRFValidationError({
+                'estado': (
+                    f"No se puede eliminar una factura en estado '{factura.estado}'. "
+                    "Solo facturas en BORRADOR admiten eliminacion directa. "
+                    "Use la anulacion (cambiar estado a ANULADA) para facturas ya "
+                    "enviadas/aceptadas/rechazadas -- preserva la trazabilidad fiscal "
+                    "y contable del documento."
+                )
+            })
+        FacturaCRUDService.eliminar(factura)
+
+    @staticmethod
+    @transaction.atomic
     def crear_factura_desde_venta(empresa, dto: dict):
         """
         Crea una Factura de Venta electronica a partir del DTO canonico generado
@@ -653,6 +688,18 @@ class FacturaBusinessService:
             "empresa": empresa_instance,
             "numero": numero,
             "prefijo": dto.get("prefijo", ""),
+            # REM P3-08 (docs/remediation/REM-P3-08.md): `consecutivo` es
+            # exclusivamente el consecutivo INTERNO asignado por
+            # crear_factura_desde_venta() (Empresa.select_for_update() +
+            # Max()+1); para Origen.EXTERNO el DTO importado no trae ese
+            # concepto -- 0 es un sentinel de "no aplica", NUNCA un
+            # consecutivo real. La identidad fiscal real de CUALQUIER
+            # Factura (interna o externa) es siempre `numero`
+            # (unique=True), nunca `consecutivo`. No se hizo el campo
+            # nullable (evaluado y descartado: requeriria migracion +
+            # tocar cada consumidor que asume int, para un campo que ya no
+            # se usa como identificador en ningun lado real) -- se
+            # documenta el sentinel en su lugar.
             "consecutivo": dto.get("consecutivo", 0),
             "tipo": tipo,
             "estado": estado,
@@ -1027,6 +1074,22 @@ class FacturaBusinessService:
         # DSV: verificar propiedad del tenant
         if factura.empresa_id != empresa_id:
             raise ValidationError({"detail": "La factura no pertenece a la empresa activa."})
+
+        # REM P0-02 (docs/remediation/REM-P0-02.md): PeriodoContable.__doc__
+        # afirma "Bloquea edicion/anulacion de Facturas y Gastos en periodos
+        # cerrados", pero verificar_periodo_cerrado() nunca se invocaba desde
+        # aqui -- una factura podia editarse libremente con fecha dentro de
+        # un periodo ya cerrado, descuadrando reportes ya emitidos.
+        from apps.tenant.contabilidad.services.selectors import verificar_periodo_cerrado
+        cerrado, periodo_nombre = verificar_periodo_cerrado(factura.fecha_emision, empresa_id)
+        if cerrado:
+            raise ValidationError({
+                "detail": (
+                    f"No se puede editar esta factura: su fecha de emision "
+                    f"({factura.fecha_emision}) pertenece al periodo contable "
+                    f"'{periodo_nombre}', que ya esta CERRADO."
+                )
+            })
 
         # Rechazar campos XML inmutables con 400 explicito
         attempted_xml = XML_IMMUTABLE_FIELDS & set(data.keys())

@@ -34,7 +34,16 @@ class ExtractoBancarioBusinessService:
         """
         Parses the uploaded bank statement Excel file and ingests transactions.
         Ensures idempotency by deleting any previously processed transactions for this extract.
+
+        REM P1-03 (docs/remediation/REM-P1-03.md): select_for_update() sobre
+        el propio extracto evita que 2 llamadas concurrentes (doble-click,
+        retry) intercalen su delete()+insert() y dupliquen transiciones
+        momentaneamente -- la segunda llamada espera a que la primera
+        confirme (delete+insert completo) antes de repetir su propio
+        delete+insert, resultado neto identico (idempotente), sin duplicar.
         """
+        extracto = ExtractoBancario.objects.select_for_update().get(pk=extracto.pk)
+
         if not extracto.archivo_s3:
             raise ValidationError("El extracto no tiene un archivo adjunto.")
 

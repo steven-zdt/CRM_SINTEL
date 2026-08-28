@@ -45,6 +45,17 @@ class ExtractoBancario(SintelTenantBaseModel):
         indexes = [
             models.Index(fields=["empresa", "cuenta", "anio", "mes"]),
         ]
+        constraints = [
+            # REM P1-03 (docs/remediation/REM-P1-03.md): la clave natural ya
+            # la usaba ExtractoBancarioCRUDService.crear_extracto() como
+            # chequeo de aplicacion (.exists() antes de crear, con ventana
+            # TOCTOU real bajo doble-submit concurrente) -- se agrega el
+            # backstop real de BD con la misma clave, sin inventar una nueva.
+            models.UniqueConstraint(
+                fields=["empresa", "cuenta", "anio", "mes"],
+                name="uniq_extracto_bancario_empresa_cuenta_periodo",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.cuenta.nombre} - {self.anio}/{self.mes:02d}"

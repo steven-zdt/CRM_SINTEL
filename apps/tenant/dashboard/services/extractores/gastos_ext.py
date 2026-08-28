@@ -31,7 +31,7 @@ class GastosExtractor:
             return WidgetGastosDTO(
                 total_gastos_mes=total_gastos_mes.quantize(Decimal('0.01')),
                 gastos_pendientes=gastos_activos,
-                gastos_vencidos=gastos_anulados,
+                gastos_anulados=gastos_anulados,
                 gasto_promedio=gasto_promedio.quantize(Decimal('0.01')),
             )
 

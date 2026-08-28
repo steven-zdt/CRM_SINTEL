@@ -52,8 +52,8 @@ Corrección sugerida | Dependencia | Evidencia
 
 | Proceso | App | Hallazgo | Categoría |
 |---|---|---|---|
-| Compras | `compras` | `OrdenCompra.ESTADO_CHOICES` incluye `'ANULADA'` pero ningún método de servicio transiciona a ese estado — código inalcanzable, no corrupción | ARCHITECTURE |
-| Facturación | `facturas` | `Factura` no tiene ningún campo persistido hacia `Venta` (`venta_uuid`) pese a que un comentario del propio código sugiere que debería tenerlo — el vínculo real es solo por igualdad de string (`numero_factura`==`numero`) | ARCHITECTURE, DATA |
+| ~~Compras~~ | ~~`compras`~~ | **CORREGIDO en REM-P3-09: el hallazgo era impreciso.** `cambiar_estado_orden_compra()` ya aceptaba `'ANULADA'` como destino genérico desde antes de esta sesión; ahora además validado por `TRANSICIONES_VALIDAS` (REM-P1-01), confirmado con test real (`APROBADA→ANULADA`). | ~~ARCHITECTURE~~ |
+| ~~Facturación~~ | ~~`facturas`~~ | **CORREGIDO en REM-P3-10 (docs/remediation/REM-P3-10.md): el hallazgo era impreciso.** `Venta.factura_asociada` (`apps/tenant/ventas/models.py:174-181`) es un `OneToOneField` real hacia `Factura` con `related_name='venta_origen'` — `factura.venta_origen` ya resuelve el vínculo sin necesidad de un campo duplicado en `Factura`. No se crea ninguna relación nueva. | ~~ARCHITECTURE, DATA~~ |
 | Tributario | `proveedores` | `ProveedorBusinessService.obtener_configuracion_retenciones()`/`calcular_componentes_retencion()` son código muerto confirmado (tarifas hardcodeadas, nunca ejecutadas — el mecanismo real vive en `contabilidad`) | ARCHITECTURE |
 
 ---
