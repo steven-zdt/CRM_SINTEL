@@ -42,6 +42,7 @@ PRODUCTO_LIST_FIELDS = (
 
 SERVICIO_LIST_FIELDS = (
     'id', 'uuid', 'codigo', 'nombre', 'categoria', 'categoria__id', 'categoria__uuid', 'categoria__nombre',
+    'precio_venta', 'activo', 'imagen',
 )
 
 ACTIVO_LIST_FIELDS = (

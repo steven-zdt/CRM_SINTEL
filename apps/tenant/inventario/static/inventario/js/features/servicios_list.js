@@ -106,4 +106,12 @@
         };
     }
 
+    // Alias anidado: list_servicios.html referencia
+    // window.Sintel.Inventario.Servicios.List.recargar() (boton "Recargar",
+    // mismo patron que Productos/Categorias). Sin esto el boton era un no-op.
+    w.Sintel = w.Sintel || {};
+    w.Sintel.Inventario = w.Sintel.Inventario || {};
+    w.Sintel.Inventario.Servicios = w.Sintel.Inventario.Servicios || {};
+    w.Sintel.Inventario.Servicios.List = w.ServiciosList;
+
 })(window, document);

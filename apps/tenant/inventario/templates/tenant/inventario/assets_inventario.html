@@ -7,7 +7,6 @@
 
 {# ⚠️ v3.5: Feature-Sliced JS Assets #}
 <script src="{% static 'inventario/js/features/inventario_editor.js' %}"></script>
-<script src="{% static 'inventario/js/features/inventario_list.js' %}"></script>
 <script src="{% static 'inventario/js/features/categorias_editor.js' %}"></script>
 <script src="{% static 'inventario/js/features/categorias_list.js' %}"></script>
 <script src="{% static 'inventario/js/features/productos_editor.js' %}"></script>
@@ -40,15 +39,12 @@
                 });
             };
             
-            if (targetId === 'offcanvas-container-servicios') {
-                initOffcanvas('offcanvas-container-servicios', '[inventario.assets] Offcanvas servicios', function() {
-                    if (window.Sintel?.Inventario?.Servicios?.Editor?.init) window.Sintel.Inventario.Servicios.Editor.init();
-                });
-            }
-
             if (targetId === 'offcanvas-container-movimientos') {
                 initOffcanvas('offcanvas-container-movimientos', '[inventario.assets] Offcanvas movimientos', function() {
-                    if (window.MovimientosEditor?.init) window.MovimientosEditor.init();
+                    // MovimientosEditor.init() ya lo dispara el <script> inline de
+                    // offcanvas_movimiento.html al inyectarse el HTML — llamarlo
+                    // otra vez aqui duplicaba form.reset()/preRellenarModoEdicion()
+                    // (doble GET de items en modo edicion).
                     if (window.MovimientoFacturasAutocomplete) {
                         const offcanvasEl = document.getElementById('offcanvas-movimientos');
                         if (offcanvasEl) {

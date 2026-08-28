@@ -11,6 +11,16 @@ from apps.tenant.core.models import SintelTenantBaseModel  # auto-inserted by au
 from apps.tenant.empresa.models import Empresa
 
 
+def _hoy():
+    """Callable de default para DateField -- timezone.now() devuelve un
+    datetime, no un date; usarlo directo como default de un DateField deja
+    el atributo en memoria como datetime hasta el proximo refresh_from_db(),
+    lo que rompe DRF DateField.to_representation() en la respuesta de un
+    POST justo despues de crear (AssertionError: Expected a date, but got a
+    datetime). Mismo bug y mismo fix que Cotizacion.fecha_emision."""
+    return timezone.now().date()
+
+
 class TimeStampedModel(SintelTenantBaseModel):
     """Modelo base abstracto para auditoría de tiempos."""
     created_at = models.DateTimeField(default=timezone.now, editable=False)
@@ -494,7 +504,7 @@ class HistorialServicio(TimeStampedModel):
         related_name="historial_ventas",
         help_text="Servicio del historial. Si se elimina el servicio, se eliminan todos sus historiales."
     )
-    fecha_registro = models.DateField(default=timezone.now)
+    fecha_registro = models.DateField(default=_hoy)
     cantidad = models.DecimalField(max_digits=10, decimal_places=2, default=1)
     valor_cobrado = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     

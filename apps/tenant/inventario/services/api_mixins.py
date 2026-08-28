@@ -197,7 +197,21 @@ class ActivoFijoServiceMixin:
     """Mixin para inyectar logica de negocio de Activos Fijos en ViewSets."""
 
     def service_activo_destroy(self, instance):
-        """Elimina el activo fijo."""
+        """
+        Elimina el activo fijo.
+
+        Mismo guard de seguridad que ProductoServiceMixin/ServicioServiceMixin
+        (api_mixins.py): no se borra un item en uso, para no perder en CASCADE
+        el historial de Kardex asociado por un clic accidental. Para ActivoFijo
+        el equivalente de "activo=False" es su propio estado terminal
+        (BAJA/VENDIDO) — no se inventa un campo nuevo, se reutiliza el que ya
+        existe en el modelo.
+        """
+        if instance.estado not in (ActivoFijo.Estado.BAJA, ActivoFijo.Estado.VENDIDO):
+            raise ValidationError(
+                "No se puede eliminar un activo fijo en uso. "
+                "Cambie su estado a 'De Baja' o 'Vendido' antes de borrarlo."
+            )
         instance.delete()
         return True
 

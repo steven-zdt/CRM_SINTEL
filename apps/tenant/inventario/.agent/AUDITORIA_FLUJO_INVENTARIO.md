@@ -2,9 +2,19 @@
 
 **Versión auditada:** v3.10.2
 **Fecha:** 2026-05-28
-**Estado:** PRODUCTION READY (0 CRÍTICOS)
+**Estado:** PRODUCTION READY (0 CRÍTICOS) — histórico, ver nota 2026-08-27 abajo
 **Auditor:** Claude Code (claude-sonnet-4-6)
 **Ubicación:** `apps/tenant/inventario/`
+
+> **DRIFT CONFIRMADO 2026-08-27** (misión de modernización integral): el módulo
+> evolucionó de forma real desde esta auditoría (F21 Traslados entre Sedes,
+> `MovimientoInventario.sede`/`documento_origen_*`, idempotencia por
+> documento origen) sin que este documento se actualizara. Ver
+> `docs/inventario/INVENTARIO_BASELINE.md` y el resto de
+> `docs/inventario/INVENTARIO_*.md` para el estado real verificado contra
+> código. Correcciones puntuales aplicadas abajo donde el drift era engañoso
+> (costo_promedio, DEUDA-04/05/08); el resto del documento permanece como
+> referencia histórica de v3.10.2, no como fuente de verdad vigente.
 
 ---
 
@@ -101,7 +111,7 @@
 | `unidad` | CharField(16) | `default='UND'` |
 | `imagen` | ImageField | `upload_to='inventario/productos/'`, nullable |
 | `precio_venta` | DecimalField(14,2) | `default=0` |
-| `costo_promedio` | DecimalField(14,2) | `default=0` — actualizado por `KardexService` en ENTRADA_COMPRA |
+| `costo_promedio` | DecimalField(14,2) | `default=0` — **CORREGIDO 2026-08-27**: es un campo ESTÁTICO, nunca recalculado automáticamente por ninguna entrada (ni `ENTRADA_COMPRA` ni ninguna otra). Poblado manualmente o por ingesta. Decisión arquitectónica deliberada, ver `documentacion/F23_SALE_INVENTORY_CONTRACT.md` §6. La afirmación original de esta fila era incorrecta. |
 | `stock_actual` | DecimalField(14,3) | **desnormalizado** — recalculado por `KardexService.recalcular_stock_producto()` |
 | `stock_minimo` | DecimalField(14,3) | `default=0` — para alertas de reposición |
 | `activo` | BooleanField | `default=True` |
@@ -582,10 +592,11 @@ APP_ORIGEN_PREFIJOS['inventario'] = [
 
 | ID | Archivo | Severidad | Descripción |
 |----|---------|-----------|-------------|
-| DEUDA-04 | `api/urls.py` | BAJA | Endpoints `dt/` DEPRECATED (presentes desde v2.40) aún registrados. Eliminar en próxima limpieza. |
-| DEUDA-05 | `services/business_service.py` | BAJA | `IngestaService` podría separarse en `services/ingesta_service.py`. Los 6 `ServiceMixins` también podrían tener su propio archivo. |
-| DEUDA-06 | Tests | COMPLETADA | Suite de pruebas en `tests/tenant/inventario/` implementada y estabilizada. 24/24 pruebas pasando exitosamente. |
-| DEUDA-08 | `activos_editor.js` | MUY BAJA | `initCodigoPrefijo()` y la llamada a `setupCuentaAutocomplete` para `#activo-cuenta-activo-busqueda` son dead code silencioso: el template ya no tiene esos inputs, el guard `if (d.querySelector(...))` evita errores. Se puede eliminar en limpieza. |
+| DEUDA-04 | `api/urls.py` | RESUELTA (2026-08-27) | Endpoints `dt/` ya no existen en el código — confirmado por grep exhaustivo, sin consumidores. |
+| DEUDA-05 | `services/business_service.py` | RESUELTA (2026-08-27) | `IngestaService` ya vive en su propio archivo `services/ingesta_service.py`. Los 6 `ServiceMixins` siguen juntos en `api_mixins.py` (no separados por modelo) — asimetría documentada, no un bug. |
+| DEUDA-06 | Tests | COMPLETADA (histórico) | Ampliada de nuevo 2026-08-27: `test_kardex_service.py` (KardexService directo), `test_multitenant_isolation.py` (Producto/Categoria/ActivoFijo cross-tenant), y suite de permisos CRUD extendida a Producto/Servicio/ActivoFijo-destroy-guard/Movimiento-update-delete/HistorialServicio en `tests/tenant/inventario/test_crud_permissions.py`. |
+| DEUDA-08 | `activos_editor.js` | RESUELTA (2026-08-27) | `initCodigoPrefijo()`/`setupCuentaAutocomplete()` ya no existen en el JS real (confirmado por grep) — esta entrada quedó desactualizada, el código ya había sido eliminado. |
+| DEUDA-09 | `services/crud_service.py` | RESUELTA (2026-08-27) | Archivo completo (7 funciones: `crear_producto`, `actualizar_producto`, `crear_servicio`, `actualizar_servicio`, `crear_activo`, `actualizar_activo`, `crear_movimiento_raw`) confirmado sin consumidores reales — eliminado junto con su re-export en `services/__init__.py`. Los ViewSets ya persistían vía `serializer.save()`/`BaseViewSet.perform_create()`, nunca vía este módulo. |
 
 ---
 

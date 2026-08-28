@@ -430,10 +430,14 @@ class TestMovimientoInventarioCRUD(InventarioPermissionsMixin, SintelTenantTestC
     """
     Tests para MovimientoInventarioViewSet.
 
-    ARQUITECTURA KARDEX:
-    - Los movimientos SOLO se crean (POST) y leen (GET).
-    - NO se permiten ediciones ni eliminaciones (inmutabilidad del Kardex).
-    - Solo ADMIN puede crear movimientos.
+    ARQUITECTURA KARDEX (corregido 2026-08-27, ver docs/inventario/INVENTARIO_BASELINE.md):
+    - Los movimientos son append-first pero SI admiten edicion/eliminacion
+      controlada: KardexService.actualizar_movimiento()/eliminar_movimiento()
+      (v3.9.1+) recalculan stock_actual atomicamente. El docstring anterior
+      ("NO se permiten ediciones ni eliminaciones") quedo desactualizado por
+      ese cambio real y nunca se corrigio ni se testeo -- ver
+      TestMovimientoInventarioUpdateDelete abajo.
+    - Solo ADMIN puede crear/editar/eliminar movimientos.
 
     NOTA: El endpoint POST /api/v1/inventario/movimientos/ delega a
     service_movimiento_perform_create() en el Service Layer.
@@ -573,3 +577,386 @@ class TestMovimientoInventarioCRUD(InventarioPermissionsMixin, SintelTenantTestC
                     status.HTTP_200_OK,
                     f"[{label}] Esperado 200, obtenido {response.status_code}",
                 )
+
+
+# ==============================================================================
+# TEST SUITE 4: MovimientoInventario UPDATE/DELETE (gap real, FASE 49/50)
+# ==============================================================================
+class TestMovimientoInventarioUpdateDelete(InventarioPermissionsMixin, SintelTenantTestCase):
+    """
+    KardexService.actualizar_movimiento()/eliminar_movimiento() (v3.9.1+) y los
+    metodos partial_update()/destroy() del ViewSet no tenian ningun test propio
+    -- confirmado por grep exhaustivo durante la auditoria de 2026-08-27.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.empresa = Empresa.objects.create(
+            razon_social="Empresa Test Mov Update", nit="900123459",
+            direccion="Calle Test 1", telefono="1111111", singleton_key=1,
+        )
+        self.admin_user = self._create_user_in_public(
+            username="admin_movupd@test.com", email="admin_movupd@test.com"
+        )
+        self.visor_user = self._create_user_in_public(
+            username="visor_movupd@test.com", email="visor_movupd@test.com"
+        )
+        self._create_tenant_profile(self.admin_user, self.empresa, "ADMIN")
+        self._create_tenant_profile(self.visor_user, self.empresa, "VISOR")
+
+        public_schema = get_public_schema_name()
+        with schema_context(public_schema):
+            from apps.public.tenants.models import TenantMembership
+
+            TenantMembership.objects.create(
+                client=self.tenant, user=self.admin_user, rol="ADMIN", is_active=True
+            )
+            TenantMembership.objects.create(
+                client=self.tenant, user=self.visor_user, rol="VISOR", is_active=True
+            )
+
+        self.producto = Producto.objects.create(
+            empresa=self.empresa, codigo="PROD-MOV-UPD", nombre="Producto Update Test",
+        )
+        self.movimiento = MovimientoInventario.objects.create(
+            empresa=self.empresa, producto=self.producto,
+            tipo="ENTRADA_AJUSTE", cantidad=Decimal("10.000"),
+        )
+        self.producto.stock_actual = Decimal("10.000")
+        self.producto.save(update_fields=["stock_actual"])
+
+        domain = self.domain.domain
+        self.admin_client = self._make_client_for(self.admin_user, domain)
+        self.visor_client = self._make_client_for(self.visor_user, domain)
+
+    def test_admin_can_update_movimiento_y_recalcula_stock(self):
+        url = reverse("inv-movimientos-detail", kwargs={"uuid": self.movimiento.uuid})
+        response = self.admin_client.patch(url, {"cantidad": "20.000"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock_actual, Decimal("20.000"))
+
+    def test_visor_cannot_update_movimiento(self):
+        url = reverse("inv-movimientos-detail", kwargs={"uuid": self.movimiento.uuid})
+        response = self.visor_client.patch(url, {"cantidad": "99.000"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_admin_can_delete_movimiento_y_recalcula_stock(self):
+        url = reverse("inv-movimientos-detail", kwargs={"uuid": self.movimiento.uuid})
+        response = self.admin_client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock_actual, Decimal("0.000"))
+        self.assertFalse(MovimientoInventario.objects.filter(pk=self.movimiento.pk).exists())
+
+    def test_visor_cannot_delete_movimiento(self):
+        url = reverse("inv-movimientos-detail", kwargs={"uuid": self.movimiento.uuid})
+        response = self.visor_client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(MovimientoInventario.objects.filter(pk=self.movimiento.pk).exists())
+
+
+# ==============================================================================
+# TEST SUITE 5: Producto CRUD completo (gap real, FASE 49/50)
+# ==============================================================================
+class TestProductoCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
+    """Cero tests de CRUD via API existian para Producto antes de esta mision."""
+
+    def setUp(self):
+        super().setUp()
+        self.empresa = Empresa.objects.create(
+            razon_social="Empresa Test Producto CRUD", nit="900123460",
+            direccion="Calle Test 2", telefono="2222222", singleton_key=1,
+        )
+        self.admin_user = self._create_user_in_public(
+            username="admin_prodcrud@test.com", email="admin_prodcrud@test.com"
+        )
+        self.visor_user = self._create_user_in_public(
+            username="visor_prodcrud@test.com", email="visor_prodcrud@test.com"
+        )
+        self._create_tenant_profile(self.admin_user, self.empresa, "ADMIN")
+        self._create_tenant_profile(self.visor_user, self.empresa, "VISOR")
+
+        public_schema = get_public_schema_name()
+        with schema_context(public_schema):
+            from apps.public.tenants.models import TenantMembership
+
+            TenantMembership.objects.create(
+                client=self.tenant, user=self.admin_user, rol="ADMIN", is_active=True
+            )
+            TenantMembership.objects.create(
+                client=self.tenant, user=self.visor_user, rol="VISOR", is_active=True
+            )
+
+        domain = self.domain.domain
+        self.admin_client = self._make_client_for(self.admin_user, domain)
+        self.visor_client = self._make_client_for(self.visor_user, domain)
+
+    def test_admin_can_create_producto(self):
+        url = reverse("inv-productos-list")
+        response = self.admin_client.post(
+            url, {"codigo": "PRD-CRUD-1", "nombre": "Producto CRUD Test", "precio_venta": "100.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+    def test_visor_cannot_create_producto(self):
+        url = reverse("inv-productos-list")
+        response = self.visor_client.post(
+            url, {"codigo": "PRD-CRUD-2", "nombre": "Producto CRUD Test 2"}, format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_admin_can_update_producto(self):
+        producto = Producto.objects.create(empresa=self.empresa, codigo="PRD-UPD-1", nombre="Original")
+        url = reverse("inv-productos-detail", kwargs={"uuid": producto.uuid})
+        response = self.admin_client.patch(url, {"nombre": "Actualizado"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data.get("nombre"), "Actualizado")
+
+    def test_eliminar_producto_activo_es_rechazado(self):
+        """service_producto_destroy(): no se puede borrar un producto con activo=True."""
+        producto = Producto.objects.create(
+            empresa=self.empresa, codigo="PRD-DEL-ACTIVO", nombre="No Borrable", activo=True,
+        )
+        url = reverse("inv-productos-detail", kwargs={"uuid": producto.uuid})
+        response = self.admin_client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(Producto.objects.filter(uuid=producto.uuid).exists())
+
+    def test_eliminar_producto_inactivo_es_permitido(self):
+        producto = Producto.objects.create(
+            empresa=self.empresa, codigo="PRD-DEL-INACTIVO", nombre="Borrable", activo=False,
+        )
+        url = reverse("inv-productos-detail", kwargs={"uuid": producto.uuid})
+        response = self.admin_client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.data)
+        self.assertFalse(Producto.objects.filter(uuid=producto.uuid).exists())
+
+    def test_visor_cannot_delete_producto(self):
+        producto = Producto.objects.create(
+            empresa=self.empresa, codigo="PRD-DEL-VISOR", nombre="Protegido", activo=False,
+        )
+        url = reverse("inv-productos-detail", kwargs={"uuid": producto.uuid})
+        response = self.visor_client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Producto.objects.filter(uuid=producto.uuid).exists())
+
+
+# ==============================================================================
+# TEST SUITE 6: Servicio CRUD completo (gap real, FASE 49/50)
+# ==============================================================================
+class TestServicioCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
+    """Cero tests de CRUD via API existian para Servicio antes de esta mision."""
+
+    def setUp(self):
+        super().setUp()
+        self.empresa = Empresa.objects.create(
+            razon_social="Empresa Test Servicio CRUD", nit="900123461",
+            direccion="Calle Test 3", telefono="3333333", singleton_key=1,
+        )
+        self.admin_user = self._create_user_in_public(
+            username="admin_svccrud@test.com", email="admin_svccrud@test.com"
+        )
+        self._create_tenant_profile(self.admin_user, self.empresa, "ADMIN")
+
+        public_schema = get_public_schema_name()
+        with schema_context(public_schema):
+            from apps.public.tenants.models import TenantMembership
+
+            TenantMembership.objects.create(
+                client=self.tenant, user=self.admin_user, rol="ADMIN", is_active=True
+            )
+
+        domain = self.domain.domain
+        self.admin_client = self._make_client_for(self.admin_user, domain)
+
+    def test_admin_can_create_servicio(self):
+        url = reverse("inv-servicios-list")
+        response = self.admin_client.post(
+            url, {"codigo": "SVC-CRUD-1", "nombre": "Servicio CRUD Test", "precio_venta": "200.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+    def test_admin_can_update_servicio(self):
+        from apps.tenant.inventario.models import Servicio
+
+        servicio = Servicio.objects.create(empresa=self.empresa, codigo="SVC-UPD-1", nombre="Original")
+        url = reverse("inv-servicios-detail", kwargs={"uuid": servicio.uuid})
+        response = self.admin_client.patch(url, {"nombre": "Actualizado"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+    def test_eliminar_servicio_activo_es_rechazado(self):
+        from apps.tenant.inventario.models import Servicio
+
+        servicio = Servicio.objects.create(
+            empresa=self.empresa, codigo="SVC-DEL-ACTIVO", nombre="No Borrable", activo=True,
+        )
+        url = reverse("inv-servicios-detail", kwargs={"uuid": servicio.uuid})
+        response = self.admin_client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(Servicio.objects.filter(uuid=servicio.uuid).exists())
+
+    def test_eliminar_servicio_inactivo_es_permitido(self):
+        from apps.tenant.inventario.models import Servicio
+
+        servicio = Servicio.objects.create(
+            empresa=self.empresa, codigo="SVC-DEL-INACTIVO", nombre="Borrable", activo=False,
+        )
+        url = reverse("inv-servicios-detail", kwargs={"uuid": servicio.uuid})
+        response = self.admin_client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.data)
+        self.assertFalse(Servicio.objects.filter(uuid=servicio.uuid).exists())
+
+
+# ==============================================================================
+# TEST SUITE 7: ActivoFijo DELETE guard (hallazgo real corregido, FASE 6)
+# ==============================================================================
+class TestActivoFijoDestroyGuard(InventarioPermissionsMixin, SintelTenantTestCase):
+    """
+    Antes de esta mision, ActivoFijoServiceMixin.service_activo_destroy()
+    borraba incondicionalmente (sin el guard "inactivar antes de borrar" que
+    ya tenian Producto/Servicio) -- asimetria real documentada en
+    docs/inventario/INVENTARIO_BASELINE.md y corregida en
+    apps/tenant/inventario/services/api_mixins.py.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.empresa = Empresa.objects.create(
+            razon_social="Empresa Test Activo Destroy", nit="900123462",
+            direccion="Calle Test 4", telefono="4444444", singleton_key=1,
+        )
+        self.admin_user = self._create_user_in_public(
+            username="admin_actdestroy@test.com", email="admin_actdestroy@test.com"
+        )
+        self._create_tenant_profile(self.admin_user, self.empresa, "ADMIN")
+
+        public_schema = get_public_schema_name()
+        with schema_context(public_schema):
+            from apps.public.tenants.models import TenantMembership
+
+            TenantMembership.objects.create(
+                client=self.tenant, user=self.admin_user, rol="ADMIN", is_active=True
+            )
+
+        domain = self.domain.domain
+        self.admin_client = self._make_client_for(self.admin_user, domain)
+
+    def test_eliminar_activo_en_uso_es_rechazado(self):
+        activo = ActivoFijo.objects.create(
+            empresa=self.empresa, codigo="ACT-DEL-USO", nombre="En uso",
+            costo_adquisicion=Decimal("1000.00"), estado=ActivoFijo.Estado.ACTIVO,
+        )
+        url = reverse("inv-activos-detail", kwargs={"uuid": activo.uuid})
+        response = self.admin_client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(ActivoFijo.objects.filter(uuid=activo.uuid).exists())
+
+    def test_eliminar_activo_en_mantenimiento_es_rechazado(self):
+        activo = ActivoFijo.objects.create(
+            empresa=self.empresa, codigo="ACT-DEL-MANT", nombre="Mantenimiento",
+            costo_adquisicion=Decimal("1000.00"), estado=ActivoFijo.Estado.MANTENIMIENTO,
+        )
+        url = reverse("inv-activos-detail", kwargs={"uuid": activo.uuid})
+        response = self.admin_client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(ActivoFijo.objects.filter(uuid=activo.uuid).exists())
+
+    def test_eliminar_activo_de_baja_es_permitido(self):
+        activo = ActivoFijo.objects.create(
+            empresa=self.empresa, codigo="ACT-DEL-BAJA", nombre="De baja",
+            costo_adquisicion=Decimal("1000.00"), estado=ActivoFijo.Estado.BAJA,
+        )
+        url = reverse("inv-activos-detail", kwargs={"uuid": activo.uuid})
+        response = self.admin_client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.data)
+        self.assertFalse(ActivoFijo.objects.filter(uuid=activo.uuid).exists())
+
+    def test_eliminar_activo_vendido_es_permitido(self):
+        activo = ActivoFijo.objects.create(
+            empresa=self.empresa, codigo="ACT-DEL-VENDIDO", nombre="Vendido",
+            costo_adquisicion=Decimal("1000.00"), estado=ActivoFijo.Estado.VENDIDO,
+        )
+        url = reverse("inv-activos-detail", kwargs={"uuid": activo.uuid})
+        response = self.admin_client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT, response.data)
+        self.assertFalse(ActivoFijo.objects.filter(uuid=activo.uuid).exists())
+
+
+# ==============================================================================
+# TEST SUITE 8: HistorialServicio create + vincular_proyecto (gap real, FASE 49/50)
+# ==============================================================================
+class TestHistorialServicioCRUD(InventarioPermissionsMixin, SintelTenantTestCase):
+    """
+    Cero tests existian para HistorialServicioViewSet (ni create ni
+    vincular_proyecto) antes de esta mision. vincular_proyecto tambien
+    ganó una validacion DSV nueva (el proyecto_uuid debe existir y
+    pertenecer al tenant) -- antes se grababa sin verificar.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.empresa = Empresa.objects.create(
+            razon_social="Empresa Test Historial", nit="900123463",
+            direccion="Calle Test 5", telefono="5555555", singleton_key=1,
+        )
+        self.admin_user = self._create_user_in_public(
+            username="admin_hist@test.com", email="admin_hist@test.com"
+        )
+        self._create_tenant_profile(self.admin_user, self.empresa, "ADMIN")
+
+        public_schema = get_public_schema_name()
+        with schema_context(public_schema):
+            from apps.public.tenants.models import TenantMembership
+
+            TenantMembership.objects.create(
+                client=self.tenant, user=self.admin_user, rol="ADMIN", is_active=True
+            )
+
+        from apps.tenant.inventario.models import Servicio
+
+        self.servicio = Servicio.objects.create(
+            empresa=self.empresa, codigo="SVC-HIST", nombre="Servicio Historial",
+        )
+        domain = self.domain.domain
+        self.admin_client = self._make_client_for(self.admin_user, domain)
+
+    def test_admin_can_create_historial(self):
+        url = reverse("inv-historial-servicios-list")
+        response = self.admin_client.post(
+            url, {"servicio": str(self.servicio.uuid), "cantidad": "1", "valor_cobrado": "500.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+    def test_vincular_proyecto_real_del_tenant_funciona(self):
+        from apps.tenant.inventario.models import HistorialServicio
+        from apps.tenant.proyectos.models import Proyecto
+
+        historial = HistorialServicio.objects.create(empresa=self.empresa, servicio=self.servicio)
+        proyecto = Proyecto.objects.create(empresa=self.empresa, nombre="Proyecto Real")
+
+        url = reverse("inv-historial-servicios-vincular-proyecto", kwargs={"uuid": historial.uuid})
+        response = self.admin_client.post(
+            url, {"proyecto_uuid": str(proyecto.uuid), "proyecto_nombre": proyecto.nombre}, format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        historial.refresh_from_db()
+        self.assertEqual(historial.proyecto_uuid, proyecto.uuid)
+
+    def test_vincular_proyecto_inexistente_es_rechazado(self):
+        """DSV agregado en esta mision: antes se grababa cualquier UUID sin verificar."""
+        import uuid as uuid_mod
+
+        from apps.tenant.inventario.models import HistorialServicio
+
+        historial = HistorialServicio.objects.create(empresa=self.empresa, servicio=self.servicio)
+        url = reverse("inv-historial-servicios-vincular-proyecto", kwargs={"uuid": historial.uuid})
+        response = self.admin_client.post(
+            url, {"proyecto_uuid": str(uuid_mod.uuid4()), "proyecto_nombre": "Fantasma"}, format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        historial.refresh_from_db()
+        self.assertIsNone(historial.proyecto_uuid)

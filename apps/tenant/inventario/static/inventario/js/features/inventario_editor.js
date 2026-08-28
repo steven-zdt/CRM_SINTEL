@@ -238,8 +238,10 @@
             w.SintelFeedback.success('Movimiento registrado correctamente');
         }
 
-        // ⚠️ Disparar evento personalizado para refrescar tabla
-        d.dispatchEvent(new Event('inventario-updated'));
+        // Refrescar la grilla real de Productos (Fase 5-BIS, django-tables2+HTMX):
+        // #productos-panel escucha `producto-updated from:body` (list_productos.html).
+        // El evento `inventario-updated` en `document` no tiene ningun listener real.
+        d.body.dispatchEvent(new CustomEvent('producto-updated'));
     }
 
 

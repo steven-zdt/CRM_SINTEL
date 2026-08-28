@@ -60,8 +60,11 @@
                 try {
                     const res = await w.Sintel.Core.Http.request('DELETE', `${CORE_API_BASE}/${uuid}/`);
                     if (!res.ok) {
-                        const msg = res.data?.detail || res.data?.message || 'Error al eliminar la categoría';
-                        if (w.SintelFeedback?.error) w.SintelFeedback.error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+                        if (w.UIManager?.handleError) {
+                            w.UIManager.handleError(res, MOD);
+                        } else if (w.SintelFeedback?.error) {
+                            w.SintelFeedback.error('Error al eliminar la categoría');
+                        }
                         btnDelete.disabled = false;
                         btnDelete.innerHTML = originalHTML;
                         return;

@@ -482,10 +482,13 @@ class ActivoFijoViewSet(BaseViewSet, inv_services.ActivoFijoServiceMixin):
         ok, reason = self._check_enforced_mode(request)
         if not ok:
             return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
-        
+
         instance = self.get_object()
-        self.service_activo_destroy(instance)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        try:
+            self.service_activo_destroy(instance)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['get'], url_path="list-all")
     def list_all(self, request):
@@ -624,6 +627,17 @@ class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMix
         self.service_movimiento_perform_create(serializer, empresa)
 
     def partial_update(self, request, *args, **kwargs):
+        # BUG DE SEGURIDAD REAL (2026-08-27): este metodo sobreescribe
+        # BaseViewSet.update() (que si llama _check_enforced_mode antes de
+        # delegar a super().update()) sin volver a aplicar el guard -- un
+        # VISOR/OPERADOR podia editar cualquier movimiento de Kardex via
+        # PATCH. IsTenantAdminOrReadOnly.has_permission() confia en que el
+        # propio ViewSet aplique el enforcement porque detecta el metodo
+        # _check_enforced_mode (hasattr), asi que sin este chequeo aqui no
+        # habia NINGUNA verificacion de rol en este endpoint.
+        ok, reason = self._check_enforced_mode(request)
+        if not ok:
+            return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
         empresa = inv_services.get_empresa_singleton()
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=True)
@@ -636,6 +650,10 @@ class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMix
         return self.partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
+        # Mismo bug de seguridad que partial_update() arriba -- ver comentario.
+        ok, reason = self._check_enforced_mode(request)
+        if not ok:
+            return Response({"detail": reason}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
         empresa = inv_services.get_empresa_singleton()
         instance = self.get_object()
         self.service_movimiento_perform_destroy(instance, empresa)
@@ -683,6 +701,19 @@ class HistorialServicioViewSet(BaseViewSet, inv_services.HistorialServiceMixin):
             proyecto_uuid_val = uuid_mod.UUID(str(proyecto_uuid_str))
         except (ValueError, AttributeError):
             return Response({'detail': 'proyecto_uuid invalido.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # DSV: el proyecto_uuid es una soft-reference (sin FK), pero debe
+        # verificarse que pertenece a este tenant antes de guardarlo — mismo
+        # patron que ya aplica ProyectoViewSet.vincular_proyecto() del lado de
+        # Proyectos (apps/tenant/proyectos/api/viewsets.py). Sin esto se podia
+        # grabar un proyecto_uuid/proyecto_nombre arbitrario no verificado.
+        from apps.tenant.proyectos.services.selectors import qs_detail as proyecto_qs_detail
+        empresa = inv_services.get_empresa_singleton()
+        if proyecto_qs_detail(empresa.id, proyecto_uuid_val) is None:
+            return Response(
+                {'detail': 'El proyecto especificado no existe o no pertenece a esta empresa.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         instance.proyecto_uuid = proyecto_uuid_val
         instance.proyecto_nombre = proyecto_nombre or ''

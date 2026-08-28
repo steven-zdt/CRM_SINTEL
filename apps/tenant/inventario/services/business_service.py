@@ -266,6 +266,9 @@ class KardexService:
         select_for_update() en recalcular_stock_producto previene carreras concurrentes.
         Solo actua sobre MovimientoInventario con producto_id (no Activos).
         """
+        if movimiento.empresa_id != empresa_id:
+            raise ValidationError("El movimiento no pertenece a esta empresa.")
+
         recalcular = False
 
         if nueva_cantidad is not None:
@@ -307,6 +310,9 @@ class KardexService:
         Elimina un movimiento y recalcula stock atomicamente.
         El recalculo ejecuta select_for_update() sobre el Producto afectado.
         """
+        if movimiento.empresa_id != empresa_id:
+            raise ValidationError("El movimiento no pertenece a esta empresa.")
+
         producto_id = movimiento.producto_id
         movimiento.delete()
         if producto_id:

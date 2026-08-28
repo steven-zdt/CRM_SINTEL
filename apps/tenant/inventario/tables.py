@@ -62,9 +62,9 @@ class CategoriaItemTable(tables.Table):
     def render_acciones(self, record):
         return format_html(
             '<div class="btn-group btn-group-sm" role="group">'
-            '<button type="button" class="btn btn-outline-primary btn-edit-categoria" data-uuid="{0}" title="Editar">'
+            '<button type="button" class="btn btn-outline-primary btn-edit-categoria" data-uuid="{0}" title="Editar" aria-label="Editar categoría">'
             '<i class="bi bi-pencil"></i></button>'
-            '<button type="button" class="btn btn-outline-danger btn-delete-categoria" data-uuid="{0}" title="Eliminar">'
+            '<button type="button" class="btn btn-outline-danger btn-delete-categoria" data-uuid="{0}" title="Eliminar" aria-label="Eliminar categoría">'
             '<i class="bi bi-trash"></i></button>'
             "</div>",
             record.uuid,
@@ -128,11 +128,11 @@ class ProductoTable(tables.Table):
     def render_acciones(self, record):
         return format_html(
             '<div class="btn-group btn-group-sm" role="group">'
-            '<button type="button" class="btn btn-outline-primary btn-edit-producto" data-uuid="{0}" title="Editar">'
+            '<button type="button" class="btn btn-outline-primary btn-edit-producto" data-uuid="{0}" title="Editar" aria-label="Editar producto">'
             '<i class="bi bi-pencil"></i></button>'
-            '<button type="button" class="btn btn-outline-info btn-ver-kardex" data-uuid="{0}" title="Kardex">'
+            '<button type="button" class="btn btn-outline-info btn-ver-kardex" data-uuid="{0}" title="Kardex" aria-label="Ver kardex del producto">'
             '<i class="bi bi-list-ul"></i></button>'
-            '<button type="button" class="btn btn-outline-danger btn-delete-producto" data-uuid="{0}" title="Eliminar">'
+            '<button type="button" class="btn btn-outline-danger btn-delete-producto" data-uuid="{0}" title="Eliminar" aria-label="Eliminar producto">'
             '<i class="bi bi-trash"></i></button>'
             "</div>",
             record.uuid,

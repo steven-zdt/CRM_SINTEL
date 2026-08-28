@@ -46,16 +46,5 @@ from .ingesta_service import (
     materializar_carga_masiva_productos,
 )
 
-from .crud_service import (
-    crear_producto,
-    actualizar_producto,
-    crear_servicio,
-    actualizar_servicio,
-    crear_activo,
-    actualizar_activo,
-    crear_movimiento_raw,
-)
-
 from . import selectors as inv_selectors
 from . import business_service as inv_business
-from . import crud_service as inv_crud

@@ -31,7 +31,7 @@
 
     let categorias = [];
     try {
-      const api = w.Sintel.Inventario.Api;
+      const api = w.Sintel.Inventario.API;
       let res;
       if (api && api.categorias && typeof api.categorias.list === 'function') {
         res = await api.categorias.list({ page_size: 200 });

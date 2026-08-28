@@ -25,7 +25,8 @@
     const FEEDBACK_ID = '#form-activo-feedback';
     const OFFCANVAS_ID = '#offcanvas-activos';
 
-
+    // Protección contra doble envío (mismo patrón que productos_editor.js/servicios_editor.js).
+    let _guardandoActivo = false;
 
     /**
      * Recolectar datos del formulario de activo
@@ -143,11 +144,24 @@
             e.stopPropagation();
         }
 
+        if (_guardandoActivo) {
+            console.warn(`${MOD} Guardado ya en proceso, ignorando solicitud duplicada`);
+            return;
+        }
+
         ocultarError();
 
         const payload = recolectarDatosFormulario();
         if (!payload) {
             return;
+        }
+
+        _guardandoActivo = true;
+        const btnGuardar = d.querySelector(FORM_ID + ' #btn-guardar-activo');
+        const btnOriginalHTML = btnGuardar ? btnGuardar.innerHTML : '';
+        if (btnGuardar) {
+            btnGuardar.disabled = true;
+            btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Guardando...';
         }
 
         const activoId = obtenerActivoId();
@@ -158,6 +172,11 @@
             console.error(`${MOD} Sintel.Core.Http no está disponible`);
             if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
                 w.UIManager.notifyError({ status: 500, data: { detail: 'API no disponible' } }, MOD);
+            }
+            _guardandoActivo = false;
+            if (btnGuardar) {
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = btnOriginalHTML;
             }
             return;
         }
@@ -205,6 +224,12 @@
         } catch (error) {
             console.error(`${MOD} Error al guardar activo:`, error);
             mostrarError('Error inesperado al guardar el activo');
+        } finally {
+            _guardandoActivo = false;
+            if (btnGuardar) {
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = btnOriginalHTML;
+            }
         }
     }
 

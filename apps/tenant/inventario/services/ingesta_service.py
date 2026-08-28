@@ -82,14 +82,13 @@ def materializar_inventario_desde_dto(dto: dict) -> tuple:
                 if created and dto.get("stock_actual"):
                     stock_inicial = Decimal(str(dto.get("stock_actual", "0")))
                     if stock_inicial > 0:
-                        MovimientoInventario.objects.create(
-                            empresa=empresa,
-                            producto=producto,
+                        KardexService.registrar_movimiento(
+                            empresa_id=empresa.id,
+                            producto_id=producto.id,
                             tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
                             cantidad=stock_inicial,
                             observaciones="Carga desde DTO",
                         )
-                        KardexService.recalcular_stock_producto(producto.id, empresa.id)
                 return {"id": producto.id, "codigo": producto.codigo, "nombre": producto.nombre, "created": created}, 201 if created else 200
 
             elif tipo == "servicio":
@@ -193,14 +192,13 @@ def materializar_carga_masiva_productos(empresa_id, lista_datos, usuario=None):
                 if created:
                     resumen["creados"] += 1
                     if stock_inicial > 0:
-                        MovimientoInventario.objects.create(
-                            empresa=empresa,
-                            producto=producto,
+                        KardexService.registrar_movimiento(
+                            empresa_id=empresa.id,
+                            producto_id=producto.id,
                             tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
                             cantidad=stock_inicial,
                             observaciones="Carga Masiva Inicial",
                         )
-                        KardexService.recalcular_stock_producto(producto.id, empresa.id)
                 else:
                     resumen["actualizados"] += 1
 

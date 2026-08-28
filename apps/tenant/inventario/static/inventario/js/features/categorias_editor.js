@@ -21,6 +21,9 @@
     const FEEDBACK_ID = '#form-categoria-feedback';
     const OFFCANVAS_ID = '#offcanvas-categorias';
 
+    // Protección contra doble envío (mismo patrón que productos_editor.js/servicios_editor.js).
+    let _guardandoCategoria = false;
+
     w.Sintel = w.Sintel || {};
     w.Sintel.Inventario = w.Sintel.Inventario || {};
     w.Sintel.Inventario.Categorias = w.Sintel.Inventario.Categorias || {};
@@ -116,11 +119,24 @@
             e.stopPropagation();
         }
 
+        if (_guardandoCategoria) {
+            console.warn(`${MOD} Guardado ya en proceso, ignorando solicitud duplicada`);
+            return;
+        }
+
         ocultarError();
 
         const payload = recolectarDatosFormulario();
         if (!payload) {
             return;
+        }
+
+        _guardandoCategoria = true;
+        const btnGuardar = d.querySelector(FORM_ID + ' #btn-guardar-categoria');
+        const btnOriginalHTML = btnGuardar ? btnGuardar.innerHTML : '';
+        if (btnGuardar) {
+            btnGuardar.disabled = true;
+            btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Guardando...';
         }
 
         const categoriaId = obtenerCategoriaId();
@@ -131,6 +147,11 @@
             console.error(`${MOD} Sintel.Core.Http no está disponible`);
             if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
                 w.UIManager.notifyError({ status: 500, data: { detail: 'API no disponible' } }, MOD);
+            }
+            _guardandoCategoria = false;
+            if (btnGuardar) {
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = btnOriginalHTML;
             }
             return;
         }
@@ -185,6 +206,12 @@
         } catch (error) {
             console.error(`${MOD} Error al guardar categoría:`, error);
             mostrarError('Error inesperado al guardar la categoría');
+        } finally {
+            _guardandoCategoria = false;
+            if (btnGuardar) {
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = btnOriginalHTML;
+            }
         }
     }
 
