@@ -60,6 +60,23 @@ violaría la regla de capa propietaria si se hace sin que Contabilidad lo
 exponga como un servicio explícito para este trigger). Documentado como
 deuda pendiente, no como parte de este hallazgo P0.
 
+## Alineación normativa (verificada contra fuente oficial, no contra documentación del proyecto)
+
+Per §4 del programa de remediación P0, se registra la base normativa que
+justifica NO permitir hard-delete de facturas con impacto, y se marca
+explícitamente qué queda fuera de lo que este código puede certificar.
+
+| Norma | Artículo/sección | Vigencia | Fuente oficial | Regla implementada | Estado de verificación |
+|---|---|---|---|---|---|
+| Código de Comercio (Decreto 410 de 1971) | Art. 60 | Vigente, reforzado por Ley 962 de 2005 Art. 28 | [leyes.co/codigo_de_comercio/60.htm](https://leyes.co/codigo_de_comercio/60.htm) | Los libros y papeles contables deben conservarse mínimo **10 años** desde el cierre/último asiento — ninguna eliminación física de un documento con valor contable/probatorio puede ocurrir antes de ese plazo | **Verificado**: `eliminar_factura()` bloquea el `DELETE` físico para todo estado con impacto (todo salvo `BORRADOR`); no hay ningún mecanismo de purga automática por antigüedad en el código actual — el requisito de los 10 años no se ve amenazado porque el sistema simplemente no borra documentos con impacto, sin límite de tiempo |
+| Resolución DIAN 000165 de 2023 (Anexo Técnico de Factura Electrónica v1.9, vigente desde mayo 2024) | Íntegra — regula generación/transmisión/validación/expedición/recepción de la factura electrónica | Vigente al momento de esta auditoría, con modificaciones posteriores (ej. Resolución 0008 de 2024) no revisadas exhaustivamente aquí | [dian.gov.co — Resolución 000165](https://www.dian.gov.co/normatividad/Normatividad/Resoluci%C3%B3n%20000165%20de%2001-11-2023.pdf) | El CUFE, el XML firmado y el documento de origen se preservan íntegros al anular (no se regeneran ni se destruyen) | **PROFESSIONAL_REVIEW_REQUIRED** — este código preserva los artefactos técnicos (CUFE, XML, firma) pero **no certifica** que el proceso completo de generación/transmisión/validación cumpla con el Anexo Técnico vigente en su totalidad, ni con las modificaciones posteriores a la Resolución 000165 no revisadas en esta pasada. Ver también `documentacion/AUDITORIA_ONBOARDING_TENANTS_2026-08-30.md` y el EXTERNAL_DEPENDENCY ya documentado en `docs/remediation/REM-EXT-01.md` sobre transmisión real DIAN |
+| Ley 1314 de 2009 / Decreto 2420 de 2015 (marco normativo contable NIIF Colombia) | General | Vigente | — | La preservación del documento fiscal como soporte del registro contable es consistente con el principio de que todo asiento debe tener soporte documental verificable | **PROFESSIONAL_REVIEW_REQUIRED** — la correspondencia exacta entre este código y las NIIF aplicables (pyme vs. plenas según el tenant) no fue evaluada por un contador; el código no distingue el marco NIIF del tenant |
+
+**No se afirma "cumplimiento legal" por tener este código implementado** —
+per §4, esta tabla documenta correspondencia entre norma y comportamiento
+de código verificado, no una certificación de cumplimiento integral, que
+excede el alcance de una auditoría de código.
+
 ## Tests (DB-level, no solo HTTP)
 
 `apps/tenant/facturas/tests/test_remediation_p0_01_delete_guard.py` — 6

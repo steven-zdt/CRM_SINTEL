@@ -8,6 +8,18 @@ adicional pedido explícitamente: matrices de decisión documentadas,
 baseline de código, y — el único gap real admitido antes — una prueba
 de concurrencia REAL multi-conexión para P0-04.
 
+**Actualización (pasada de rigor normativo, 2026-08-30):** una nueva
+ejecución del programa de remediación (formato "PROGRAMA AUTÓNOMO DE
+REMEDIACIÓN P0") verificó código real desde cero (Fase 0,
+`P0_CURRENT_BASELINE.md`), clasificó los 4 hallazgos como
+**ALREADY_FIXED** (ningún código modificado en esta pasada), y agregó
+2 artefactos que el programa exige explícitamente y que no existían como
+piezas separadas: grounding normativo fiscal/contable con fuente oficial
+verificada (Código de Comercio Art. 60, Resolución DIAN 000165 de 2023,
+Estatuto Tributario Arts. 375-382) dentro de `P0_01_FACTURA_DELETE.md` y
+`P0_03_RETENCIONES.md`, y `P0_CROSS_APP_VALIDATION.md` como documento
+dedicado (antes era una sección de este mismo reporte).
+
 **Fecha:** 2026-08-30
 **Rama:** `feat/onboarding-cookie`
 
@@ -21,6 +33,9 @@ de concurrencia REAL multi-conexión para P0-04.
 | P0-04 | `TipoComprobante` sin `select_for_update()` | **VERIFIED** | **Gap cerrado**: prueba de concurrencia real (2 y 10 threads con conexiones de BD distintas) — ver `P0_04_NUMBERING.md` |
 
 ## FASE P0-05 — Revisión cross-app
+
+Ver `P0_CROSS_APP_VALIDATION.md` (documento dedicado, per §13 del
+programa) para el detalle eslabón-por-eslabón. Resumen:
 
 Auditado el flujo `Facturas → Contabilidad → Impuestos → Bancos →
 Inventario → Ventas` tras los 4 fixes:
@@ -99,15 +114,17 @@ de cada cambio, per instrucción explícita del plan):
 
 Creados/actualizados en esta pasada:
 
-- `docs/remediation/P0_BASELINE.md`
+- `docs/remediation/P0_BASELINE.md` (pasada anterior)
 - `docs/remediation/P0_01_FACTURA_DELETE_MATRIX.md`
-- `docs/remediation/P0_01_FACTURA_DELETE.md`
+- `docs/remediation/P0_01_FACTURA_DELETE.md` (+ grounding normativo, esta pasada)
 - `docs/remediation/P0_02_PERIOD_CLOSURE_MATRIX.md`
 - `docs/remediation/P0_02_PERIOD_CLOSURE.md`
-- `docs/remediation/P0_03_RETENCIONES.md`
+- `docs/remediation/P0_03_RETENCIONES.md` (+ grounding normativo, esta pasada)
 - `docs/remediation/P0_04_NUMBERING.md`
 - `docs/remediation/P0_FINAL_REPORT.md` (este documento)
 - `docs/remediation/P0_EXECUTION_STATUS.md`
+- `docs/remediation/P0_CURRENT_BASELINE.md` (**nuevo esta pasada** — Fase 0 del programa actual)
+- `docs/remediation/P0_CROSS_APP_VALIDATION.md` (**nuevo esta pasada** — antes era una sección de este reporte)
 
 Documentación previa reutilizada sin duplicar contenido:
 `docs/remediation/REM-P0-0{1,2,3,4}.md` (mismos hallazgos, pasada
@@ -130,6 +147,9 @@ test encontradas y corregidas durante esa validación).
 [x] governance PASS
 [x] tests dirigidos PASS
 [x] documentación actualizada
+[x] grounding normativo fiscal/contable con fuente oficial verificada (Código de Comercio Art. 60, Resolución DIAN 000165/2023, Estatuto Tributario Arts. 375-382) — sin afirmar cumplimiento legal integral, con PROFESSIONAL_REVIEW_REQUIRED donde corresponde
+[x] cross-app validation como documento dedicado (P0_CROSS_APP_VALIDATION.md)
+[x] DOCUMENTATION_DRIFT revisado — ninguno vigente en P0-01/03/04
 ```
 
 ## P0_RELEASE = VERIFIED
