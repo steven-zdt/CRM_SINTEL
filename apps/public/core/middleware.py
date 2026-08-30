@@ -264,18 +264,6 @@ class CSRFTrustedOriginMiddleware:
                     else:
                         request.META["HTTP_ORIGIN"] = origin_no_port
 
-        # If an access token was delivered via HttpOnly cookie (OTT flow),
-        # expose it to downstream authentication mechanisms by mapping it
-        # into the Authorization header if not already present.
-        try:
-            if 'HTTP_AUTHORIZATION' not in request.META:
-                access_tok = request.COOKIES.get('access_token')
-                if access_tok and isinstance(access_tok, str) and access_tok.count('.') >= 2:
-                    request.META['HTTP_AUTHORIZATION'] = f'Bearer {access_tok}'
-        except Exception:
-            # Fail-safe: do not interrupt request processing
-            pass
-
         return self.get_response(request)
 
 

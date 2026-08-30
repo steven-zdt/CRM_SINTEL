@@ -631,12 +631,14 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
         'apps.public.impuestos.api.ingesta.throttling.IngestaScopedThrottle',
+        'apps.public.tenants.throttling.OnboardingCreateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '500/day',   # 500 requests por día para usuarios anónimos (catálogos públicos)
         'user': '2000/day',  # 2000 requests por día para usuarios autenticados
         'impuestos_ingesta': '20/hour',  # 20 requests por hora para ingesta
         'impuestos_search': '100/minute',  # 100 requests por minuto para búsqueda
+        'tenant_onboarding_create': '10/hour',  # Cada request exitoso crea un schema PostgreSQL real
     },
     
     # Versionado de APIs
