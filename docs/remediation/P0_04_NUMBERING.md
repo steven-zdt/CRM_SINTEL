@@ -75,32 +75,57 @@ huecos, `consecutivo_actual` final = 11 (1 inicial + 10), sin
 excepciones ni deadlock. `select_for_update()` serializó correctamente
 las 10 transacciones concurrentes contra la misma fila.
 
-**Hallazgo operativo (no afecta la corrección del fix, documentado por
-transparencia — regla de "documentar honestamente lo que se hizo y lo
-que quedó fuera")**: pytest reportó *"2 passed, 2 errors"* — los 2
-`ERROR` ocurren **después** de que cada test ya completó y afirmó
-correctamente sus asserts (`PASSED` visible en el log antes del error),
-durante el `flush` automático que `pytest-django` ejecuta entre tests
-`django_db(transaction=True)` para resetear la BD. El error real
-subyacente es
-`psycopg.errors.FeatureNotSupported: cannot truncate a table referenced
-in a foreign key constraint` — un conflicto entre el `TRUNCATE` genérico
-de `pytest-django`/Django y las relaciones FK del modelo, específico al
-patrón de esta prueba (threads reales con conexiones de BD
-independientes, cada uno abriendo y cerrando su propia conexión — un
-patrón nuevo en la suite, distinto del resto de tests `transaction=True`
-existentes que operan en una sola conexión). Se investigó comparando
-contra el único otro test `transaction=True` de la suite
-(`test_idempotence_v2614.py::TestHTTPStatusCodesProveedores`, que NO usa
-threads) — ese archivo corre limpio sin este error, confirmando que el
-origen es el patrón de multi-conexión/multi-thread, no una condición
-preexistente del harness. Dado que **la evidencia que realmente prueba
-el fix (unicidad, secuencia,
-ausencia de deadlock) ya quedó capturada antes de que el error de
-teardown ocurra**, y que profundizar más en esto es arqueología de
-infraestructura de testing (no una corrección del hallazgo P0-04 en sí),
-se documenta como deuda de infraestructura de tests, no como bloqueante
-de este hallazgo.
+**Hallazgo operativo -- RESUELTO (actualizado tras diagnóstico de causa
+raíz)**: la pasada anterior reportó *"2 passed, 2 errors"* y atribuyó los
+`ERROR` (durante el `flush` automático de `pytest-django` entre tests
+`django_db(transaction=True)`) al patrón de threads/conexiones reales de
+este test, por comparación con
+`test_idempotence_v2614.py::TestHTTPStatusCodesProveedores` (que no usa
+threads y "corría limpio"). Esa comparación fue insuficiente: se investigó
+más a fondo consultando `pg_constraint` directamente contra la BD de test
+y ejecutando `sql_flush()` de Django manualmente, y la causa raíz **no
+tiene relación con threads**:
+
+`TenantProfile.user` (`apps/tenant/perfil/models.py`) es un FK real de
+Postgres, intencional y documentado, de `<schema_tenant>.perfil_tenantprofile`
+hacia `public.accounts_user` -- una FK que cruza schemas. En cuanto
+`migrate_schemas` crea (con COMMIT real, requisito de `transaction=True`)
+un schema de tenant nuevo, esa tabla y esa FK quedan creadas junto con él,
+sin que el test necesite usar `TenantProfile` en absoluto. El `flush` que
+`pytest-django` corre después de cada test `transaction=True`
+(`allow_cascade=False`) intenta `TRUNCATE` de `public.accounts_user`, pero
+la introspección de `django-tenants` (`DatabaseSchemaIntrospection`) está
+acotada al schema `public` -- nunca puede ver ni incluir en el mismo
+`TRUNCATE` la tabla referenciante que vive en el schema del tenant.
+Postgres rechaza correctamente ese `TRUNCATE` parcial con
+`FeatureNotSupported: cannot truncate a table referenced in a foreign key
+constraint`. Esto ocurre para **cualquier** test `transaction=True` cuyo
+schema de tenant ya tenga `perfil_tenantprofile` migrado -- el archivo de
+referencia sin threads no es inmune al problema por estructura, solo no
+se había verificado en aislamiento con el mismo rigor.
+
+**Corrección aplicada**: se agregó un fixture `autouse=True` en
+`test_remediation_p0_04_concurrencia_real.py`
+(`_drop_cross_schema_fk_before_flush`) que, tras cada test y antes de que
+corra el `flush` automático de `pytest-django` (ordenado explícitamente
+como dependencia de `db`, para que su teardown se ejecute primero por
+LIFO), suelta cualquier FK del schema del tenant hacia `public` --
+verificado con `pg_constraint` -- ya que este test nunca usa
+`TenantProfile` y el schema es desechable. Confirmado localmente:
+`test_remediation_p0_04_concurrencia_real.py` corre "2 passed" sin
+errores de teardown.
+
+**Nota operativa -- `DATABASE_HOST` local en Windows**: durante el
+diagnóstico se reprodujo, de forma separada al problema del `flush`, un
+cuelgue real de ~130s en las conexiones nuevas que abre cada thread
+cuando `DATABASE_HOST=localhost` (valor por defecto de `.env` en este
+checkout). Con `DATABASE_HOST=127.0.0.1` el mismo test corre en <10s sin
+cuelgues -- consistente con que la evidencia original de esta misión ya
+se había capturado explícitamente con `DATABASE_HOST=127.0.0.1` (ver
+sección "Evidencia" arriba). No es un bug de la corrección ni del test:
+es resolución de `localhost` lenta en este entorno Windows para
+conexiones nuevas por thread. Para correr este archivo localmente fuera
+de Docker, usar `DATABASE_HOST=127.0.0.1`.
 
 ## Riesgos / deuda pendiente
 
@@ -112,15 +137,14 @@ fila de PostgreSQL, no a nivel de proceso Python). Esto cubre el
 escenario real de la aplicación: múltiples requests HTTP concurrentes,
 cada uno con su propia conexión de BD del pool.
 
-**Deuda de infraestructura de tests (no de producto)**: el patrón
-"threads reales + conexiones de BD independientes" bajo
-`pytest.mark.django_db(transaction=True)` dispara un `FeatureNotSupported`
-de Postgres durante el `flush` automático que corre `pytest-django`
-entre tests (ver evidencia arriba) — no reproducido por ningún otro test
-`transaction=True` existente en la suite porque ninguno usa threads
-reales. No bloquea el resultado de este hallazgo (la evidencia de
-corrección ya se capturó antes del teardown), pero sí es la razón por la
-que este patrón de test no debería reutilizarse tal cual para otros
-hallazgos de concurrencia sin antes resolver esto — candidato a una
-tarea de infraestructura de testing dedicada, fuera del alcance de un
-hallazgo P0 de producto.
+**Deuda de infraestructura de tests (resuelta para este archivo, pendiente
+en general)**: cualquier test `pytest.mark.django_db(transaction=True)`
+que haga que `migrate_schemas` cree un schema de tenant real (COMMIT, no
+rollback) con `perfil_tenantprofile` migrado disparará el mismo
+`FeatureNotSupported` en su propio `flush` de teardown, tenga threads o
+no. El fixture agregado aquí resuelve el caso puntual de este archivo;
+otros tests `transaction=True` que creen tenants nuevos (y no ya lo
+resuelvan de otra forma) podrían necesitar el mismo patrón. Candidato a
+una solución de infraestructura de testing más general (p. ej. usar
+`django_tenants.test.runner.TenantTestRunner` o un fixture compartido en
+`conftest.py`), fuera del alcance de este hallazgo P0 de producto.

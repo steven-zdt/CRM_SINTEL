@@ -21,6 +21,7 @@ thread para no dejarla abierta tras el test.
 import threading
 
 import pytest
+from django.db import connection
 from django_tenants.utils import get_public_schema_name, schema_context
 
 from apps.public.tenants.models import Client as TenantModel
@@ -46,6 +47,43 @@ def tenant(django_db_setup, django_db_blocker):
             defaults={'tenant': tenant, 'is_primary': True},
         )
         return TenantModel.objects.only('id', 'schema_name').get(pk=tenant.pk)
+
+
+@pytest.fixture(autouse=True)
+def _drop_cross_schema_fk_before_flush(db, tenant):
+    """
+    Deuda de infraestructura de P0_04_NUMBERING.md, causa raiz real (no los
+    threads): `TipoComprobante`/`Empresa` viven solo en el schema del tenant,
+    pero `migrate_schemas` tambien crea ahi `perfil_tenantprofile`, que tiene
+    un FK real de Postgres (intencional, ver apps/tenant/perfil/models.py
+    TenantProfile.user) hacia `public.accounts_user` -- una FK cruzando
+    schemas. En cuanto ese schema de tenant queda COMMITEADO (requisito de
+    `transaction=True`), el `flush` automatico que pytest-django corre tras
+    cada test (`allow_cascade=False`) intenta truncar `public.accounts_user`
+    sin poder incluir esa tabla referenciante de otro schema en el mismo
+    TRUNCATE -- Postgres lo rechaza con FeatureNotSupported
+    ("cannot truncate a table referenced in a foreign key constraint"),
+    sin importar si hay threads involucrados (confirmado consultando
+    pg_constraint directamente contra la BD de test). Este test nunca usa
+    TenantProfile, asi que es seguro soltar esa FK en el schema desechable
+    de este tenant antes de que corra el flush.
+    """
+    yield
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT c.conrelid::regclass::text, c.conname
+            FROM pg_constraint c
+            JOIN pg_class rel ON rel.oid = c.confrelid
+            JOIN pg_namespace refns ON refns.oid = rel.relnamespace
+            WHERE c.contype = 'f'
+              AND c.connamespace = %s::regnamespace
+              AND refns.nspname = 'public'
+            """,
+            [tenant.schema_name],
+        )
+        for table_name, constraint_name in cursor.fetchall():
+            cursor.execute(f'ALTER TABLE {table_name} DROP CONSTRAINT "{constraint_name}"')
 
 
 def _get_or_create_empresa():
