@@ -41,3 +41,7 @@ temp_*.py
 
 # Configuracion local de asistentes/IDEs
 .claude/settings.local.json
+
+# Backups de base de datos -- pueden contener datos reales de tenants
+# (PII, facturas, etc.), nunca deben llegar a git.
+backups/

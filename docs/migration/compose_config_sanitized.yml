@@ -1,0 +1,324 @@
+name: crm_sintel
+services:
+  celery:
+    build:
+      context: C:\Users\steve\OneDrive\Documents\crm_sintel
+      dockerfile: Dockerfile
+    command:
+    - celery
+    - -A
+    - config
+    - worker
+    - -l
+    - info
+    - -Q
+    - high_priority,default
+    container_name: crm_sintel-celery-1
+    depends_on:
+      db:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    dns:
+    - 192.168.2.15
+    - 8.8.8.8
+    environment:
+      ACTIVATION_BASE_URL: <REDACTED>
+      ALLOWED_HOSTS: <REDACTED>
+      C_FORCE_ROOT: <REDACTED>
+      DATABASE_HOST: <REDACTED>
+      DATABASE_NAME: <REDACTED>
+      DATABASE_PASSWORD: <REDACTED>
+      DATABASE_PORT: <REDACTED>
+      DATABASE_USER: <REDACTED>
+      DEFAULT_FROM_EMAIL: <REDACTED>
+      DJANGO_DEBUG: <REDACTED>
+      DJANGO_SECRET_KEY: <REDACTED>
+      DJANGO_SETTINGS_MODULE: <REDACTED>
+      EMAIL_BACKEND: <REDACTED>
+      EMAIL_HOST: <REDACTED>
+      EMAIL_HOST_PASSWORD: <REDACTED>
+      EMAIL_HOST_USER: <REDACTED>
+      EMAIL_PORT: <REDACTED>
+      EMAIL_USE_SSL: <REDACTED>
+      EMAIL_USE_TLS: <REDACTED>
+      JWT_SECRET_KEY: <REDACTED>
+      NEO4J_PASSWORD: <REDACTED>
+      NEO4J_URI: <REDACTED>
+      NEO4J_USER: <REDACTED>
+      REDIS_URL: <REDACTED>
+      SERVICE_ROLE: <REDACTED>
+      SITE_PROTOCOL: <REDACTED>
+      TUNNEL_TOKEN: <REDACTED>
+    extra_hosts:
+    - home.sintel.net.co=192.168.2.200
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - celery -A config inspect ping -d celery@$$HOSTNAME || exit 1
+      timeout: 10s
+      interval: 30s
+      retries: 5
+      start_period: 30s
+    networks:
+      default: null
+    restart: unless-stopped
+    volumes:
+    - type: bind
+      source: C:\Users\steve\OneDrive\Documents\crm_sintel
+      target: /app
+      bind: {}
+  cloudflared:
+    command:
+    - tunnel
+    - --no-autoupdate
+    - run
+    container_name: crm_sintel-cloudflared-1
+    depends_on:
+      nginx:
+        condition: service_started
+        required: true
+    environment:
+      TUNNEL_TOKEN: <REDACTED>
+    image: cloudflare/cloudflared:2025.5.0
+    networks:
+      default: null
+    restart: unless-stopped
+  db:
+    container_name: crm_sintel-db-1
+    environment:
+      POSTGRES_DB: <REDACTED>
+      POSTGRES_PASSWORD: <REDACTED>
+      POSTGRES_USER: <REDACTED>
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - psql -U sintel -d sintel -c 'SELECT 1' -q 2>/dev/null
+      timeout: 3s
+      interval: 5s
+      retries: 10
+      start_period: 15s
+    image: postgres:16-alpine
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 5432
+      published: '5432'
+      protocol: tcp
+    restart: unless-stopped
+    volumes:
+    - type: volume
+      source: postgres_data
+      target: /var/lib/postgresql/data
+      volume: {}
+  neo4j:
+    container_name: crm_sintel-neo4j-1
+    environment:
+      NEO4J_AUTH: <REDACTED>
+      NEO4J_server_memory_heap_max__size: <REDACTED>
+      NEO4J_server_memory_pagecache_size: <REDACTED>
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -O /dev/null -q http://localhost:7474 || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 10
+      start_period: 30s
+    image: neo4j:5.24-community
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 7474
+      published: '7474'
+      protocol: tcp
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 7687
+      published: '7687'
+      protocol: tcp
+    restart: unless-stopped
+    volumes:
+    - type: volume
+      source: neo4j_data
+      target: /data
+      volume: {}
+  nginx:
+    build:
+      context: C:\Users\steve\OneDrive\Documents\crm_sintel\nginx
+      dockerfile: Dockerfile
+    container_name: crm_sintel-nginx-1
+    depends_on:
+      web:
+        condition: service_healthy
+        required: true
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://127.0.0.1:80/
+      timeout: 5s
+      interval: 10s
+      retries: 5
+      start_period: 15s
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      host_ip: 0.0.0.0
+      target: 80
+      published: '80'
+      protocol: tcp
+    - mode: ingress
+      host_ip: 0.0.0.0
+      target: 443
+      published: '443'
+      protocol: tcp
+    restart: unless-stopped
+    volumes:
+    - type: volume
+      source: nginx_certs
+      target: /etc/nginx/certs
+      volume: {}
+    - type: bind
+      source: C:\Users\steve\OneDrive\Documents\crm_sintel\staticfiles
+      target: /app/staticfiles
+      read_only: true
+      bind: {}
+    - type: bind
+      source: C:\Users\steve\OneDrive\Documents\crm_sintel\media
+      target: /app/media
+      read_only: true
+      bind: {}
+  redis:
+    container_name: crm_sintel-redis-1
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      timeout: 3s
+      interval: 5s
+      retries: 10
+      start_period: 5s
+    image: redis:7.2-alpine
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 6379
+      published: '6379'
+      protocol: tcp
+    restart: unless-stopped
+  web:
+    build:
+      context: C:\Users\steve\OneDrive\Documents\crm_sintel
+      dockerfile: Dockerfile
+    command:
+    - python
+    - manage.py
+    - runserver
+    - 0.0.0.0:8000
+    container_name: crm_sintel-web-1
+    depends_on:
+      db:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    dns:
+    - 192.168.2.15
+    - 8.8.8.8
+    environment:
+      ACTIVATION_BASE_URL: <REDACTED>
+      ALLOWED_HOSTS: <REDACTED>
+      DATABASE_HOST: <REDACTED>
+      DATABASE_NAME: <REDACTED>
+      DATABASE_PASSWORD: <REDACTED>
+      DATABASE_PORT: <REDACTED>
+      DATABASE_USER: <REDACTED>
+      DEFAULT_FROM_EMAIL: <REDACTED>
+      DJANGO_DEBUG: <REDACTED>
+      DJANGO_SECRET_KEY: <REDACTED>
+      DJANGO_SETTINGS_MODULE: <REDACTED>
+      EMAIL_BACKEND: <REDACTED>
+      EMAIL_HOST: <REDACTED>
+      EMAIL_HOST_PASSWORD: <REDACTED>
+      EMAIL_HOST_USER: <REDACTED>
+      EMAIL_PORT: <REDACTED>
+      EMAIL_USE_SSL: <REDACTED>
+      EMAIL_USE_TLS: <REDACTED>
+      JWT_SECRET_KEY: <REDACTED>
+      NEO4J_PASSWORD: <REDACTED>
+      NEO4J_URI: <REDACTED>
+      NEO4J_USER: <REDACTED>
+      REDIS_URL: <REDACTED>
+      SERVICE_ROLE: <REDACTED>
+      SITE_PROTOCOL: <REDACTED>
+      TUNNEL_TOKEN: <REDACTED>
+    extra_hosts:
+    - home.sintel.net.co=192.168.2.200
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:8000/health
+      timeout: 5s
+      interval: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      default: null
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 8000
+      published: '8000'
+      protocol: tcp
+    restart: unless-stopped
+    volumes:
+    - type: bind
+      source: C:\Users\steve\OneDrive\Documents\crm_sintel
+      target: /app
+      bind: {}
+networks:
+  default:
+    name: crm_sintel_default
+volumes:
+  neo4j_data:
+    name: crm_sintel_neo4j_data
+    driver: local
+  nginx_certs:
+    name: crm_sintel_nginx_certs
+    driver: local
+  postgres_data:
+    name: crm_sintel_postgres_data
+    driver: local
+x-app-base:
+  build:
+    context: .
+    dockerfile: Dockerfile
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  dns:
+  - 192.168.2.15
+  - 8.8.8.8
+  env_file:
+  - .env
+  volumes:
+  - .:/app
