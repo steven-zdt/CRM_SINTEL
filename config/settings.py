@@ -957,6 +957,22 @@ FEATURE_DOCUMENT_PIPELINE = os.getenv("FEATURE_DOCUMENT_PIPELINE", "true").lower
 FEATURE_UPLOAD_DOCUMENT_ENDPOINT = os.getenv("FEATURE_UPLOAD_DOCUMENT_ENDPOINT", "false").lower() == "true"
 
 # ============================================================================
+# AI Engine feature flags (docs/ai/AI_ENGINE_ARCHITECTURE.md, Fase 63)
+# ============================================================================
+# WARNING: SEGURIDAD: server-side unicamente -- nunca controlables desde el
+# request/cliente (apps/services/ai/engine/ai_engine.py los lee via
+# django.conf.settings, nunca via request.data). Default False: el AI Engine
+# no se activa solo porque el codigo exista, requiere habilitacion explicita
+# por entorno. AI_WRITE_ENABLED en particular NUNCA debe activarse hasta que
+# exista un flujo de aprobacion real para tools WRITE (hoy no hay ninguna
+# tool WRITE registrada).
+AI_ENABLED = os.getenv("AI_ENABLED", "false").lower() == "true"
+AI_READ_ENABLED = os.getenv("AI_READ_ENABLED", "false").lower() == "true"
+AI_VALIDATE_ENABLED = os.getenv("AI_VALIDATE_ENABLED", "false").lower() == "true"
+AI_SUGGEST_ENABLED = os.getenv("AI_SUGGEST_ENABLED", "false").lower() == "true"
+AI_WRITE_ENABLED = os.getenv("AI_WRITE_ENABLED", "false").lower() == "true"
+
+# ============================================================================
 # Logging Configuration
 # ============================================================================
 # WARNING: IMPORTANTE: Configuración de logging para diagnóstico de emails e invitaciones
