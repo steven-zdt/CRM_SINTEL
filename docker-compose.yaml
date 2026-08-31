@@ -85,7 +85,13 @@ services:
     <<: *app-base
     container_name: crm_sintel-web-1
     ports:
-      - "0.0.0.0:8000:8000"
+      # LAN_MULTI_TENANT (docs/network/): Django (runserver) NO debe ser
+      # alcanzable desde la LAN -- Nginx (0.0.0.0:80/443) es el unico punto
+      # de entrada documentado. Antes bindeaba 0.0.0.0:8000, exponiendo el
+      # dev server crudo a toda la red local sin pasar por Nginx/TenantMiddleware
+      # security headers. Restringido a loopback: sigue disponible para
+      # depuracion directa desde ESTA maquina (http://localhost:8000).
+      - "127.0.0.1:8000:8000"
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings
       - SERVICE_ROLE=web
