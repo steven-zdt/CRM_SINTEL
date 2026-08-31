@@ -1,7 +1,9 @@
 # PRODUCTION_RELEASE_GATE — Fase 65
 
 `PRODUCTION_READY = VERIFIED` solo si TODOS los ítems están en `[x]`.
-Estado real, corrida 2026-08-31T15:48:37Z (`python manage.py production_readiness`):
+Estado real, última corrida 2026-08-31T12:xx UTC (`python manage.py
+production_readiness`, ejecutado dentro del contenedor `web` tras cerrar
+`BAK-02`):
 
 ```
 [ ] Security            -- 1 BLOCKER activo (APP-02, SECRET_KEY insegura)
@@ -9,8 +11,8 @@ Estado real, corrida 2026-08-31T15:48:37Z (`python manage.py production_readines
 [x] Auth                -- login real, bloqueo real, reactivación real, verificados (misión de lifecycle)
 [x] Database            -- sin migraciones pendientes (DB-01)
 [x] Migrations          -- ídem
-[ ] Backups              -- comandos existen (BAK-01=PASS), pero SIN prueba de restauración (BAK-02=BLOCKER)
-[ ] Restore              -- BLOCKER (BAK-02)
+[x] Backups              -- comandos existen (BAK-01=PASS), drill real ejecutado y verificado (BAK-02=PASS)
+[x] Restore              -- PASS (BAK-02), RTO medido 16.86s sobre schema de prueba
 [~] Nginx               -- configurado en docker-compose (volumen nginx_certs), no verificable sin entorno real expuesto
 [ ] TLS                  -- NOT_APPLICABLE_LOCAL_DEV (INFRA-03) -- no hay certificado real que verificar en este entorno
 [ ] DNS                  -- NOT_APPLICABLE_LOCAL_DEV, mismo motivo
@@ -29,7 +31,7 @@ Estado real, corrida 2026-08-31T15:48:37Z (`python manage.py production_readines
 [x] Governance             -- manage.py check PASS, makemigrations --check PASS, git diff --check PASS
 [~] EKG                    -- tools.ekg existente y usado en sesiones previas; no se ejecutó un impact-check dedicado sobre el nuevo módulo production_readiness en esta pasada (ver nota abajo)
 [x] Smoke tests            -- definidos en PRODUCTION_CHECKLIST.md; ejecutados manualmente contra el entorno de desarrollo (health, login, CRUD) en misiones previas de esta sesión
-[ ] No critical blockers    -- FALSO: 2 blockers P0 reales activos (APP-02, BAK-02) más APP-01 (esperado en dev, real si se desplegara hoy)
+[ ] No critical blockers    -- FALSO: 2 blockers P0 reales activos (APP-01, APP-02) -- ambos configuración de .env del entorno destino, no bugs de código. BAK-02 ya cerrado.
 ```
 
 ## Nota EKG (Fase 53)
@@ -45,7 +47,8 @@ cierre de los blockers P0 restantes.
 
 ## PRODUCTION_READY = **NOT VERIFIED**
 
-2 blockers P0 reales y activos (`APP-02-secret-key`, `BAK-02-restore-tested`)
-más 1 esperado-pero-real-si-se-desplegara-hoy (`APP-01-debug`). Ver
+2 blockers P0 reales y activos (`APP-01-debug`, `APP-02-secret-key`) --
+ambos configuración de `.env` del entorno de destino, no bugs de código.
+`BAK-02-restore-tested` cerrado con evidencia real (2026-08-31). Ver
 `docs/production/PRODUCTION_READINESS_FINAL.md` para el veredicto
-completo y las 3 acciones concretas que cierran el gate.
+completo.

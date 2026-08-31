@@ -2,7 +2,10 @@
 
 **Versión evaluada:** rama `feat/onboarding-cookie`, commit base `8377edc`
 (este módulo se commitea sobre ese estado).
-**Fecha de la corrida:** 2026-08-31T15:48:37Z
+**Fecha de la corrida inicial:** 2026-08-31T15:48:37Z. **Actualizada**
+tras cerrar `BAK-02` (drill de restore real) y agregar `BAK-04`
+(check de version pg_dump/pg_restore), corrida dentro del contenedor
+`web` el mismo día.
 **Herramienta:** `python manage.py production_readiness` (nueva,
 implementada en esta misión — `apps/public/core/production_readiness/`)
 
@@ -16,7 +19,7 @@ corregirse (a diferencia de DIAN/DSPNE, que sí son
 `EXTERNAL_DEPENDENCY` correctamente clasificados y no cuentan como la
 razón del `NOT_READY`).
 
-## Los 3 blockers reales, en orden de esfuerzo para cerrarlos
+## Los 2 blockers reales restantes (ambos triviales, config de entorno)
 
 1. **`APP-02-secret-key` (trivial — minutos):** generar
    `DJANGO_SECRET_KEY` real y definirla en el `.env` del entorno de
@@ -27,11 +30,23 @@ razón del `NOT_READY`).
 2. **`APP-01-debug` (trivial — minutos):** `DEBUG=False` en el `.env`
    del entorno de destino. Mismo patrón — no es un bug de código, es
    configuración de despliegue pendiente.
-3. **`BAK-02-restore-tested` (real — requiere una ventana dedicada):**
-   ejecutar el drill de `BACKUP_RESTORE_RUNBOOK.md` contra un tenant de
-   prueba real y documentar el resultado con evidencia (RPO/RTO
-   medidos). Es el único de los 3 que requiere trabajo real más allá de
-   configuración.
+
+## `BAK-02-restore-tested` — CERRADO (2026-08-31)
+
+Drill end-to-end ejecutado y verificado (backup real → dato corrompido
+deliberadamente → restore → verificación de datos e integridad, RTO
+medido). Ver `docs/production/BACKUP_RESTORE_RUNBOOK.md` para la
+evidencia completa.
+
+**Hallazgo real encontrado y corregido durante el drill:** el cliente
+`pg_restore` de la imagen `web` (v17, Debian trixie sin versión fijada)
+era incompatible con el servidor `postgres:16-alpine` — cualquier
+restauración real habría fallado con
+`unrecognized configuration parameter "transaction_timeout"`. Corregido
+fijando `postgresql-client-16` en el `Dockerfile` (repo oficial PGDG).
+Se agregó `BAK-04-pg-client-server-version-match` al Production Check
+Registry para detectar esta clase de regresión automáticamente en el
+futuro, sin depender de que alguien vuelva a correr el drill manual.
 
 ## Dependencias externas (correctamente BLOCKED, no fingidas)
 
@@ -46,7 +61,7 @@ distinta y más específica.
 
 ## Checks ejecutados — resumen
 
-19 checks reales, 9 categorías (`APPLICATION`, `SECURITY`, `DATABASE`,
+20 checks reales, 9 categorías (`APPLICATION`, `SECURITY`, `DATABASE`,
 `TENANT`, `INFRA`, `BACKUP`, `OBSERVABILITY`, `DOCUMENTATION`,
 `FISCAL`). Detalle completo, reproducible en cualquier momento futuro
 (Fase 70 — proceso recurrente, no auditoría de una sola vez):
@@ -75,11 +90,14 @@ checklist ítem-por-ítem contra las 24 áreas del gate final del plan.
 - **`/health` operativo.**
 - **Mock de transporte DIAN deshabilitado por defecto**, no activable
   por el cliente.
+- **Restauración real de backup** — drill completo ejecutado (backup →
+  dato corrompido → restore → verificación), incluyendo un hallazgo real
+  de incompatibilidad de versión cliente/servidor encontrado y corregido
+  en el proceso (ver `BACKUP_RESTORE_RUNBOOK.md`).
 
 ## Lo que NO se verificó en esta pasada (honesto, no inferido)
 
 - TLS/DNS reales — no existe ambiente expuesto para verificar.
-- Restauración real de backup — comando existe, drill no ejecutado.
 - Carga/concurrencia real (Fase 27, 34-35).
 - Flujos críticos de negocio contra un ambiente de staging real (no
   existe staging desplegado — sí hay evidencia extensa contra el
@@ -95,13 +113,14 @@ checklist ítem-por-ítem contra las 24 áreas del gate final del plan.
 
 ## Recomendación
 
-Cerrar los 3 blockers `P0` (2 triviales de configuración, 1 que
-requiere un drill real de backup/restore) y volver a correr `manage.py
-production_readiness`. Con esos 3 en `PASS`, el estado pasaría a
-`READY_WITH_EXTERNAL_DEPENDENCIES` (por DIAN/DSPNE) — suficiente para un
-primer despliegue de SINTEL como ERP operativo sin transmisión
-electrónica real, nunca para declarar "facturación electrónica DIAN
-production ready" sin los insumos externos correspondientes.
+Cerrar los 2 blockers `P0` restantes (ambos triviales, config de `.env`
+del entorno de destino: `APP-01-debug`, `APP-02-secret-key`) y volver a
+correr `manage.py production_readiness`. Con esos 2 en `PASS`, el estado
+pasaría a `READY_WITH_EXTERNAL_DEPENDENCIES` (por DIAN/DSPNE) —
+suficiente para un primer despliegue de SINTEL como ERP operativo sin
+transmisión electrónica real, nunca para declarar "facturación
+electrónica DIAN production ready" sin los insumos externos
+correspondientes.
 
 ## Continuidad (Fase 70)
 

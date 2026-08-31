@@ -15,18 +15,34 @@ COPY requirements.txt /app/requirements.txt
 
 # ⚠️ OPTIMIZACIÓN: Un solo bloque RUN para instalar dependencias del sistema, pip install, purgar gcc y limpiar apt
 # Esto reduce el número de capas y el tamaño final de la imagen
+#
+# ⚠️ BAK-02 (docs/production/BACKUP_RESTORE_RUNBOOK.md): el repo default de
+# Debian trixie (base de python:3.12-slim) solo empaqueta postgresql-client
+# v17, pero docker-compose.yaml pin ea el servicio `db` a postgres:16-alpine.
+# pg_restore v17 antepone `SET transaction_timeout = 0;` (GUC introducido en
+# PG17) al restaurar, que un servidor v16 rechaza con "unrecognized
+# configuration parameter" -- CUALQUIER restauracion real fallaba en este
+# entorno antes de este fix (confirmado en vivo durante el drill de BAK-02).
+# Se instala postgresql-client-16 desde el repo oficial PGDG para que el
+# cliente coincida con la version del servidor.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         gcc \
         libpq-dev \
-        postgresql-client \
         netcat-openbsd \
         libffi-dev \
         libxml2-dev \
         libxslt1-dev \
-        curl && \
+        curl \
+        ca-certificates \
+        gnupg && \
+    install -d /usr/share/postgresql-common/pgdg && \
+    curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc && \
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends postgresql-client-16 && \
     pip install --no-cache-dir -r requirements.txt && \
-    apt-get purge -y gcc && \
+    apt-get purge -y gcc gnupg && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 

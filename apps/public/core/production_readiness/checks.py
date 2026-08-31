@@ -317,12 +317,34 @@ def check_backup_commands_exist():
 
 @register_check("BAK-02-restore-tested", "BACKUP", Severity.P0, "devops")
 def check_restore_tested():
-    return CheckStatus.BLOCKER, (
-        "No existe evidencia documentada de una prueba de restauracion end-to-end "
-        "ejecutada (backup -> restore -> verificacion de datos/schemas/integridad, "
-        "con RPO/RTO medidos). Tener el comando no equivale a haber demostrado que "
-        "funciona (Fase 17 del plan, explicito). Ver docs/production/BACKUP_RESTORE_RUNBOOK.md "
-        "para el procedimiento a ejecutar antes de cerrar este blocker."
+    """Evidencia real de un drill end-to-end (backup -> corromper dato ->
+    restore --clean -> verificar), no una re-ejecucion del drill completo
+    en cada corrida de este check (demasiado costoso para un check
+    rutinario) -- igual que TEN-01/E2E, se referencia evidencia real
+    fechada, con la fecha y el resultado explicitos en vez de un PASS
+    fijo sin sustento."""
+    ref = os.path.join(_REPO_ROOT, "docs", "production", "BACKUP_RESTORE_RUNBOOK.md")
+    if not os.path.exists(ref):
+        return CheckStatus.BLOCKER, "docs/production/BACKUP_RESTORE_RUNBOOK.md no existe."
+    try:
+        with open(ref, encoding="utf-8") as fh:
+            content = fh.read()
+    except OSError as exc:
+        return CheckStatus.WARN, f"No se pudo leer BACKUP_RESTORE_RUNBOOK.md: {exc}"
+    if "BAK-02-restore-tested` = **PASS**" not in content:
+        return CheckStatus.BLOCKER, (
+            "No existe evidencia documentada de una prueba de restauracion end-to-end "
+            "ejecutada (backup -> restore -> verificacion de datos/schemas/integridad, "
+            "con RPO/RTO medidos). Ver docs/production/BACKUP_RESTORE_RUNBOOK.md "
+            "para el procedimiento a ejecutar antes de cerrar este blocker."
+        )
+    return CheckStatus.PASS, (
+        "Drill end-to-end ejecutado y verificado 2026-08-31 (tenant QA desechable "
+        "bak_drill_20260831120616): backup -> dato corrompido -> restore --clean (RTO "
+        "16.86s, exit 0) -> dato revertido + Client/Domain/Membership/Empresa/"
+        "TenantProfile coherentes. Ver docs/production/BACKUP_RESTORE_RUNBOOK.md "
+        "para evidencia completa. Nota: es una corrida real puntual, no una suite "
+        "automatizada corriendo en CI -- re-verificar tras cambios al mecanismo."
     )
 
 
@@ -332,6 +354,53 @@ def check_backup_schedule():
         "Sin programacion automatica de backups (no hay celery beat ni cron configurado "
         "en docker-compose.yaml). Los comandos existen pero requieren ejecucion manual hoy."
     )
+
+
+@register_check("BAK-04-pg-client-server-version-match", "BACKUP", Severity.P0, "devops")
+def check_pg_client_server_version_match():
+    """Regresion especifica del hallazgo real de BAK-02: pg_restore mas
+    nuevo que el servidor Postgres antepone GUCs que el servidor rechaza
+    (ej. 'transaction_timeout', introducido en PG17), rompiendo CUALQUIER
+    restauracion real sin que ningun otro check lo detecte. Compara la
+    version major del cliente pg_dump/pg_restore instalado contra la
+    version major real del servidor (via Django connection), en vez de
+    asumir que coinciden."""
+    try:
+        result = subprocess.run(
+            ["pg_dump", "--version"], capture_output=True, text=True, timeout=10,
+        )
+    except FileNotFoundError:
+        return CheckStatus.WARN, (
+            "'pg_dump' no esta en PATH en este contexto de ejecucion -- este check debe "
+            "correrse desde donde vive el cliente real (contenedor 'web'), no desde el host "
+            "si el host no tiene postgresql-client instalado."
+        )
+    except Exception as exc:
+        return CheckStatus.WARN, f"No se pudo ejecutar 'pg_dump --version': {exc}"
+    match_client = re.search(r"(\d+)(?:\.\d+)*", result.stdout)
+    if not match_client:
+        return CheckStatus.WARN, f"No se pudo parsear la version de pg_dump: {result.stdout!r}"
+    client_major = int(match_client.group(1))
+    try:
+        from django.db import connection
+
+        with connection.cursor() as cur:
+            cur.execute("SHOW server_version")
+            server_version = cur.fetchone()[0]
+    except Exception as exc:
+        return CheckStatus.WARN, f"No se pudo consultar server_version real: {exc}"
+    match_server = re.search(r"(\d+)", server_version)
+    if not match_server:
+        return CheckStatus.WARN, f"No se pudo parsear server_version: {server_version!r}"
+    server_major = int(match_server.group(1))
+    if client_major != server_major:
+        return CheckStatus.BLOCKER, (
+            f"pg_dump/pg_restore cliente v{client_major} != servidor Postgres v{server_major}. "
+            "CUALQUIER restauracion real fallaria (GUCs de sesion incompatibles entre versiones "
+            "major). Fijar postgresql-client-{server_major} en el Dockerfile de la imagen que "
+            "ejecuta backup_tenant/restore_tenant. Ver docs/production/BACKUP_RESTORE_RUNBOOK.md."
+        )
+    return CheckStatus.PASS, f"pg_dump/pg_restore cliente v{client_major} coincide con servidor Postgres v{server_major}."
 
 
 # ---------------------------------------------------------------------------

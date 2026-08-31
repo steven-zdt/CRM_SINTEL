@@ -14,46 +14,98 @@ docker compose exec web python manage.py backup_all_tenants --output-dir /backup
 docker compose exec web python manage.py restore_tenant <schema_name> --input <archivo>
 ```
 
-## Estado real (Fase 16-17) — BLOCKER activo
+## Estado real (Fase 16-17) — `BAK-02-restore-tested` = **PASS**
 
-**`BAK-02-restore-tested` = BLOCKER** (confirmado por
-`manage.py production_readiness`). Los comandos existen y su código fue
-leído y confirmado coherente, pero **no hay evidencia documentada de
-una restauración end-to-end ejecutada y verificada** en esta sesión ni
-en el historial de `MEMORY.md` revisado.
+Drill end-to-end ejecutado y verificado el 2026-08-31 (ver evidencia
+completa abajo). Reemplaza el `BLOCKER` anterior, con evidencia real —
+no por inferencia.
 
-## Procedimiento de prueba de restauración (a ejecutar para cerrar el blocker)
+### Hallazgo critico encontrado y corregido durante el drill
+
+El PRIMER intento de restauración falló:
 
 ```
-1. backup_tenant de un tenant QA de prueba (ej. qa_verify_20260831090942,
-   ya existente de la misión de onboarding E2E — identificable, no
-   productivo)
-       ↓
-2. Modificar deliberadamente un dato conocido en ese tenant (ej. razon_social)
-       ↓
-3. restore_tenant desde el backup del paso 1 (a un schema DISTINTO para
-   no destruir el original mientras se verifica, o documentar que se
-   sobrescribe el mismo)
-       ↓
-4. Verificar: el dato modificado en el paso 2 vuelve al valor original
-   del backup
-       ↓
-5. Verificar: Client/Domain/TenantMembership/Empresa/TenantProfile
-   siguen coherentes tras la restauración
-       ↓
-6. Medir tiempo total (RTO) y punto de datos perdidos si el backup no
-   era el más reciente (RPO)
-       ↓
-7. Documentar el resultado aquí, con evidencia (timestamps, comandos
-   ejecutados, verificación de datos) — reemplaza este blocker por PASS
-   solo con esa evidencia, nunca por inferencia
+pg_restore: error: could not execute query: ERROR:  unrecognized configuration parameter "transaction_timeout"
+Command was: SET transaction_timeout = 0;
 ```
 
-**No se ejecutó este drill en esta pasada** — requiere una ventana
-dedicada (crear backup real, modificar datos, restaurar, verificar) que
-excede el alcance de "auditar y construir el marco de verificación" de
-esta misión. Queda como el blocker `BAK-02` explícito en
-`PRODUCTION_BLOCKERS.md`.
+Causa raíz: la imagen `web` (`FROM python:3.12-slim`, Debian 13
+"trixie") instalaba `postgresql-client` sin fijar versión, y el repo
+default de trixie solo empaqueta el cliente v17. El servicio `db` corre
+`postgres:16-alpine` (servidor v16). `pg_restore` v17 antepone
+`SET transaction_timeout = 0;` (GUC introducido en PG17) a cualquier
+restauración, y un servidor v16 lo rechaza. **Esto significa que
+CUALQUIER restauración real habría fallado en este entorno desde que la
+imagen se reconstruyó sobre Debian trixie** — exactamente la razón por
+la que nunca había evidencia de un restore exitoso.
+
+Fix aplicado (`Dockerfile`): se agregó el repositorio oficial PGDG
+(`apt.postgresql.org`, distribución `trixie-pgdg`) y se fijó
+`postgresql-client-16` explícitamente, para que el cliente coincida con
+la versión real del servidor. Imagen reconstruida
+(`docker compose build web`), contenedor recreado, verificado
+`pg_restore --version` → `16.15 (Debian 16.15-1.pgdg13+2)`.
+
+### Evidencia del drill (post-fix, tenant QA desechable `bak_drill_20260831120616`)
+
+```
+1. Tenant QA creado vía crear_tenant_con_owner() (desechable, no productivo,
+   eliminado al final del drill)
+2. Empresa.razon_social = "BAK Drill Test" (estado limpio conocido)
+3. backup_tenant bak_drill_20260831120616 --output-dir /tmp/bak_drill
+   -> bak_drill_20260831120616_20260831_121532.dump (1.23 MB) -- 8.4s
+4. Empresa.razon_social corrompido deliberadamente ->
+   "DATO CORRUPTO PARA PRUEBA DE RESTORE V3"
+5. restore_tenant <dump> --schema-name bak_drill_20260831120616 --clean
+   -> "OK: Restauración completada exitosamente" (exit 0, sin warnings)
+   -- RTO medido: 16.86s
+6. Verificado post-restore:
+   - Empresa.razon_social == "BAK Drill Test" (revertido correctamente)
+   - Client.is_active == True, Domain coincide, TenantMembership.count() == 1
+   - TenantProfile.count() == 1, owner User sigue existiendo
+7. Tenant QA eliminado (hard_delete_tenant) tras verificar -- limpieza,
+   no queda residuo en la base de datos
+```
+
+### Alcance real de `backup_tenant`/`restore_tenant` (documentado, no asumido)
+
+Ambos comandos operan **únicamente sobre el schema Postgres del tenant**
+(`--schema=<schema_name>` en `pg_dump`/`pg_restore`). `Client`, `Domain`
+y `TenantMembership` viven en el **schema `public`** y NO son
+respaldados ni restaurados por estos comandos — el backup del schema
+`public` (cuenta de usuarios, registro de tenants) requeriría un
+mecanismo separado, no existente hoy. Esto no invalida el `PASS` de
+`BAK-02` (el drill prueba exactamente lo que el comando promete: el
+schema del tenant), pero es una limitación real a tener en cuenta para
+un plan de DR completo — no se infla el alcance del blocker cerrado.
+
+### RTO/RPO medidos
+
+- **RTO** (tiempo de restauración de un tenant individual): ~17s para un
+  schema de ~1.2 MB recién migrado (sin datos operativos reales). No es
+  extrapolable linealmente a un tenant productivo con años de datos —
+  requiere una medición dedicada contra un volumen representativo antes
+  de comprometerse a un SLA de RTO real.
+- **RPO**: determinado por la frecuencia de `backup_tenant`/
+  `backup_all_tenants` programada — **no hay `celery beat` en ningún
+  entorno de este proyecto** (`INFRA-02`, ya documentado), por lo que hoy
+  no hay backups automáticos recurrentes; el RPO real es "desde el
+  último backup manual", indefinido hasta que se programe.
+
+### Procedimiento (referencia, ya ejecutado arriba)
+
+```
+1. backup_tenant de un tenant QA desechable
+2. Modificar deliberadamente un dato conocido
+3. restore_tenant --clean (mismo schema -- el comando no soporta
+   restaurar bajo un nombre de schema distinto al que quedó grabado en
+   el dump, confirmado leyendo restore_tenant.py: --schema-name solo
+   filtra/etiqueta, no renombra el destino)
+4. Verificar que el dato vuelve al valor del backup
+5. Verificar Client/Domain/TenantMembership/Empresa/TenantProfile
+6. Medir RTO/RPO
+7. Documentar con evidencia real (hecho arriba)
+```
 
 ## Retención, cifrado, ubicación (Fase 16) — sin definir, requiere decisión de negocio
 

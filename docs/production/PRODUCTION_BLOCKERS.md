@@ -1,8 +1,9 @@
 # PRODUCTION_BLOCKERS
 
 Generado a partir de una corrida real de `python manage.py
-production_readiness` (2026-08-31T15:48:37Z). Severidad per Fase 57:
-`P0` bloquea, `P1` bloquea normalmente, `P2` warning, `P3` mejora.
+production_readiness` (última corrida: 2026-08-31T12:xx UTC, dentro del
+contenedor `web`, tras cerrar `BAK-02`). Severidad per Fase 57: `P0`
+bloquea, `P1` bloquea normalmente, `P2` warning, `P3` mejora.
 
 ## P0 — bloquean el release
 
@@ -10,7 +11,18 @@ production_readiness` (2026-08-31T15:48:37Z). Severidad per Fase 57:
 |---|---|---|---|---|
 | `APP-01-debug` | APPLICATION | `settings.DEBUG=True` actualmente | Definir `DEBUG=False` en el `.env` del entorno de destino antes de desplegar (correcto y esperado que sea `True` en desarrollo local — este blocker es "no despliegues así", no "el código está mal") | DevOps/release |
 | `APP-02-secret-key` | APPLICATION | `SECRET_KEY` usa el fallback `'django-insecure-change-me-in-production'` — confirmado real, `DJANGO_SECRET_KEY` no está definida en `.env` | Generar una clave real (`get_random_secret_key()`) y definir `DJANGO_SECRET_KEY` en el entorno de destino. **No cambiar el `.env` de desarrollo local** — invalidaría sesiones/tokens activos sin necesidad real; esto es una acción específica del entorno de destino | DevOps/release |
-| `BAK-02-restore-tested` | BACKUP | Sin evidencia de una prueba de restauración end-to-end ejecutada | Ejecutar el drill descrito en `BACKUP_RESTORE_RUNBOOK.md` y documentar el resultado con evidencia | DevOps |
+
+## Cerrado — `BAK-02-restore-tested` = PASS (2026-08-31)
+
+Drill end-to-end ejecutado con evidencia real (backup → dato corrompido →
+restore → verificación). Durante el drill se encontró y corrigió un
+blocker real independiente: el cliente `pg_restore` de la imagen `web`
+(v17) era incompatible con el servidor `postgres:16-alpine`, por lo que
+**cualquier restauración real habría fallado silenciosamente** hasta
+este fix (`Dockerfile` ahora fija `postgresql-client-16` vía PGDG). Ver
+`BACKUP_RESTORE_RUNBOOK.md` para la evidencia completa. Se agregó
+`BAK-04-pg-client-server-version-match` como check recurrente para que
+esta regresión de versión se detecte automáticamente en el futuro.
 
 ## EXTERNAL_DEPENDENCY — no bloquean por sí solos, pero deben quedar clasificados explícitamente (nunca fingidos como resueltos)
 
@@ -48,4 +60,7 @@ tras corregir un falso positivo de la propia herramienta),
 `SEC-02` (CORS/CSRF acotados), `SEC-03` (mock de DIAN deshabilitado por
 defecto), `OBS-01` (`/health` responde 200), `TEN-01/02/03` (aislamiento
 cross-tenant, fix de escalación de privilegios, y enforcement de trial —
-los 3 verificados en vivo en misiones previas de esta sesión).
+los 3 verificados en vivo en misiones previas de esta sesión),
+`BAK-01` (comandos existen), `BAK-02` (drill real ejecutado y
+verificado), `BAK-04` (versión de cliente pg_dump/pg_restore coincide
+con el servidor).
