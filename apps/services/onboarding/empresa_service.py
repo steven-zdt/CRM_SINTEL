@@ -36,7 +36,7 @@ Uso:
         admin_user_id=1
     )
 """
-def _build_primary_domain(schema_name: str, dominio_fqdn: str | None = None) -> str:
+def build_primary_domain(schema_name: str, dominio_fqdn: str | None = None) -> str:
     """
     Construye el dominio primario FQDN para un tenant.
     
@@ -360,7 +360,7 @@ def crear_tenant_con_owner(
     # 4) Domain (dominio primario FQDN)
     # WARNING: CAMBIO v2.25: Autogeneración de dominio como <schema>.<TENANT_DOMAIN_BASE>
     # si dominio_fqdn viene vacío o inválido
-    primary_fqdn = _build_primary_domain(client.schema_name, dominio_fqdn)
+    primary_fqdn = build_primary_domain(client.schema_name, dominio_fqdn)
     
     try:
         domain, created = Domain.objects.get_or_create(

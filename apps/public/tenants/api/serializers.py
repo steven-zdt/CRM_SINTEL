@@ -9,6 +9,7 @@ from rest_framework import serializers
 from apps.public.tenants.models import Client, Domain, TenantMembership
 from apps.public.tenants.utils import normalize_domain, validate_fqdn
 from apps.public.tenants.validators import validate_schema_name
+from apps.services.onboarding.empresa_service import build_primary_domain
 
 
 class DomainSerializer(serializers.ModelSerializer):
@@ -105,7 +106,19 @@ class OnboardTenantWithOwnerSerializer(serializers.Serializer):
     admin_user_id = serializers.IntegerField(required=False, allow_null=True)
     owner_email = serializers.EmailField(required=False, allow_null=True)
     # WARNING: v2.29: owner_password ELIMINADO - NO se acepta password en onboarding
-    owner_is_staff = serializers.BooleanField(required=False, default=True)
+    # REM ONBOARDING-E2E-03 (docs/e2e/ONBOARDING_E2E_REPORT.md) -- CRITICO:
+    # este default era True, contradiciendo directamente el motor real
+    # (apps/services/onboarding/empresa_service.py::crear_tenant_con_owner,
+    # parametro owner_is_staff: bool = False -- "Owners de tenant no son
+    # staff del sistema"). El formulario de consola (/console/tenants/new/)
+    # no expone este campo, asi que TODO tenant creado por el flujo normal
+    # heredaba is_staff=True para su owner sin que el admin que lo creaba lo
+    # supiera -- verificado en vivo: con solo la contrasena establecida via
+    # el endpoint legitimo de soporte, el owner podia loguearse en el admin
+    # publico y listar TODOS los tenants del sistema (incluyendo clientes
+    # reales) via /console/tenants/ y /api/public/v1/tenants/. Alineado con
+    # el default correcto del motor.
+    owner_is_staff = serializers.BooleanField(required=False, default=False)
     owner_is_active = serializers.BooleanField(required=False, default=True)
     paid_until = serializers.DateField(required=False, allow_null=True)
     on_trial = serializers.BooleanField(required=False, default=True)
@@ -132,57 +145,6 @@ class OnboardTenantWithOwnerSerializer(serializers.Serializer):
 
         # Llamar al método padre para procesamiento normal
         return super().to_internal_value(data)
-
-    def validate(self, data):
-        """
-        Validación final: autogenerar dominio_fqdn si viene vacío o inválido.
-
-        WARNING: CAMBIO v2.25: Autogeneración de dominio FQDN como <schema>.<TENANT_DOMAIN_BASE>
-        WARNING: CAMBIO v2.29: Rechaza explícitamente campos de password
-        """
-        # WARNING: v2.29: Rechazar explícitamente campos de password
-        forbidden_fields = {"password", "password1", "password2", "owner_password"}
-        received_fields = set(map(str.lower, self.initial_data.keys()))
-        found_forbidden = forbidden_fields & received_fields
-
-        if found_forbidden:
-            raise serializers.ValidationError(
-                {
-                    "detail": f"No se permite establecer contraseña en el onboarding. "
-                    f"Campos rechazados: {', '.join(found_forbidden)}. "
-                    f"El owner debe activar su cuenta en /activate?token=... para establecer su contraseña."
-                }
-            )
-
-        # Validación básica (admin_user_id o owner_email)
-        admin_user_id = data.get("admin_user_id")
-        owner_email = data.get("owner_email")
-
-        if not admin_user_id and not owner_email:
-            raise serializers.ValidationError(
-                "Se requiere 'admin_user_id' o 'owner_email' para crear un tenant"
-            )
-
-        # WARNING: v2.29: El password se define EXCLUSIVAMENTE en la activación dentro del subdominio del tenant
-
-        # Autogenerar dominio_fqdn si viene vacío o inválido
-        schema_name = data.get("schema_name", "").strip().lower()
-        dominio_fqdn = data.get("dominio_fqdn", "").strip()
-
-        if not dominio_fqdn or not validate_fqdn(normalize_domain(dominio_fqdn)):
-            # Autogenerar: <schema>.<TENANT_DOMAIN_BASE>
-            from django.conf import settings
-
-            base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
-            dominio_fqdn = f"{schema_name}.{base}"
-            data["dominio_fqdn"] = normalize_domain(dominio_fqdn)
-            # Validar el dominio autogenerado
-            if not validate_fqdn(data["dominio_fqdn"]):
-                raise serializers.ValidationError(
-                    f"El dominio autogenerado '{data['dominio_fqdn']}' no es un FQDN válido"
-                )
-
-        return data
 
     def validate_schema_name(self, value: str) -> str:
         """
@@ -249,17 +211,22 @@ class OnboardTenantWithOwnerSerializer(serializers.Serializer):
         dominio_fqdn = data.get("dominio_fqdn", "").strip()
 
         if not dominio_fqdn or not validate_fqdn(normalize_domain(dominio_fqdn)):
-            # Autogenerar: <schema>.<TENANT_DOMAIN_BASE>
-            from django.conf import settings
-
-            base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
-            dominio_fqdn = f"{schema_name}.{base}"
-            data["dominio_fqdn"] = normalize_domain(dominio_fqdn)
-            # Validar el dominio autogenerado
-            if not validate_fqdn(data["dominio_fqdn"]):
+            # REM ONBOARDING-E2E-01 (docs/e2e/ONBOARDING_E2E_REPORT.md): antes,
+            # esta autogeneracion concatenaba f"{schema_name}.{base}" sin sanear
+            # guiones bajos -- un schema_name con "_" (formato explicitamente
+            # sugerido por el propio campo del formulario, ej. "mi_empresa")
+            # producia un FQDN invalido (los guiones bajos no son validos en
+            # labels DNS) y el onboarding fallaba con 400 pese a que el dato
+            # de entrada era valido segun su propia documentacion. Se reutiliza
+            # build_primary_domain() (empresa_service.py), que ya sanea
+            # correctamente -- misma logica que el motor de creacion real usa,
+            # sin reimplementarla aqui por segunda vez.
+            try:
+                data["dominio_fqdn"] = build_primary_domain(schema_name, None)
+            except Exception as e:
                 raise serializers.ValidationError(
-                    f"El dominio autogenerado '{data['dominio_fqdn']}' no es un FQDN válido"
-                )
+                    f"No se pudo autogenerar un dominio valido para el schema '{schema_name}': {e}"
+                ) from e
 
         return data
 
