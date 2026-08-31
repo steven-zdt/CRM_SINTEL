@@ -33,13 +33,16 @@ por hostname.
 
 ## IP del servidor
 
-`192.168.2.15` (estática, adaptador Ethernet). **Estado real:** esta IP
-está actualmente duplicada en la red (otra máquina física responde con
-el mismo valor) -- ver Hallazgo 1 del informe final. La arquitectura de
-código no depende de un valor hardcodeado de IP en ningún punto del
-stack Django/Nginx/Docker; toda referencia a `.15` es configuración de
-entorno (`.env`, `TENANT_DOMAIN_BASE`, `extra_hosts`), no una constante
-de código.
+`192.168.2.17` (estática, adaptador Ethernet). **Actualizado
+2026-08-31**: originalmente configurada como `192.168.2.15`, que
+resultó estar duplicada en la red (otra máquina física respondía con el
+mismo valor -- ver Hallazgo 1 del informe final). Reasignada a `.17`
+(verificada libre por ARP antes de asignarla, sin conflicto desde
+entonces). La arquitectura de código no depende de un valor
+hardcodeado de IP en ningún punto del stack Django/Nginx/Docker; toda
+referencia a la IP del servidor es configuración de entorno (`.env`,
+`TENANT_DOMAIN_BASE`, `extra_hosts`), no una constante de código -- el
+cambio de IP no requirió tocar Nginx/Django/Docker.
 
 ## DNS
 

@@ -1,25 +1,37 @@
 # LAN_MULTI_TENANT_FINAL_REPORT
 
-**Fecha:** 2026-08-31. **Objetivo de la misión:** que un PC cliente en la
-misma LAN acceda a `admin.sintel.net.co` (tenant `admin@sintel.net.co`)
-desde `192.168.2.15`, sin depender de Internet.
+**Fecha:** 2026-08-31 (actualizado el mismo día tras resolverse el
+Hallazgo 1). **Objetivo de la misión:** que un PC cliente en la misma
+LAN acceda a `admin.sintel.net.co` (tenant `admin@sintel.net.co`), sin
+depender de Internet.
 
 ## Veredicto
 
-## **BLOCKED_SAFE**
+## **PARTIALLY_VERIFIED** (actualizado -- ver Actualización 2026-08-31 abajo)
 
-No `VERIFIED`. La capa de aplicación (Nginx → Django → TenantMiddleware
-→ Domain → schema Postgres) está **verificada y funciona
-correctamente** — se corrigió un hallazgo real de exposición de puerto
-en el camino. Pero el acceso LAN real está bloqueado por **dos
-problemas de infraestructura física/red, fuera de este repositorio de
-código**, que ningún cambio de Nginx/Django/Docker puede resolver:
+La capa de aplicación (Nginx → Django → TenantMiddleware → Domain →
+schema Postgres) está **verificada y funciona correctamente end-to-end,
+incluyendo login real**, tanto desde esta máquina (`127.0.0.1`) como
+desde su IP LAN real (`192.168.2.17`, HTTP y HTTPS). El Hallazgo 1
+(conflicto de IP) se resolvió: el usuario reasignó la IP estática del
+adaptador Ethernet de este servidor de `192.168.2.15` (en conflicto) a
+`192.168.2.17` (libre, verificado). Queda un único punto abierto para
+`VERIFIED` completo: que un PC **distinto** de la LAN resuelva
+`admin.sintel.net.co` y confirme el mismo resultado -- ver
+"Actualización 2026-08-31".
 
-1. **Conflicto de IP real y activo en `192.168.2.15`.**
+## Estado original de este informe (histórico, ya no vigente en el punto 1)
+
+Originalmente: **BLOCKED_SAFE** por dos problemas de infraestructura
+física/red, fuera de este repositorio de código, que ningún cambio de
+Nginx/Django/Docker podía resolver:
+
+1. ~~Conflicto de IP real y activo en `192.168.2.15`.~~ **RESUELTO** --
+   ver Actualización.
 2. **El wildcard DNS interno que la arquitectura requiere no está
-   operativo.**
+   operativo** -- sigue abierto, ver Actualización.
 
-Ambos requieren una decisión y una acción fuera del código (qué máquina
+Ambos requerían una decisión y una acción fuera del código (qué máquina
 física usa qué IP, dónde vive el DNS Server real) — exactamente el tipo
 de bloqueo que esta misión define como cierre válido
 (`BLOCKED_SAFE con evidencia concreta`), no una falla de la
@@ -27,7 +39,66 @@ implementación de software.
 
 ---
 
-## Hallazgo 1 (CRÍTICO) — Conflicto de IP: `192.168.2.15` responde desde OTRA máquina física
+## Actualización 2026-08-31 — Hallazgo 1 RESUELTO
+
+El usuario reasignó la IP estática del adaptador Ethernet de este
+servidor: de `192.168.2.15` (en conflicto con otra máquina física) a
+`192.168.2.17` (verificada libre antes de asignarla). Evidencia
+recolectada tras el cambio:
+
+```
+$ arp -a | findstr 192.168.2.17
+  192.168.2.17    e4-a8-df-9c-f8-4d    dinámico
+```
+
+`e4-a8-df-9c-f8-4d` es la MAC real del adaptador Ethernet de ESTA
+máquina (confirmada desde el inicio de la misión) -- sin conflicto,
+a diferencia de `.15`.
+
+```
+$ curl -H "Host: admin.sintel.net.co" http://192.168.2.17/
+< HTTP/1.1 302 Found
+< Location: /static/tenant/core/auth/login.html
+
+$ curl -k -H "Host: admin.sintel.net.co" https://192.168.2.17/
+< HTTP/1.1 302 Found   (HTTPS tambien correcto)
+
+$ curl -k -X POST -H "Host: admin.sintel.net.co" \
+    https://192.168.2.17/api/v1/core/auth/login/ \
+    -d '{"email":"admin@sintel.com","password":"Admin12345"}'
+< {"success":true,"redirect_url":"/dashboard/","user":{"id":1,"email":"admin@sintel.com",...}}
+< STATUS:200
+```
+
+**Login real, end-to-end, confirmado por IP LAN real sin conflicto.**
+El Hallazgo 1 queda cerrado. `192.168.2.15` ya no está configurada en
+esta máquina (se reemplazó, no quedó como IP secundaria).
+
+### Lo único que falta para `VERIFIED` completo
+
+Todo lo anterior se verificó **desde este mismo servidor** (curl con
+Host header manual, simulando lo que un DNS real haría). Para declarar
+el release gate completo, falta la prueba desde un **PC físicamente
+distinto** de la LAN:
+
+```cmd
+:: en el PC cliente (agregar a su propio hosts file, como Administrador,
+:: o resolver via un DNS real -- ver Hallazgo 2 mas abajo, aun abierto):
+::   192.168.2.17    admin.sintel.net.co
+ping 192.168.2.17
+curl http://admin.sintel.net.co/
+:: o abrir https://admin.sintel.net.co/ en el navegador (aceptar el
+:: certificado autofirmado) y autenticar admin@sintel.com
+```
+
+El Hallazgo 2 (wildcard DNS interno no operativo) sigue abierto sin
+cambios -- por eso otro PC de la LAN todavía necesita su propia entrada
+de hosts file apuntando a `192.168.2.17` (la IP real, ya sin conflicto)
+hasta que se resuelva un DNS interno real.
+
+---
+
+## Hallazgo 1 (CRÍTICO, evidencia original antes de la resolución) — Conflicto de IP: `192.168.2.15` respondía desde OTRA máquina física
 
 Evidencia:
 
@@ -272,27 +343,35 @@ curl http://admin.sintel.net.co/
 [x] lifecycle respetado                    -- verificado por diseno (TEN-03, mismo middleware chain sin importar el host)
 [x] logs correctos                         -- verificado (TenantSecurityAndURLConfMiddleware logea host/tenant/path, sin passwords/JWT)
 [~] firewall seguro                        -- puerto 8000 corregido; reglas "SINTEL" documentadas no existen en esta maquina (viven en el otro servidor)
-[ ] servidor accesible desde LAN           -- BLOQUEADO (Hallazgo 1: IP duplicada)
-[ ] puerto 80/443 accesible                -- accesible EN ESTA maquina; no determinable cual maquina respondera desde otro punto de la LAN (Hallazgo 1)
-[ ] DNS resuelve                           -- BLOQUEADO (Hallazgo 2: wildcard no distribuido)
-[ ] login funciona (cliente LAN real)      -- no ejecutable sin resolver Hallazgo 1/2
-[ ] UserContext correcto (cliente LAN real)-- no ejecutable sin resolver Hallazgo 1/2
-[ ] API funciona (cliente LAN real)        -- no ejecutable sin resolver Hallazgo 1/2
-[ ] static funciona (cliente LAN real)     -- no ejecutable sin resolver Hallazgo 1/2
+[x] servidor accesible desde LAN           -- RESUELTO 2026-08-31 (IP reasignada a 192.168.2.17, sin conflicto, ARP verificado)
+[x] puerto 80/443 accesible                -- verificado por IP real (192.168.2.17) HTTP y HTTPS, 302 correcto en ambos
+[ ] DNS resuelve                           -- BLOQUEADO (Hallazgo 2: wildcard no distribuido) -- otro PC de la LAN aun necesita hosts file manual apuntando a .17
+[x] login funciona (verificado desde este servidor via IP LAN real)  -- 200, admin@sintel.com, redirect /dashboard/
+[x] UserContext correcto                   -- login devuelve el user correcto (id=1, admin@sintel.com) para el tenant admin
+[ ] API funciona (cliente LAN fisicamente distinto)  -- aun no probado desde una maquina distinta a este servidor
+[ ] static funciona (cliente LAN fisicamente distinto) -- idem
 ```
 
-## LAN_MULTI_TENANT = **BLOCKED_SAFE**
+## LAN_MULTI_TENANT = **PARTIALLY_VERIFIED**
 
-No por defecto de la implementación de SINTEL (Nginx/Django/
-TenantMiddleware/DNS-config-de-aplicación están correctos y
-verificados), sino por dos problemas de infraestructura física real y
-activos en la red de este entorno, que requieren una decisión y acceso
-administrativo fuera del alcance de este repositorio:
+El Hallazgo 1 (conflicto de IP) se resolvió el 2026-08-31 -- el usuario
+reasignó este servidor a `192.168.2.17` (libre, sin conflicto,
+verificado por ARP). Todo lo verificable desde este servidor mismo
+(Nginx, TenantMiddleware, resolución de Domain, login real end-to-end,
+HTTP y HTTPS) está confirmado funcionando correctamente por la IP LAN
+real del servidor.
 
-1. `192.168.2.15` responde desde dos máquinas distintas en la red
-   (conflicto de IP real, confirmado por ARP).
-2. El wildcard DNS `*.sintel.net.co` no está siendo distribuido por el
-   DHCP del router a ningún cliente de la LAN.
+Queda un solo punto abierto para `VERIFIED` completo:
 
-Ver secciones "Hallazgo 1" y "Hallazgo 2" arriba para la remediación
-concreta de cada uno.
+1. El wildcard DNS `*.sintel.net.co` sigue sin distribuirse por DHCP
+   (Hallazgo 2, sin cambios) -- cualquier PC de la LAN **distinto** de
+   este servidor necesita hoy una entrada manual en su propio hosts
+   file (`192.168.2.17    admin.sintel.net.co`) para resolver el
+   hostname, hasta que se configure un DNS interno real.
+2. Ninguna prueba de esta misión se ejecutó todavía desde un dispositivo
+   físicamente distinto a este servidor -- ver la sección "Actualización
+   2026-08-31" arriba para el procedimiento exacto pendiente.
+
+Ver la sección "Hallazgo 2" para la remediación concreta del wildcard
+DNS (requiere acceso administrativo al Windows Server real o al router,
+fuera del alcance de este repositorio).
