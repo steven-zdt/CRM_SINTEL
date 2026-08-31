@@ -247,6 +247,11 @@ class ClientSerializer(serializers.ModelSerializer):
     domains = DomainSerializer(many=True, read_only=True, source="domains.all")
     # Primary domain (v3.5) — obtener el dominio primario sin query extra
     primary_domain = serializers.SerializerMethodField()
+    # CONSOLE_TENANTS_CRUD (Fase 3): el listado debe mostrar el estado de
+    # trial derivado, no solo los booleanos crudos -- ver
+    # apps/public/tenants/services/lifecycle.py (SSoT, sin campos nuevos).
+    lifecycle_status = serializers.SerializerMethodField()
+    trial_days_remaining = serializers.SerializerMethodField()
     # WARNING: NOTA: memberships solo se incluye si se necesita (usar related_name correcto)
     # memberships = TenantMembershipSerializer(many=True, read_only=True, source='memberships.all')
 
@@ -262,8 +267,13 @@ class ClientSerializer(serializers.ModelSerializer):
             "is_active",
             "domains",
             "primary_domain",
+            "lifecycle_status",
+            "trial_days_remaining",
         )
-        read_only_fields = ("id", "created_on", "domains", "primary_domain")
+        read_only_fields = (
+            "id", "created_on", "domains", "primary_domain",
+            "lifecycle_status", "trial_days_remaining",
+        )
 
     def validate_schema_name(self, value: str) -> str:
         """Normaliza y valida schema_name."""
@@ -283,3 +293,15 @@ class ClientSerializer(serializers.ModelSerializer):
         """Retorna el dominio primario del tenant (v3.5)."""
         domain = obj.domains.filter(is_primary=True).first()
         return domain.domain if domain else None
+
+    def get_lifecycle_status(self, obj):
+        """Estado derivado (ACTIVE_TRIAL/EXPIRED/SUSPENDED_BY_ADMIN/...) --
+        calculado en memoria, sin query adicional (ver lifecycle.py)."""
+        from apps.public.tenants.services.lifecycle import compute_lifecycle_status
+
+        return compute_lifecycle_status(obj)
+
+    def get_trial_days_remaining(self, obj):
+        from apps.public.tenants.services.lifecycle import trial_days_remaining
+
+        return trial_days_remaining(obj)

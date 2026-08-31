@@ -281,6 +281,55 @@ def provision_tenant_certificates_task(self, domain: str, schema_name: str) -> d
         raise self.retry(exc=ex)
 
 
+@shared_task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    max_retries=3,
+)
+def reconcile_tenants_lifecycle_task(self) -> dict:
+    """
+    Tarea periodica: reconcilia el is_active de todos los tenants con
+    trial vencido (docs/console/TENANT_LIFECYCLE.md).
+
+    IMPORTANTE (Fase 17-19 del plan Console Tenants): esta tarea es
+    SECUNDARIA -- refleja el estado en el admin (util para el listado de
+    /console/tenants/ y para tenants sin trafico entrante), pero el
+    bloqueo de acceso REAL ya ocurre en tiempo real via
+    TenantSecurityMiddleware (que llama a la misma funcion de
+    reconciliacion en cada request). El acceso NUNCA depende de que esta
+    tarea haya corrido.
+    """
+    from apps.public.tenants.services.lifecycle import reconcile_all_tenants
+
+    try:
+        resultado = reconcile_all_tenants()
+        if resultado["reconciled"]:
+            logger.warning(
+                "[LIFECYCLE] Reconciliacion periodica: %s tenant(s) desactivados por trial vencido: %s",
+                len(resultado["reconciled"]), resultado["reconciled"],
+            )
+        if resultado["errors"]:
+            logger.error(
+                "[LIFECYCLE] Reconciliacion periodica: %s error(es): %s",
+                len(resultado["errors"]), resultado["errors"],
+            )
+        return resultado
+    except Exception as ex:
+        if self.request.retries >= self.max_retries:
+            _registrar_dlq(
+                task_id=self.request.id,
+                task_name="reconcile_tenants_lifecycle_task",
+                args=[],
+                kwargs={},
+                exception=ex,
+                schema_name=None,
+                retries=self.request.retries,
+            )
+            return {"status": "failed_dlq"}
+        raise self.retry(exc=ex)
+
+
 # ---------------------------------------------------------------------------
 # Helpers internos
 # ---------------------------------------------------------------------------

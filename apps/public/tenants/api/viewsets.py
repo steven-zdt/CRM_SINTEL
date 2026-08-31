@@ -74,6 +74,36 @@ class ClientViewSet(viewsets.ModelViewSet):
     ordering_fields = ["nombre", "created_on", "paid_until"]
     ordering = ["-created_on"]
 
+    def _log_console_action(self, request, *, action: str, client=None, target_user=None, metadata: dict = None):
+        """
+        Registra una accion administrativa en ConsoleActionLog.
+
+        CONSOLE_TENANTS_CRUD (docs/console/TENANT_LIFECYCLE.md, hallazgo
+        E2E-05 de la auditoria de onboarding previa): antes de esto,
+        ninguna accion de ClientViewSet dejaba rastro auditable pese a que
+        el modelo y sus choices (TENANT_CREATE/UPDATE/DELETE) existen
+        desde la migracion inicial. `metadata` nunca debe incluir
+        passwords/tokens/secretos -- solo datos operativos (estados,
+        fechas, motivos).
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            from apps.public.console.models import ConsoleActionLog
+
+            actor = request.user if getattr(request.user, "is_authenticated", False) else None
+            ConsoleActionLog.objects.create(
+                action=action,
+                actor=actor,
+                tenant=client,
+                target_user=target_user,
+                metadata=metadata or {},
+            )
+        except Exception:
+            # La auditoria nunca debe romper la operacion administrativa real.
+            logger.error("[ConsoleActionLog] No se pudo registrar accion=%s", action, exc_info=True)
+
     @action(detail=False, methods=["post"], url_path="onboard", url_name="onboard")
     def onboard(self, request):
         """
@@ -150,6 +180,10 @@ class ClientViewSet(viewsets.ModelViewSet):
             try:
                 payload = crear_empresa(nombre=nombre, email_admin=email_admin, dominio=dominio, on_trial=on_trial)
                 logger.info("OK: Onboarding (legacy) exitoso: nombre=%s, dominio=%s", nombre, dominio)
+                self._log_console_action(
+                    request, action="TENANT_CREATE", client=payload.get("client"),
+                    metadata={"flujo": "legacy", "nombre": nombre, "dominio": dominio},
+                )
                 return Response(payload, status=status.HTTP_201_CREATED)
             except ValidationError as e:
                 return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -184,6 +218,15 @@ class ClientViewSet(viewsets.ModelViewSet):
                 payload.get("client_id"),
                 payload.get("domain"),
                 payload.get("membership_id"),
+            )
+            client_obj = Client.objects.filter(pk=payload.get("client_id")).only("id").first()
+            self._log_console_action(
+                request, action="TENANT_CREATE", client=client_obj,
+                metadata={
+                    "flujo": "onboard",
+                    "domain": payload.get("domain"),
+                    "membership_id": payload.get("membership_id"),
+                },
             )
             return Response(payload, status=status.HTTP_201_CREATED)
         except ValidationError as e:
@@ -231,8 +274,20 @@ class ClientViewSet(viewsets.ModelViewSet):
         - Cambia is_active y retorna {"id", "is_active", "message"}
 
         Cambia el estado de is_active del tenant:
-        - Si is_active=True → is_active=False (suspende)
+        - Si is_active=True → is_active=False (suspende manualmente --
+          se distingue de una desactivacion por trial vencido, ver
+          docs/console/TENANT_LIFECYCLE.md)
         - Si is_active=False → is_active=True (activa)
+
+        CONSOLE_TENANTS_CRUD (Fase 26): reactivar un tenant cuyo trial
+        esta vencido (EXPIRED) NO debe limitarse a poner is_active=True --
+        el middleware lo volveria a desactivar en el siguiente request
+        (la fecha sigue siendo la fuente de verdad). Para reactivar un
+        EXPIRED de forma persistente sin inventar un sistema de
+        facturacion que no existe, esta accion saca al tenant del regimen
+        de trial (on_trial=False) -- "activacion administrativa" explicita,
+        sin fecha de expiracion. Si en cambio se quiere dar mas dias de
+        prueba, usar la accion dedicada `extend-trial`.
 
         WARNING: PERMISOS: Requiere IsAdminUser (solo staff puede cambiar estado de tenants)
 
@@ -244,18 +299,45 @@ class ClientViewSet(viewsets.ModelViewSet):
             }
         """
         try:
+            from apps.public.tenants.services.lifecycle import compute_lifecycle_status
+
             client = self.get_object()
-            client.is_active = not client.is_active
-            client.save(update_fields=["is_active"])
+            estado_antes = compute_lifecycle_status(client)
+            nuevo_is_active = not client.is_active
+
+            update_fields = ["is_active"]
+            client.is_active = nuevo_is_active
+
+            reactivacion_administrativa = nuevo_is_active and estado_antes == "EXPIRED"
+            if reactivacion_administrativa:
+                client.on_trial = False
+                update_fields.append("on_trial")
+
+            client.save(update_fields=update_fields)
+
+            self._log_console_action(
+                request,
+                action="TENANT_UPDATE",
+                client=client,
+                metadata={
+                    "operacion": "toggle_active",
+                    "estado_lifecycle_antes": estado_antes,
+                    "is_active_despues": nuevo_is_active,
+                    "reactivacion_administrativa": reactivacion_administrativa,
+                },
+            )
 
             serializer = self.get_serializer(client)
             action = "activado" if client.is_active else "desactivado"
+            message = f'Tenant "{client.nombre}" {action} exitosamente'
+            if reactivacion_administrativa:
+                message += " (retirado del regimen de prueba -- activacion administrativa)"
 
             return Response(
                 {
                     "id": client.id,
                     "is_active": client.is_active,
-                    "message": f'Tenant "{client.nombre}" {action} exitosamente',
+                    "message": message,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -266,6 +348,117 @@ class ClientViewSet(viewsets.ModelViewSet):
             logger = logging.getLogger(__name__)
             logger.error(f"Error al cambiar estado del tenant: {str(e)}", exc_info=True)
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"], url_path="extend-trial", url_name="extend-trial")
+    def extend_trial(self, request, pk=None):
+        """
+        Extiende (o define) el periodo de prueba de un tenant.
+
+        POST /api/public/v1/tenants/{id}/extend-trial/
+        Body: {"days": int} O {"paid_until": "YYYY-MM-DD"}, "motivo": str (opcional)
+
+        CONSOLE_TENANTS_CRUD (Fase 25): accion auditada, autorizada
+        (IsAdminUser, mismo permiso que el resto del ViewSet) e
+        idempotente (llamarla dos veces con el mismo `paid_until` produce
+        el mismo resultado final, sin efectos acumulativos duplicados --
+        `days` SI acumula sobre el paid_until actual/hoy, por diseño,
+        pero no es "silenciosa": siempre queda registrada en
+        ConsoleActionLog con estado antes/despues, actor y motivo.
+
+        Si el tenant estaba EXPIRED o SUSPENDED_BY_ADMIN, esta accion lo
+        reactiva (is_active=True, on_trial=True) siempre que la nueva
+        fecha sea futura -- resuelve el lifecycle explicitamente en vez
+        de solo tocar is_active (Fase 26).
+
+        Returns 200: {"id", "paid_until", "on_trial", "is_active", "lifecycle_status"}
+        Returns 400: sin days/paid_until, fecha invalida, o fecha no futura
+        """
+        import logging
+
+        from django.utils import timezone
+
+        from apps.public.tenants.services.lifecycle import compute_lifecycle_status
+
+        logger = logging.getLogger(__name__)
+        client = self.get_object()
+
+        days = request.data.get("days")
+        paid_until_raw = request.data.get("paid_until")
+        motivo = (request.data.get("motivo") or "").strip()
+
+        if not days and not paid_until_raw:
+            return Response(
+                {"detail": "Se requiere 'days' (int) o 'paid_until' (YYYY-MM-DD)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        estado_antes = compute_lifecycle_status(client)
+        paid_until_antes = client.paid_until
+
+        if paid_until_raw:
+            from datetime import date
+
+            try:
+                nueva_fecha = date.fromisoformat(str(paid_until_raw))
+            except ValueError:
+                return Response(
+                    {"detail": "paid_until invalido. Formato esperado: YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            try:
+                dias_int = int(days)
+            except (TypeError, ValueError):
+                return Response({"detail": "'days' debe ser un entero."}, status=status.HTTP_400_BAD_REQUEST)
+            if dias_int <= 0:
+                return Response({"detail": "'days' debe ser positivo."}, status=status.HTTP_400_BAD_REQUEST)
+            base = client.paid_until if (client.paid_until and client.paid_until >= timezone.localdate()) else timezone.localdate()
+            nueva_fecha = base + timezone.timedelta(days=dias_int)
+
+        if nueva_fecha <= timezone.localdate():
+            return Response(
+                {"detail": "La nueva fecha de expiracion debe ser futura."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        client.paid_until = nueva_fecha
+        client.on_trial = True
+        update_fields = ["paid_until", "on_trial"]
+        if not client.is_active:
+            client.is_active = True
+            update_fields.append("is_active")
+        client.save(update_fields=update_fields)
+
+        estado_despues = compute_lifecycle_status(client)
+
+        self._log_console_action(
+            request,
+            action="EXTEND_TRIAL",
+            client=client,
+            metadata={
+                "paid_until_antes": paid_until_antes.isoformat() if paid_until_antes else None,
+                "paid_until_despues": nueva_fecha.isoformat(),
+                "estado_lifecycle_antes": estado_antes,
+                "estado_lifecycle_despues": estado_despues,
+                "motivo": motivo or None,
+            },
+        )
+        logger.info(
+            "[LIFECYCLE] Trial extendido: schema=%s paid_until %s -> %s (actor=%s)",
+            client.schema_name, paid_until_antes, nueva_fecha,
+            getattr(request.user, "email", "?"),
+        )
+
+        return Response(
+            {
+                "id": client.id,
+                "paid_until": client.paid_until.isoformat(),
+                "on_trial": client.on_trial,
+                "is_active": client.is_active,
+                "lifecycle_status": estado_despues,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=True, methods=["post"], url_path="resend-invitation", url_name="resend-invitation")
     def resend_invitation(self, request, pk=None):
