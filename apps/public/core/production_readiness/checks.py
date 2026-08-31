@@ -136,10 +136,24 @@ def check_fiscal_mock_guard():
     return CheckStatus.PASS, "FISCAL_ALLOW_MOCK_TRANSPORT=False (default seguro)."
 
 
+# Fase 44: 65 ocurrencias clasificadas manualmente 2026-08-31, todas
+# legitimas (fallbacks getattr(settings,...), comentarios/docstrings,
+# codigo gateado por settings.DEBUG, whitelist de seguridad deliberada
+# en capas, herramientas de dev standalone, health-check propio). Ver
+# docs/production/SEC04_LOCALHOST_CLASSIFICATION.md para el detalle
+# completo por categoria -- no se reclasifican en cada corrida, solo se
+# senalan ocurrencias NUEVAS por encima de este baseline.
+_SEC04_BASELINE_CLASSIFIED = 65
+
+
 @register_check("SEC-04-localhost-leaks", "SECURITY", Severity.P2, "core")
 def check_localhost_leaks():
     """Fase 44: localhost/127.0.0.1 hardcodeado fuera de settings/tests
-    -- candidato a URL de desarrollo filtrada a produccion."""
+    -- candidato a URL de desarrollo filtrada a produccion. Compara
+    contra un baseline ya clasificado (ver
+    docs/production/SEC04_LOCALHOST_CLASSIFICATION.md) en vez de WARN
+    perpetuo sin salida -- solo senala ocurrencias NUEVAS para revision
+    dirigida."""
     pattern = re.compile(r"localhost|127\.0\.0\.1")
     hits = []
     for base in ("apps",):
@@ -161,11 +175,21 @@ def check_localhost_leaks():
                                 hits.append(f"{os.path.relpath(fpath, _REPO_ROOT)}:{lineno}")
                 except OSError:
                     continue
-    if len(hits) > 15:
-        return CheckStatus.WARN, f"{len(hits)} ocurrencias de localhost/127.0.0.1 en código no-test (fuera del alcance de este check clasificar cada una individualmente -- ver Fase 44). Primeras 15: {hits[:15]}"
-    if hits:
-        return CheckStatus.WARN, f"Ocurrencias de localhost/127.0.0.1 en código no-test: {hits}"
-    return CheckStatus.PASS, "Sin localhost/127.0.0.1 hardcodeado fuera de tests/settings."
+    if not hits:
+        return CheckStatus.PASS, "Sin localhost/127.0.0.1 hardcodeado fuera de tests/settings."
+    if len(hits) <= _SEC04_BASELINE_CLASSIFIED:
+        return CheckStatus.PASS, (
+            f"{len(hits)} ocurrencias, todas dentro del baseline ya clasificado "
+            f"({_SEC04_BASELINE_CLASSIFIED}, 2026-08-31) -- ver "
+            f"docs/production/SEC04_LOCALHOST_CLASSIFICATION.md."
+        )
+    nuevas = len(hits) - _SEC04_BASELINE_CLASSIFIED
+    return CheckStatus.WARN, (
+        f"{len(hits)} ocurrencias -- {nuevas} por encima del baseline clasificado "
+        f"({_SEC04_BASELINE_CLASSIFIED}). Revisar las nuevas antes de asumir que son "
+        f"tan legitimas como las ya documentadas en "
+        f"docs/production/SEC04_LOCALHOST_CLASSIFICATION.md. Ultimas del listado: {hits[-10:]}"
+    )
 
 
 # ---------------------------------------------------------------------------

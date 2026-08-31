@@ -129,7 +129,7 @@ class ClientViewSet(viewsets.ModelViewSet):
             "owner_email": "owner@empresa-x.com",  # Requerido (si no se proporciona admin_user_id)
             # WARNING: v2.29: owner_password ELIMINADO - NO se acepta password en onboarding
             "admin_user_id": 1,  # Opcional (alternativa a owner_email)
-            "owner_is_staff": true,  # Opcional, default: true
+            "owner_is_staff": false,  # Opcional, default: false (E2E-03 -- owners de tenant NO son staff del sistema)
             "owner_is_active": true,  # Opcional, default: true
             "paid_until": "2024-12-31",  # Opcional
             "on_trial": true  # Opcional, default: true
