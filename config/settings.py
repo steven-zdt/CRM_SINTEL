@@ -427,7 +427,7 @@ Seguridad Host Header (prod) y soporte HTTPS detrás de proxy.
 # WARNING: SEGURIDAD: En producción, usar lista explícita desde ENV (NO usar '*')
 # WARNING: v2.60: Siempre incluir sintel.net.co y dominios públicos para permitir acceso desde ambos dominios
 base_allowed_hosts = (
-    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,192.168.2.15,sintel.net.co,186.117.247.166,186.117.247.167").split(",")
+    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,192.168.2.17,sintel.net.co,186.117.247.166,186.117.247.167").split(",")
     if DEBUG
     else os.getenv("ALLOWED_HOSTS", "sintel.net.co,.sintel.net.co,186.117.247.166,186.117.247.167").split(",")
 )
@@ -452,7 +452,7 @@ if DEBUG:
         "sintel.com.co",  # Variante de dominio .com.co (distinta de sintel.com/sintel.net.co)
         "testserver",
         "test.sintel.local",  # Soporte para tests
-        "192.168.2.15",  # IP local del servidor (acceso desde red interna)
+        "192.168.2.17",  # IP local del servidor (acceso desde red interna) -- LAN_MULTI_TENANT: reasignada desde .15 tras conflicto de IP real con otra maquina fisica (docs/network/LAN_MULTI_TENANT_FINAL_REPORT.md)
     ]
     for host in _dev_hosts:
         if host not in ALLOWED_HOSTS:
@@ -480,7 +480,7 @@ if DEBUG:
     CORS_ALLOWED_ORIGIN_REGEXES.extend([
         r"^http://localhost(:\d+)?$",
         r"^http://127\.0\.0\.1(:\d+)?$",
-        r"^https?://192\.168\.2\.15(:\d+)?$",  # IP local del servidor
+        r"^https?://192\.168\.2\.17(:\d+)?$",  # IP local del servidor
     ])
 
 # WARNING: IMPORTANTE: Permitir credenciales (cookies) en CORS para autenticación por sesión
@@ -494,7 +494,7 @@ CORS_ALLOW_CREDENTIALS = True
 # CSRF: orígenes de confianza (con esquema). Separar por comas en ENV.
 _csrf_origins = os.getenv(
     "CSRF_TRUSTED_ORIGINS",
-    "http://localhost,http://127.0.0.1,http://192.168.2.15,https://192.168.2.15,http://sintel.net.co,https://sintel.net.co,http://.sintel.net.co,https://.sintel.net.co,https://186.117.247.166,https://186.117.247.167",
+    "http://localhost,http://127.0.0.1,http://192.168.2.17,https://192.168.2.17,http://sintel.net.co,https://sintel.net.co,http://.sintel.net.co,https://.sintel.net.co,https://186.117.247.166,https://186.117.247.167",
 ).split(",")
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins if o.strip()]
 
@@ -509,9 +509,9 @@ if DEBUG:
         "http://sintel.net.co",  # Dominio de producción (también disponible en desarrollo)
         "http://sintel.net.co:8000",  # Dominio con puerto 8000 para desarrollo
         "http://*.sintel.net.co:8000",  # Todos los subdominios tenant en desarrollo
-        "http://192.168.2.15",  # IP local del servidor
-        "https://192.168.2.15",
-        "http://192.168.2.15:8000",
+        "http://192.168.2.17",  # IP local del servidor
+        "https://192.168.2.17",
+        "http://192.168.2.17:8000",
     ]
     for origin in _dev_csrf_origins:
         if origin not in CSRF_TRUSTED_ORIGINS:

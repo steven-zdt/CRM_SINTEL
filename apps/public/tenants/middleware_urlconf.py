@@ -49,7 +49,7 @@ class TenantSecurityAndURLConfMiddleware:
             "127.0.0.1",  # Desarrollo local (IP)
             "0.0.0.0",  # Desarrollo local (bind all)
             "testserver",  # Django test client host
-            "192.168.2.15",  # Red local - Consola pública
+            "192.168.2.17",  # Red local - Consola pública (LAN_MULTI_TENANT: reasignada desde .15 tras conflicto de IP real)
         ]
     )
 
