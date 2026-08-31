@@ -103,12 +103,23 @@ services:
       # Registro local en desarrollo -- NO usar Cloudflare todavia (aun en desarrollo).
       - "home.sintel.net.co:192.168.2.200"
     # DEVOPS-M3: usa el endpoint /health ya existente (config/urls_public.py)
+    # DEVOPS-M5: start_period=30s (retries=5*interval=10s -> 80s de margen
+    # total) resultaba insuficiente frente al arranque REAL observado
+    # (migrate_schemas de TODOS los tenants + garantizar dominios del
+    # tenant publico + collectstatic corren SIEMPRE en cada arranque,
+    # antes de que /health pueda responder -- medido >160s en un arranque
+    # real de esta sesion). Cuando el margen se agotaba, `docker compose up`
+    # reportaba "dependency web failed to start" para nginx (que exige
+    # web: condition: service_healthy) y dejaba nginx en estado "Created"
+    # sin arrancar, aunque web terminara arrancando bien segundos despues.
+    # Ampliado con margen real, no ajustado al numero exacto observado una
+    # sola vez.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 6
+      start_period: 180s
 
   # Reverse proxy HTTPS
   nginx:
