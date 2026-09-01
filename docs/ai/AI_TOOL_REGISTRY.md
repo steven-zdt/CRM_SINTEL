@@ -19,8 +19,9 @@ AI-03 READ TOOLS
 │   └── bancos (SENSITIVE_READ, ver AI_SECURITY_MODEL.md -- numero de cuenta siempre enmascarado, saldos/movimientos nunca)
 │
 ├── BLOCKED BY DESIGN (requieren un documento/diseño previo, no solo wrap-a-selector)
-│   └── contabilidad  → requiere diseño de integración AI ↔ Asistente
-│                        Contable existente (orquestar, no duplicar)
+│   └── contabilidad  → diseño de integración YA ESCRITO
+│                        (AI_CONTABILIDAD_INTEGRATION.md, 2026-09-01) --
+│                        falta implementar la tool (STEP 7)
 │
 └── DEFERRED (fuera de alcance actual, no es deuda pendiente)
     ├── impuestos   → owner_phase = TBD, reason = domain intentionally deferred
