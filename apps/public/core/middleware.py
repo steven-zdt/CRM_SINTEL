@@ -257,12 +257,18 @@ class CSRFTrustedOriginMiddleware:
                     except (ValueError, TypeError):
                         pass
 
-                # Establecer HTTP_ORIGIN si no esta presente
-                if "HTTP_ORIGIN" not in request.META:
-                    if port and port not in (80, 443):
-                        request.META["HTTP_ORIGIN"] = f"{scheme}://{host}:{port}"
-                    else:
-                        request.META["HTTP_ORIGIN"] = origin_no_port
+                # NO sintetizar request.META["HTTP_ORIGIN"] aqui.
+                # CSRF_TRUSTED_ORIGINS ya quedo poblado arriba (ese es el unico
+                # proposito real de este middleware); CsrfViewMiddleware nunca
+                # llega a mirar el Origin de este request porque DebugNoCSRFMiddleware
+                # ya marco request._dont_enforce_csrf_checks = True en DEBUG.
+                # Un HTTP_ORIGIN sintetico si queda visible en request.headers/META
+                # para CUALQUIER middleware posterior en la fase de respuesta,
+                # incluido corsheaders.middleware.CorsMiddleware (que va ANTES en
+                # MIDDLEWARE pero lee el Origin en su process_response, ya con este
+                # request mutado) -- eso hace que refleje un origen inventado
+                # (con el puerto interno, p.ej. :8000) en access-control-allow-origin
+                # para peticiones que nunca trajeron un Origin real del navegador.
 
         return self.get_response(request)
 

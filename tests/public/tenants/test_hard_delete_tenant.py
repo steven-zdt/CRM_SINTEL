@@ -136,7 +136,7 @@ def test_hard_delete_elimina_tenant_inactivo(inactive_tenant):
     tenant_id = inactive_tenant.id
     schema_name = inactive_tenant.schema_name
     domain_id = inactive_tenant.domains.first().id
-    membership_id = inactive_tenant.tenantmembership_set.first().id
+    membership_id = inactive_tenant.memberships.first().id
 
     # Verificar que existe antes de eliminar
     assert Client.objects.filter(id=tenant_id).exists()
@@ -246,7 +246,7 @@ def test_hard_delete_cascade_domain_and_membership(inactive_tenant):
 
     tenant_id = inactive_tenant.id
     domain = inactive_tenant.domains.first()
-    membership = inactive_tenant.tenantmembership_set.first()
+    membership = inactive_tenant.memberships.first()
 
     # Verificar que existen antes
     assert Domain.objects.filter(id=domain.id).exists()
@@ -258,6 +258,37 @@ def test_hard_delete_cascade_domain_and_membership(inactive_tenant):
     # Verificar que fueron eliminados por CASCADE
     assert not Domain.objects.filter(id=domain.id).exists()
     assert not TenantMembership.objects.filter(id=membership.id).exists()
+
+
+def test_hard_delete_orphan_users_no_corrompe_transaccion(inactive_tenant, tenant_owner):
+    """
+    Test I (regresión BAK-02): delete_orphan_users=True no debe hacer que
+    ProgrammingError ("perfil_tenantprofile" no existe) aborte silenciosamente
+    toda la transacción atómica de hard_delete_tenant.
+
+    Causa raíz original: el borrado usaba User.objects.filter(...).delete()
+    (ORM), cuyo collector recorre TenantProfile.user (OneToOneField CASCADE)
+    e intenta consultar "perfil_tenantprofile" en el schema actual (public),
+    donde esa tabla no existe. El ProgrammingError, aunque se atrapaba
+    localmente, dejaba connection.needs_rollback=True y el @transaction.atomic
+    externo revertía TODO (drop de esquema y borrado de Client incluidos) sin
+    propagar el error al caller.
+    """
+    connection.set_schema_to_public()
+
+    tenant_id = inactive_tenant.id
+    schema_name = inactive_tenant.schema_name
+    user_id = tenant_owner.id
+
+    # tenant_owner solo tiene membresía en este tenant -> candidato a huérfano
+    hard_delete_tenant(client_id=tenant_id, delete_orphan_users=True)
+
+    # La transacción completa debe haberse confirmado, no revertido
+    assert not Client.objects.filter(id=tenant_id).exists()
+    assert not schema_exists(schema_name)
+
+    # El usuario huérfano debe haber sido eliminado
+    assert not User.objects.filter(id=user_id).exists()
 
 
 def test_hard_delete_preserva_usuarios_globales(inactive_tenant, tenant_owner):

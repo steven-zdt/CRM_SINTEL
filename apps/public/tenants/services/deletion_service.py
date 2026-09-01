@@ -160,17 +160,26 @@ def hard_delete_tenant(
         f"domains={domains}, actor={actor_user_id}"
     )
     # 10) Borrar usuarios huérfanos opcionalmente (seguro y conservador)
+    # WARNING: NUNCA usar User.objects.filter(...).delete() (ORM) aquí: el
+    # collector de Django recorre TenantProfile.user (OneToOneField CASCADE,
+    # ver apps/tenant/perfil/models.py ARQ-A2) sin conocer el aislamiento por
+    # schema de django-tenants, e intenta consultar "perfil_tenantprofile" en
+    # el schema actual (public) -> ProgrammingError. delete_user_service()
+    # evita esto con DELETE en SQL crudo sobre el usuario + limpieza de
+    # TenantProfile por schema vía señal/tenant_context().
     if delete_orphan_users and orphan_user_ids:
-        from django.contrib.auth import get_user_model
+        from apps.public.accounts.services.delete_user_service import delete_user_service
 
-        User = get_user_model()
-        try:
-            deleted, _ = User.objects.filter(id__in=orphan_user_ids).delete()
-            logger.warning(
-                f"INFO: Usuarios huérfanos eliminados: user_ids={orphan_user_ids}, deleted_count={deleted}"
-            )
-        except Exception as e:
-            logger.error(
-                f"ERROR: No se pudieron eliminar usuarios huérfanos {orphan_user_ids}: {e}",
-                exc_info=True,
-            )
+        deleted_ids = []
+        for uid in orphan_user_ids:
+            try:
+                delete_user_service(uid, deleted_by_id=actor_user_id)
+                deleted_ids.append(uid)
+            except Exception as e:
+                logger.error(
+                    f"ERROR: No se pudo eliminar usuario huérfano {uid}: {e}",
+                    exc_info=True,
+                )
+        logger.warning(
+            f"INFO: Usuarios huérfanos eliminados: user_ids={deleted_ids}, deleted_count={len(deleted_ids)}"
+        )
