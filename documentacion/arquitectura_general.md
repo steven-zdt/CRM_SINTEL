@@ -1,7 +1,107 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.59.0
-**Ultima actualizacion:** 2026-08-25 (DOC-M46) — **Cierre Mision Mail Hub
+**Version:** 3.60.0
+**Ultima actualizacion:** 2026-09-01 (DOC-M47) — **7 misiones autonomas
+consecutivas**: remediacion P0 (re-verificacion + grounding normativo),
+validacion E2E de onboarding (privilegio-escalacion critico corregido),
+CRUD/lifecycle de Console Tenants (trial real), framework de Production
+Readiness, resolucion de conflicto de IP real en la LAN, auditoria de
+migracion de servidor (SOURCE), y nucleo real del AI Engine transversal.
+Posterior a DOC-M46 (2026-08-25).
+
+**1. Remediacion P0 (re-verificacion):** los 4 hallazgos P0 del
+`REMEDIATION_MASTER_PLAN` ya estaban corregidos en el codigo —
+clasificados `ALREADY_FIXED` con evidencia real, mas grounding
+normativo (Codigo de Comercio Art. 60, Resolucion DIAN 000165/2023,
+Estatuto Tributario) en vez de afirmaciones sin fuente. `P0-04`
+(concurrencia) tenia un fallo real de teardown en pytest (FK
+cross-schema sin dropear antes del flush) — corregido. Detalle:
+`docs/remediation/P0_FINAL_REPORT.md`, `P0_CURRENT_BASELINE.md`.
+
+**2. Validacion E2E de onboarding de tenant:** flujo real completo
+(consola → API → DB → provisioning → login), no solo `HTTP 201`.
+**Hallazgo critico real, corregido en vivo:** `owner_is_staff` del
+serializer de onboarding tenia `default=True`, contradiciendo el motor
+real (`default=False`) — cualquier owner de tenant nuevo heredaba
+`is_staff=True` global y podia listar TODOS los tenants del sistema
+via `/console/tenants/`. Verificado explotado en vivo antes de
+corregir. Tambien: bug de autogeneracion de dominio con `schema_name`
+con guion bajo, y un `validate()` duplicado silenciosamente sombreado.
+Veredicto: `ONBOARDING_E2E = PARTIAL` (2 hallazgos menores quedaron
+documentados, no bloqueantes). Detalle: `docs/e2e/ONBOARDING_E2E_REPORT.md`.
+
+**3. Console Tenants — CRUD + lifecycle + trial real:**
+`reconcile_tenant_lifecycle()` (nuevo, `apps/public/tenants/services/
+lifecycle.py`) invocado desde `TenantSecurityMiddleware` en cada
+request — un tenant con trial vencido queda bloqueado de verdad, **sin
+depender de Celery Beat** (que no existe en ningun entorno de este
+proyecto), verificado explicitamente sin Celery corriendo. `ConsoleActionLog`
+ahora se escribe para `TENANT_CREATE`/`TENANT_UPDATE`/`EXTEND_TRIAL`
+(antes, practicamente ningun codigo lo poblaba). Veredicto:
+`TENANT_TRIAL = VERIFIED`, `TENANT_LIFECYCLE = PARTIAL` (Domain/Membership
+CRUD y frontend deliberadamente diferidos). Detalle:
+`docs/console/CONSOLE_TENANTS_FINAL_REPORT.md`.
+
+**4. Production Readiness framework:** `apps/public/core/production_readiness/`
+(nuevo, no una app Django — registro de checks reutilizable) +
+`python manage.py production_readiness` como mecanismo recurrente, no
+auditoria de una sola vez. 20 checks reales en 9 categorias. Veredicto
+real: `NOT_READY` — 2 blockers P0 activos (`APP-01-debug`,
+`APP-02-secret-key`, ambos configuracion de `.env` del entorno de
+destino, no bugs de codigo). **`BAK-02-restore-tested` se cerro con un
+drill real**: durante el primer intento, `pg_restore` (v17, imagen
+`web` sin version fijada) resulto incompatible con el servidor
+`postgres:16-alpine` — *cualquier* restauracion real habria fallado en
+este entorno. Corregido fijando `postgresql-client-16` via PGDG en el
+`Dockerfile`; se agrego `BAK-04-pg-client-server-version-match` como
+check recurrente para esta clase de regresion. `SEC-04` (65
+ocurrencias de `localhost`/127.0.0.1) clasificado una por una — todas
+legitimas, check convertido de WARN perpetuo a baseline con deteccion
+de regresion. Detalle: `docs/production/PRODUCTION_READINESS_FINAL.md`.
+
+**5. LAN Multi-Tenant — conflicto de IP real resuelto:** `192.168.2.15`
+(IP historica del servidor) resulto estar duplicada con otra maquina
+fisica real en la red (confirmado por ARP, no cache). El usuario
+reasigno el servidor a `192.168.2.17` (verificada libre) — se
+actualizaron los 7 puntos de codigo que aun tenian `.15` hardcodeada
+(`ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGIN_REGEXES`, `CSRF_TRUSTED_ORIGINS`,
+`TenantSecurityAndURLConfMiddleware.ALLOWED_PUBLIC_DOMAINS`), mismo
+patron de riesgo ya advertido en `documentacion/INFRA_RED_LOCAL_MULTI_TENANT.md`.
+Login real end-to-end verificado por la nueva IP (HTTP+HTTPS). El
+wildcard DNS interno `*.sintel.net.co` sigue sin operar (Hallazgo 2,
+sin cambios) — otro PC de la LAN aun necesita una entrada manual de
+hosts file. Detalle: `docs/network/LAN_MULTI_TENANT_FINAL_REPORT.md`.
+
+**6. Auditoria de migracion de servidor (SOURCE):** sin TARGET real
+disponible — inventario completo (host, Docker, imagenes por digest,
+compose saneado sin secretos, volumenes, red, DNS, TLS) + **backup
+real de los 5 schemas** con checksums SHA256, mas manifiesto SHA256 de
+`media/` (165 archivos). 3 hallazgos reales documentados sin forzar
+correccion fuera de alcance: certificado TLS con `CN=*.sintel.com` (no
+`*.sintel.net.co`, el dominio real en uso), Neo4j sin backup logico
+propio auditado, y el contenedor `web` corre `manage.py runserver`
+(no un WSGI de produccion real). Estado: `SOURCE_AUDIT = READY_FOR_MIGRATION`,
+`MIGRATION_READY = NOT_READY` (requiere TARGET real). Detalle:
+`docs/migration/SERVER_MIGRATION_FINAL_REPORT.md`.
+
+**7. AI Engine transversal — nucleo real (ver tambien §8, reescrita):**
+`apps/services/ai/` (capa de servicio, no una app de negocio) con
+provider abstraction, context engine (SSoT real via `TenantProfile`),
+tool registry, y **una tool READ real end-to-end** (`buscar_cliente`,
+envuelve `ClienteSelector` ya existente). WRITE bloqueado
+**estructuralmente** (no solo documentado) — verificado por test aunque
+el flag este activo. 20/20 tests reales pasando. Hallazgo real durante
+el desarrollo de tests (no un bug): `Empresa` es singleton por schema
+de tenant, invalidando el diseño original de un test de aislamiento
+cross-empresa (rediseñado para reflejar la arquitectura real). Estado:
+`AI_ENGINE = NOT_VERIFIED` (honesto) — `READ_ONLY_ASSISTANT` alcanzado
+para 1 dominio, todo el resto (VALIDATE/SUGGEST/WRITE, MCP, memoria,
+tracing productivo) diseñado y documentado, no implementado. Detalle:
+`docs/ai/AI_CURRENT_STATE.md`, `docs/ai/AI_RELEASE_GATE.md`.
+
+---
+
+**Actualizacion previa:** 2026-08-25 (DOC-M46) — **Cierre Mision Mail Hub
 (MAIL-19/20) + fix real reportado por el usuario en `empresa`**,
 posterior a DOC-M45 (2026-08-25, misma fecha). Mision Mail Hub
 **COMPLETED** para el alcance cubierto (unico pendiente real: click-through
@@ -2400,18 +2500,37 @@ python manage.py poblar_catalogo_niif
 
 ## 8. Ecosistema de Agentes de Inteligencia Artificial
 
+**[DOC-M47, 2026-09-01, corregido]** Esta seccion documentaba
+`FacturacionAgent`/`GastosAgent`/`NominaAgent`/`InventarioAgent` como
+si fueran clases reales. Auditoria exhaustiva confirmo que **no lo
+son** (`grep -r "class \w*Agent\b" apps/` → 0 resultados) — son solo
+etiquetas de un dict Python (`ContabilidadBusinessService._APP_TIPO_LABEL`)
+que parametriza el mismo texto de prompt segun `app_label`. Una unica
+funcion real (`sugerir_lineas_asiento_ia`) atiende los 4 "dominios".
+Corregido para reflejar la realidad. Ver `docs/ai/AI_CURRENT_STATE.md`
+para el detalle completo de la auditoria (Fase 0 de la mision
+`SINTEL_AI_ENGINE`).
+
 ### 8.1. Principio de Diseno
 
 El asistente IA es un metodo de entrada rapida para lineas de asiento contable en el flujo Manual On-Demand. La validacion local (cuadratura, nivel 6, `TipoComprobante`) es siempre la fuente de verdad final. La IA nunca persiste datos sin confirmacion explicita del usuario.
 
-### 8.2. Agentes Especializados por Dominio
+### 8.2. Asistente Contable — funcion unica, no 4 agentes distintos
 
-| Agent ID | App Label | Conocimiento NIIF Colombia | Modelo |
-|---|---|---|---|
-| `FacturacionAgent` | `facturas` | CxC (1305), IVA generado (240805), Retefuente (2365xx), ReteICA (2368xx), Ingresos (4135xx) | `claude-haiku-4-5-20251001` |
-| `GastosAgent` | `gastos` | CxP Proveedor (2335xx), IVA descontable (240810), Retefuente (2365xx), Gastos operativos (51xx) | `claude-haiku-4-5-20251001` |
-| `NominaAgent` | `empleados` | Salarios (5105xx), Aportes seguridad social (2370xx), Obligaciones laborales (25xx) | `claude-haiku-4-5-20251001` |
-| `InventarioAgent` | `inventario` | Inventario (1435xx), CMV (6135xx), Ingresos (4135xx) | `claude-haiku-4-5-20251001` |
+Un unico prompt parametrizado por `app_label` (via el dict
+`_APP_TIPO_LABEL`), no 4 clases independientes:
+
+| App Label (parametro) | Conocimiento NIIF Colombia | Modelo |
+|---|---|---|
+| `facturas` | CxC (1305), IVA generado (240805), Retefuente (2365xx), ReteICA (2368xx), Ingresos (4135xx) | `claude-haiku-4-5-20251001` |
+| `gastos` | CxP Proveedor (2335xx), IVA descontable (240810), Retefuente (2365xx), Gastos operativos (51xx) | `claude-haiku-4-5-20251001` |
+| `empleados` | Salarios (5105xx), Aportes seguridad social (2370xx), Obligaciones laborales (25xx) | `claude-haiku-4-5-20251001` |
+| `inventario` | Inventario (1435xx), CMV (6135xx), Ingresos (4135xx) | `claude-haiku-4-5-20251001` |
+
+Sin tests automatizados (`grep` en `apps/tenant/contabilidad/tests/`
+para `asistente_ia`/`sugerir_lineas_asiento_ia` → 0 resultados). Sin
+`tools=`/function-calling nativo del SDK — completion de texto plano
+de un solo turno.
 
 ### 8.3. Flujo del Orquestador
 
@@ -2442,6 +2561,41 @@ POST /api/v1/contabilidad/pendientes/asistente-ia/
 El archivo `AGENTS.md` es el contexto primario para cualquier agente de codigo. El archivo `MEMORY.md` en la raiz del proyecto es la fuente canonica del estado actual, decisiones arquitectonicas recientes (ADRs) y progreso activo.
 
 Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `MEMORY.md` primero, luego `AGENTS.md`, luego el `.agent/AUDITORIA_FLUJO_*.md` de la app objetivo.
+
+### 8.6. AI Engine transversal (nuevo, DOC-M47) — capa de servicio, no reemplaza 8.1-8.5
+
+`apps/services/ai/` (mismo patron que `apps/services/onboarding/` —
+capa de servicio, no una app Django de negocio, sin migraciones):
+
+```
+apps/services/ai/
+  providers/    AIProvider (contrato) + AnthropicProvider (reutiliza
+                el mismo SDK que 8.1-8.5, no lo duplica)
+  context/      AIContext (frozen) + build_context(request) -- SSoT
+                real via request.user.tenant_profile.empresa_id (el
+                mismo que usa SintelDSVMixin.get_empresa_id())
+  tools/        BaseTool, ToolKind(READ|SUGGEST|VALIDATE|WRITE),
+                ToolRisk, AIToolRegistry + BuscarClienteTool (unica
+                tool real, envuelve ClienteSelector ya existente)
+  engine/       AIEngine.run_tool() -- unico punto de entrada; WRITE
+                bloqueado ESTRUCTURALMENTE (AUTO_APPROVED_KINDS
+                excluye WRITE sin importar el flag), feature flags
+                server-side (AI_ENABLED/AI_READ_ENABLED/etc.,
+                config/settings.py, default False, nunca leidos de
+                request.data)
+```
+
+Estado real: `AI_ENGINE = NOT_VERIFIED` (honesto) —
+`READ_ONLY_ASSISTANT` alcanzado para 1 dominio (`clientes`), 20/20
+tests reales pasando (incluye aislamiento via empresa_id real y WRITE
+bloqueado aunque el flag este activo). El resto de dominios
+(proveedores, facturas, contabilidad...), VALIDATE/SUGGEST/WRITE, MCP
+(`django-rest-framework-mcp` esta instalado y montado en `/mcp/` pero
+con cero ViewSets decorados — andamiaje inerte, sin cambios en esta
+mision), memoria de sesion y tracing productivo estan **disenados, no
+implementados** — ver `docs/ai/` (11 documentos, cada uno distingue
+implementado vs. solo diseñado) y `docs/ai/AI_RELEASE_GATE.md` para el
+detalle item por item.
 
 ---
 
@@ -2511,6 +2665,13 @@ Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `M
 | Venta -> Inventario -> Kardex -> Costo -> Contabilidad (F23, 2026-08-10) | `documentacion/F23_FINAL_REPORT.md` | Cierra la brecha `ventas->inventario`: contrato Venta->Inventario (`documentacion/F23_SALE_INVENTORY_CONTRACT.md`), politica del evento de salida (`F23_INVENTORY_ISSUE_POLICY.md`), auditoria de ventas/facturas (`F23_VENTAS_BASELINE.md`, `F23_FACTURAS_BASELINE.md`), bug de atomicidad real encontrado y corregido en `procesar_y_facturar_venta()`, 9/9 tests reales + 45/45 en regresion consolidada F21+F22+F23 (`F23_TEST_MATRIX.md`), estado fase por fase (`F23_EXECUTION_STATUS.md`) |
 | Auditoria integral de codigo/arquitectura, mision 1 (16/16 apps, 2026-08-20/21) | `documentacion/APP_AUDIT_MASTER_FINAL.md` | Ciclo FASE A-Y por app con regresion real confirmada. ~2509 lineas de codigo muerto eliminadas, tabla consolidada por app, contratos cross-app, hallazgo P1 principal (transmision DIAN de facturas nunca implementada, `documentacion/audits/apps/APP_facturas_NORMATIVE_MATRIX.md`). Progreso vivo: `documentacion/APP_AUDIT_MASTER_STATUS.md`. 16 `APP_<app>_AUDIT.md` + 9 `APP_<app>_NORMATIVE_MATRIX.md` en `documentacion/audits/apps/` |
 | Auditoria integral de negocio/arquitectura, mision 2 / F34 (16/16 apps, 2026-08-21) | `documentacion/audits/apps/F34_MASTER_FINAL.md` | Segunda pasada sobre las mismas 16 apps: reglas de negocio clasificadas, mapa de dominio, N+1 verificado (no solo sospechado), barrido de codigo muerto simbolo-por-simbolo. ~241 lineas adicionales eliminadas (`proveedores`, `inventario`), hallazgo transversal sobre el patron "capa de compatibilidad legacy". Sin ejecucion de tests (instruccion explicita del usuario) -- validado con `py_compile` + grep de consumidores. Progreso vivo: `documentacion/audits/apps/F34_MASTER_STATUS.md`. 16 `F34_<app>_AUDIT.md` en `documentacion/audits/apps/` |
+| Remediacion P0 -- re-verificacion + grounding normativo (2026-08-31) | `docs/remediation/P0_FINAL_REPORT.md` | 4 hallazgos P0 ya corregidos, clasificados `ALREADY_FIXED` con evidencia real; grounding normativo real (Codigo de Comercio, Resolucion DIAN 000165/2023, Estatuto Tributario); fix real de teardown en test de concurrencia P0-04. Baseline: `P0_CURRENT_BASELINE.md` |
+| Validacion E2E de onboarding de tenant (2026-08-31) | `docs/e2e/ONBOARDING_E2E_REPORT.md` | Flujo real consola→API→DB→provisioning→login. Hallazgo critico corregido en vivo: `owner_is_staff` default=True (escalacion de privilegios real). `ONBOARDING_E2E = PARTIAL` |
+| Console Tenants -- CRUD + lifecycle + trial real (2026-08-31) | `docs/console/CONSOLE_TENANTS_FINAL_REPORT.md` | `reconcile_tenant_lifecycle()` real sin depender de Celery Beat (verificado explicitamente sin Celery corriendo). `TENANT_TRIAL = VERIFIED` |
+| Production Readiness -- framework + release gate (2026-08-31) | `docs/production/PRODUCTION_READINESS_FINAL.md` | `apps/public/core/production_readiness/`, 20 checks reales, `manage.py production_readiness` recurrente. Drill real de backup/restore (`BACKUP_RESTORE_RUNBOOK.md`) encontro y corrigio una incompatibilidad real de version `pg_dump`/`pg_restore`. `NOT_READY` -- 2 blockers de config de entorno destino |
+| LAN Multi-Tenant -- conflicto de IP real resuelto (2026-09-01) | `docs/network/LAN_MULTI_TENANT_FINAL_REPORT.md` | `192.168.2.15` duplicada con otra maquina fisica real (confirmado por ARP); servidor reasignado a `192.168.2.17`, 7 puntos de codigo con IP hardcodeada corregidos. `PARTIALLY_VERIFIED` -- wildcard DNS interno sigue sin operar |
+| Auditoria de migracion de servidor / SOURCE (2026-09-01) | `docs/migration/SERVER_MIGRATION_FINAL_REPORT.md` | Sin TARGET real disponible -- inventario completo + backup real de 5 schemas con checksums SHA256. 3 hallazgos reales (cert TLS con CN incorrecto, Neo4j sin backup logico, `runserver` en vez de WSGI real). `SOURCE_AUDIT = READY_FOR_MIGRATION` |
+| AI Engine transversal -- nucleo real (2026-09-01) | `docs/ai/AI_RELEASE_GATE.md` | `apps/services/ai/`, provider abstraction + context engine + tool registry + 1 tool READ real (`buscar_cliente`), WRITE bloqueado estructuralmente, 20/20 tests reales. Ver tambien §8.6. `AI_ENGINE = NOT_VERIFIED` (honesto) -- `READ_ONLY_ASSISTANT` para 1 dominio |
 
 ### 10.2. Documentos de Auditoria por App (SSoT por modulo)
 
