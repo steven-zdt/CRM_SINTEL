@@ -14,6 +14,7 @@ from apps.tenant.clientes.models import Cliente
 from apps.tenant.compras.models import OrdenCompra
 from apps.tenant.cotizaciones.models import Cotizacion
 from apps.tenant.empresa.models import Empresa, Sede
+from apps.tenant.facturas.models import Factura
 from apps.tenant.gastos.models import DocumentoSoporte, ResolucionDIAN
 from apps.tenant.perfil.models import TenantProfile
 from apps.tenant.proveedores.models import Proveedor
@@ -242,3 +243,42 @@ class ConsultarProyectoToolTests(SintelTenantTestCase):
         assert len(result.data) == 1
         assert result.data[0]["nombre"] == "Proyecto De Prueba AI"
         assert result.data[0]["cliente"] == "Cliente Snapshot"
+
+
+class ConsultarFacturaToolTests(SintelTenantTestCase):
+    """consultar_factura es READ-only por diseno (FASE 21) -- estos tests
+    solo verifican lectura, nunca ejercitan escritura via esta tool."""
+
+    def setUp(self):
+        super().setUp()
+        self.empresa = Empresa.objects.create(
+            razon_social="EMPRESA FACTURAS TEST S.A.S.", nit="900444555", direccion="Calle F",
+        )
+        self.user = User.objects.create_user(email="fact_user@test.local", password="testpass123")
+        TenantProfile.objects.create(user=self.user, empresa=self.empresa)
+        Factura.objects.create(
+            empresa=self.empresa, numero="FE-AI-TEST-001", consecutivo=1,
+            naturaleza="VENTA", fecha_emision="2026-06-01T00:00:00Z",
+            emisor_nit="900444555", emisor_razon_social="EMPRESA FACTURAS TEST S.A.S.",
+            receptor_nit="900333444", receptor_razon_social="Cliente Receptor AI",
+            total="238.00",
+        )
+
+    @override_settings(**AI_FLAGS_ON)
+    def test_consultar_factura_encuentra_factura_real(self):
+        request = _FakeRequest(user=self.user, tenant=self.tenant)
+
+        result = run_tool("consultar_factura", request, search="AI-TEST")
+
+        assert result.status == "OK"
+        assert len(result.data) == 1
+        assert result.data[0]["numero"] == "FE-AI-TEST-001"
+        assert result.data[0]["receptor_razon_social"] == "Cliente Receptor AI"
+
+    def test_consultar_factura_no_expone_metodos_de_escritura(self):
+        """La tool nunca debe registrar kind distinto de READ."""
+        from apps.services.ai.tools import get_tool
+
+        tool = get_tool("consultar_factura")
+
+        assert tool.kind.value == "READ"

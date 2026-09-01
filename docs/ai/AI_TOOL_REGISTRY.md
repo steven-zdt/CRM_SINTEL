@@ -1,6 +1,33 @@
 # AI_TOOL_REGISTRY — Fases 11-16 (+ AI-02/AI-03, misión evolución contextual, 2026-09-01)
 
-## Implementado (9 tools reales)
+## Definición de "AI-03 terminado" (decisión explícita, 2026-09-01)
+
+**No** es "existen READ tools para los 13 dominios del ERP". **Es**:
+AI-03 está cerrado cuando todo dominio actualmente elegible tiene su
+READ tool implementada/testeada/registrada, y todo dominio no
+elegible queda formalmente bloqueado por una dependencia explícita
+(no como "pendiente" ambiguo que una auditoría futura reinterprete
+como incompleto).
+
+```
+AI-03 READ TOOLS
+├── VERIFIED (implementadas, testeadas, registradas)
+│   ├── clientes, inventario, proveedores, ventas, compras
+│   ├── cotizaciones, gastos, proyectos
+│   └── facturas (READ-only permanente, ver fila en la tabla abajo)
+│
+├── BLOCKED BY DESIGN (requieren un documento/diseño previo, no solo wrap-a-selector)
+│   ├── empleados     → requiere AI_SECURITY_MODEL.md (datos sensibles)
+│   ├── bancos        → requiere AI_SECURITY_MODEL.md (datos sensibles)
+│   └── contabilidad  → requiere diseño de integración AI ↔ Asistente
+│                        Contable existente (orquestar, no duplicar)
+│
+└── DEFERRED (fuera de alcance actual, no es deuda pendiente)
+    ├── impuestos   → owner_phase = TBD, reason = domain intentionally deferred
+    └── reporting   → owner_phase = TBD, reason = domain intentionally deferred
+```
+
+## Implementado (10 tools reales)
 
 | Tool | Dominio | Kind | Risk | Confirmación | Servicio subyacente |
 |---|---|---|---|---|---|
@@ -13,6 +40,7 @@
 | `consultar_cotizacion` | `cotizaciones` | READ | `SAFE_READ` | No | `apps.tenant.cotizaciones.services.selectors.CotizacionSelector` — respeta sede vía filtro NULL-safe (OSF Fase F7) |
 | `consultar_gasto` | `gastos` | READ | `SAFE_READ` | No | `apps.tenant.gastos.services.selectors.DocumentoSelector` (modelo `DocumentoSoporte`) — mismo filtro NULL-safe de sede |
 | `consultar_proyecto` | `proyectos` | READ | `SAFE_READ` | No | `apps.tenant.proyectos.services.selectors.qs_list` — mismo filtro NULL-safe de sede |
+| `consultar_factura` | `facturas` | READ | `SAFE_READ` | No | `apps.tenant.facturas.services.selectors.FacturaSelectors.qs_list` — **READ-only permanente por diseño** (FASE 21): nunca habrá `crear_factura`/`anular_factura`/`transmitir_factura` en el AI Engine, esa escritura vive solo en el pipeline propietario (`FacturaBusinessService`) |
 
 `*` La misión de evolución pide un documento `AI_EKG.md` dedicado —
 decisión explícita: no se crea, para no duplicar contenido casi
@@ -36,7 +64,7 @@ como ejemplo ya construido):
 | `productos`/`inventario` | `apps.tenant.inventario` | `buscar_producto` ✅ **implementada** (incluye stock, `consultar_stock` no necesita tool separada) | `validar_producto` | `crear_producto` |
 | `cotizaciones` | `apps.tenant.cotizaciones` | `consultar_cotizacion` ✅ **implementada** (sede NULL-safe) | `validar_cotizacion` | `crear_borrador_cotizacion` |
 | `ventas` | `apps.tenant.ventas` | `consultar_venta` ✅ **implementada** (filtro por estado, nombre de cliente) | `validar_venta` | (no priorizada -- pipeline propietario complejo) |
-| `facturas` | `apps.tenant.facturas` | `consultar_factura` | `validar_factura` | **nunca directa** -- ver `FASE 21` de la misión, pipeline propietario obligatorio |
+| `facturas` | `apps.tenant.facturas` | `consultar_factura` ✅ **implementada** (sede NULL-safe) | `validar_factura` | **nunca directa** -- ver `FASE 21` de la misión, pipeline propietario obligatorio |
 | `compras` | `apps.tenant.compras` | `consultar_compra` ✅ **implementada** (respeta alcance sede/área real) | `validar_compra` | (no priorizada) |
 | `gastos` | `apps.tenant.gastos` | `consultar_gasto` ✅ **implementada** (sede NULL-safe) | `validar_gasto` | `crear_gasto` |
 | `proyectos` | `apps.tenant.proyectos` | `consultar_proyecto` ✅ **implementada** (sede NULL-safe) | -- | -- |

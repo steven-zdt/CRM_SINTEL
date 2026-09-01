@@ -3,6 +3,7 @@ from .clientes_tools import BuscarClienteTool
 from .compras_tools import ConsultarCompraTool
 from .cotizaciones_tools import ConsultarCotizacionTool
 from .ekg_tools import ProjectMapTool
+from .facturas_tools import ConsultarFacturaTool
 from .gastos_tools import ConsultarGastoTool
 from .inventario_tools import BuscarProductoTool
 from .proveedores_tools import BuscarProveedorTool
@@ -21,6 +22,7 @@ register_tool(ConsultarCompraTool())
 register_tool(ConsultarCotizacionTool())
 register_tool(ConsultarGastoTool())
 register_tool(ConsultarProyectoTool())
+register_tool(ConsultarFacturaTool())
 
 __all__ = [
     "AUTO_APPROVED_KINDS",
