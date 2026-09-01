@@ -13,6 +13,7 @@ from apps.services.ai.engine import run_tool
 from apps.tenant.clientes.models import Cliente
 from apps.tenant.compras.models import OrdenCompra
 from apps.tenant.cotizaciones.models import Cotizacion
+from apps.tenant.empleados.models import Empleado
 from apps.tenant.empresa.models import Empresa, Sede
 from apps.tenant.facturas.models import Factura
 from apps.tenant.gastos.models import DocumentoSoporte, ResolucionDIAN
@@ -282,3 +283,76 @@ class ConsultarFacturaToolTests(SintelTenantTestCase):
         tool = get_tool("consultar_factura")
 
         assert tool.kind.value == "READ"
+
+
+class BuscarEmpleadoToolTests(SintelTenantTestCase):
+    """Cubre la clasificacion de campos de AI_SECURITY_MODEL.md: PII solo
+    para rol ADMIN, datos de salud/afiliacion nunca expuestos."""
+
+    def setUp(self):
+        super().setUp()
+        self.empresa = Empresa.objects.create(
+            razon_social="EMPRESA EMPLEADOS TEST S.A.S.", nit="900666888", direccion="Calle E",
+        )
+        self.empleado = Empleado.objects.create(
+            empresa=self.empresa, tipo_documento="CC", numero_documento="1000999888",
+            primer_nombre="Ana", primer_apellido="Torres", email="ana.torres@test.local",
+            telefono="3001234567", eps="EPS001", afp="AFP001", arl="ARL001",
+            fecha_ingreso=datetime.date(2025, 1, 15),
+        )
+
+        self.user_admin = User.objects.create_user(email="emp_admin@test.local", password="testpass123")
+        TenantProfile.objects.create(user=self.user_admin, empresa=self.empresa, rol="ADMIN")
+
+        self.user_operador = User.objects.create_user(email="emp_operador@test.local", password="testpass123")
+        TenantProfile.objects.create(user=self.user_operador, empresa=self.empresa, rol="OPERADOR")
+
+    @override_settings(**AI_FLAGS_ON)
+    def test_admin_ve_documento_email_telefono(self):
+        request = _FakeRequest(user=self.user_admin, tenant=self.tenant)
+
+        result = run_tool("buscar_empleado", request, search="Torres")
+
+        assert result.status == "OK"
+        assert len(result.data) == 1
+        assert result.data[0]["numero_documento"] == "1000999888"
+        assert result.data[0]["email"] == "ana.torres@test.local"
+        assert result.data[0]["nombre_completo"] == "Ana Torres"
+
+    @override_settings(**AI_FLAGS_ON)
+    def test_operador_no_ve_documento_email_telefono(self):
+        """Regla AI_SECURITY_MODEL.md: PII identificable solo con rol ADMIN."""
+        request = _FakeRequest(user=self.user_operador, tenant=self.tenant)
+
+        result = run_tool("buscar_empleado", request, search="Torres")
+
+        assert result.status == "OK"
+        assert len(result.data) == 1
+        assert "numero_documento" not in result.data[0]
+        assert "email" not in result.data[0]
+        assert "telefono" not in result.data[0]
+        assert result.data[0]["nombre_completo"] == "Ana Torres"
+
+    @override_settings(**AI_FLAGS_ON)
+    def test_nunca_expone_datos_de_salud_ni_afiliacion(self):
+        """Regla AI_SECURITY_MODEL.md: EPS/AFP/ARL FORBIDDEN sin excepcion de rol."""
+        request = _FakeRequest(user=self.user_admin, tenant=self.tenant)
+
+        result = run_tool("buscar_empleado", request, search="Torres")
+
+        assert result.status == "OK"
+        campos = set(result.data[0].keys())
+        assert "eps" not in campos
+        assert "afp" not in campos
+        assert "arl" not in campos
+        assert "nivel_riesgo_arl" not in campos
+        assert "foto" not in campos
+
+    @override_settings(**AI_FLAGS_ON)
+    def test_limit_maximo_es_10_no_50(self):
+        """Regla AI_SECURITY_MODEL.md: limites de agregacion mas estrictos para dominios sensibles."""
+        request = _FakeRequest(user=self.user_admin, tenant=self.tenant)
+
+        result = run_tool("buscar_empleado", request, limit=50)
+
+        assert result.status == "VALIDATION_ERROR"

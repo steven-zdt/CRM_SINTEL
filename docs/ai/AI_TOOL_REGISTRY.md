@@ -14,11 +14,13 @@ AI-03 READ TOOLS
 ├── VERIFIED (implementadas, testeadas, registradas)
 │   ├── clientes, inventario, proveedores, ventas, compras
 │   ├── cotizaciones, gastos, proyectos
-│   └── facturas (READ-only permanente, ver fila en la tabla abajo)
+│   ├── facturas (READ-only permanente, ver fila en la tabla abajo)
+│   └── empleados (SENSITIVE_READ, ver AI_SECURITY_MODEL.md -- PII solo rol ADMIN, salud/nomina nunca)
 │
 ├── BLOCKED BY DESIGN (requieren un documento/diseño previo, no solo wrap-a-selector)
-│   ├── empleados     → requiere AI_SECURITY_MODEL.md (datos sensibles)
-│   ├── bancos        → requiere AI_SECURITY_MODEL.md (datos sensibles)
+│   ├── bancos        → requiere aplicar la clasificación ya escrita en
+│   │                     AI_SECURITY_MODEL.md (mismo patrón que empleados,
+│   │                     aún no implementada como tool)
 │   └── contabilidad  → requiere diseño de integración AI ↔ Asistente
 │                        Contable existente (orquestar, no duplicar)
 │
@@ -27,7 +29,7 @@ AI-03 READ TOOLS
     └── reporting   → owner_phase = TBD, reason = domain intentionally deferred
 ```
 
-## Implementado (10 tools reales)
+## Implementado (11 tools reales)
 
 | Tool | Dominio | Kind | Risk | Confirmación | Servicio subyacente |
 |---|---|---|---|---|---|
@@ -41,6 +43,7 @@ AI-03 READ TOOLS
 | `consultar_gasto` | `gastos` | READ | `SAFE_READ` | No | `apps.tenant.gastos.services.selectors.DocumentoSelector` (modelo `DocumentoSoporte`) — mismo filtro NULL-safe de sede |
 | `consultar_proyecto` | `proyectos` | READ | `SAFE_READ` | No | `apps.tenant.proyectos.services.selectors.qs_list` — mismo filtro NULL-safe de sede |
 | `consultar_factura` | `facturas` | READ | `SAFE_READ` | No | `apps.tenant.facturas.services.selectors.FacturaSelectors.qs_list` — **READ-only permanente por diseño** (FASE 21): nunca habrá `crear_factura`/`anular_factura`/`transmitir_factura` en el AI Engine, esa escritura vive solo en el pipeline propietario (`FacturaBusinessService`) |
+| `buscar_empleado` | `empleados` | READ | `SENSITIVE_READ` | No | `apps.tenant.empleados.services.selectors.EmpleadoSelector` — **primer dominio sensible**: PII (`numero_documento`/`email`/`telefono`) solo si `context.rol == "ADMIN"`, salud/afiliación (EPS/AFP/ARL) y nómina (`Contrato`/`Devengo`) nunca expuestos por esta tool, `limit` máximo 10 (no 50); ver clasificación completa en `AI_SECURITY_MODEL.md` |
 
 `*` La misión de evolución pide un documento `AI_EKG.md` dedicado —
 decisión explícita: no se crea, para no duplicar contenido casi
@@ -68,7 +71,7 @@ como ejemplo ya construido):
 | `compras` | `apps.tenant.compras` | `consultar_compra` ✅ **implementada** (respeta alcance sede/área real) | `validar_compra` | (no priorizada) |
 | `gastos` | `apps.tenant.gastos` | `consultar_gasto` ✅ **implementada** (sede NULL-safe) | `validar_gasto` | `crear_gasto` |
 | `proyectos` | `apps.tenant.proyectos` | `consultar_proyecto` ✅ **implementada** (sede NULL-safe) | -- | -- |
-| `empleados` | `apps.tenant.empleados` | `consultar_empleado` | -- | -- (datos sensibles, ver `AI_SECURITY_MODEL.md`) |
+| `empleados` | `apps.tenant.empleados` | `buscar_empleado` ✅ **implementada** (`SENSITIVE_READ`, PII solo ADMIN) | -- | -- (datos sensibles, ver `AI_SECURITY_MODEL.md`) |
 | `bancos` | `apps.tenant.bancos` | `consultar_banco` | `verificar_pago` | -- (datos sensibles) |
 | `contabilidad` | `apps.tenant.contabilidad` | `consultar_asiento` | `validar_asiento` | **orquesta el Asistente Contable existente, no lo duplica** (ver `AI_ENGINE_ARCHITECTURE.md`) |
 | `impuestos` | `apps.public.impuestos` | `consultar_impuestos` | -- | -- |
