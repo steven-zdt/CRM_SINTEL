@@ -41,11 +41,23 @@ Construido **exclusivamente** desde `request.user.tenant_profile`
 (mismo SSoT que `SintelDSVMixin.get_empresa_id()`), nunca desde el
 payload de IA. `alcance=SEDE`/`AREA` puebla `sede_ids`/`area_ids`
 desde las relaciones M2M reales del perfil (`sedes_asignadas`/
-`areas_asignadas`) -- **las tools de esta pasada (`buscar_cliente`) no
-usan todavía `sede_ids`/`area_ids`** para filtrar (Cliente no tiene
-FK a Sede en el modelo actual) -- el campo existe en `AIContext` listo
-para cuando una tool de un dominio con alcance por sede lo necesite
-(ej. inventario, empleados).
+`areas_asignadas`) -- `buscar_cliente`/`buscar_producto` no usan
+`sede_ids`/`area_ids` (esos modelos no tienen FK a Sede). **[2026-09-01]
+`consultar_compra` sí los usa de verdad** (primera tool con alcance
+organizacional real, `apps/services/ai/tools/compras_tools.py`) --
+respeta exactamente la misma semántica que
+`apps/tenant/core/services/organizational_filters.py::filter_by_scope`
+ya usa en el resto del código: `sede_ids=None` → sin restricción
+(alcance `EMPRESA`); `sede_ids=()` (tupla vacía, no `None`) →
+restringir a nada (alcance `SEDE`/`AREA` sin ninguna sede asignada).
+`AIContext.sede_ids` devuelve `()` para **ambos** casos (`EMPRESA` sin
+restricción y `SEDE` sin asignaciones) — la tool traduce
+explícitamente según `context.alcance` antes de pasarlo al selector
+(`_scope_ids_or_none()`), nunca asume que "tupla vacía" siempre
+significa "sin restricción". Probado con 2 usuarios reales (alcance
+`EMPRESA` ve ambas sedes; alcance `SEDE` con una sola sede asignada
+nunca ve la otra) en
+`apps/services/ai/tests/test_ai03_mas_dominios_tool.py::ConsultarCompraToolTests`.
 
 ## Fase 23 — Contexto de pantalla (implementado, opcional)
 
