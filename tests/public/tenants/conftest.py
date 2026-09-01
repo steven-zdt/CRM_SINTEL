@@ -6,7 +6,9 @@ Incluye fixtures comunes para tests de onboarding y CRUD.
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import override_settings
+from django_tenants.utils import get_public_schema_name
 
 
 @pytest.fixture(autouse=True)
@@ -65,3 +67,24 @@ def api_client():
     from rest_framework.test import APIClient
 
     return APIClient()
+
+
+@pytest.fixture
+def public_tenant(db):
+    """Garantiza que exista el Client(schema_name='public') en la BD de test.
+
+    Ninguna migración de apps/public/tenants/migrations/ siembra este
+    registro: en un entorno de desarrollo normal existe porque
+    setup_public_tenant/create_public_tenant ya se corrió alguna vez contra
+    una BD persistente, pero una BD de test creada desde cero (--create-db)
+    no lo tiene. get_or_create evita depender de ese estado heredado.
+    """
+    from apps.public.tenants.models import Client
+
+    connection.set_schema_to_public()
+    public_schema = get_public_schema_name()
+    client, _ = Client.objects.get_or_create(
+        schema_name=public_schema,
+        defaults={"nombre": "Public Schema", "is_active": True, "on_trial": False},
+    )
+    return client

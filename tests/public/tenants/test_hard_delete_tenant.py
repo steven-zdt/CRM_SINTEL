@@ -12,7 +12,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import connection
-from django_tenants.utils import get_public_schema_name, schema_exists
+from django_tenants.utils import schema_exists
 
 from apps.public.tenants.models import Client, Domain, TenantMembership
 from apps.public.tenants.services.deletion_service import hard_delete_tenant
@@ -156,21 +156,21 @@ def test_hard_delete_elimina_tenant_inactivo(inactive_tenant):
     assert not schema_exists(schema_name)
 
 
-def test_hard_delete_bloquea_tenant_publico(db):
+def test_hard_delete_bloquea_tenant_publico(public_tenant):
     """
     Test C: No permite borrar el tenant público.
     """
     connection.set_schema_to_public()
-
-    public_schema = get_public_schema_name()
-    public_tenant = Client.objects.get(schema_name=public_schema)
 
     # Desactivar temporalmente para pasar la precondición
     public_tenant.is_active = False
     public_tenant.save()
 
     # Intentar eliminar tenant público debe fallar
-    with pytest.raises(ValueError) as exc_info:
+    # (hard_delete_tenant lanza ValidationError, no ValueError -- ver el
+    # chequeo de defensa en profundidad en deletion_service.py; ValueError
+    # solo lo lanza Client.delete() cuando se invoca directamente al modelo)
+    with pytest.raises(ValidationError) as exc_info:
         hard_delete_tenant(client_id=public_tenant.id)
 
     assert (
