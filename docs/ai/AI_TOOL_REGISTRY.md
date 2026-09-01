@@ -1,6 +1,6 @@
 # AI_TOOL_REGISTRY — Fases 11-16 (+ AI-02/AI-03, misión evolución contextual, 2026-09-01)
 
-## Implementado (6 tools reales)
+## Implementado (9 tools reales)
 
 | Tool | Dominio | Kind | Risk | Confirmación | Servicio subyacente |
 |---|---|---|---|---|---|
@@ -10,6 +10,9 @@
 | `buscar_proveedor` | `proveedores` | READ | `SAFE_READ` | No | `apps.tenant.proveedores.services.selectors.ProveedorSelector` |
 | `consultar_venta` | `ventas` | READ | `SAFE_READ` | No | `apps.tenant.ventas.services.selectors.VentaSelector` (filtro por `estado`, incluye nombre de cliente) |
 | `consultar_compra` | `compras` | READ | `SAFE_READ` | No | `apps.tenant.compras.services.selectors.OrdenCompraSelector` — **primera tool que respeta alcance organizacional real** (sede/área), no solo `empresa_id`, ver `AI_CONTEXT_MODEL.md` |
+| `consultar_cotizacion` | `cotizaciones` | READ | `SAFE_READ` | No | `apps.tenant.cotizaciones.services.selectors.CotizacionSelector` — respeta sede vía filtro NULL-safe (OSF Fase F7) |
+| `consultar_gasto` | `gastos` | READ | `SAFE_READ` | No | `apps.tenant.gastos.services.selectors.DocumentoSelector` (modelo `DocumentoSoporte`) — mismo filtro NULL-safe de sede |
+| `consultar_proyecto` | `proyectos` | READ | `SAFE_READ` | No | `apps.tenant.proyectos.services.selectors.qs_list` — mismo filtro NULL-safe de sede |
 
 `*` La misión de evolución pide un documento `AI_EKG.md` dedicado —
 decisión explícita: no se crea, para no duplicar contenido casi
@@ -31,12 +34,12 @@ como ejemplo ya construido):
 | `clientes` | `apps.tenant.clientes` | `buscar_cliente` ✅ **implementada** | `validar_cliente` | `crear_cliente` |
 | `proveedores` | `apps.tenant.proveedores` | `buscar_proveedor` ✅ **implementada** | `validar_proveedor` | `crear_proveedor` |
 | `productos`/`inventario` | `apps.tenant.inventario` | `buscar_producto` ✅ **implementada** (incluye stock, `consultar_stock` no necesita tool separada) | `validar_producto` | `crear_producto` |
-| `cotizaciones` | `apps.tenant.cotizaciones` | `consultar_cotizacion` | `validar_cotizacion` | `crear_borrador_cotizacion` |
+| `cotizaciones` | `apps.tenant.cotizaciones` | `consultar_cotizacion` ✅ **implementada** (sede NULL-safe) | `validar_cotizacion` | `crear_borrador_cotizacion` |
 | `ventas` | `apps.tenant.ventas` | `consultar_venta` ✅ **implementada** (filtro por estado, nombre de cliente) | `validar_venta` | (no priorizada -- pipeline propietario complejo) |
 | `facturas` | `apps.tenant.facturas` | `consultar_factura` | `validar_factura` | **nunca directa** -- ver `FASE 21` de la misión, pipeline propietario obligatorio |
 | `compras` | `apps.tenant.compras` | `consultar_compra` ✅ **implementada** (respeta alcance sede/área real) | `validar_compra` | (no priorizada) |
-| `gastos` | `apps.tenant.gastos` | `consultar_gasto` | `validar_gasto` | `crear_gasto` |
-| `proyectos` | `apps.tenant.proyectos` | `consultar_proyecto` | -- | -- |
+| `gastos` | `apps.tenant.gastos` | `consultar_gasto` ✅ **implementada** (sede NULL-safe) | `validar_gasto` | `crear_gasto` |
+| `proyectos` | `apps.tenant.proyectos` | `consultar_proyecto` ✅ **implementada** (sede NULL-safe) | -- | -- |
 | `empleados` | `apps.tenant.empleados` | `consultar_empleado` | -- | -- (datos sensibles, ver `AI_SECURITY_MODEL.md`) |
 | `bancos` | `apps.tenant.bancos` | `consultar_banco` | `verificar_pago` | -- (datos sensibles) |
 | `contabilidad` | `apps.tenant.contabilidad` | `consultar_asiento` | `validar_asiento` | **orquesta el Asistente Contable existente, no lo duplica** (ver `AI_ENGINE_ARCHITECTURE.md`) |

@@ -1,9 +1,12 @@
 from .base import AUTO_APPROVED_KINDS, BaseTool, ToolKind, ToolResult, ToolRisk
 from .clientes_tools import BuscarClienteTool
 from .compras_tools import ConsultarCompraTool
+from .cotizaciones_tools import ConsultarCotizacionTool
 from .ekg_tools import ProjectMapTool
+from .gastos_tools import ConsultarGastoTool
 from .inventario_tools import BuscarProductoTool
 from .proveedores_tools import BuscarProveedorTool
+from .proyectos_tools import ConsultarProyectoTool
 from .registry import get_tool, list_tools, register_tool, tool_metadata
 from .ventas_tools import ConsultarVentaTool
 
@@ -15,6 +18,9 @@ register_tool(BuscarProductoTool())
 register_tool(BuscarProveedorTool())
 register_tool(ConsultarVentaTool())
 register_tool(ConsultarCompraTool())
+register_tool(ConsultarCotizacionTool())
+register_tool(ConsultarGastoTool())
+register_tool(ConsultarProyectoTool())
 
 __all__ = [
     "AUTO_APPROVED_KINDS",

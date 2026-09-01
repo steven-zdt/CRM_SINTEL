@@ -59,6 +59,23 @@ significa "sin restricción". Probado con 2 usuarios reales (alcance
 nunca ve la otra) en
 `apps/services/ai/tests/test_ai03_mas_dominios_tool.py::ConsultarCompraToolTests`.
 
+**[2026-09-01] `consultar_cotizacion`/`consultar_gasto`/`consultar_proyecto`
+usan una variante distinta, NULL-safe** (`Cotizacion`/`DocumentoSoporte`/
+`Proyecto` tienen `sede` opcional y el 100% de los registros reales
+tiene `sede=NULL` hoy, OSF Fase F7 -- ver
+`apps/tenant/core/services/organizational_filters.py::filter_by_scope_null_safe`
+y la nota en cada selector). Estos 3 modelos no tienen campo `area`,
+asi que no hay eje de area que traducir: la tool pasa
+`context.sede_ids` (la tupla real, incluso vacia) para cualquier
+alcance distinto de `EMPRESA` -- incluyendo alcance `AREA`, cuyo
+`context.sede_ids` siempre es `()` (ver `build_context`), lo que hoy
+es NULL-safe-permisivo (toda la data real es NULL) y se vuelve
+correctamente restrictivo el dia que existan registros con sede real
+asignada. Esto es intencionalmente mas simple que
+`_scope_kwargs()` de `consultar_compra` porque aqui solo existe UN eje
+(sede), no dos -- no hay riesgo de aplicar la misma regla a un
+segundo eje que no corresponde.
+
 ## Fase 23 — Contexto de pantalla (implementado, opcional)
 
 `build_context(request, screen={...})` acepta un dict con
