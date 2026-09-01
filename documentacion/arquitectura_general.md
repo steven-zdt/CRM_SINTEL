@@ -1,7 +1,56 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.60.0
-**Ultima actualizacion:** 2026-09-01 (DOC-M47) — **7 misiones autonomas
+**Version:** 3.61.0
+**Ultima actualizacion:** 2026-09-01 (DOC-M48) — **Evolucion AI Engine
+(AI-01 VERIFIED, AI-02/AI-03 avanzados con `ai_project_map`/
+`buscar_producto`) + 2 hallazgos reales cerrados heredados de sesiones
+paralelas (fuga de puerto interno en CORS, `ProgrammingError` silencioso
+al borrar usuarios huerfanos) + `DOCUMENTATION_DRIFT` corregido en
+§2.2 (App Label real vs. documentado)**. Posterior a DOC-M47
+(2026-09-01, misma fecha).
+
+**A. AI Engine — AI-01 VERIFIED, AI-02/AI-03 avanzados:** `AIContext`/
+`build_context` (§8.6) ya cumplian SSoT real desde DOC-M47; se agrego
+el test explicito que AI-01.3 exige literalmente (usuario A/tenant A
+vs. usuario B/tenant B → contexto A != contexto B) — **AI-01 =
+VERIFIED**. Nueva tool `ai_project_map` (§8.6): combina el registro
+VIVO de Django (owner de un modelo, siempre actual) con los snapshots
+reales del EKG (`tools/ekg/out/<app>.json`, reglas/docs/FK, siempre
+reporta cuando se generaron) — sin crear un segundo grafo. Nueva tool
+`buscar_producto` (dominio `inventario`, incluye stock). 35/35 tests
+reales. `AI_ENGINE` sigue `NOT_VERIFIED` (11 de 13 dominios de negocio
+prioritarios sin tool aun, VALIDATE/SUGGEST/WRITE/MCP/memoria sin
+implementar) — ver `docs/ai/AI_RELEASE_GATE.md`.
+
+**B. `DOCUMENTATION_DRIFT` real corregido (§2.2, App Label):**
+encontrado incidentalmente al construir `ai_project_map` — el
+`app_label` real de 10 de las 16 apps tenant lleva el prefijo
+`tenant_` (`tenant_clientes`, `tenant_inventario`, etc., ver cada
+`apps.py`), pero la tabla de §2.2 los documentaba sin prefijo. Tabla
+corregida con evidencia real por app.
+
+**C. 2 hallazgos reales cerrados, heredados de sesiones paralelas de
+esta misma jornada** (revisados, verificados con tests reales, y
+comiteados tras confirmar que estaban completos):
+- `CSRFTrustedOriginMiddleware` (`apps/public/core/middleware.py`) ya
+  no sintetiza `HTTP_ORIGIN` cuando el navegador no envia uno real —
+  cierra el Hallazgo 3 de `docs/network/LAN_MULTI_TENANT_FINAL_REPORT.md`
+  (fuga del puerto interno `:8000` via `access-control-allow-origin`
+  sintetico). 5/5 tests nuevos.
+- `hard_delete_tenant(delete_orphan_users=True)` ya no usa
+  `User.objects.filter(...).delete()` (ORM, cuyo collector intentaba
+  consultar `perfil_tenantprofile` en el schema `public` →
+  `ProgrammingError` que revertia TODA la transaccion silenciosamente,
+  drop de schema incluido) — ahora reutiliza `delete_user_service()`
+  ya existente (SQL crudo + limpieza cross-schema via signal). 8/9
+  tests PASS (el 9no, `test_hard_delete_bloquea_tenant_publico`, es un
+  gap de fixture preexistente y NO relacionado, confirmado
+  reproduciendolo aislado contra una BD de test recien creada — queda
+  delegado aparte, `task_a8ca8af1`).
+
+---
+
+**Actualizacion previa:** 2026-09-01 (DOC-M47) — **7 misiones autonomas
 consecutivas**: remediacion P0 (re-verificacion + grounding normativo),
 validacion E2E de onboarding (privilegio-escalacion critico corregido),
 CRUD/lifecycle de Console Tenants (trial real), framework de Production
@@ -1931,22 +1980,39 @@ empresa.sintel.net.co →  tenant schema    →  urls_tenant.py
 
 | App | App Label | Modelos | Migraciones | Responsabilidad |
 |---|---|---|---|---|
-| `apps/tenant/core/` | `core` | SintelTenantBaseModel, SedeAwareModel (ambas abstractas) | 0 | UI Shell, bridge cross-schema, onboarding, auth JWT |
+| `apps/tenant/core/` | `tenant_core`¹ | SintelTenantBaseModel, SedeAwareModel (ambas abstractas) | 0 | UI Shell, bridge cross-schema, onboarding, auth JWT |
 | `apps/tenant/empresa/` | `empresa` | Empresa, MailInboxConfig, Sede, Area | 9 | Datos fiscales, logo, sedes y areas del tenant |
 | `apps/tenant/perfil/` | `perfil` | Departamento, TenantProfile (+ RolTenant, AlcanceOrganizacional como `TextChoices`, no modelos) | 8 | Roles y perfiles de usuario dentro del tenant |
 | `apps/tenant/facturas/` | `facturas` | Factura, ItemFactura, NotaCredito, ItemNotaCredito, MailIngestionRun, MailInboxState, FacturaAnexos, FacturaImpuesto | 33 | Facturacion electronica DIAN (XML, envio, estados) |
 | `apps/tenant/contabilidad/` | `contabilidad` | CatalogoMaestroNIIF, CuentaContable, TipoComprobante, AsientoContable, MovimientoContable, PeriodoContable, ReglaContable, TarifaImpuesto, ConfiguracionRetenciones, Retencion, PlantillaContable, LineaPlantilla, ImpuestoDocumento | 16 | PUC NIIF, asientos, extractores Pull, agente IA, Motor de Plantillas |
-| `apps/tenant/gastos/` | `gastos` | ResolucionDIAN, DocumentoSoporte | 22 | Gastos operativos, documentos soporte, retenciones |
-| `apps/tenant/inventario/` | `inventario` | CategoriaItem, Producto, Servicio, ActivoFijo, MovimientoInventario, TrasladoInventario (F21), HistorialServicio (+ TimeStampedModel abstract) | 11 | Productos, servicios, activos fijos, Kardex unificado, traslado de stock entre sedes (F21) |
-| `apps/tenant/empleados/` | `empleados` | Empleado, Contrato, Devengo, ResolucionDIAN, TransmisionNominaDIAN, LiquidacionPrestacion | 13 | Nomina colombiana, devengos, contratos, liquidaciones |
-| `apps/tenant/cotizaciones/` | `cotizaciones` | Cotizacion, CotizacionItem (+ Producto y Servicio propios) | 5 | Cotizaciones comerciales, vinculacion con facturas |
-| `apps/tenant/clientes/` | `clientes` | Cliente, ContactoCliente, Cartera | 8 | CRM basico, terceros clientes, cartera, retenciones |
-| `apps/tenant/proveedores/` | `proveedores` | Proveedor, CuentasPagar, Representante | 18 | Terceros proveedores, cartera unificada, documentos soporte |
-| `apps/tenant/proyectos/` | `proyectos` | Proyecto, AsignacionPersonal, PedidoProyecto, ItemPedido, ItemPresupuestoProyecto, TareaCorta, TareaDiariaProyecto | 20 | Gestion de proyectos, presupuesto, tareas cortas |
+| `apps/tenant/gastos/` | `tenant_gastos`¹ | ResolucionDIAN, DocumentoSoporte | 22 | Gastos operativos, documentos soporte, retenciones |
+| `apps/tenant/inventario/` | `tenant_inventario`¹ | CategoriaItem, Producto, Servicio, ActivoFijo, MovimientoInventario, TrasladoInventario (F21), HistorialServicio (+ TimeStampedModel abstract) | 11 | Productos, servicios, activos fijos, Kardex unificado, traslado de stock entre sedes (F21) |
+| `apps/tenant/empleados/` | `tenant_empleados`¹ | Empleado, Contrato, Devengo, ResolucionDIAN, TransmisionNominaDIAN, LiquidacionPrestacion | 13 | Nomina colombiana, devengos, contratos, liquidaciones |
+| `apps/tenant/cotizaciones/` | `tenant_cotizaciones`¹ | Cotizacion, CotizacionItem (+ Producto y Servicio propios) | 5 | Cotizaciones comerciales, vinculacion con facturas |
+| `apps/tenant/clientes/` | `tenant_clientes`¹ | Cliente, ContactoCliente, Cartera | 8 | CRM basico, terceros clientes, cartera, retenciones |
+| `apps/tenant/proveedores/` | `tenant_proveedores`¹ | Proveedor, CuentasPagar, Representante | 18 | Terceros proveedores, cartera unificada, documentos soporte |
+| `apps/tenant/proyectos/` | `tenant_proyectos`¹ | Proyecto, AsignacionPersonal, PedidoProyecto, ItemPedido, ItemPresupuestoProyecto, TareaCorta, TareaDiariaProyecto | 20 | Gestion de proyectos, presupuesto, tareas cortas |
 | `apps/tenant/dashboard/` | `dashboard` | SnapshotMetricaDiaria | 3 | Dashboard ejecutivo, metricas consolidadas |
 | `apps/tenant/bancos/` | `bancos` | CuentaBancaria, ExtractoBancario, TransaccionBancaria | 5 | Estados de cuenta bancarios, conciliacion manual via UUID soft-references |
-| `apps/tenant/compras/` | `compras` | PlantillaOrdenCompra, OrdenCompra (hereda `SedeAwareModel`, ver §3.2/ADR-003), ItemOrdenCompra, RecepcionCompra (F21, hereda `SedeAwareModel`), RecepcionCompraItem (F21) | 8 | Ordenes de compra a proveedores + Recepcion de Compras -> Inventario (F21, ver `documentacion/F21_RECEPCION_INVENTARIO.md`) |
-| `apps/tenant/ventas/` | `ventas` | ResolucionFacturacion, Venta, ItemVenta | 3 | Ordenes de venta y su puente hacia `facturas` (agregada 2026-06-17, ver `.agent/ARQUITECTURA_VENTAS.md`) |
+| `apps/tenant/compras/` | `tenant_compras`¹ | PlantillaOrdenCompra, OrdenCompra (hereda `SedeAwareModel`, ver §3.2/ADR-003), ItemOrdenCompra, RecepcionCompra (F21, hereda `SedeAwareModel`), RecepcionCompraItem (F21) | 8 | Ordenes de compra a proveedores + Recepcion de Compras -> Inventario (F21, ver `documentacion/F21_RECEPCION_INVENTARIO.md`) |
+| `apps/tenant/ventas/` | `tenant_ventas`¹ | ResolucionFacturacion, Venta, ItemVenta | 3 | Ordenes de venta y su puente hacia `facturas` (agregada 2026-06-17, ver `.agent/ARQUITECTURA_VENTAS.md`) |
+
+**¹ [DOC-M48, 2026-09-01] `DOCUMENTATION_DRIFT` corregido:** esta
+columna documentaba el App Label sin el prefijo `tenant_` para 10 de
+las 16 apps de esta tabla. El `app_label` real (`class AppConfig:
+label = "tenant_<nombre>"`, cada `apps.py` respectivo, ej.
+`apps/tenant/clientes/apps.py:7`, comentario recurrente "evita
+colisiones de labels con apps publicas") **sí** lleva el prefijo para
+`core`/`gastos`/`inventario`/`empleados`/`cotizaciones`/`clientes`/
+`proveedores`/`proyectos`/`compras`/`ventas` — las 6 restantes
+(`empresa`, `perfil`, `facturas`, `contabilidad`, `dashboard`,
+`bancos`) no tienen `label` explícito en su `AppConfig`, así que Django
+usa el último componente de `name` sin prefijo, que sí coincide con lo
+ya documentado. Hallazgo real, encontrado incidentalmente al construir
+`ai_project_map` (§8.6) — el nombre de archivo de los snapshots del
+EKG (`tools/ekg/out/<carpeta>.json`) usa el nombre de **carpeta**, no
+el `app_label`, por lo que ninguna de las dos convenciones coincidía
+con lo que este documento afirmaba.
 
 **Nota (`ResolucionDIAN` duplicado):** `gastos` y `empleados` tienen cada una su propia clase `ResolucionDIAN` — son dos modelos distintos, no un bug de referencia cruzada (hallazgo confirmado durante la auditoria EKG 2026-08-07, ver `documentacion/INFORME_FINAL_EKG_GOBERNANZA_2026-08-07.md` §4.1).
 
@@ -2562,7 +2628,7 @@ El archivo `AGENTS.md` es el contexto primario para cualquier agente de codigo. 
 
 Regla para agentes de codigo: al iniciar cualquier sesion o tarea nueva, leer `MEMORY.md` primero, luego `AGENTS.md`, luego el `.agent/AUDITORIA_FLUJO_*.md` de la app objetivo.
 
-### 8.6. AI Engine transversal (nuevo, DOC-M47) — capa de servicio, no reemplaza 8.1-8.5
+### 8.6. AI Engine transversal (DOC-M47, ampliado DOC-M48) — capa de servicio, no reemplaza 8.1-8.5
 
 `apps/services/ai/` (mismo patron que `apps/services/onboarding/` —
 capa de servicio, no una app Django de negocio, sin migraciones):
@@ -2575,8 +2641,10 @@ apps/services/ai/
                 real via request.user.tenant_profile.empresa_id (el
                 mismo que usa SintelDSVMixin.get_empresa_id())
   tools/        BaseTool, ToolKind(READ|SUGGEST|VALIDATE|WRITE),
-                ToolRisk, AIToolRegistry + BuscarClienteTool (unica
-                tool real, envuelve ClienteSelector ya existente)
+                ToolRisk, AIToolRegistry + 3 tools reales:
+                BuscarClienteTool, BuscarProductoTool (inventario,
+                incluye stock), ProjectMapTool (`ai_project_map`,
+                EKG contextual -- ver abajo)
   engine/       AIEngine.run_tool() -- unico punto de entrada; WRITE
                 bloqueado ESTRUCTURALMENTE (AUTO_APPROVED_KINDS
                 excluye WRITE sin importar el flag), feature flags
@@ -2585,10 +2653,25 @@ apps/services/ai/
                 request.data)
 ```
 
-Estado real: `AI_ENGINE = NOT_VERIFIED` (honesto) —
-`READ_ONLY_ASSISTANT` alcanzado para 1 dominio (`clientes`), 20/20
-tests reales pasando (incluye aislamiento via empresa_id real y WRITE
-bloqueado aunque el flag este activo). El resto de dominios
+**[DOC-M48, 2026-09-01] `ai_project_map`:** primera tool que consulta
+el EKG (`tools/ekg/`) sin crear un segundo grafo -- combina el
+registro VIVO de Django (`django.apps.apps.get_models()`, para
+"¿quien es dueño de este modelo?", siempre actual) con los snapshots
+ya serializados de `tools/ekg/out/<app>.json` (para reglas/docs/FK de
+una app, generados por `make ekg-build`, reportando siempre cuando se
+generaron -- nunca ocultando que es una fotografia). Hallazgo real
+encontrado al construirla: el `app_label` real de Django no siempre
+coincide con el nombre de archivo del snapshot EKG (ej. `Cliente` →
+`app_label="tenant_clientes"` per `apps/tenant/clientes/apps.py:7`,
+pero el snapshot es `clientes.json`, nombrado por carpeta) — confirma
+el `DOCUMENTATION_DRIFT` de la columna "App Label" en §2.2 (ver nota
+ahi). La tool deriva el nombre de carpeta real desde `__module__` en
+vez de asumir que coincide con `app_label`.
+
+Estado real: `AI_ENGINE = NOT_VERIFIED` (honesto) — AI-01 (Context
+Engine) **VERIFIED**; AI-02 (EKG Contextual) y AI-03 (READ Tools)
+**parciales** (2/13 dominios de negocio prioritarios: `clientes`,
+`inventario`); 35/35 tests reales pasando. El resto de dominios
 (proveedores, facturas, contabilidad...), VALIDATE/SUGGEST/WRITE, MCP
 (`django-rest-framework-mcp` esta instalado y montado en `/mcp/` pero
 con cero ViewSets decorados — andamiaje inerte, sin cambios en esta
