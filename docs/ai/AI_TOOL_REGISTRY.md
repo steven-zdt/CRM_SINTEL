@@ -1,10 +1,18 @@
-# AI_TOOL_REGISTRY — Fases 11-16
+# AI_TOOL_REGISTRY — Fases 11-16 (+ AI-02/AI-03, misión evolución contextual, 2026-09-01)
 
-## Implementado (1 tool real)
+## Implementado (3 tools reales)
 
 | Tool | Dominio | Kind | Risk | Confirmación | Servicio subyacente |
 |---|---|---|---|---|---|
 | `buscar_cliente` | `clientes` | READ | `SAFE_READ` | No | `apps.tenant.clientes.services.selectors.ClienteSelector` |
+| `ai_project_map` | `platform` (transversal, ver `AI_EKG.md`* nota abajo) | READ | `SAFE_READ` | No | `django.apps.apps.get_models()` (owner) + `tools/ekg/queries.py` + snapshots `tools/ekg/out/<app>.json` (rules/docs/fk) |
+| `buscar_producto` | `inventario` | READ | `SAFE_READ` | No | `apps.tenant.inventario.services.selectors.ProductoSelector` (incluye `stock_actual`, cubre AI-03.2 completa sin tool separada de stock) |
+
+`*` La misión de evolución pide un documento `AI_EKG.md` dedicado —
+decisión explícita: no se crea, para no duplicar contenido casi
+idéntico al ya existente en `AI_ENGINE_ARCHITECTURE.md` §"EKG / Knowledge
+Graph tool" (Regla 9 de esa misión, "NO DUPLICAR"). El detalle de
+`ai_project_map` vive ahí y aquí; se actualizan ambos in situ.
 
 Metadata completa vía `apps.services.ai.tools.tool_metadata()` (nunca
 se expone el objeto Python de la tool en sí, solo el dict
@@ -19,7 +27,7 @@ como ejemplo ya construido):
 |---|---|---|---|---|
 | `clientes` | `apps.tenant.clientes` | `buscar_cliente` ✅ **implementada** | `validar_cliente` | `crear_cliente` |
 | `proveedores` | `apps.tenant.proveedores` | `buscar_proveedor` | `validar_proveedor` | `crear_proveedor` |
-| `productos`/`inventario` | `apps.tenant.inventario` | `buscar_producto`, `consultar_stock` | `validar_producto` | `crear_producto` |
+| `productos`/`inventario` | `apps.tenant.inventario` | `buscar_producto` ✅ **implementada** (incluye stock, `consultar_stock` no necesita tool separada) | `validar_producto` | `crear_producto` |
 | `cotizaciones` | `apps.tenant.cotizaciones` | `consultar_cotizacion` | `validar_cotizacion` | `crear_borrador_cotizacion` |
 | `ventas` | `apps.tenant.ventas` | `consultar_venta` | `validar_venta` | (no priorizada -- pipeline propietario complejo) |
 | `facturas` | `apps.tenant.facturas` | `consultar_factura` | `validar_factura` | **nunca directa** -- ver `FASE 21` de la misión, pipeline propietario obligatorio |

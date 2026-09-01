@@ -12,17 +12,24 @@ real lo que la propia misión pide primero ("AUDITAR → MAPEAR →
 DISEÑAR", "NO habilitar WRITE", "Primero READ_ONLY_ASSISTANT") y
 diseñar explícitamente, sin fingir implementación, el resto.
 
+**[2026-09-01, misión de evolución READ_ONLY → contextual, Fases AI-01
+a AI-03]** Actualizado tras cerrar AI-01 (context engine, formalmente
+verificado) y avanzar AI-02 (EKG contextual, `ai_project_map` real) +
+AI-03 parcial (2 dominios READ: `clientes`, `inventario`). Ver
+`AI_RELEASE_GATE.md` para el detalle ítem por ítem actualizado.
+
 **Implementado y probado (código real, tests reales, ver
 `AI_RELEASE_GATE.md`):**
-`AIProvider`/`AnthropicProvider`, `AIContext`/`build_context`,
-`BaseTool`/`AIToolRegistry`, `AIEngine.run_tool`, feature flags
-server-side, **una** tool READ real (`buscar_cliente`).
+`AIProvider`/`AnthropicProvider`, `AIContext`/`build_context`
+(AI-01 **VERIFIED**), `BaseTool`/`AIToolRegistry`, `AIEngine.run_tool`,
+feature flags server-side, **3 tools READ reales**: `buscar_cliente`,
+`buscar_producto`, y `ai_project_map` (EKG contextual, AI-02).
 
-**Diseñado, no implementado:** todo lo demás (resto de tools por
-dominio, MCP write, guardrails de input/output, memoria de sesión,
-tracing productivo, cost control, model router, integración EKG como
-retrieval). Cada documento de `docs/ai/` dice explícitamente cuál es
-cuál.
+**Diseñado, no implementado:** el resto de tools por dominio (11 de
+13 dominios prioritarios de AI-03 siguen pendientes), MCP write,
+guardrails de input/output, memoria de sesión, tracing productivo,
+cost control, model router, VALIDATE/SUGGEST engines (AI-04/AI-05).
+Cada documento de `docs/ai/` dice explícitamente cuál es cuál.
 
 ## Estructura real
 
@@ -37,13 +44,17 @@ apps/services/ai/            # capa de servicio, NO una app de negocio
   tools/
     base.py                  # BaseTool, ToolKind, ToolRisk, ToolResult
     registry.py               # AIToolRegistry (register_tool/get_tool/list_tools)
-    clientes_tools.py          # BuscarClienteTool -- la unica tool real hoy
+    clientes_tools.py          # BuscarClienteTool
+    inventario_tools.py         # BuscarProductoTool (incluye stock_actual)
+    ekg_tools.py                 # ProjectMapTool (ai_project_map) -- AI-02
   engine/
     ai_engine.py               # AIEngine.run_tool() -- unico punto de entrada
   tests/
     test_tool_registry.py
-    test_ai_context.py
-    test_buscar_cliente_tool.py  # confirma empresa_id real del contexto, flags, permisos
+    test_ai_context.py             # incluye AI-01.3: contexto A != contexto B
+    test_buscar_cliente_tool.py     # confirma empresa_id real del contexto, flags, permisos
+    test_buscar_producto_tool.py     # mismo patron, dominio inventario
+    test_ai_project_map_tool.py       # owner (Django) + rules/fk (snapshot EKG real)
 ```
 
 `policies/`, `memory/`, `tracing/` **no se crearon** -- crear paquetes
@@ -99,21 +110,46 @@ tiene `TenantProfile` válido, `build_context()` lanza
 `PermissionDeniedError` -- no hay fallback silencioso a "sin
 restricción".
 
-## EKG / Knowledge Graph tool (Fase 9-10)
+## EKG / Knowledge Graph tool (Fase 9-10, AI-02) — **implementado**
 
-**No implementado.** `tools/ekg/` (ver `AI_CURRENT_STATE.md`) es un
-candidato real (ya tiene el grafo de dependencias que
-`ai.project_map` necesitaría), pero conectar el AI Engine al EKG real
-(vía Neo4j) es trabajo genuino de diseño+implementación que excede el
-alcance de esta pasada. Diseño de la interfaz esperada:
+`ai_project_map` (`apps/services/ai/tools/ekg_tools.py`, clase
+`ProjectMapTool`) combina dos fuentes reales, cada una la más
+autoritativa para su pregunta:
 
 ```python
-# DISEÑO, no implementado:
-def ai_project_map(question: str) -> dict:
-    """
-    Responde 'que app posee X', 'que depende de Y', 'que servicio uso',
-    consultando tools/ekg/queries.py contra el grafo Neo4j ya existente
-    -- NUNCA devuelve el grafo completo al modelo, filtra a lo
-    relevante para la pregunta (Fase 10, regla explicita).
-    """
+def run(self, context, *, question: str, name: str) -> ToolResult:
+    # question="owner" -> django.apps.apps.get_models() (registro VIVO,
+    #   nunca un snapshot -- responde "que app_label posee este modelo"
+    #   con autoridad total, sin depender de que el EKG este actualizado)
+    # question in ("rules_for_app","docs_for_app","fk_relationships",
+    #   "endpoints_for_model") -> carga tools/ekg/out/<carpeta>.json
+    #   (snapshot real generado por `make ekg-build`) + funciones
+    #   offline_* de tools/ekg/queries.py -- SIEMPRE reporta
+    #   snapshot_generated_at, nunca oculta que es una fotografia
 ```
+
+**No usa Neo4j directamente** -- usa los snapshots JSON ya
+serializados (`tools/ekg/schema.py::graph_from_jsonable`), que ya
+contienen exactamente lo que las funciones `offline_*` necesitan; no
+hace falta una conexión Neo4j viva para responder estas preguntas.
+**No devuelve el grafo completo** -- cada pregunta carga solo el
+snapshot de la app relevante (no las 27 apps a la vez), y las
+funciones `offline_*` ya filtran a las relaciones del modelo/app
+consultado (Fase 10, cumplido).
+
+**DOCUMENTATION_DRIFT real encontrado al construirla** (ver
+`AI_BASELINE_EXECUTION.md` para el detalle completo): el `app_label`
+real de Django no siempre coincide con el nombre de archivo del
+snapshot EKG (ej. `Cliente` → `app_label="tenant_clientes"`, snapshot
+`clientes.json`, nombrado por carpeta). La tool deriva el nombre de
+carpeta real desde `model.__module__` en vez de asumir que coincide
+con `app_label` — corregido en el código nuevo; no se corrigió
+`documentacion/arquitectura_general.md` §2.2 (fuera del alcance mínimo
+de esta tool).
+
+**No implementado (AI-02.4, process resolution):** "¿qué ocurre al
+facturar una venta?" (cadena `Venta → Factura → Inventario →
+Contabilidad → Bancos → Impuestos`) requeriría resolver dependencias
+cross-app en cadena que el grafo actual no modela de forma
+directamente consultable con las funciones `offline_*` existentes —
+trabajo genuino adicional, no incluido en esta pasada.

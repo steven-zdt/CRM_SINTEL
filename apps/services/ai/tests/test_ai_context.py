@@ -100,6 +100,22 @@ def test_build_context_incluye_contexto_de_pantalla_sin_secretos():
     assert not hasattr(ctx, "password")
 
 
+def test_build_context_usuario_a_tenant_a_difiere_de_usuario_b_tenant_b():
+    """AI-01.3 (mision AI Engine, Fase AI-01): contexto A != contexto B, explicito."""
+    profile_a = _FakeProfile(empresa_id=100, rol="ADMIN", alcance="EMPRESA")
+    profile_b = _FakeProfile(empresa_id=200, rol="VISOR", alcance="EMPRESA")
+    request_a = _FakeRequest(user=_FakeUser(profile=profile_a, user_id=1), tenant=_FakeTenant("tenant_a"))
+    request_b = _FakeRequest(user=_FakeUser(profile=profile_b, user_id=2), tenant=_FakeTenant("tenant_b"))
+
+    ctx_a = build_context(request_a)
+    ctx_b = build_context(request_b)
+
+    assert ctx_a != ctx_b
+    assert ctx_a.empresa_id != ctx_b.empresa_id
+    assert ctx_a.schema_name != ctx_b.schema_name
+    assert ctx_a.user_id != ctx_b.user_id
+
+
 def test_ai_context_es_inmutable():
     profile = _FakeProfile()
     request = _FakeRequest(user=_FakeUser(profile=profile), tenant=_FakeTenant())

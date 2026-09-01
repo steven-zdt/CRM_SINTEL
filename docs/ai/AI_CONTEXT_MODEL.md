@@ -1,5 +1,20 @@
 # AI_CONTEXT_MODEL — Fases 8, 23, 43-44
 
+## AI-01 = **VERIFIED** (2026-09-01, misión evolución READ_ONLY → contextual)
+
+Cierre formal: `AIContext`/`build_context` ya cumplían la Fase 8 desde
+la misión anterior; esta pasada agregó la prueba explícita que AI-01.3
+exige literalmente ("usuario A / tenant A" vs. "usuario B / tenant B" →
+contexto A ≠ contexto B):
+`test_build_context_usuario_a_tenant_a_difiere_de_usuario_b_tenant_b`
+(`apps/services/ai/tests/test_ai_context.py`) — construye 2 contextos
+reales desde 2 perfiles/tenants distintos y confirma
+`ctx_a != ctx_b`, `ctx_a.empresa_id != ctx_b.empresa_id`,
+`ctx_a.schema_name != ctx_b.schema_name`. AI-01.1 (SSoT del contexto,
+nunca del mensaje del usuario) y AI-01.2 (contexto mínimo, no "todo el
+ERP") ya estaban cumplidos por diseño desde antes — ver el resto de
+este documento.
+
 ## `AIContext` (implementado, `apps/services/ai/context/ai_context.py`)
 
 ```python
