@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.test import override_settings
 
 from apps.services.ai.engine import run_tool
+from apps.tenant.bancos.models import CuentaBancaria
 from apps.tenant.clientes.models import Cliente
 from apps.tenant.compras.models import OrdenCompra
 from apps.tenant.cotizaciones.models import Cotizacion
@@ -354,5 +355,53 @@ class BuscarEmpleadoToolTests(SintelTenantTestCase):
         request = _FakeRequest(user=self.user_admin, tenant=self.tenant)
 
         result = run_tool("buscar_empleado", request, limit=50)
+
+        assert result.status == "VALIDATION_ERROR"
+
+
+class ConsultarCuentaBancariaToolTests(SintelTenantTestCase):
+    """Cubre la regla de enmascaramiento de AI_SECURITY_MODEL.md: el
+    numero de cuenta nunca se expone completo, ni siquiera a ADMIN."""
+
+    def setUp(self):
+        super().setUp()
+        self.empresa = Empresa.objects.create(
+            razon_social="EMPRESA BANCOS TEST S.A.S.", nit="900777999", direccion="Calle B",
+        )
+        self.user = User.objects.create_user(email="banco_user@test.local", password="testpass123")
+        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN")
+        CuentaBancaria.objects.create(
+            empresa=self.empresa, nombre="Cuenta Principal AI", banco="Bancolombia",
+            tipo="AHORROS", numero="1234567890123456",
+        )
+
+    @override_settings(**AI_FLAGS_ON)
+    def test_numero_de_cuenta_siempre_enmascarado(self):
+        request = _FakeRequest(user=self.user, tenant=self.tenant)
+
+        result = run_tool("consultar_cuenta_bancaria", request, search="Principal AI")
+
+        assert result.status == "OK"
+        assert len(result.data) == 1
+        assert result.data[0]["numero"] == "****3456"
+        assert "1234567890123456" not in str(result.data)
+
+    @override_settings(**AI_FLAGS_ON)
+    def test_no_expone_saldos_ni_movimientos(self):
+        request = _FakeRequest(user=self.user, tenant=self.tenant)
+
+        result = run_tool("consultar_cuenta_bancaria", request)
+
+        assert result.status == "OK"
+        campos = set(result.data[0].keys())
+        assert "saldo" not in campos
+        assert "saldo_inicial" not in campos
+        assert "saldo_final" not in campos
+
+    @override_settings(**AI_FLAGS_ON)
+    def test_limit_maximo_es_10_no_50(self):
+        request = _FakeRequest(user=self.user, tenant=self.tenant)
+
+        result = run_tool("consultar_cuenta_bancaria", request, limit=50)
 
         assert result.status == "VALIDATION_ERROR"

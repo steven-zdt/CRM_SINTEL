@@ -1,3 +1,4 @@
+from .bancos_tools import ConsultarCuentaBancariaTool
 from .base import AUTO_APPROVED_KINDS, BaseTool, ToolKind, ToolResult, ToolRisk
 from .clientes_tools import BuscarClienteTool
 from .compras_tools import ConsultarCompraTool
@@ -25,6 +26,7 @@ register_tool(ConsultarGastoTool())
 register_tool(ConsultarProyectoTool())
 register_tool(ConsultarFacturaTool())
 register_tool(BuscarEmpleadoTool())
+register_tool(ConsultarCuentaBancariaTool())
 
 __all__ = [
     "AUTO_APPROVED_KINDS",
