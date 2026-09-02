@@ -13,7 +13,7 @@ están `VERIFIED`).
 [~] AI-04 Validation Engine       = PARCIAL -- 6 tools reales (clientes, proveedores, inventario, compras, cotizaciones, gastos); ventas investigado y descartado por falta de validate() real (no wrap-a-ciegas); facturas/empleados/bancos/contabilidad no aplican (READ-only/import-only/ya valida internamente); impuestos/reporting DEFERRED
 [ ] AI-05 Suggestion Engine        = BLOQUEADO POR DISEÑO (investigado 2026-09-01) -- no hay logica de negocio real que envolver, ver seccion abajo
 [~] AI-06 Form Assistant             = PARCIAL (2026-09-01) -- orquestador real (apps/services/ai/orchestrator/), primer caller real de AIProvider, CON endpoint HTTP real (POST /api/v1/ai/ask/); parcial porque falta integracion en el frontend/UI, no porque falte backend
-[ ] AI-07 MCP Read Controlado         = no iniciado (MCP sigue inerte, 0 ViewSets decorados)
+[ ] AI-07 MCP Read Controlado         = BLOQUEADO POR DEFECTO DE TERCEROS (investigado 2026-09-01) -- django-rest-framework-mcp==0.1.0a4 nunca asigna request.method, rompe IsTenantAdminOrReadOnly; revertido, MCP sigue inerte, 0 ViewSets decorados. Ver AI_MCP_POLICY.md
 [ ] AI-08 Session/Memory               = no iniciado
 [ ] AI-09 Tracing/Observability         = parcial -- logging basico ya existia, sin trace_id/persistencia
 [ ] AI-10 Write Assistant                 = BLOQUEADO por diseño -- AI-01..AI-09 no estan todos VERIFIED (regla AI-42)
@@ -254,22 +254,29 @@ FORM_ASSISTANT           <- EN PROGRESO (AI-06 PARCIAL, orquestador + endpoint H
 WRITE_ASSISTANT         <- no alcanzado, BLOQUEADO por diseño (AI-42) hasta AI-01..AI-09 = VERIFIED
 ```
 
-## Siguiente paso real (2026-09-01, actualizado tras exponer el endpoint HTTP de AI-06)
+## Siguiente paso real (2026-09-01, actualizado tras investigar AI-07)
 
 AI-03 está cerrado, AI-04 tiene su primer lote real hecho, AI-06 tiene
 orquestador **y** endpoint HTTP reales (`POST /api/v1/ai/ask/`). AI-05
 sigue `BLOQUEADO POR DISEÑO` (sin función de sugerencia pura que
-envolver). El usuario eligió explícitamente **AI-06 (Form Assistant)**
-cuando se le presentó el bloqueo de AI-05 (vía `AskUserQuestion`,
-2026-09-01); se implementó primero el orquestador puro (testeable sin
-HTTP, mismo criterio que `AIEngine.run_tool()`) y luego, en la misma
-pasada, el endpoint HTTP real reutilizando el patrón ya aceptado de
-`ReportingViewSet` (auth/permisos existentes, sin inventar ninguno
-nuevo). Lo que falta para que AI-06 sea `VERIFIED` no es backend: es
+envolver). AI-07 quedó **BLOQUEADO POR DEFECTO DE TERCEROS**: se
+decoró `ClienteViewSet` con `@mcp_viewset(actions=["list", "retrieve"])`,
+se verificó con un test real (JWT real, usuario `OPERADOR` explícito)
+que `django-rest-framework-mcp==0.1.0a4` nunca asigna `request.method`
+en la petición interna que ejecuta la acción, rompiendo
+`IsTenantAdminOrReadOnly` (la clase de permiso más usada en el
+proyecto) -- un usuario no-admin legítimo era rechazado incluso para
+una lectura pura. Se revirtió la decoración (código vuelto a su estado
+exacto anterior, sin diff) en vez de dejar una función medio-rota en
+producción. Ver `AI_MCP_POLICY.md` "AI-07 = BLOQUEADO POR DEFECTO DE
+TERCEROS" para la evidencia completa y las 3 rutas reales hacia
+adelante (ninguna ejecutada, requieren decisión del usuario).
+
+Lo que falta para que AI-06 sea `VERIFIED` no es backend: es
 integración en el frontend/UI (un widget de chat/asistente que llame a
 `/api/v1/ai/ask/`), fuera del alcance de este backend-only pass.
-Próximo paso real disponible sin bloqueo: AI-07 (MCP Read) -- no
-depende de que AI-05 se desbloquee ni de la integración frontend de
-AI-06. AI-02.4
-(process resolution) sigue como trabajo genuino adicional, no
-bloqueante.
+AI-02.4 (process resolution) sigue como trabajo genuino adicional, no
+bloqueante. Con AI-05 y AI-07 ambos bloqueados por razones reales
+(diseño y defecto de terceros respectivamente), el trabajo con avance
+real disponible sin bloqueo hoy es: el widget de frontend de AI-06, o
+AI-08/AI-09 (Memory/Tracing) si el usuario prefiere seguir en backend.
