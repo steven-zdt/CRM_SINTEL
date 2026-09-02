@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from apps.services.ai.context import AIContext
 
+from ._validation import validar_via_serializer
 from .base import BaseTool, ToolKind, ToolResult, ToolRisk
 
 
@@ -38,3 +39,26 @@ class BuscarProveedorTool(BaseTool):
             for p in qs
         ]
         return ToolResult(status="OK", data=proveedores)
+
+
+class ValidarProveedorTool(BaseTool):
+    """Fase AI-04. Envuelve ProveedorDetailSerializer.is_valid() -- misma
+    validacion anti-duplicidad (FASE 4/Zero Trust) que ya corre en el
+    endpoint real. Nunca escribe."""
+
+    name = "validar_proveedor"
+    description = (
+        "Valida si los datos de un proveedor candidato (sin crearlo) "
+        "cumplirian las reglas del formulario real: campos requeridos, "
+        "formato, y unicidad de tipo+numero de documento en el tenant."
+    )
+    domain = "proveedores"
+    kind = ToolKind.VALIDATE
+    risk = ToolRisk.SAFE_READ
+    confirmation_required = False
+    idempotent = True
+
+    def run(self, context: AIContext, *, data: dict) -> ToolResult:
+        from apps.tenant.proveedores.api.serializers import ProveedorDetailSerializer
+
+        return validar_via_serializer(ProveedorDetailSerializer, context, data)

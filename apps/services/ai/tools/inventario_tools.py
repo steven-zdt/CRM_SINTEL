@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from apps.services.ai.context import AIContext
 
+from ._validation import validar_via_serializer
 from .base import BaseTool, ToolKind, ToolResult, ToolRisk
 
 
@@ -49,3 +50,36 @@ class BuscarProductoTool(BaseTool):
             for p in qs
         ]
         return ToolResult(status="OK", data=productos)
+
+
+class ValidarProductoTool(BaseTool):
+    """Fase AI-04. Envuelve ProductoDetailSerializer.is_valid() -- valida
+    campos requeridos/formato y que `categoria` pertenezca al tenant y
+    sea aplicable a productos (`validate_categoria`, ya existente).
+
+    Limitacion real, verificada leyendo el modelo (no asumida): la
+    unicidad de `codigo` por empresa usa un `UniqueConstraint` sobre
+    `Lower('codigo')` (`apps/tenant/inventario/models.py`, constraint
+    `unique_producto_codigo_per_empresa`) -- DRF no genera un
+    validador automatico para constraints con expresiones (`Lower()`),
+    solo para campos simples. Esta tool NO detecta un codigo duplicado
+    de antemano -- eso solo se descubre en el `.save()` real (fuera de
+    alcance de una tool VALIDATE, que nunca escribe)."""
+
+    name = "validar_producto"
+    description = (
+        "Valida si los datos de un producto candidato (sin crearlo) "
+        "cumplirian las reglas del formulario real: campos requeridos, "
+        "formato, y que la categoria pertenezca al tenant. No detecta "
+        "codigo duplicado (esa constraint solo se verifica al guardar)."
+    )
+    domain = "inventario"
+    kind = ToolKind.VALIDATE
+    risk = ToolRisk.SAFE_READ
+    confirmation_required = False
+    idempotent = True
+
+    def run(self, context: AIContext, *, data: dict) -> ToolResult:
+        from apps.tenant.inventario.api.serializers import ProductoDetailSerializer
+
+        return validar_via_serializer(ProductoDetailSerializer, context, data)

@@ -9,8 +9,8 @@ están `VERIFIED`).
 ```
 [x] AI-01 Context Engine       = VERIFIED (2026-09-01) -- test explicito A != B agregado
 [~] AI-02 EKG Contextual        = PARCIAL -- ai_project_map real (owner/rules/docs/fk), sin process resolution (AI-02.4)
-[~] AI-03 READ Tools             = PARCIAL -- 2/13 dominios prioritarios (clientes, inventario), 11 pendientes
-[ ] AI-04 Validation Engine       = no iniciado
+[x] AI-03 READ/SUGGEST Tools     = VERIFIED (2026-09-01) -- 10 dominios con tool real (clientes, inventario, proveedores, ventas, compras, cotizaciones, gastos, proyectos, facturas, empleados, bancos, contabilidad = 12; impuestos/reporting DEFERRED formalmente, no deuda). Ver AI_TOOL_REGISTRY.md "Cierre formal de AI-03".
+[~] AI-04 Validation Engine       = PARCIAL -- 6 tools reales (clientes, proveedores, inventario, compras, cotizaciones, gastos); ventas investigado y descartado por falta de validate() real (no wrap-a-ciegas); facturas/empleados/bancos/contabilidad no aplican (READ-only/import-only/ya valida internamente); impuestos/reporting DEFERRED
 [ ] AI-05 Suggestion Engine        = no iniciado
 [ ] AI-06 Form Assistant             = no iniciado
 [ ] AI-07 MCP Read Controlado         = no iniciado (MCP sigue inerte, 0 ViewSets decorados)
@@ -49,18 +49,50 @@ sin el prefijo `tenant_`, desactualizado. Corregido en el código nuevo
 preexistente (fuera del alcance mínimo). Ver
 `AI_BASELINE_EXECUTION.md`.
 
-## AI-03 = PARCIAL — evidencia
+## AI-03 = VERIFIED — evidencia (actualizado 2026-09-01, cierre formal)
 
-`buscar_producto` (`apps/services/ai/tools/inventario_tools.py`),
-mismo patrón que `buscar_cliente`, envuelve `ProductoSelector` ya
-existente. Incluye `stock_actual` — cubre AI-03.2 completa (búsqueda +
-stock) sin necesitar una segunda tool. **11 dominios prioritarios
-siguen sin tool real:** facturas, ventas, compras, bancos,
-contabilidad, impuestos, reporting, proveedores, cotizaciones, gastos,
-proyectos, empleados — ver `AI_TOOL_REGISTRY.md` para el diseño de
-cada uno.
+Completado en el orden acordado con el usuario tras su mensaje de
+priorización estratégica: `task_a8ca8af1` (hallazgo no-relacionado) →
+`facturas` READ-only → `AI_SECURITY_MODEL.md` → `empleados` → `bancos`
+→ diseño de integración con el Asistente Contable
+(`AI_CONTABILIDAD_INTEGRATION.md`) → `contabilidad`. 12 tools READ/
+SUGGEST reales cubriendo 10 dominios de negocio (`clientes`,
+`inventario`, `proveedores`, `ventas`, `compras`, `cotizaciones`,
+`gastos`, `proyectos`, `facturas`, `empleados`, `bancos`,
+`contabilidad`) + `ai_project_map` (platform/EKG). `impuestos`/
+`reporting` quedan `DEFERRED` formalmente (decisión explícita, no
+deuda técnica) -- ver `AI_TOOL_REGISTRY.md` "Definición de AI-03
+terminado" y "Cierre formal de AI-03" para el criterio exacto que
+sustenta declarar VERIFIED sin cobertura de los 13 dominios.
 
-## Corrida real de tests (2026-09-01)
+## AI-04 = PARCIAL — evidencia (2026-09-01, primer lote)
+
+6 tools `validar_*` reales (`clientes`, `proveedores`, `inventario`,
+`compras`, `cotizaciones`, `gastos`), todas envolviendo el
+`Serializer.is_valid()` de ESCRITURA real de cada dominio (nunca
+reimplementan la regla) -- ver `AI_TOOL_REGISTRY.md` §"AI-04
+(Validation Engine)" para el árbol VERIFIED/PENDIENTE completo y los
+hallazgos reales encontrados durante la implementación (limitaciones
+honestas de cada tool, no solo éxitos). `ventas` fue investigado y
+**deliberadamente no implementado**: `VentaDetailSerializer` no tiene
+un método `validate()` propio verificable, y envolverlo tal cual solo
+validaría campos superficiales, no las reglas de negocio reales
+(posiblemente ligadas a `COMERCIAL-05`, la máquina de estados
+Venta↔Factura que el usuario ya identificó como trabajo separado) --
+se prefirió no implementar antes que implementar algo engañoso.
+`facturas`/`empleados`/`bancos`/`contabilidad` no aplican (dominios
+READ-only/import-only, o el Asistente Contable ya valida
+internamente antes de sugerir). `impuestos`/`reporting` siguen
+`DEFERRED`.
+
+## Corrida real de tests (2026-09-01, corrida mas reciente)
+
+```
+apps/services/ai/tests/ -- 72 items
+72 passed, 2 warnings (warnings preexistentes de DRF, no relacionados)
+```
+
+## Corrida real de tests (2026-09-01, corrida original de esta seccion, historica)
 
 ```
 apps/services/ai/tests/ -- 35 items
@@ -76,11 +108,11 @@ tests para el conteo exacto por archivo.
 
 ## `AI_ENGINE` = **NOT_VERIFIED** (honesto, sin cambios de veredicto global)
 
-Progreso real sobre la pasada anterior (AI-01 cerrado, AI-02/AI-03
-avanzados), pero el criterio de la Fase AI-43 exige los 10 gates en
-`[x]` — siguen 7 en `no iniciado` y 2 en `parcial`. No se declara
-`VERIFIED` por progreso parcial (Regla Absoluta 10 de la misión
-original: nunca afirmar completado lo que no lo está).
+Progreso real sobre la pasada anterior (AI-01 y AI-03 ahora VERIFIED,
+AI-02/AI-04 parciales), pero el criterio de la Fase AI-43 exige los 10
+gates en `[x]` — siguen 6 en `no iniciado` y 2 en `parcial` (AI-02,
+AI-04). No se declara `VERIFIED` por progreso parcial (Regla Absoluta
+10 de la misión original: nunca afirmar completado lo que no lo está).
 
 ## Checklist heredado (misión anterior, Fases 60-61, sigue vigente)
 
@@ -93,9 +125,9 @@ original: nunca afirmar completado lo que no lo está).
 [~] EKG integration             -- AI-02 PARCIAL (ver arriba) -- antes "no implementado", ahora real y parcial
 [x] User Access Context         -- build_context() deriva SIEMPRE de request.user.tenant_profile, nunca del payload
 [x] tool registry               -- AIToolRegistry real, con metadata serializable, probado
-[~] read tools                  -- AI-03 PARCIAL: 3 tools reales (clientes, inventario, platform/EKG), 11 dominios de negocio pendientes
-[ ] validation tools            -- diseñadas (AI_TOOL_REGISTRY.md), no implementadas
-[ ] suggestion tools            -- diseñadas, no implementadas
+[x] read tools                  -- AI-03 VERIFIED: 12 tools READ/SUGGEST reales, 10 dominios de negocio + platform/EKG, impuestos/reporting DEFERRED formalmente
+[~] validation tools            -- AI-04 PARCIAL: 6 tools reales (clientes, proveedores, inventario, compras, cotizaciones, gastos); ventas investigado y descartado (sin validate() real que envolver), ver AI_TOOL_REGISTRY.md
+[ ] suggestion tools            -- diseñadas, no implementadas (distinto de sugerir_asiento_contable, que es AI-03/dominio contabilidad, no un Suggestion Engine generico AI-05)
 [x] write controls              -- AUTO_APPROVED_KINDS excluye WRITE incondicionalmente -- estructural, no solo documentado
 [ ] approvals (flujo real)      -- no implementado -- consecuencia directa de no tener tools WRITE todavia
 [~] audit                       -- logging real por tool call (tool/kind/status/user/empresa), sin persistencia estructurada ni trace_id
@@ -103,27 +135,30 @@ original: nunca afirmar completado lo que no lo está).
 [ ] session (memoria)           -- diseñada (AI_MEMORY_POLICY.md), no implementada -- sin flujo conversacional real que la necesite
 [x] tenant isolation            -- garantia de SCHEMA ya verificada en otras misiones de esta sesion (TEN-01); a nivel de tool se prueba que empresa_id viene siempre del contexto real
 [ ] prompt injection defense    -- diseñado, no implementado -- ningun flujo real concatena datos de negocio en un prompt todavia
-[~] sensitive data controls     -- ninguna tool sensible existe todavia -- nada que fallar, pero tampoco nada probado
+[~] sensitive data controls     -- empleados/bancos/contabilidad ya tienen tools reales con clasificacion aplicada (AI_SECURITY_MODEL.md) -- 2 tools SENSITIVE_READ + 1 SUGGEST probadas, no solo diseñadas
 [ ] MCP read                    -- MCP sigue inerte (0 ViewSets decorados) -- sin cambios en esta pasada, deliberado
 [ ] MCP write controls          -- N/A, MCP read tampoco existe
-[x] tests                       -- 35/35 PASS
+[x] tests                       -- 72/72 PASS (corrida completa mas reciente, apps/services/ai/tests/)
 [x] governance                  -- manage.py check PASS, makemigrations --check PASS, git diff --check PASS
-[x] documentation                -- 12 documentos en docs/ai/, todos distinguiendo implementado vs diseñado (sin duplicar -- Regla 9 de esta mision)
+[x] documentation                -- 14 documentos en docs/ai/ (12 originales + AI_SECURITY_MODEL.md ampliado + AI_CONTABILIDAD_INTEGRATION.md nuevo), todos distinguiendo implementado vs diseñado
 ```
 
 ## Fase 62 — Go-live controlado
 
 ```
-READ_ONLY_ASSISTANT     <- aqui, con 3 tools (clientes, inventario, platform/EKG) -- flags en False por defecto
-VALIDATION_ASSISTANT    <- no alcanzado
-SUGGESTION_ASSISTANT    <- no alcanzado
+READ_ONLY_ASSISTANT     <- CERRADO (AI-03 VERIFIED, 12 tools) -- flags en False por defecto
+VALIDATION_ASSISTANT    <- EN PROGRESO (AI-04 PARCIAL, 6 tools) -- flags en False por defecto
+SUGGESTION_ASSISTANT    <- no alcanzado (AI-05, distinto del SUGGEST puntual de sugerir_asiento_contable)
 WRITE_ASSISTANT         <- no alcanzado, BLOQUEADO por diseño (AI-42) hasta AI-01..AI-09 = VERIFIED
 ```
 
-## Siguiente paso real (no ejecutado, fuera de esta pasada)
+## Siguiente paso real (2026-09-01, actualizado)
 
-Completar AI-03 (11 dominios de negocio restantes, mismo patrón
-Tool→Selector→SSoT ya probado 2 veces) antes de iniciar AI-04
-(Validation Engine) — orden obligatorio de la misión (AI-41). AI-02.4
-(process resolution) queda como trabajo genuino adicional, no
-bloqueante para el resto de fases.
+AI-03 y el primer lote de AI-04 ya están cerrados (ver arriba). El
+roadmap explícito del usuario para continuar (sus palabras, no
+ejecutado todavía en esta pasada): AI-04 (completar lo que falta si
+aparece un caso real de `ventas` resuelto -- ej. si `COMERCIAL-05`
+define la máquina de estados y con ella una regla de validación real)
+→ AI-05 SUGGEST → AI-06 FORM ASSISTANT → AI-07 MCP READ → AI-08 MEMORY
+→ AI-09 TRACING → AI-10 WRITE. AI-02.4 (process resolution) sigue
+como trabajo genuino adicional, no bloqueante para el resto de fases.

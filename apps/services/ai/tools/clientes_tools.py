@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from apps.services.ai.context import AIContext
 
+from ._validation import validar_via_serializer
 from .base import BaseTool, ToolKind, ToolResult, ToolRisk
 
 
@@ -56,3 +57,26 @@ class BuscarClienteTool(BaseTool):
             for c in qs
         ]
         return ToolResult(status="OK", data=clientes)
+
+
+class ValidarClienteTool(BaseTool):
+    """Fase AI-04. Envuelve ClienteDetailSerializer.is_valid() -- misma
+    validacion (incluida la regla de duplicidad de documento) que ya
+    corre en el endpoint real de creacion/edicion. Nunca escribe."""
+
+    name = "validar_cliente"
+    description = (
+        "Valida si los datos de un cliente candidato (sin crearlo) "
+        "cumplirian las reglas del formulario real: campos requeridos, "
+        "formato, y unicidad de tipo+numero de documento en el tenant."
+    )
+    domain = "clientes"
+    kind = ToolKind.VALIDATE
+    risk = ToolRisk.SAFE_READ
+    confirmation_required = False
+    idempotent = True
+
+    def run(self, context: AIContext, *, data: dict) -> ToolResult:
+        from apps.tenant.clientes.api.serializers import ClienteDetailSerializer
+
+        return validar_via_serializer(ClienteDetailSerializer, context, data)

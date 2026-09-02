@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from apps.services.ai.context import AIContext
 
+from ._validation import validar_via_serializer
 from .base import BaseTool, ToolKind, ToolResult, ToolRisk
 
 
@@ -83,3 +84,34 @@ class ConsultarCompraTool(BaseTool):
             for o in qs
         ]
         return ToolResult(status="OK", data=ordenes)
+
+
+class ValidarCompraTool(BaseTool):
+    """Fase AI-04. Envuelve OrdenCompraCreateUpdateSerializer.is_valid()
+    -- el serializer de ESCRITURA real (distinto de
+    OrdenCompraDetailSerializer, que es read-only). Valida
+    fecha_entrega >= fecha y que items no venga vacio (reglas ya
+    existentes en el serializer real). No filtra proveedor/plantilla/
+    proyecto/area por empresa_id en este serializer (verificado
+    leyendo codigo) -- no es un gap de esta tool: Empresa es singleton
+    por schema tenant (confirmado en sesiones previas), asi que un
+    UUID valido en el schema actual ya pertenece a la unica empresa
+    del tenant por construccion."""
+
+    name = "validar_compra"
+    description = (
+        "Valida si los datos de una orden de compra candidata (sin "
+        "crearla) cumplirian las reglas del formulario real: fecha de "
+        "entrega no anterior a la fecha, al menos un item, y formato "
+        "de cada campo."
+    )
+    domain = "compras"
+    kind = ToolKind.VALIDATE
+    risk = ToolRisk.SAFE_READ
+    confirmation_required = False
+    idempotent = True
+
+    def run(self, context: AIContext, *, data: dict) -> ToolResult:
+        from apps.tenant.compras.api.serializers import OrdenCompraCreateUpdateSerializer
+
+        return validar_via_serializer(OrdenCompraCreateUpdateSerializer, context, data)

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from apps.services.ai.context import AIContext
 
+from ._validation import validar_via_serializer
 from .base import BaseTool, ToolKind, ToolResult, ToolRisk
 
 
@@ -66,3 +67,40 @@ class ConsultarCotizacionTool(BaseTool):
             for c in qs
         ]
         return ToolResult(status="OK", data=cotizaciones)
+
+
+class ValidarCotizacionTool(BaseTool):
+    """Fase AI-04. Envuelve CotizacionSerializer.is_valid() -- el
+    serializer real de escritura. A diferencia de los demas dominios,
+    su `__init__`/`validate()` leen `context['empresa']` (instancia real
+    de `Empresa`, no `empresa_id`) para acotar los querysets de
+    `cliente`/`configuracion`/`sede` y para el chequeo anti-IDOR de
+    sede -- se resuelve aqui via una consulta minima (`Empresa` es
+    singleton por schema tenant, `.only('id')` ya alcanza).
+
+    Caveat real (verificado leyendo el codigo, mismo que gastos): el
+    chequeo de alcance organizacional de sede
+    (`sede_esta_en_alcance()`) requiere un `request` de Django real y
+    degrada a "permitido" sin uno -- comportamiento documentado de esa
+    funcion, no un bug de esta tool. Esta tool SI reproduce el chequeo
+    anti-IDOR de "la sede pertenece a esta empresa"."""
+
+    name = "validar_cotizacion"
+    description = (
+        "Valida si los datos de una cotizacion candidata (sin crearla) "
+        "cumplirian las reglas del formulario real: campos requeridos, "
+        "formato, y que cliente/configuracion/sede pertenezcan al "
+        "tenant."
+    )
+    domain = "cotizaciones"
+    kind = ToolKind.VALIDATE
+    risk = ToolRisk.SAFE_READ
+    confirmation_required = False
+    idempotent = True
+
+    def run(self, context: AIContext, *, data: dict) -> ToolResult:
+        from apps.tenant.cotizaciones.api.serializers import CotizacionSerializer
+        from apps.tenant.empresa.models import Empresa
+
+        empresa = Empresa.objects.only("id").get(id=context.empresa_id)
+        return validar_via_serializer(CotizacionSerializer, context, data, extra_context={"empresa": empresa})
