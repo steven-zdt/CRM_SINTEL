@@ -12,7 +12,7 @@ están `VERIFIED`).
 [x] AI-03 READ/SUGGEST Tools     = VERIFIED (2026-09-01) -- 10 dominios con tool real (clientes, inventario, proveedores, ventas, compras, cotizaciones, gastos, proyectos, facturas, empleados, bancos, contabilidad = 12; impuestos/reporting DEFERRED formalmente, no deuda). Ver AI_TOOL_REGISTRY.md "Cierre formal de AI-03".
 [~] AI-04 Validation Engine       = PARCIAL -- 6 tools reales (clientes, proveedores, inventario, compras, cotizaciones, gastos); ventas investigado y descartado por falta de validate() real (no wrap-a-ciegas); facturas/empleados/bancos/contabilidad no aplican (READ-only/import-only/ya valida internamente); impuestos/reporting DEFERRED
 [ ] AI-05 Suggestion Engine        = BLOQUEADO POR DISEÑO (investigado 2026-09-01) -- no hay logica de negocio real que envolver, ver seccion abajo
-[ ] AI-06 Form Assistant             = no iniciado
+[~] AI-06 Form Assistant             = PARCIAL (2026-09-01) -- orquestador real (apps/services/ai/orchestrator/), primer caller real de AIProvider; sin endpoint HTTP todavia (decision aparte)
 [ ] AI-07 MCP Read Controlado         = no iniciado (MCP sigue inerte, 0 ViewSets decorados)
 [ ] AI-08 Session/Memory               = no iniciado
 [ ] AI-09 Tracing/Observability         = parcial -- logging basico ya existia, sin trace_id/persistencia
@@ -123,11 +123,49 @@ lo cual es trabajo de esa app, no del AI Engine. Se documenta como
 "fuera de alcance", es una dependencia real (una función pura que
 sugerir) que hoy no existe.
 
+## AI-06 = PARCIAL — evidencia (2026-09-01, elegido por el usuario tras el bloqueo de AI-05)
+
+`apps/services/ai/orchestrator/` (`ask(request, message, screen=None)`)
+es el **primer caller real** de `AIProvider`/`AnthropicProvider` en
+todo el AI Engine -- verificado antes de este commit:
+`apps/services/ai/providers/` solo se importaba desde tests, nunca
+desde un flujo real (`AI_ENGINE_ARCHITECTURE.md` ya lo documentaba
+como "listo para cuando exista un flujo real", Fase 17+). Implementa
+exactamente ese diseño: recibe lenguaje natural + contexto de
+pantalla opcional (Fase 23, `build_context(screen=...)`, hasta ahora
+sin ningún caller real tampoco), pide al LLM que elija UNA tool ya
+registrada (`tool_metadata()`) respondiendo JSON puro (mismo patrón
+que `sugerir_lineas_asiento_ia()`, no el protocolo nativo de tool-use
+de Anthropic), y ejecuta la decisión exclusivamente vía
+`AIEngine.run_tool()` -- el orquestador nunca llama `tool.run()`
+directo, así que toda la seguridad estructural ya existente (flags,
+`AUTO_APPROVED_KINDS`, contexto real) sigue aplicando sin
+reimplementarla.
+
+**Deliberadamente PARCIAL, no VERIFIED**: no hay endpoint HTTP
+todavía. Exponer una URL (`BaseTenantViewSet`, dual-auth JWT/session,
+nueva superficie de ataque real) es una decisión separada que merece
+su propio commit/revisión -- mismo criterio que `AIEngine.run_tool()`
+se construyó primero como motor puro testeable antes de que existiera
+cualquier tool real que lo ejercitara.
+
+Guardrail de Fase 55 (prompt injection) aplicado, no solo diseñado: el
+`system` prompt instruye explícitamente al modelo a tratar el mensaje
+del usuario como **dato**, nunca como instrucción a seguir si
+contradice las reglas -- primer caso real de esta regla implementada
+en código, antes solo estaba documentada en `AI_SECURITY_MODEL.md`
+como "ningún flujo real la ejercita todavía".
+
+Defensa en profundidad probada con test explícito: si el LLM
+"alucina" un nombre de tool inexistente, el orquestador NO lo valida
+él mismo -- confía en que `AIEngine.run_tool()` lo rechace con
+`NOT_FOUND` (`test_llm_alucina_tool_inexistente_es_manejado_por_ai_engine`).
+
 ## Corrida real de tests (2026-09-01, corrida mas reciente)
 
 ```
-apps/services/ai/tests/ -- 72 items
-72 passed, 2 warnings (warnings preexistentes de DRF, no relacionados)
+apps/services/ai/tests/ -- 78 items
+78 passed, 2 warnings (warnings preexistentes de DRF, no relacionados)
 ```
 
 ## Corrida real de tests (2026-09-01, corrida original de esta seccion, historica)
@@ -147,16 +185,18 @@ tests para el conteo exacto por archivo.
 ## `AI_ENGINE` = **NOT_VERIFIED** (honesto, sin cambios de veredicto global)
 
 Progreso real sobre la pasada anterior (AI-01 y AI-03 ahora VERIFIED,
-AI-02/AI-04 parciales), pero el criterio de la Fase AI-43 exige los 10
-gates en `[x]` — siguen 6 en `no iniciado` y 2 en `parcial` (AI-02,
-AI-04). No se declara `VERIFIED` por progreso parcial (Regla Absoluta
-10 de la misión original: nunca afirmar completado lo que no lo está).
+AI-02/AI-04/AI-06 parciales, AI-05 investigado y BLOQUEADO POR
+DISEÑO), pero el criterio de la Fase AI-43 exige los 10 gates en `[x]`
+— siguen 4 en `no iniciado`, 1 `BLOQUEADO POR DISEÑO` y 3 en `parcial`
+(AI-02, AI-04, AI-06). No se declara `VERIFIED` por progreso parcial
+(Regla Absoluta 10 de la misión original: nunca afirmar completado lo
+que no lo está).
 
 ## Checklist heredado (misión anterior, Fases 60-61, sigue vigente)
 
 ```
 [x] provider abstraction        -- AIProvider (ABC) implementado
-[x] Anthropic compatible        -- AnthropicProvider real, reutiliza el patron del Asistente Contable
+[x] Anthropic compatible        -- AnthropicProvider real, reutiliza el patron del Asistente Contable; AI-06 es su primer caller real (antes solo se importaba desde tests)
 [ ] OpenAI compatible           -- diseñado (AI_PROVIDER_MATRIX.md), no implementado -- sin caller real que lo ejerza
 [ ] local provider              -- diseñado, no implementado, mismo motivo
 [x] context engine              -- AI-01 VERIFIED (ver arriba)
@@ -165,18 +205,18 @@ AI-04). No se declara `VERIFIED` por progreso parcial (Regla Absoluta
 [x] tool registry               -- AIToolRegistry real, con metadata serializable, probado
 [x] read tools                  -- AI-03 VERIFIED: 12 tools READ/SUGGEST reales, 10 dominios de negocio + platform/EKG, impuestos/reporting DEFERRED formalmente
 [~] validation tools            -- AI-04 PARCIAL: 6 tools reales (clientes, proveedores, inventario, compras, cotizaciones, gastos); ventas investigado y descartado (sin validate() real que envolver), ver AI_TOOL_REGISTRY.md
-[ ] suggestion tools            -- diseñadas, no implementadas (distinto de sugerir_asiento_contable, que es AI-03/dominio contabilidad, no un Suggestion Engine generico AI-05)
+[ ] suggestion tools            -- AI-05 BLOQUEADO POR DISEÑO (investigado 2026-09-01) -- sin funcion de sugerencia pura que envolver mas alla de sugerir_lineas_asiento_ia (ya cubierta en AI-03)
 [x] write controls              -- AUTO_APPROVED_KINDS excluye WRITE incondicionalmente -- estructural, no solo documentado
 [ ] approvals (flujo real)      -- no implementado -- consecuencia directa de no tener tools WRITE todavia
 [~] audit                       -- logging real por tool call (tool/kind/status/user/empresa), sin persistencia estructurada ni trace_id
 [~] tracing                     -- logging basico real; tracing de workflow completo NO implementado (AI_TRACING.md)
 [ ] session (memoria)           -- diseñada (AI_MEMORY_POLICY.md), no implementada -- sin flujo conversacional real que la necesite
 [x] tenant isolation            -- garantia de SCHEMA ya verificada en otras misiones de esta sesion (TEN-01); a nivel de tool se prueba que empresa_id viene siempre del contexto real
-[ ] prompt injection defense    -- diseñado, no implementado -- ningun flujo real concatena datos de negocio en un prompt todavia
+[x] prompt injection defense    -- AI-06 implementa el guardrail real (Fase 55): el system prompt marca el mensaje del usuario como dato, nunca instruccion -- primer flujo real que lo ejercita
 [~] sensitive data controls     -- empleados/bancos/contabilidad ya tienen tools reales con clasificacion aplicada (AI_SECURITY_MODEL.md) -- 2 tools SENSITIVE_READ + 1 SUGGEST probadas, no solo diseñadas
 [ ] MCP read                    -- MCP sigue inerte (0 ViewSets decorados) -- sin cambios en esta pasada, deliberado
 [ ] MCP write controls          -- N/A, MCP read tampoco existe
-[x] tests                       -- 72/72 PASS (corrida completa mas reciente, apps/services/ai/tests/)
+[x] tests                       -- 78/78 PASS (corrida completa mas reciente, apps/services/ai/tests/)
 [x] governance                  -- manage.py check PASS, makemigrations --check PASS, git diff --check PASS
 [x] documentation                -- 14 documentos en docs/ai/ (12 originales + AI_SECURITY_MODEL.md ampliado + AI_CONTABILIDAD_INTEGRATION.md nuevo), todos distinguiendo implementado vs diseñado
 ```
@@ -187,22 +227,22 @@ AI-04). No se declara `VERIFIED` por progreso parcial (Regla Absoluta
 READ_ONLY_ASSISTANT     <- CERRADO (AI-03 VERIFIED, 12 tools) -- flags en False por defecto
 VALIDATION_ASSISTANT    <- EN PROGRESO (AI-04 PARCIAL, 6 tools) -- flags en False por defecto
 SUGGESTION_ASSISTANT    <- BLOQUEADO POR DISEÑO (AI-05 investigado 2026-09-01 -- sin logica pura que envolver, ver seccion arriba)
+FORM_ASSISTANT           <- EN PROGRESO (AI-06 PARCIAL, orquestador real sin endpoint HTTP) -- flags en False por defecto
 WRITE_ASSISTANT         <- no alcanzado, BLOQUEADO por diseño (AI-42) hasta AI-01..AI-09 = VERIFIED
 ```
 
-## Siguiente paso real (2026-09-01, actualizado tras investigar AI-05)
+## Siguiente paso real (2026-09-01, actualizado tras AI-06)
 
-AI-03 y el primer lote de AI-04 ya están cerrados. AI-05 (Suggestion
-Engine generico) quedó investigado y **BLOQUEADO POR DISEÑO** en esta
-misma pasada -- no hay ninguna función de sugerencia pura (sin
-escritura) en todo el ERP que envolver además de
-`sugerir_lineas_asiento_ia` (ya cubierta por AI-03). Avanzar
-requeriría inventar lógica dentro del AI Engine (prohibido) o esperar
-a que una app de dominio exponga una función de sugerencia nueva
-(trabajo de esa app, no del AI Engine). El roadmap original del
-usuario listaba AI-05 SUGGEST → AI-06 FORM ASSISTANT → AI-07 MCP READ
-→ AI-08 MEMORY → AI-09 TRACING → AI-10 WRITE, pero con AI-05 bloqueado
-el siguiente paso con trabajo real disponible es **AI-06 (Form
-Assistant)** o **AI-07 (MCP Read)** -- ninguno de los dos depende de
-que exista más lógica SUGGEST. AI-02.4 (process resolution) sigue como
-trabajo genuino adicional, no bloqueante.
+AI-03 está cerrado, AI-04 y AI-06 tienen su primer lote real hecho.
+AI-05 sigue `BLOQUEADO POR DISEÑO` (sin función de sugerencia pura que
+envolver). El usuario eligió explícitamente **AI-06 (Form Assistant)**
+cuando se le presentó el bloqueo de AI-05 (vía `AskUserQuestion`,
+2026-09-01) -- se implementó el orquestador real
+(`apps/services/ai/orchestrator/`), primer caller real de
+`AIProvider`, pero **sin endpoint HTTP todavía** (decisión de
+superficie de ataque separada, no bloqueante para el resto). Próximos
+pasos reales disponibles: exponer el endpoint HTTP de AI-06 (requiere
+diseño de permisos/dual-auth, ver `AGENTS.md` §15), o avanzar a AI-07
+(MCP Read) -- ninguno depende de que AI-05 se desbloquee. AI-02.4
+(process resolution) sigue como trabajo genuino adicional, no
+bloqueante.

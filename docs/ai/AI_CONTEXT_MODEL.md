@@ -83,10 +83,15 @@ exactamente 4 claves conocidas (`app`, `entity`, `entity_id`,
 `operation`) -- cualquier otra clave enviada (ej. `password` por
 error del caller) se ignora silenciosamente, nunca se copia a
 `AIContext` (probado en
-`test_build_context_incluye_contexto_de_pantalla_sin_secretos`). No
-hay todavía ningún endpoint HTTP real que reciba este payload del
-frontend -- el parámetro existe en `build_context()` listo para
-cuando exista un endpoint de chat/asistente real.
+`test_build_context_incluye_contexto_de_pantalla_sin_secretos`).
+
+**[2026-09-01] Primer caller real (sin endpoint HTTP todavía)**:
+`apps/services/ai/orchestrator/form_assistant.py::ask()` (Fase
+17+/AI-06) ya pasa `screen` a `build_context()` y lo reenvía a
+`AIEngine.run_tool()`. Sigue sin existir ningún endpoint HTTP que
+reciba este payload directamente del frontend -- `ask()` se invoca
+hoy solo desde Python/tests, exponer una URL real es una decisión
+separada (ver `AI_RELEASE_GATE.md` "AI-06 = PARCIAL").
 
 ## Fase 43-44 — Context retrieval / EKG retrieval (diseño, no implementado)
 

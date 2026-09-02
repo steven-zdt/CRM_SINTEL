@@ -78,12 +78,21 @@ Caller (vista/backend, AUN NO vía MCP)
 
 Ningún paso de esta cadena toca ORM/SQL fuera de un Selector/Service
 ya propietario del dominio (Regla Absoluta 1). El `AIProvider`
-(Anthropic) **no se invoca todavía en este flujo** -- la tool
-`buscar_cliente` es una función determinista (búsqueda estructurada),
-no requiere LLM. El `AIProvider` queda listo para cuando un flujo real
-necesite generar texto/decidir con un modelo (ej. explicar un
-resultado, decidir qué tool usar a partir de lenguaje natural) -- eso
-es diseño de Fase 17+ (Form Assistant), no implementado aún.
+(Anthropic) **no se invoca en el flujo READ/VALIDATE directo** -- la
+tool `buscar_cliente` es una función determinista (búsqueda
+estructurada), no requiere LLM.
+
+**[2026-09-01] Fase 17+ (Form Assistant) ya tiene un primer caller
+real**: `apps/services/ai/orchestrator/` (`ask(request, message,
+screen=None)`) es el primer flujo que usa `AIProvider` para "decidir
+qué tool usar a partir de lenguaje natural" -- antes `AIProvider` solo
+se importaba desde tests. Recibe el mensaje del usuario + contexto de
+pantalla opcional (Fase 23), pide al LLM elegir una tool ya registrada
+respondiendo JSON puro, y ejecuta la decisión exclusivamente vía
+`AIEngine.run_tool()` (nunca `tool.run()` directo -- toda la seguridad
+estructural existente sigue aplicando sin reimplementarla). Sin
+endpoint HTTP todavía -- ver `AI_RELEASE_GATE.md` "AI-06 = PARCIAL"
+para el detalle y por qué se separó esa decisión.
 
 ## Provider abstraction (Fase 5)
 

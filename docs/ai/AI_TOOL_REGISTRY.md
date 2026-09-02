@@ -126,7 +126,10 @@ Graph tool" (Regla 9 de esa misión, "NO DUPLICAR"). El detalle de
 
 Metadata completa vía `apps.services.ai.tools.tool_metadata()` (nunca
 se expone el objeto Python de la tool en sí, solo el dict
-serializable -- Regla Absoluta 12).
+serializable -- Regla Absoluta 12). **[2026-09-01]** primer consumidor
+real: `apps/services/ai/orchestrator/form_assistant.py` (AI-06, Form
+Assistant) usa este catálogo para que el LLM elija qué tool invocar a
+partir de lenguaje natural -- ver `AI_RELEASE_GATE.md` "AI-06 = PARCIAL".
 
 ## Diseño — AI Domain Registry (Fase 11), no implementado
 

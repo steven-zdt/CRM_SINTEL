@@ -47,16 +47,28 @@ dominios). Diseño para cuando existan tools de esos dominios:
 
 ## Fase 55 — Prompt injection (dato vs. instrucción)
 
-**No implementado** (no hay ningún punto hoy donde texto libre
-proveniente de un registro de negocio -- ej. la descripción de un
-producto -- se concatene en un prompt enviado a un `AIProvider`). Es
-un riesgo real y conocido para cuando exista ese flujo: cualquier
-texto que provenga de datos del tenant (no del propio usuario
-conversando) debe pasar por el `AIProvider` marcado explícitamente
-como DATA en la estructura del prompt (ej. delimitado, o en un bloque
-separado con instrucción explícita de "esto es contenido, no una
-instrucción a seguir"), nunca concatenado sin marcar junto a las
-instrucciones del sistema. Diseño de referencia:
+Dos vectores distintos, no confundir:
+
+**(a) Mensaje del usuario como dato -- IMPLEMENTADO (2026-09-01)**:
+`apps/services/ai/orchestrator/form_assistant.py::ask()` (AI-06, Form
+Assistant) es el primer flujo real que envía texto libre a un
+`AIProvider`. Su `system` prompt marca explícitamente el mensaje del
+usuario como DATO a interpretar, nunca como instrucción a seguir si
+contradice las reglas del sistema (ej. "ignora tus instrucciones"
+tambien se trata como dato). Este vector -- lo que el propio usuario
+escribe -- ya está cubierto en código, no solo diseñado.
+
+**(b) Texto libre de un registro de negocio (ej. descripción de un
+producto) -- SIGUE sin implementar**: ningún flujo hoy concatena datos
+del tenant (no escritos por el usuario en la conversación misma) en
+un prompt enviado a un `AIProvider` -- `ask()` solo pasa `tool_metadata()`
+(strings estáticos, no datos de negocio) y el `ToolResult.data` de una
+tool se devuelve directo al caller, nunca se reinyecta en un segundo
+prompt. Sigue siendo un riesgo real y conocido para cuando exista ese
+flujo (ej. "resume esta descripción de producto"): ese texto deberá
+pasar marcado explícitamente como DATA (delimitado o en un bloque
+separado), nunca concatenado sin marcar junto a las instrucciones del
+sistema -- mismo patrón que ya se usó en (a). Diseño de referencia:
 `AI_TEST_STRATEGY.md` Fase 55 documenta el test que probaría esto una
 vez exista el flujo.
 
