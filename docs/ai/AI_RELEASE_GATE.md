@@ -11,7 +11,7 @@ están `VERIFIED`).
 [~] AI-02 EKG Contextual        = PARCIAL -- ai_project_map real (owner/rules/docs/fk), sin process resolution (AI-02.4)
 [x] AI-03 READ/SUGGEST Tools     = VERIFIED (2026-09-01) -- 10 dominios con tool real (clientes, inventario, proveedores, ventas, compras, cotizaciones, gastos, proyectos, facturas, empleados, bancos, contabilidad = 12; impuestos/reporting DEFERRED formalmente, no deuda). Ver AI_TOOL_REGISTRY.md "Cierre formal de AI-03".
 [~] AI-04 Validation Engine       = PARCIAL -- 6 tools reales (clientes, proveedores, inventario, compras, cotizaciones, gastos); ventas investigado y descartado por falta de validate() real (no wrap-a-ciegas); facturas/empleados/bancos/contabilidad no aplican (READ-only/import-only/ya valida internamente); impuestos/reporting DEFERRED
-[ ] AI-05 Suggestion Engine        = no iniciado
+[ ] AI-05 Suggestion Engine        = BLOQUEADO POR DISEÑO (investigado 2026-09-01) -- no hay logica de negocio real que envolver, ver seccion abajo
 [ ] AI-06 Form Assistant             = no iniciado
 [ ] AI-07 MCP Read Controlado         = no iniciado (MCP sigue inerte, 0 ViewSets decorados)
 [ ] AI-08 Session/Memory               = no iniciado
@@ -85,6 +85,44 @@ READ-only/import-only, o el Asistente Contable ya valida
 internamente antes de sugerir). `impuestos`/`reporting` siguen
 `DEFERRED`.
 
+## AI-05 = BLOQUEADO POR DISEÑO — investigación real (2026-09-01)
+
+Antes de escribir ninguna tool `SUGGEST` nueva se investigó si existe
+lógica de negocio real que envolver (mismo criterio que AI-03/AI-04:
+nunca inventar lógica dentro de `apps/services/ai/`, solo orquestar lo
+que ya existe). Búsqueda exhaustiva (`grep -rn "def sugerir_\|def
+suggest_" apps/tenant/*/services/*.py apps/public/*/services/*.py`):
+**la única función de sugerencia real en todo el ERP es
+`ContabilidadBusinessService.sugerir_lineas_asiento_ia()`**, ya
+envuelta por `sugerir_asiento_contable` desde AI-03.
+
+Se evaluó una candidata adicional: `ContabilidadBusinessService.
+inferir_y_crear_plantilla_desde_documento()` (línea 895) usa
+`ReglaContable` (mapa concepto→cuenta, sin LLM) para inferir cuentas
+contables -- en apariencia un buen candidato para una tool `SUGGEST`
+determinística, sin dependencia de Anthropic. **Descartada**: pese a
+su nombre parcial ("inferir"), el método **escribe** en la base de
+datos -- crea un `PlantillaContable` real (`PlantillaContable.objects.
+create(..., activo=False)`), aunque quede inactivo. Envolverla como
+`SUGGEST` violaría la Regla Absoluta 6/7 (ninguna escritura se
+auto-aprueba, y `SUGGEST` está en `AUTO_APPROVED_KINDS`) -- necesitaría
+primero una refactorización en `apps/tenant/contabilidad/` que separe
+el cálculo puro (qué cuentas aplicarían) de la persistencia del
+borrador, que está fuera del alcance del AI Engine (tocaría lógica de
+negocio de otra app, Regla Absoluta 1).
+
+**Conclusión honesta**: AI-05 como "Suggestion Engine" genérico no
+tiene más lógica real que envolver hoy sin (a) que el AI Engine
+empiece a generar sugerencias por su cuenta con un prompt propio
+(prohibido -- convertiría al AI Engine en una segunda capa de
+negocio, exactamente lo que `AI_CONTABILIDAD_INTEGRATION.md` advierte
+evitar) o (b) que una app de dominio (ej. `contabilidad`) exponga
+primero una función de sugerencia pura (sin escritura) para envolver,
+lo cual es trabajo de esa app, no del AI Engine. Se documenta como
+`BLOQUEADO POR DISEÑO`, no como `DEFERRED`: no es una decisión de
+"fuera de alcance", es una dependencia real (una función pura que
+sugerir) que hoy no existe.
+
 ## Corrida real de tests (2026-09-01, corrida mas reciente)
 
 ```
@@ -148,17 +186,23 @@ AI-04). No se declara `VERIFIED` por progreso parcial (Regla Absoluta
 ```
 READ_ONLY_ASSISTANT     <- CERRADO (AI-03 VERIFIED, 12 tools) -- flags en False por defecto
 VALIDATION_ASSISTANT    <- EN PROGRESO (AI-04 PARCIAL, 6 tools) -- flags en False por defecto
-SUGGESTION_ASSISTANT    <- no alcanzado (AI-05, distinto del SUGGEST puntual de sugerir_asiento_contable)
+SUGGESTION_ASSISTANT    <- BLOQUEADO POR DISEÑO (AI-05 investigado 2026-09-01 -- sin logica pura que envolver, ver seccion arriba)
 WRITE_ASSISTANT         <- no alcanzado, BLOQUEADO por diseño (AI-42) hasta AI-01..AI-09 = VERIFIED
 ```
 
-## Siguiente paso real (2026-09-01, actualizado)
+## Siguiente paso real (2026-09-01, actualizado tras investigar AI-05)
 
-AI-03 y el primer lote de AI-04 ya están cerrados (ver arriba). El
-roadmap explícito del usuario para continuar (sus palabras, no
-ejecutado todavía en esta pasada): AI-04 (completar lo que falta si
-aparece un caso real de `ventas` resuelto -- ej. si `COMERCIAL-05`
-define la máquina de estados y con ella una regla de validación real)
-→ AI-05 SUGGEST → AI-06 FORM ASSISTANT → AI-07 MCP READ → AI-08 MEMORY
-→ AI-09 TRACING → AI-10 WRITE. AI-02.4 (process resolution) sigue
-como trabajo genuino adicional, no bloqueante para el resto de fases.
+AI-03 y el primer lote de AI-04 ya están cerrados. AI-05 (Suggestion
+Engine generico) quedó investigado y **BLOQUEADO POR DISEÑO** en esta
+misma pasada -- no hay ninguna función de sugerencia pura (sin
+escritura) en todo el ERP que envolver además de
+`sugerir_lineas_asiento_ia` (ya cubierta por AI-03). Avanzar
+requeriría inventar lógica dentro del AI Engine (prohibido) o esperar
+a que una app de dominio exponga una función de sugerencia nueva
+(trabajo de esa app, no del AI Engine). El roadmap original del
+usuario listaba AI-05 SUGGEST → AI-06 FORM ASSISTANT → AI-07 MCP READ
+→ AI-08 MEMORY → AI-09 TRACING → AI-10 WRITE, pero con AI-05 bloqueado
+el siguiente paso con trabajo real disponible es **AI-06 (Form
+Assistant)** o **AI-07 (MCP Read)** -- ninguno de los dos depende de
+que exista más lógica SUGGEST. AI-02.4 (process resolution) sigue como
+trabajo genuino adicional, no bloqueante.

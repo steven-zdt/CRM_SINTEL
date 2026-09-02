@@ -163,12 +163,26 @@ las validaciones YA existentes en cada `business_service.py` (ej.
 `FacturaBusinessService`, `VentaBusinessService`) -- una `validate_*`
 tool nunca reimplementa reglas de negocio, las invoca.
 
-## Fase 15 — Suggestion tools (diseño)
+## Fase 15 — Suggestion tools (AI-05, BLOQUEADO POR DISEÑO, investigado 2026-09-01)
 
 Sugerencia ≠ escritura (regla explícita). Contrato esperado:
 `ToolResult.data` con el valor sugerido + `"confidence"` +
 `"reasoning"` breve -- nunca un ID de un registro ya creado, porque no
 se creó nada.
+
+**Investigación real antes de implementar** (ver
+`AI_RELEASE_GATE.md` §"AI-05 = BLOQUEADO POR DISEÑO" para el detalle
+completo): búsqueda exhaustiva de funciones `def sugerir_*`/`def
+suggest_*` en todo `apps/tenant/*/services/` y `apps/public/*/services/`
+-- la única existente es `sugerir_lineas_asiento_ia()`, ya envuelta
+por `sugerir_asiento_contable` desde AI-03. Un candidato adicional
+(`inferir_y_crear_plantilla_desde_documento()`) fue descartado porque
+**escribe** en la base de datos (crea un `PlantillaContable`, aunque
+inactivo) -- no es una función pura, envolverla como `SUGGEST`
+violaría Regla Absoluta 6/7. No se implementa ninguna tool `SUGGEST`
+nueva hasta que exista una función de sugerencia pura real en alguna
+app de dominio -- inventar la lógica dentro de `apps/services/ai/`
+convertiría al AI Engine en una segunda capa de negocio.
 
 ## Fase 16 — Write tools (diseño, explícitamente no implementado)
 
