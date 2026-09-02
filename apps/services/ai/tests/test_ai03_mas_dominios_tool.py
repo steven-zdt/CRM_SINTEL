@@ -5,6 +5,10 @@ consultar_cotizacion, consultar_gasto, consultar_proyecto), mismo
 patron que test_buscar_cliente_tool.py / test_buscar_producto_tool.py.
 """
 import datetime
+import json
+import os
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import override_settings
@@ -13,6 +17,7 @@ from apps.services.ai.engine import run_tool
 from apps.tenant.bancos.models import CuentaBancaria
 from apps.tenant.clientes.models import Cliente
 from apps.tenant.compras.models import OrdenCompra
+from apps.tenant.contabilidad.models import CuentaContable
 from apps.tenant.cotizaciones.models import Cotizacion
 from apps.tenant.empleados.models import Empleado
 from apps.tenant.empresa.models import Empresa, Sede
@@ -27,6 +32,7 @@ from tests.tenant.base_test import SintelTenantTestCase
 User = get_user_model()
 
 AI_FLAGS_ON = {"AI_ENABLED": True, "AI_READ_ENABLED": True}
+AI_SUGGEST_FLAGS_ON = {"AI_ENABLED": True, "AI_SUGGEST_ENABLED": True}
 
 
 class _FakeRequest:
@@ -403,5 +409,106 @@ class ConsultarCuentaBancariaToolTests(SintelTenantTestCase):
         request = _FakeRequest(user=self.user, tenant=self.tenant)
 
         result = run_tool("consultar_cuenta_bancaria", request, limit=50)
+
+        assert result.status == "VALIDATION_ERROR"
+
+
+class SugerirAsientoContableToolTests(SintelTenantTestCase):
+    """sugerir_asiento_contable envuelve el Asistente Contable YA
+    existente (ContabilidadBusinessService.sugerir_lineas_asiento_ia) --
+    estos tests mockean la llamada real a Anthropic (mismo patron que
+    la funcion real usa: anthropic.Anthropic(...).messages.create()),
+    nunca hacen una llamada de red real."""
+
+    def setUp(self):
+        super().setUp()
+        self.empresa = Empresa.objects.create(
+            razon_social="EMPRESA CONTAB TEST S.A.S.", nit="900555111", direccion="Calle K",
+        )
+        CuentaContable.objects.create(
+            empresa=self.empresa, codigo="513505", nombre="Gastos administrativos AI",
+            tipo="GASTO", nivel=6, activa=True,
+        )
+        CuentaContable.objects.create(
+            empresa=self.empresa, codigo="233505", nombre="Cuentas por pagar proveedores AI",
+            tipo="PASIVO", nivel=6, activa=True,
+        )
+
+        self.user_admin = User.objects.create_user(email="contab_admin@test.local", password="testpass123")
+        TenantProfile.objects.create(user=self.user_admin, empresa=self.empresa, rol="ADMIN")
+
+        self.user_operador = User.objects.create_user(email="contab_operador@test.local", password="testpass123")
+        TenantProfile.objects.create(user=self.user_operador, empresa=self.empresa, rol="OPERADOR")
+
+    def _mock_anthropic_response(self, lineas):
+        payload = json.dumps({"lineas": lineas})
+        fake_message = SimpleNamespace(content=[SimpleNamespace(type="text", text=payload)])
+        fake_client = SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: fake_message))
+        return patch("anthropic.Anthropic", return_value=fake_client)
+
+    @override_settings(**AI_SUGGEST_FLAGS_ON)
+    def test_operador_no_puede_sugerir_asiento(self):
+        """Regla del diseno (AI_CONTABILIDAD_INTEGRATION.md): requiere rol ADMIN,
+        igual que el endpoint real (IsTenantAdminOrReadOnly)."""
+        request = _FakeRequest(user=self.user_operador, tenant=self.tenant)
+
+        result = run_tool(
+            "sugerir_asiento_contable", request,
+            app_label="gastos", subtotal="100.00", total="100.00",
+        )
+
+        assert result.status == "PERMISSION_DENIED"
+
+    @override_settings(**AI_SUGGEST_FLAGS_ON)
+    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "fake-key-for-test"})
+    def test_admin_recibe_lineas_del_asistente_contable_real(self):
+        """La tool invoca la funcion real sugerir_lineas_asiento_ia() -- la
+        validacion de cuenta nivel-6 activa y debe==haber corre de verdad."""
+        request = _FakeRequest(user=self.user_admin, tenant=self.tenant)
+        lineas_mock = [
+            {"cuenta_codigo": "513505", "debe": 100.00, "haber": 0, "descripcion": "Gasto AI test"},
+            {"cuenta_codigo": "233505", "debe": 0, "haber": 100.00, "descripcion": "CxP AI test"},
+        ]
+
+        with self._mock_anthropic_response(lineas_mock):
+            result = run_tool(
+                "sugerir_asiento_contable", request,
+                app_label="gastos", subtotal="100.00", total="100.00",
+                tercero_nit="900111222", tercero_nombre="Proveedor AI Test",
+            )
+
+        assert result.status == "OK"
+        assert len(result.data) == 2
+        codigos = {linea["cuenta_codigo"] for linea in result.data}
+        assert codigos == {"513505", "233505"}
+
+    @override_settings(**AI_SUGGEST_FLAGS_ON)
+    @patch.dict(os.environ, {"ANTHROPIC_API_KEY": "fake-key-for-test"})
+    def test_cuenta_inexistente_se_traduce_a_validation_error(self):
+        """Si el LLM sugiere una cuenta que no existe/no es nivel-6 activa,
+        sugerir_lineas_asiento_ia() lanza ValidationError real -- la tool
+        debe traducirla, nunca propagar el traceback."""
+        request = _FakeRequest(user=self.user_admin, tenant=self.tenant)
+        lineas_mock = [
+            {"cuenta_codigo": "999999", "debe": 100.00, "haber": 0, "descripcion": "Cuenta que no existe"},
+            {"cuenta_codigo": "233505", "debe": 0, "haber": 100.00, "descripcion": "CxP AI test"},
+        ]
+
+        with self._mock_anthropic_response(lineas_mock):
+            result = run_tool(
+                "sugerir_asiento_contable", request,
+                app_label="gastos", subtotal="100.00", total="100.00",
+            )
+
+        assert result.status == "VALIDATION_ERROR"
+
+    @override_settings(**AI_SUGGEST_FLAGS_ON)
+    def test_app_label_invalido_no_llega_a_llamar_anthropic(self):
+        request = _FakeRequest(user=self.user_admin, tenant=self.tenant)
+
+        result = run_tool(
+            "sugerir_asiento_contable", request,
+            app_label="ventas", subtotal="100.00", total="100.00",
+        )
 
         assert result.status == "VALIDATION_ERROR"

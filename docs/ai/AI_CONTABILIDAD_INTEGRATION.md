@@ -151,17 +151,24 @@ en lenguaje natural para un chat, esa explicación debe citar los
 campos reales (`cuenta_codigo`, `debe`, `haber`) sin alterar los
 montos ni inventar una cuenta que no vino de la función real.
 
-## 6. Fuera de alcance de este documento (STEP 7, implementación)
+## 6. STEP 7 -- implementación (COMPLETADA, 2026-09-01)
 
-- `apps/services/ai/tools/contabilidad_tools.py` con
-  `SugerirAsientoContableTool` (kind=`SUGGEST`, risk=`SENSITIVE_READ`
-  o superior -- toca datos financieros del tenant).
-- Registro en `apps/services/ai/tools/__init__.py`.
-- Tests reales verificando: (a) rol no-ADMIN devuelve
-  `PERMISSION_DENIED` antes de llegar a llamar Anthropic, (b) rol
-  ADMIN con `AI_SUGGEST_ENABLED=True` invoca
-  `sugerir_lineas_asiento_ia()` real y traduce su resultado, (c) una
-  `ValidationError` real (ej. cuenta inexistente) se traduce a
-  `ToolResult(status="VALIDATION_ERROR")` sin traceback.
-- Actualizar `AI_TOOL_REGISTRY.md` moviendo `contabilidad` de
-  `BLOCKED BY DESIGN` a `VERIFIED` una vez implementado y testeado.
+`apps/services/ai/tools/contabilidad_tools.py::SugerirAsientoContableTool`
+implementa exactamente el diseño de este documento -- verificado con
+tests reales (`test_ai03_mas_dominios_tool.py::SugerirAsientoContableToolTests`,
+mockeando `anthropic.Anthropic` para no depender de la red, pero
+ejecutando la validación real de `sugerir_lineas_asiento_ia()` --
+cuenta nivel-6 activa, `debe == haber`):
+
+- Rol no-ADMIN → `PERMISSION_DENIED` **antes** de llamar a
+  `ContabilidadBusinessService` (el chequeo de rol vive en el `run()`
+  de la tool, no en el engine).
+- Rol ADMIN + `app_label` válido → invoca la función real, devuelve
+  `data=<lineas>` tal cual las retornó `sugerir_lineas_asiento_ia()`.
+- Cuenta inexistente/no-nivel-6 sugerida por el LLM →
+  `ValidationError` real de la función se traduce a
+  `ToolResult(status="VALIDATION_ERROR")`, nunca un traceback.
+- `app_label` fuera de `{facturas, gastos, empleados, inventario}` →
+  `VALIDATION_ERROR` sin siquiera intentar construir el `ctx`.
+
+`AI_TOOL_REGISTRY.md` ya refleja `contabilidad` como `VERIFIED`.

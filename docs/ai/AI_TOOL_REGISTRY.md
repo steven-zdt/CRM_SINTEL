@@ -10,25 +10,34 @@ elegible queda formalmente bloqueado por una dependencia explícita
 como incompleto).
 
 ```
-AI-03 READ TOOLS
+AI-03 READ/SUGGEST TOOLS -- CERRADO (2026-09-01, ver "Cierre formal" abajo)
 ├── VERIFIED (implementadas, testeadas, registradas)
 │   ├── clientes, inventario, proveedores, ventas, compras
 │   ├── cotizaciones, gastos, proyectos
 │   ├── facturas (READ-only permanente, ver fila en la tabla abajo)
 │   ├── empleados (SENSITIVE_READ, ver AI_SECURITY_MODEL.md -- PII solo rol ADMIN, salud/nomina nunca)
-│   └── bancos (SENSITIVE_READ, ver AI_SECURITY_MODEL.md -- numero de cuenta siempre enmascarado, saldos/movimientos nunca)
-│
-├── BLOCKED BY DESIGN (requieren un documento/diseño previo, no solo wrap-a-selector)
-│   └── contabilidad  → diseño de integración YA ESCRITO
-│                        (AI_CONTABILIDAD_INTEGRATION.md, 2026-09-01) --
-│                        falta implementar la tool (STEP 7)
+│   ├── bancos (SENSITIVE_READ, ver AI_SECURITY_MODEL.md -- numero de cuenta siempre enmascarado, saldos/movimientos nunca)
+│   └── contabilidad (SUGGEST, ver AI_CONTABILIDAD_INTEGRATION.md -- envuelve el Asistente Contable ya existente, requiere rol ADMIN, nunca escribe)
 │
 └── DEFERRED (fuera de alcance actual, no es deuda pendiente)
     ├── impuestos   → owner_phase = TBD, reason = domain intentionally deferred
     └── reporting   → owner_phase = TBD, reason = domain intentionally deferred
 ```
 
-## Implementado (12 tools reales)
+### Cierre formal de AI-03 (2026-09-01)
+
+Los 3 dominios que estaban `BLOCKED BY DESIGN` (empleados, bancos,
+contabilidad) quedaron `VERIFIED` en el orden acordado con el usuario
+(`task_a8ca8af1` → facturas → `AI_SECURITY_MODEL.md` → empleados →
+bancos → diseño de integración contable → contabilidad). No quedan
+dominios `BLOCKED` -- solo `impuestos`/`reporting`, que son `DEFERRED`
+por decisión explícita, no deuda técnica. **AI-03 se declara cerrado
+bajo la definición de la sección anterior**: no implica que los 13
+dominios del ERP tengan una tool -- implica que todo dominio elegible
+la tiene, y los no elegibles están formalmente registrados como fuera
+de alcance.
+
+## Implementado (13 tools reales)
 
 | Tool | Dominio | Kind | Risk | Confirmación | Servicio subyacente |
 |---|---|---|---|---|---|
@@ -44,6 +53,7 @@ AI-03 READ TOOLS
 | `consultar_factura` | `facturas` | READ | `SAFE_READ` | No | `apps.tenant.facturas.services.selectors.FacturaSelectors.qs_list` — **READ-only permanente por diseño** (FASE 21): nunca habrá `crear_factura`/`anular_factura`/`transmitir_factura` en el AI Engine, esa escritura vive solo en el pipeline propietario (`FacturaBusinessService`) |
 | `buscar_empleado` | `empleados` | READ | `SENSITIVE_READ` | No | `apps.tenant.empleados.services.selectors.EmpleadoSelector` — **primer dominio sensible**: PII (`numero_documento`/`email`/`telefono`) solo si `context.rol == "ADMIN"`, salud/afiliación (EPS/AFP/ARL) y nómina (`Contrato`/`Devengo`) nunca expuestos por esta tool, `limit` máximo 10 (no 50); ver clasificación completa en `AI_SECURITY_MODEL.md` |
 | `consultar_cuenta_bancaria` | `bancos` | READ | `SENSITIVE_READ` | No | `apps.tenant.bancos.services.selectors.CuentaBancariaSelector` — número de cuenta **siempre enmascarado** (`****1234`, sin excepción de rol), saldos/movimientos (`ExtractoBancario`/`TransaccionBancaria`) nunca expuestos por esta tool, `limit` máximo 10; ver `AI_SECURITY_MODEL.md` |
+| `sugerir_asiento_contable` | `contabilidad` | **SUGGEST** | `SENSITIVE_READ` | **Sí** | `apps.tenant.contabilidad.services.business_service.ContabilidadBusinessService.sugerir_lineas_asiento_ia` — **envuelve el Asistente Contable ya existente en producción**, no lo reimplementa; requiere `context.rol == "ADMIN"` (mismo permiso que el endpoint real `POST /pendientes/asistente-ia/`); nunca escribe un `AsientoContable` (esa persistencia sigue siendo `contabilizar_documento_manual()`, un flujo de confirmación humana fuera de esta tool); ver `AI_CONTABILIDAD_INTEGRATION.md` |
 
 `*` La misión de evolución pide un documento `AI_EKG.md` dedicado —
 decisión explícita: no se crea, para no duplicar contenido casi
@@ -73,7 +83,7 @@ como ejemplo ya construido):
 | `proyectos` | `apps.tenant.proyectos` | `consultar_proyecto` ✅ **implementada** (sede NULL-safe) | -- | -- |
 | `empleados` | `apps.tenant.empleados` | `buscar_empleado` ✅ **implementada** (`SENSITIVE_READ`, PII solo ADMIN) | -- | -- (datos sensibles, ver `AI_SECURITY_MODEL.md`) |
 | `bancos` | `apps.tenant.bancos` | `consultar_cuenta_bancaria` ✅ **implementada** (`SENSITIVE_READ`, número siempre enmascarado) | `verificar_pago` | -- (datos sensibles) |
-| `contabilidad` | `apps.tenant.contabilidad` | `consultar_asiento` | `validar_asiento` | **orquesta el Asistente Contable existente, no lo duplica** (ver `AI_ENGINE_ARCHITECTURE.md`) |
+| `contabilidad` | `apps.tenant.contabilidad` | `consultar_asiento` (diseño, no implementada) | `sugerir_asiento_contable` ✅ **implementada** (SUGGEST, orquesta el Asistente Contable existente, ver `AI_CONTABILIDAD_INTEGRATION.md`) | -- |
 | `impuestos` | `apps.public.impuestos` | `consultar_impuestos` | -- | -- |
 | `reporting` | `apps.tenant.dashboard` | `consultar_reporte` | -- | -- |
 
