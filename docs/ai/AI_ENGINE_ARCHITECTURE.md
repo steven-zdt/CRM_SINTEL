@@ -90,9 +90,11 @@ se importaba desde tests. Recibe el mensaje del usuario + contexto de
 pantalla opcional (Fase 23), pide al LLM elegir una tool ya registrada
 respondiendo JSON puro, y ejecuta la decisión exclusivamente vía
 `AIEngine.run_tool()` (nunca `tool.run()` directo -- toda la seguridad
-estructural existente sigue aplicando sin reimplementarla). Sin
-endpoint HTTP todavía -- ver `AI_RELEASE_GATE.md` "AI-06 = PARCIAL"
-para el detalle y por qué se separó esa decisión.
+estructural existente sigue aplicando sin reimplementarla). Expuesto
+via `POST /api/v1/ai/ask/` (`apps/services/ai/api/`, mismo patrón de
+`ReportingViewSet` -- auth/permisos reutilizados, ninguno inventado) --
+ver `AI_RELEASE_GATE.md` "AI-06 = PARCIAL" para el detalle (falta la
+integración del lado frontend/UI, no el backend).
 
 ## Provider abstraction (Fase 5)
 

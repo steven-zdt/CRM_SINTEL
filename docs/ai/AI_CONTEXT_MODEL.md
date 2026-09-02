@@ -85,13 +85,13 @@ error del caller) se ignora silenciosamente, nunca se copia a
 `AIContext` (probado en
 `test_build_context_incluye_contexto_de_pantalla_sin_secretos`).
 
-**[2026-09-01] Primer caller real (sin endpoint HTTP todavía)**:
+**[2026-09-01] Primer caller real, con endpoint HTTP**:
 `apps/services/ai/orchestrator/form_assistant.py::ask()` (Fase
 17+/AI-06) ya pasa `screen` a `build_context()` y lo reenvía a
-`AIEngine.run_tool()`. Sigue sin existir ningún endpoint HTTP que
-reciba este payload directamente del frontend -- `ask()` se invoca
-hoy solo desde Python/tests, exponer una URL real es una decisión
-separada (ver `AI_RELEASE_GATE.md` "AI-06 = PARCIAL").
+`AIEngine.run_tool()`. `POST /api/v1/ai/ask/`
+(`apps/services/ai/api/`, `AIAskSerializer`) ya recibe este payload
+real del frontend -- solo falta la integración del lado UI (un widget
+que llame a esa URL), ver `AI_RELEASE_GATE.md` "AI-06 = PARCIAL".
 
 ## Fase 43-44 — Context retrieval / EKG retrieval (diseño, no implementado)
 

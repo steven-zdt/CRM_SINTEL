@@ -12,7 +12,7 @@ están `VERIFIED`).
 [x] AI-03 READ/SUGGEST Tools     = VERIFIED (2026-09-01) -- 10 dominios con tool real (clientes, inventario, proveedores, ventas, compras, cotizaciones, gastos, proyectos, facturas, empleados, bancos, contabilidad = 12; impuestos/reporting DEFERRED formalmente, no deuda). Ver AI_TOOL_REGISTRY.md "Cierre formal de AI-03".
 [~] AI-04 Validation Engine       = PARCIAL -- 6 tools reales (clientes, proveedores, inventario, compras, cotizaciones, gastos); ventas investigado y descartado por falta de validate() real (no wrap-a-ciegas); facturas/empleados/bancos/contabilidad no aplican (READ-only/import-only/ya valida internamente); impuestos/reporting DEFERRED
 [ ] AI-05 Suggestion Engine        = BLOQUEADO POR DISEÑO (investigado 2026-09-01) -- no hay logica de negocio real que envolver, ver seccion abajo
-[~] AI-06 Form Assistant             = PARCIAL (2026-09-01) -- orquestador real (apps/services/ai/orchestrator/), primer caller real de AIProvider; sin endpoint HTTP todavia (decision aparte)
+[~] AI-06 Form Assistant             = PARCIAL (2026-09-01) -- orquestador real (apps/services/ai/orchestrator/), primer caller real de AIProvider, CON endpoint HTTP real (POST /api/v1/ai/ask/); parcial porque falta integracion en el frontend/UI, no porque falte backend
 [ ] AI-07 MCP Read Controlado         = no iniciado (MCP sigue inerte, 0 ViewSets decorados)
 [ ] AI-08 Session/Memory               = no iniciado
 [ ] AI-09 Tracing/Observability         = parcial -- logging basico ya existia, sin trace_id/persistencia
@@ -142,13 +142,6 @@ directo, así que toda la seguridad estructural ya existente (flags,
 `AUTO_APPROVED_KINDS`, contexto real) sigue aplicando sin
 reimplementarla.
 
-**Deliberadamente PARCIAL, no VERIFIED**: no hay endpoint HTTP
-todavía. Exponer una URL (`BaseTenantViewSet`, dual-auth JWT/session,
-nueva superficie de ataque real) es una decisión separada que merece
-su propio commit/revisión -- mismo criterio que `AIEngine.run_tool()`
-se construyó primero como motor puro testeable antes de que existiera
-cualquier tool real que lo ejercitara.
-
 Guardrail de Fase 55 (prompt injection) aplicado, no solo diseñado: el
 `system` prompt instruye explícitamente al modelo a tratar el mensaje
 del usuario como **dato**, nunca como instrucción a seguir si
@@ -161,11 +154,41 @@ Defensa en profundidad probada con test explícito: si el LLM
 él mismo -- confía en que `AIEngine.run_tool()` lo rechace con
 `NOT_FOUND` (`test_llm_alucina_tool_inexistente_es_manejado_por_ai_engine`).
 
+### Endpoint HTTP real (2026-09-01, mismo día, segunda mitad del trabajo)
+
+`POST /api/v1/ai/ask/` (`apps/services/ai/api/`) -- `AIAssistantViewSet`,
+mismo patrón que `ReportingViewSet` (`apps/services/reporting/api/`):
+un `viewsets.ViewSet` que NO hereda `BaseTenantViewSet` (no expone CRUD
+de un modelo Django), reutiliza `[RelaxedJWTAuthentication,
+SessionAuthentication]` + `IsTenantMember` ya existentes -- ningún
+permiso nuevo inventado. `AIAskSerializer` valida la forma de entrada
+(`message` requerido, `screen` opcional con las mismas 4 claves de
+Fase 23) antes de llegar al orquestador. El `status` que devuelve
+`ask()` se traduce a código HTTP real (`PERMISSION_DENIED`→403,
+`VALIDATION_ERROR`→400, `NOT_FOUND`→404, `INTERNAL_ERROR`→500, `OK`/
+`NO_TOOL`→200).
+
+**Hallazgo real de este test** (primera vez que este dominio ejercita
+la capa HTTP completa, no solo `run_tool()`/`ask()` directo):
+`IsTenantMember` exige una `TenantMembership` real (esquema público),
+NO alcanza con el `TenantProfile` (esquema tenant) que
+`AIContext.build_context()` necesita -- son dos requisitos distintos,
+ninguna de las tools/orquestador probadas antes en este documento lo
+había necesitado porque nunca pasaban por la capa HTTP/DRF.
+
+**Ya no es "sin endpoint HTTP"** -- se corrige la nota anterior de esta
+misma sección (escrita horas antes, en la primera mitad de esta
+pasada): el endpoint se expuso en la segunda mitad del mismo día,
+verificado con 5 tests HTTP reales (`test_ai06_http_endpoint.py`) que
+incluyen: 403 con `AI_ENABLED=False`, 400 con `message` vacío, 401 sin
+autenticar (comportamiento estándar de DRF, no un bug), 200 con el
+flujo completo, y que el payload `screen` se acepta y propaga.
+
 ## Corrida real de tests (2026-09-01, corrida mas reciente)
 
 ```
-apps/services/ai/tests/ -- 78 items
-78 passed, 2 warnings (warnings preexistentes de DRF, no relacionados)
+apps/services/ai/tests/ -- 83 items
+83 passed, 2 warnings (warnings preexistentes de DRF, no relacionados)
 ```
 
 ## Corrida real de tests (2026-09-01, corrida original de esta seccion, historica)
@@ -216,7 +239,7 @@ que no lo está).
 [~] sensitive data controls     -- empleados/bancos/contabilidad ya tienen tools reales con clasificacion aplicada (AI_SECURITY_MODEL.md) -- 2 tools SENSITIVE_READ + 1 SUGGEST probadas, no solo diseñadas
 [ ] MCP read                    -- MCP sigue inerte (0 ViewSets decorados) -- sin cambios en esta pasada, deliberado
 [ ] MCP write controls          -- N/A, MCP read tampoco existe
-[x] tests                       -- 78/78 PASS (corrida completa mas reciente, apps/services/ai/tests/)
+[x] tests                       -- 83/83 PASS (corrida completa mas reciente, apps/services/ai/tests/)
 [x] governance                  -- manage.py check PASS, makemigrations --check PASS, git diff --check PASS
 [x] documentation                -- 14 documentos en docs/ai/ (12 originales + AI_SECURITY_MODEL.md ampliado + AI_CONTABILIDAD_INTEGRATION.md nuevo), todos distinguiendo implementado vs diseñado
 ```
@@ -227,22 +250,26 @@ que no lo está).
 READ_ONLY_ASSISTANT     <- CERRADO (AI-03 VERIFIED, 12 tools) -- flags en False por defecto
 VALIDATION_ASSISTANT    <- EN PROGRESO (AI-04 PARCIAL, 6 tools) -- flags en False por defecto
 SUGGESTION_ASSISTANT    <- BLOQUEADO POR DISEÑO (AI-05 investigado 2026-09-01 -- sin logica pura que envolver, ver seccion arriba)
-FORM_ASSISTANT           <- EN PROGRESO (AI-06 PARCIAL, orquestador real sin endpoint HTTP) -- flags en False por defecto
+FORM_ASSISTANT           <- EN PROGRESO (AI-06 PARCIAL, orquestador + endpoint HTTP real -- falta integracion en frontend/UI) -- flags en False por defecto
 WRITE_ASSISTANT         <- no alcanzado, BLOQUEADO por diseño (AI-42) hasta AI-01..AI-09 = VERIFIED
 ```
 
-## Siguiente paso real (2026-09-01, actualizado tras AI-06)
+## Siguiente paso real (2026-09-01, actualizado tras exponer el endpoint HTTP de AI-06)
 
-AI-03 está cerrado, AI-04 y AI-06 tienen su primer lote real hecho.
-AI-05 sigue `BLOQUEADO POR DISEÑO` (sin función de sugerencia pura que
+AI-03 está cerrado, AI-04 tiene su primer lote real hecho, AI-06 tiene
+orquestador **y** endpoint HTTP reales (`POST /api/v1/ai/ask/`). AI-05
+sigue `BLOQUEADO POR DISEÑO` (sin función de sugerencia pura que
 envolver). El usuario eligió explícitamente **AI-06 (Form Assistant)**
 cuando se le presentó el bloqueo de AI-05 (vía `AskUserQuestion`,
-2026-09-01) -- se implementó el orquestador real
-(`apps/services/ai/orchestrator/`), primer caller real de
-`AIProvider`, pero **sin endpoint HTTP todavía** (decisión de
-superficie de ataque separada, no bloqueante para el resto). Próximos
-pasos reales disponibles: exponer el endpoint HTTP de AI-06 (requiere
-diseño de permisos/dual-auth, ver `AGENTS.md` §15), o avanzar a AI-07
-(MCP Read) -- ninguno depende de que AI-05 se desbloquee. AI-02.4
+2026-09-01); se implementó primero el orquestador puro (testeable sin
+HTTP, mismo criterio que `AIEngine.run_tool()`) y luego, en la misma
+pasada, el endpoint HTTP real reutilizando el patrón ya aceptado de
+`ReportingViewSet` (auth/permisos existentes, sin inventar ninguno
+nuevo). Lo que falta para que AI-06 sea `VERIFIED` no es backend: es
+integración en el frontend/UI (un widget de chat/asistente que llame a
+`/api/v1/ai/ask/`), fuera del alcance de este backend-only pass.
+Próximo paso real disponible sin bloqueo: AI-07 (MCP Read) -- no
+depende de que AI-05 se desbloquee ni de la integración frontend de
+AI-06. AI-02.4
 (process resolution) sigue como trabajo genuino adicional, no
 bloqueante.

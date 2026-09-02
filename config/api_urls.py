@@ -95,6 +95,16 @@ try:
 except (ImportError, AttributeError) as e:
     logger.warning(f"WARNING: No se pudieron cargar URLs de reporting: {e}")
 
+# AI Engine -- servicio transversal expuesto bajo /api/v1/ai/ (AI-06 Form
+# Assistant: apps/services/ai/, ver docs/ai/AI_RELEASE_GATE.md). Flags
+# AI_ENABLED/AI_<KIND>_ENABLED siguen en False por defecto -- exponer la
+# URL no habilita nada por si sola.
+try:
+    urlpatterns.append(path('ai/', include('apps.services.ai.api.urls')))
+    logger.info("OK: URLs de AI Engine registradas correctamente: /api/v1/ai/")
+except (ImportError, AttributeError) as e:
+    logger.warning(f"WARNING: No se pudieron cargar URLs de AI Engine: {e}")
+
 try:
     urlpatterns.append(path('inventario/', include('apps.tenant.inventario.api.urls')))
     logger.info("OK: URLs de inventario registradas correctamente: /api/v1/inventario/")
