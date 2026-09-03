@@ -521,8 +521,73 @@ regresion ERP                 = PASS
 rollback posible              = PASS
 ```
 
-**AI-VECTOR-04 = PASS.** NEXT: **AI-VECTOR-05** — `ChunkingService` (trocea
-texto de origen, **excluye campos FORBIDDEN/MASKED**), `EmbeddingService`
-(orquesta chunk→provider→persistencia, idempotente por `source_version`),
-`RetrievalService` (búsqueda vectorial tenant-scoped, exact search sin ANN,
-filtros sede/área/document_type).
+**AI-VECTOR-04 = PASS.** NEXT: **AI-VECTOR-05**.
+
+---
+
+## AI-VECTOR-05 — Capa semántica (Chunking + Embedding + Retrieval)
+
+**STATUS = PASS** (2026-09-03, rama `feat/onboarding-cookie`)
+
+### EXECUTE (HECHO) — todo en `apps/tenant/ai_knowledge/services/`
+
+- **`chunking_service.py`** — `ChunkingService.chunk(text, *, max_chars=800,
+  overlap_chars=80)`. Capa **pura de texto** (no BD, no proveedor, no
+  tenants): parte por párrafos; un párrafo largo se reparte por oración con
+  solapamiento; una oración gigante se corta duro por caracteres. Texto
+  vacío → `[]`.
+- **`sources.py`** — `INDEXABLE_SOURCES`: allowlist **curada a mano** de
+  `(modelo, campo)` indexables = **la frontera de seguridad**. Los 2
+  orígenes del POC (`cliente_observaciones`, `producto_descripcion`).
+  Cualquier campo FORBIDDEN/MASKED simplemente no está aquí. `is_indexable()`.
+- **`embedding_service.py`** — `EmbeddingService.index_text(...)`. Orquesta
+  `upsert_document → ChunkingService → replace_chunks → provider.embed_documents
+  → set_chunk_embedding`. **Idempotente**: si `source_version` no cambió y los
+  chunks ya están embebidos con el modelo/`CURRENT_EMBEDDING_VERSION`
+  actuales → `skipped=True`, sin llamar al proveedor. `force=True` reindexar;
+  `deindex()` borra; `stale_count()` cuenta chunks con modelo/versión viejos.
+- **`retrieval_service.py`** — `RetrievalService.search(*, empresa, query, k=5,
+  source_types=None, sede_ids=None, area_ids=None, max_distance=None)`.
+  **Solo lectura** (`.filter/.only/.annotate/.order_by`, cero writes).
+  `embed_query → CosineDistance('embedding', qvec) → order_by(distance)[:k]`.
+  Sin índice ANN (plan §13, exact search). Filtros sede/área **NULL-safe**
+  (un doc sin `sede_id` en `metadata` es visible siempre; si lo declara, debe
+  caer en el alcance — mismo criterio que `filter_by_scope_null_safe`).
+  `RetrievalHit` con `content/source_type/source_id/document_uuid/distance/
+  score/metadata`. **No filtra por `tenant_id`** — el aislamiento lo da el
+  schema.
+
+### VERIFY (VERIFICADO)
+
+**Smoke real end-to-end en `aipoc`** (4 descripciones sintéticas de producto,
+modelo jina-es real):
+
+| Consulta | Top-1 (score) | Correcto |
+|---|---|---|
+| "fijaciones metálicas para obra" | Perno hexagonal grado 8.8 (0.55) | ✓ (perno > tornillo, ambos fasteners) |
+| "protección de manos para laboratorio" | Guante de nitrilo (0.38) | ✓ |
+| "condiciones de pago del cliente" | Cliente preferente paga a 15 días (0.38) | ✓ |
+| Re-index con mismo `source_version` | `skipped=True` | ✓ idempotencia |
+| Datos de smoke | limpiados (8 filas) | ✓ |
+
+| Check | Resultado |
+|---|---|
+| `manage.py check` / `makemigrations --check` | OK / `No changes detected` (sin migraciones, sin infra) |
+| `pytest apps/tenant/ai_knowledge/tests/` (venv, modelo fake) | **22 passed** (7 modelos + 15 servicios: chunking, allowlist, idempotencia, ranking, k, filtro source_type, solo-lectura, no-cruza-tenants) en 623 s |
+
+### GATE — AI-VECTOR-05
+
+```
+ChunkingService puro (sin BD/tenant/provider)     = PASS
+allowlist de orIgenes = frontera de seguridad     = PASS  (sources.py, is_indexable)
+EmbeddingService idempotente por source_version    = PASS  (skip verificado)
+RetrievalService SOLO lectura                      = PASS  (test: docs/chunks no cambian)
+retrieval tenant-scoped (sin WHERE tenant_id)      = PASS  (aislamiento por schema)
+exact search, sin ANN                              = PASS  (CosineDistance + order_by)
+"retrieval funcionando dentro de un tenant real"   = PASS  (smoke en aipoc, ranking correcto)
+```
+
+**AI-VECTOR-05 = PASS.** NEXT: **AI-VECTOR-06** — Seguridad y aislamiento:
+tests obligatorios (2 tenants reales sin fuga; alcance sede/área; documentos
+etiquetados FORBIDDEN/MASKED que el chunking nunca indexa;
+`ToolRisk.SENSITIVE_READ` no es protección automática — enforcement explícito).
