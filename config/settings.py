@@ -53,7 +53,14 @@ DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
 SHARED_APPS = [
     # django-tenants DEBE ir PRIMERO (requisito obligatorio de django-tenants)
     "django_tenants",
-    
+
+    # AI-VECTOR-02: extensiones de PostgreSQL a nivel de base de datos
+    # (empezando por `vector`/pgvector). App sin modelos, SOLO en SHARED_APPS
+    # -- una extension es database-wide, no schema-scoped. Vive fuera de
+    # apps/public/ a proposito (apps/public/ requiere RFC + needs-admin-approval).
+    # Ver docs/ai/AI_VECTOR_POC_EXECUTION.md.
+    "apps.db_extensions",
+
     # WARNING: APPS PÚBLICAS DEL PROYECTO (SOLO esquema public)
     # Estas apps JAMÁS deben estar en TENANT_APPS
     "apps.public.core",     # Core público (middleware, Server Guard) (SOLO public)
