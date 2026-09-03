@@ -29,6 +29,7 @@ services:
     volumes:
       - ./media:/app/media
       - ./staticfiles:/app/staticfiles
+      - fastembed_cache:/app/.fastembed_cache  # AI-VECTOR-04: cache de modelos ONNX
 
     # DEVOPS-A3: fijar DJANGO_DEBUG=False explicito en produccion (defensa en
     # profundidad — no depender solo del fallback en config/settings.py/SEC-C1).
@@ -61,6 +62,7 @@ services:
     # El worker Celery tampoco necesita bind-mount de codigo.
     volumes:
       - ./media:/app/media
+      - fastembed_cache:/app/.fastembed_cache  # AI-VECTOR-04: cache de modelos ONNX
     environment:
       - DJANGO_DEBUG=False
 

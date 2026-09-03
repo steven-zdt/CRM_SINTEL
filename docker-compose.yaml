@@ -8,6 +8,10 @@ x-app-base: &app-base
     - .env
   volumes:
     - .:/app
+    # AI-VECTOR-04: cache persistente de modelos ONNX de embeddings (fastembed).
+    # Named volume sobre un subpath del bind-mount: evita bajar ~0.64 GB en cada
+    # arranque y no ensucia el repo del host.
+    - fastembed_cache:/app/.fastembed_cache
   depends_on:
     db:
       condition: service_healthy
@@ -102,6 +106,7 @@ services:
       - DJANGO_SETTINGS_MODULE=config.settings
       - SERVICE_ROLE=web
       - DATABASE_HOST=db
+      - FASTEMBED_CACHE_PATH=/app/.fastembed_cache  # AI-VECTOR-04
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     restart: unless-stopped
     extra_hosts:
@@ -171,6 +176,7 @@ services:
       - SERVICE_ROLE=celery
       - C_FORCE_ROOT=1
       - DATABASE_HOST=db
+      - FASTEMBED_CACHE_PATH=/app/.fastembed_cache  # AI-VECTOR-04
     command: ["celery", "-A", "config", "worker", "-l", "info", "-Q", "high_priority,default"]
     restart: unless-stopped
     extra_hosts:
@@ -206,4 +212,7 @@ volumes:
     driver: local
   neo4j_data:
     name: crm_sintel_neo4j_data
+    driver: local
+  fastembed_cache:
+    name: crm_sintel_fastembed_cache
     driver: local

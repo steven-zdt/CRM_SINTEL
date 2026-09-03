@@ -50,7 +50,10 @@ RUN apt-get update && \
 COPY . /app
 
 # Crear directorios necesarios para evitar warnings de staticfiles
-RUN mkdir -p /app/static /app/media /app/staticfiles
+# .fastembed_cache: cache de modelos ONNX de embeddings (AI-VECTOR-04). Se crea
+# con owner appuser aqui para que el named volume que se monta encima herede el
+# owner correcto (UID 1000) en lugar de root.
+RUN mkdir -p /app/static /app/media /app/staticfiles /app/.fastembed_cache
 
 # ⚠️ Recolectar staticfiles durante el BUILD (defensa en profundidad para
 # imagenes de produccion sin bind-mount, donde nadie corre collectstatic a

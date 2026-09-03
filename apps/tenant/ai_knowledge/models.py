@@ -96,14 +96,16 @@ class AIKnowledgeChunk(SintelTenantBaseModel):
     )
 
     # --- Embedding (se rellena de forma asincrona) ---
-    # dimensions=None: `vector` sin dimension fija. El proveedor -- y por tanto la
-    # dimension -- se decide en AI-VECTOR-04; entonces se fijara con un AlterField
-    # y se podra crear un indice ANN (HNSW) si el benchmark lo justifica (plan S13).
+    # dimensions=768: fijado en AI-VECTOR-04 al elegir el proveedor
+    # (fastembed / jinaai/jina-embeddings-v2-base-es, 768d). Fijar la dimension
+    # habilita un indice ANN (HNSW) si el benchmark lo justifica (plan S13);
+    # el POC arranca con exact search (sin indice). Cambiar de proveedor a otra
+    # dimension requiere un nuevo AlterField + reindexado (embedding_version).
     embedding = VectorField(
-        dimensions=None,
+        dimensions=768,
         null=True,
         blank=True,
-        help_text="Vector de embedding del `content`. NULL hasta que se genere.",
+        help_text="Vector de embedding del `content` (768d, jina-v2-es). NULL hasta que se genere.",
     )
     embedding_model = models.CharField(
         max_length=100,

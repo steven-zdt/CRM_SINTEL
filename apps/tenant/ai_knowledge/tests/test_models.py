@@ -1,7 +1,6 @@
 """AI-VECTOR-03: modelos + CRUD service del Vector Store, y aislamiento tenant."""
 
 import pytest
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.utils import IntegrityError
 from django_tenants.utils import schema_context
 
@@ -10,6 +9,15 @@ from apps.tenant.ai_knowledge.services import AIKnowledgeCRUDService
 from apps.tenant.empresa.models import Empresa
 
 pytestmark = pytest.mark.django_db
+
+# AI-VECTOR-04: la columna `embedding` es `vector(768)`.
+DIM = 768
+
+
+def _vec(*axis_values: float) -> list[float]:
+    """Vector de 768 dims: los primeros valores son `axis_values`, el resto 0."""
+    v = list(axis_values) + [0.0] * (DIM - len(axis_values))
+    return v[:DIM]
 
 
 def _empresa(schema: str) -> Empresa:
@@ -66,12 +74,12 @@ def test_set_chunk_embedding_guarda_vector_y_dimension(tenant_a):
         assert chunk.embedding is None
         assert chunk.embedding_version == 0
 
-        vec = [0.1, 0.2, 0.3, 0.4]
+        vec = _vec(0.1, 0.2, 0.3, 0.4)
         AIKnowledgeCRUDService.set_chunk_embedding(
             chunk=chunk, embedding=vec, embedding_model="test-model", embedding_version=1
         )
         chunk.refresh_from_db()
-        assert chunk.embedding_dimension == 4
+        assert chunk.embedding_dimension == DIM
         assert chunk.embedding_model == "test-model"
         assert chunk.embedding_version == 1
         assert chunk.embedded_at is not None
@@ -88,14 +96,14 @@ def test_vector_distance_query_funciona(tenant_a):
         )
         chunks = AIKnowledgeCRUDService.replace_chunks(document=doc, contents=["c0", "c1"])
         AIKnowledgeCRUDService.set_chunk_embedding(
-            chunk=chunks[0], embedding=[1.0, 0.0, 0.0], embedding_model="m", embedding_version=1
+            chunk=chunks[0], embedding=_vec(1.0, 0.0, 0.0), embedding_model="m", embedding_version=1
         )
         AIKnowledgeCRUDService.set_chunk_embedding(
-            chunk=chunks[1], embedding=[0.0, 1.0, 0.0], embedding_model="m", embedding_version=1
+            chunk=chunks[1], embedding=_vec(0.0, 1.0, 0.0), embedding_model="m", embedding_version=1
         )
         nearest = (
             AIKnowledgeChunk.objects.filter(empresa=empresa, embedding__isnull=False)
-            .order_by(CosineDistance("embedding", [0.9, 0.1, 0.0]))
+            .order_by(CosineDistance("embedding", _vec(0.9, 0.1, 0.0)))
             .first()
         )
         assert nearest.content == "c0"

@@ -45,6 +45,9 @@ anthropic>=0.40.0,<1.0  # Claude API para sugerencia automática de líneas de a
 pgvector>=0.5,<0.6  # VectorField/HnswIndex para Django + psycopg3 (AI-VECTOR-03). La
 # extension `vector` la provee la imagen pgvector/pgvector:pg16 (AI-VECTOR-01) y la
 # instala apps/db_extensions/migrations/0001 via migrate_schemas --shared (AI-VECTOR-02).
+fastembed>=0.8,<0.9  # Embeddings locales (ONNX, sin torch) -- AI-VECTOR-04. Modelo
+# por defecto jinaai/jina-embeddings-v2-base-es (768d, ES/EN). Sin API key, sin egress
+# de datos. El modelo se descarga a un cache en el primer uso (~0.64 GB).
 
 # Búsqueda - OpenSearch
 opensearch-py>=2.0,<3.0  # Cliente Python oficial para OpenSearch

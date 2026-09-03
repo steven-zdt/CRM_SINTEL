@@ -389,7 +389,140 @@ regresion ERP                              = PASS  (check / makemigrations / row
 rollback posible                           = PASS
 ```
 
-**AI-VECTOR-03 = PASS.** NEXT: **AI-VECTOR-04** — contrato
-`AIEmbeddingProvider` (ABC, mismo patrón que `AIProvider`), decisión de
-proveedor con el usuario, primera implementación real; `AlterField` para
-fijar `embedding` a la dimensión del proveedor + (opcional) índice HNSW.
+**AI-VECTOR-03 = PASS.** NEXT: **AI-VECTOR-04**.
+
+---
+
+## AI-VECTOR-04 — Embedding Provider (`AIEmbeddingProvider` + `FastEmbedProvider`)
+
+**STATUS = PASS** (2026-09-03, rama `feat/onboarding-cookie`)
+
+### Decisión del usuario
+
+Evaluación de proveedores (español, key, peso, coste, egress, latencia,
+timeout/retry) → **local con `fastembed` (ONNX, sin torch), modelo
+`jinaai/jina-embeddings-v2-base-es` (bilingüe ES/EN, 768 dims)**.
+
+Motivo dominante: el `.env` real **no tiene ninguna API key de IA**
+(`ANTHROPIC_/OPENAI_/VOYAGE_API_KEY` ausentes) — un proveedor externo
+bloquearía el loop hasta configurar credenciales. `fastembed` local: sin
+key, sin coste, **cero egress** (la regla de aislamiento del mandato se
+cumple estructuralmente), y desbloquea AI-VECTOR-04..10 ya. Los campos
+`embedding_model`/`embedding_version` + el path de reindexado permiten
+cambiar de proveedor si el benchmark (AI-VECTOR-09) lo exige.
+
+Validación previa del modelo (venv, real): descarga ~50 s (una vez),
+embed de 3 textos 0.08 s, salida 768-d. `cos("tornillo de acero" ES,
+"stainless steel screw" EN) = 0.67`; `cos("tornillo" ES, "cliente
+mayorista" ES) = -0.02` — cross-lingual y discriminación correctas.
+
+### EXECUTE (HECHO)
+
+**Contrato (`apps/services/ai/providers/`):**
+
+- `embedding_base.py` — `AIEmbeddingProvider` (ABC), `EmbeddingResult`
+  (con validación de dimensión en `__post_init__`), `EmbeddingProviderError`
+  (`transient: bool`). **Separado** de `AIProvider.complete()` a propósito
+  (generar texto y embeddings son operaciones distintas; Anthropic ni
+  siquiera ofrece embeddings). Métodos: `embed_documents(texts)` /
+  `embed_query(text)` (separados porque e5/jina-v3/voyage usan prompt
+  distinto para consulta vs documento).
+- `fastembed_provider.py` — `FastEmbedProvider`. Import perezoso de
+  `fastembed`, cache de modelo a nivel de módulo, **guard de timeout**
+  (`ThreadPoolExecutor.result(timeout=...)` → `EmbeddingProviderError(
+  transient=True)`), **retry** de la carga del modelo (1 reintento, para el
+  fallo de descarga de pesos), **logging seguro** (solo `n`, `model`,
+  `dim`, `elapsed_ms` — nunca el texto ni el vector). Config por env:
+  `AI_EMBEDDING_MODEL` / `AI_EMBEDDING_DIMENSION` / `AI_EMBEDDING_TIMEOUT_S`.
+- `__init__.py` — `get_embedding_provider(name=None)` (factory, dict
+  explícito, default `fastembed` vía `AI_EMBEDDING_PROVIDER`).
+
+**Modelo + migración (`apps/tenant/ai_knowledge/`):**
+
+- `models.py` — `embedding = VectorField(dimensions=768)` (era `None`).
+- `migrations/0002_pin_embedding_dimension_768.py` — `AlterField`,
+  `vector` → `vector(768)`. Tablas vacías → sin riesgo de datos.
+
+**Infra:**
+
+- `requirements.txt` — `fastembed>=0.8,<0.9`.
+- `Dockerfile` — `mkdir -p /app/.fastembed_cache` (owner appuser, para que
+  el named volume herede UID 1000).
+- `docker-compose.yaml` / `.prod.yaml` — named volume `fastembed_cache`
+  montado en `/app/.fastembed_cache` (web + celery), env
+  `FASTEMBED_CACHE_PATH`. Evita re-descargar ~0.64 GB en cada arranque.
+
+**Tests:** `apps/services/ai/tests/test_embedding_provider.py` — 9 tests
+con modelo fake (dimensión, shape, texto vacío, timeout→transient, logging
+sin texto, factory) + 1 `@pytest.mark.slow` con el modelo real (768d,
+similitud cross-lingual). `pytest.ini` — marker `slow`.
+
+### VERIFY (VERIFICADO)
+
+| Check | Resultado |
+|---|---|
+| Columna `embedding` (aipoc) | `vector(768)` (era `vector` sin dimensión) |
+| `get_embedding_provider()` en el contenedor | `fastembed / jinaai/jina-embeddings-v2-base-es / 768` |
+| `FASTEMBED_CACHE_PATH` | `/app/.fastembed_cache`, escribible por `appuser` (UID 1000) |
+| Smoke real end-to-end (aipoc) | 3 descripciones de producto → `embed_documents` (768d, 45 s incl. 1ª descarga del modelo) → persistidas vía `set_chunk_embedding` → `embed_query` 51 ms → `order_by(CosineDistance)` rankea **perno + tornillo por encima de "cliente mayorista"** para la consulta "herramientas y sujetadores metálicos" |
+| Logging del provider | `[FastEmbedProvider] embed_documents n=3 model=... dim=768 elapsed_ms=...` — **sin texto ni vector** |
+| Cache persistido | 615 MB en el named volume `crm_sintel_fastembed_cache` — un reinicio no vuelve a descargar |
+| Datos de smoke | limpiados (4 filas: 1 doc + 3 chunks) |
+
+### REGRESSION (VERIFICADO)
+
+| Check | Resultado |
+|---|---|
+| `manage.py check` | `System check identified no issues` |
+| `manage.py makemigrations --check --dry-run` | `No changes detected` |
+| `pytest apps/services/ai/tests/ --collect-only` | **93 tests** recolectados, sin errores de import (el cambio en `providers/__init__.py` no rompe nada) |
+| `pytest -m "not slow"` provider tests (venv) | **9 passed** (dimensión, shape, timeout→transient, logging sin texto, factory) |
+| `pytest apps/tenant/ai_knowledge/tests/` + provider (venv) | **16 passed**, 1 deselected (slow) en 609 s |
+| Tenants existentes (`home`) | 3 clientes / 0 chunks — intacto/aislado |
+| `GET /health` | `200` |
+
+### KNOWN_LIMITATIONS
+
+- **"timeout" y "retry" están degradados** frente a un proveedor hosted
+  (decisión del usuario, local sin red): timeout = guard de wall-clock sobre
+  la inferencia; retry = 1 reintento de la carga/descarga del modelo. No hay
+  5xx remoto que reintentar. Si AI-VECTOR-09 muestra que la calidad no
+  alcanza, cambiar a Voyage/OpenAI reactiva el path completo (contrato
+  `AIEmbeddingProvider` ya lo soporta).
+- El modelo se descarga en el **primer `embed()`** (~40-50 s, ~0.64 GB). El
+  named volume lo persiste entre reinicios y rebuilds. Un entorno nuevo
+  (prod primer deploy) paga esa descarga una vez; puede pre-calentarse con
+  un `python -c "from apps.services.ai.providers import get_embedding_provider; get_embedding_provider().embed_query('warmup')"`.
+- `HF_TOKEN` no configurado → descargas sin autenticar (rate limit más bajo).
+  Suficiente para el POC; documentar si se vuelve un problema.
+
+### ROLLBACK
+
+1. `migrate_schemas --tenant tenant_ai_knowledge 0001` (revierte `vector(768)`
+   → `vector`; tablas vacías, sin pérdida).
+2. Quitar `fastembed` de `requirements.txt`; borrar `embedding_base.py` /
+   `fastembed_provider.py`; revertir `providers/__init__.py` y `models.py`.
+3. Revertir el volumen `fastembed_cache` en los 2 compose + el `mkdir` del
+   Dockerfile; `docker volume rm crm_sintel_fastembed_cache`.
+4. Rebuild `web`/`celery`.
+
+### GATE — AI-VECTOR-04
+
+```
+provider real                = PASS  (FastEmbedProvider, jina-v2-es 768d)
+generacion real               = PASS  (smoke end-to-end en aipoc, ranking correcto)
+manejo de timeout             = PASS  (guard wall-clock -> EmbeddingProviderError transient)
+retry                         = PASS  (1 reintento de carga de modelo; degradado, documentado)
+idempotencia                  = PASS  (modelo determinista: mismo texto -> mismo vector)
+logging seguro                = PASS  (solo n/model/dim/elapsed; test lo verifica)
+aislamiento (cero egress)      = PASS  (modelo local, el texto no sale del contenedor)
+dimension fijada + trazable    = PASS  (vector(768), embedding_model/version/dimension)
+regresion ERP                 = PASS
+rollback posible              = PASS
+```
+
+**AI-VECTOR-04 = PASS.** NEXT: **AI-VECTOR-05** — `ChunkingService` (trocea
+texto de origen, **excluye campos FORBIDDEN/MASKED**), `EmbeddingService`
+(orquesta chunk→provider→persistencia, idempotente por `source_version`),
+`RetrievalService` (búsqueda vectorial tenant-scoped, exact search sin ANN,
+filtros sede/área/document_type).
