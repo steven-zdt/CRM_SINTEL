@@ -1,7 +1,78 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.61.0
-**Ultima actualizacion:** 2026-09-01 (DOC-M48) — **Evolucion AI Engine
+**Version:** 3.62.0
+**Ultima actualizacion:** 2026-09-03 (DOC-M49) — **POC pgvector +
+Vector/Retrieval Layer multi-tenant para el AI Engine (fases AI-VECTOR-01
+a AI-VECTOR-05, loop gate-by-gate)**. Posterior a DOC-M48 (2026-09-01).
+
+**Contexto:** mision estructurada para dotar al AI Engine de recuperacion
+semantica sin introducir una segunda BD, sin duplicar EKG/AIContext/
+Service Layer y sin habilitar AI WRITE. Bitacora fase por fase con
+evidencia real: `docs/ai/AI_VECTOR_POC_EXECUTION.md` (+ auditoria previa
+`AI_VECTOR_POC_AUDIT.md` y plan `AI_VECTOR_POC_MASTER_PLAN.md`, DOC-M48).
+
+**A. Infraestructura (AI-VECTOR-01/02):**
+- Imagen del servicio `db`: `postgres:16-alpine` → **`pgvector/pgvector:pg16`**
+  (pineada por digest, Debian/glibc, trae la extension `vector` 0.8.6
+  compilada). Salto colateral PostgreSQL 16.14 → 16.15 (minor drop-in) y
+  cambio de proveedor de collation musl → glibc, mitigado con
+  `REINDEX DATABASE sintel` (una vez). Volumen intacto, datos intactos.
+- Nueva app **`apps/db_extensions/`** (sin modelos, SOLO en `SHARED_APPS` —
+  vive fuera de `apps/public/` a proposito, que esta restringido). Su
+  migracion `0001_vector_extension` corre `CREATE EXTENSION vector` una
+  sola vez via `migrate_schemas --shared`, con **guard por schema** en un
+  `RunPython` (django-tenants 3.9 registra las migraciones de `SHARED_APPS`
+  en el `django_migrations` de todos los schemas; una operacion no-modelo
+  como `CreateExtension` se ejecutaria por tenant y el reverse mataria la
+  extension database-wide). `pg_extension`: 1 instancia, namespace `public`;
+  el tipo `vector` es visible desde cualquier tenant via el `search_path`
+  real de django-tenants (`<tenant>, public`).
+
+**B. Vector Store tenant-scoped (AI-VECTOR-03):** nueva app `TENANT_APPS`
+**`apps/tenant/ai_knowledge/`** (solo datos — la orquestacion sigue en
+`apps/services/ai/`, sin modelos). Modelos `AIKnowledgeDocument` (1 por
+`empresa`+`source_type`+`source_id`, trazabilidad al origen por strings,
+**sin FK a los modelos de dominio**) y `AIKnowledgeChunk` (FK al documento,
+`content`, `embedding = pgvector.VectorField(dimensions=768)`,
+`embedding_model`/`version`/`dimension`/`embedded_at`). Aislamiento por
+schema real (Opcion B de la auditoria — nunca `public.ai_chunks + tenant_id`).
+Migracion aplicada por el entrypoint a los 3 tenants; `public` no recibe
+ninguna tabla `tenant_ai_knowledge_*`. Tenant de POC dedicado **`aipoc`**
+creado (`crear_empresa`).
+
+**C. Embedding Provider (AI-VECTOR-04):** contrato **`AIEmbeddingProvider`**
+(ABC en `apps/services/ai/providers/embedding_base.py`, SEPARADO de
+`AIProvider.complete()`) + `FastEmbedProvider` — **local**, `fastembed`
+(ONNX, sin torch), modelo `jinaai/jina-embeddings-v2-base-es` (bilingue
+ES/EN, 768d). Decision del usuario: sin API key (ninguna existe en `.env`),
+sin coste, **cero egress** (la regla de aislamiento del mandato se cumple
+de forma estructural). Guard de timeout, retry de carga, logging seguro
+(nunca el texto ni el vector). Named volume `crm_sintel_fastembed_cache`
+para no re-descargar el modelo (~0.64 GB).
+
+**D. Capa semantica (AI-VECTOR-05):** `apps/tenant/ai_knowledge/services/`
+— `ChunkingService` (capa pura de texto), `sources.py` (`INDEXABLE_SOURCES`,
+allowlist curada = **frontera de seguridad**; los campos FORBIDDEN/MASKED
+de `AI_SECURITY_MODEL.md` simplemente no estan), `EmbeddingService`
+(orquesta chunk→provider→persistencia, **idempotente por `source_version`**),
+`RetrievalService` (**solo lectura**, `CosineDistance` exact search sin
+indice ANN, filtros `source_type`/sede/area NULL-safe, **sin `WHERE
+tenant_id`** — el aislamiento lo da el schema). Smoke real en `aipoc`:
+ranking semantico correcto con el modelo jina-es. Detalle en §8.7.
+
+**Estado:** POC hasta AI-VECTOR-05. Pendiente: AI-VECTOR-06 (gate critico de
+seguridad: no-fuga cross-tenant, alcance sede/area, no indexar
+FORBIDDEN/MASKED) .. AI-VECTOR-11. `AI_WRITE_ENABLED` sigue en `false`;
+`AIContext`/EKG/Service Layer sin cambios; ninguna Vector DB externa.
+
+**Tests nuevos (venv local, no Docker):** `apps/tenant/ai_knowledge/tests/`
+22 (modelos + servicios), `apps/services/ai/tests/test_embedding_provider.py`
+9 (+1 `slow` con el modelo real). Regresion: `manage.py check` limpio,
+`makemigrations --check` limpio, ERP intacto, `/health` 200.
+
+---
+
+**Actualizacion previa:** 2026-09-01 (DOC-M48) — **Evolucion AI Engine
 (AI-01 VERIFIED, AI-02/AI-03 avanzados con `ai_project_map`/
 `buscar_producto`) + 2 hallazgos reales cerrados heredados de sesiones
 paralelas (fuga de puerto interno en CORS, `ProgrammingError` silencioso
@@ -1892,7 +1963,9 @@ SINTEL es un ERP SaaS multi-tenant para gestion contable y facturacion electroni
 | Django | 5.0–5.1 | Framework web |
 | Django REST Framework | 3.16–3.17 | APIs JSON (ViewSets, Serializers, Routers) |
 | django-tenants | 3.9–3.10 | Aislamiento multi-tenant por esquemas PostgreSQL |
-| PostgreSQL | 15+ | Base de datos relacional |
+| PostgreSQL | 16 | Base de datos relacional — **[DOC-M49]** imagen `pgvector/pgvector:pg16` (Debian, trae la extension `vector`) |
+| pgvector (extension + `pgvector` python) | 0.8.6 / 0.5–0.6 | **[DOC-M49, POC]** Tipo `vector` + `VectorField`/`CosineDistance` para el Vector/Retrieval Layer del AI Engine (§8.7) |
+| fastembed | 0.8–0.9 | **[DOC-M49, POC]** Embeddings LOCALES (ONNX, sin torch) — modelo `jinaai/jina-embeddings-v2-base-es` (768d, ES/EN), sin API key, sin egress |
 | Celery | 5.3–6.0 | Tareas asincronas y procesamiento en segundo plano |
 | Redis | 5.0–6.0 | Broker de Celery y cache |
 | WhiteNoise | 6.x | Servicio de archivos estaticos en produccion |
@@ -1962,7 +2035,7 @@ empresa.sintel.net.co →  tenant schema    →  urls_tenant.py
 
 ## 2. Inventario de Apps
 
-### 2.1. Esquema Public (`SHARED_APPS`) — 5 apps activas
+### 2.1. Esquema Public (`SHARED_APPS`) — 5 apps de negocio + 1 de infraestructura
 
 | App | App Label | Modelos | Migraciones | Responsabilidad |
 |---|---|---|---|---|
@@ -1971,12 +2044,13 @@ empresa.sintel.net.co →  tenant schema    →  urls_tenant.py
 | `apps/public/impuestos/` | `impuestos` | TipoImpuesto, TarifaIVA, ConceptoRetencion, CodigoTributario, ActividadEconomica, DocumentoFuente, IngestaLog, NormaTributaria, ContribuyenteTipo, RegimenRenta, ResponsabilidadRUT, PerfilTributario | 1 | Catalogo DIAN, tarifas, normativas tributarias |
 | `apps/public/console/` | `console` | ConsoleActionLog | 4 | Consola admin: crear tenants, gestionar membresias, JWT bridge |
 | `apps/public/core/` | `core` (public) | (sin modelos) | — | Middleware de resolucion de tenant, infraestructura compartida |
+| `apps/db_extensions/` | `db_extensions` | (sin modelos) | 1 | **[DOC-M49]** Extensiones de PostgreSQL database-wide. `0001_vector_extension` = `CREATE EXTENSION vector` via `migrate_schemas --shared`, con guard por schema (§8.7). Fuera de `apps/public/` a proposito |
 
-**Total public models: 19** — **[DOC-M5, corregido]** recuento anterior (17) subestimaba `impuestos` (12 modelos reales, no 11). Total migraciones public: 2+2+1+4 = **9** (antes: 8; `console` paso de 3 a 4 migraciones).
+**Total public models: 19** — **[DOC-M5, corregido]** recuento anterior (17) subestimaba `impuestos` (12 modelos reales, no 11). Total migraciones public: 2+2+1+4+1 = **10** (**[DOC-M49]** +1 por `db_extensions.0001`).
 
-### 2.2. Esquema Tenant (`TENANT_APPS`) — 17 apps registradas, 15 con modelos de negocio
+### 2.2. Esquema Tenant (`TENANT_APPS`) — 18 apps registradas, 16 con modelos de negocio
 
-**[DOC-M5, corregido 2026-08-09]** `TENANT_APPS` (`config/settings.py`) tiene 17 entradas `apps.tenant.*`. Este documento tenia tres numeros distintos y mutuamente contradictorios para "apps de negocio" (14 en este encabezado, 16 filas en la tabla, 13 en la tabla de metricas §12) — ninguno era correcto. El numero real: **15 apps con modelos de negocio concretos** (todas las filas de abajo excepto `core`, que solo aporta las clases base abstractas) + `core` + `landing` (sin `models.py`, ver §2.3) = 17 apps registradas.
+**[DOC-M5, corregido 2026-08-09; DOC-M49]** `TENANT_APPS` (`config/settings.py`) tiene **18** entradas `apps.tenant.*`. El numero real: **16 apps con modelos de negocio concretos** (todas las filas de abajo excepto `core`, que solo aporta las clases base abstractas) + `core` + `landing` (sin `models.py`, ver §2.3) = 18 apps registradas. **[DOC-M49]** +1 (`ai_knowledge`, Vector Store del AI Engine — es una app de DATOS, ver §8.7).
 
 | App | App Label | Modelos | Migraciones | Responsabilidad |
 |---|---|---|---|---|
@@ -1996,6 +2070,7 @@ empresa.sintel.net.co →  tenant schema    →  urls_tenant.py
 | `apps/tenant/bancos/` | `bancos` | CuentaBancaria, ExtractoBancario, TransaccionBancaria | 5 | Estados de cuenta bancarios, conciliacion manual via UUID soft-references |
 | `apps/tenant/compras/` | `tenant_compras`¹ | PlantillaOrdenCompra, OrdenCompra (hereda `SedeAwareModel`, ver §3.2/ADR-003), ItemOrdenCompra, RecepcionCompra (F21, hereda `SedeAwareModel`), RecepcionCompraItem (F21) | 8 | Ordenes de compra a proveedores + Recepcion de Compras -> Inventario (F21, ver `documentacion/F21_RECEPCION_INVENTARIO.md`) |
 | `apps/tenant/ventas/` | `tenant_ventas`¹ | ResolucionFacturacion, Venta, ItemVenta | 3 | Ordenes de venta y su puente hacia `facturas` (agregada 2026-06-17, ver `.agent/ARQUITECTURA_VENTAS.md`) |
+| `apps/tenant/ai_knowledge/` | `tenant_ai_knowledge`¹ | AIKnowledgeDocument, AIKnowledgeChunk | 2 | **[DOC-M49, POC]** Vector Store tenant-scoped del AI Engine: texto de origen troceado + embeddings (pgvector `vector(768)`). Solo datos — orquestacion en `apps/services/ai/`. Ver §8.7 |
 
 **¹ [DOC-M48, 2026-09-01] `DOCUMENTATION_DRIFT` corregido:** esta
 columna documentaba el App Label sin el prefijo `tenant_` para 10 de
@@ -2016,8 +2091,8 @@ con lo que este documento afirmaba.
 
 **Nota (`ResolucionDIAN` duplicado):** `gastos` y `empleados` tienen cada una su propia clase `ResolucionDIAN` — son dos modelos distintos, no un bug de referencia cruzada (hallazgo confirmado durante la auditoria EKG 2026-08-07, ver `documentacion/INFORME_FINAL_EKG_GOBERNANZA_2026-08-07.md` §4.1).
 
-**Total tenant models: 71 concretos + 3 abstractos** (`SintelTenantBaseModel`, `SedeAwareModel`, `TimeStampedModel`) — **[DOC-M9, 2026-08-09]** +3 sobre el conteo DOC-M5 (67) por los modelos nuevos de F21: `RecepcionCompra`, `RecepcionCompraItem` (`compras`), `TrasladoInventario` (`inventario`). **[DOC-M14, 2026-08-10]** +1 (`ItemNotaCredito`, `facturas`) — la fila de esta seccion no se habia actualizado hasta esta pasada de validacion (2026-08-11), aunque la tabla de metricas de §12 si lo reflejaba desde DOC-M14.
-**Total migraciones: 191 (182 tenant + 9 public)** — **[DOC-M9, 2026-08-09]** +2 sobre el conteo DOC-M5 (177 tenant) por las migraciones de F21. **[DOC-M14 a DOC-M16]** +3 adicionales (`0031_itemnotacredito`, `0032_remove_factura_xml_file_path`, `0033_alter_notacredito_cude`), verificado por conteo directo de archivos (`find apps/tenant -path '*/migrations/*.py' -not -name '__init__.py'` = 182; `apps/public` = 9) durante esta pasada de validacion (2026-08-11) — la fila de esta seccion tampoco se habia actualizado desde DOC-M9 hasta ahora. Todas aplicadas en los 3 schemas de tenant reales (`migrate_schemas --tenant`), `makemigrations --check` limpio.
+**Total tenant models: 73 concretos + 3 abstractos** (`SintelTenantBaseModel`, `SedeAwareModel`, `TimeStampedModel`) — **[DOC-M9]** +3 (F21); **[DOC-M14]** +1 (`ItemNotaCredito`); **[DOC-M49]** +2 (`AIKnowledgeDocument`, `AIKnowledgeChunk`).
+**Total migraciones: 195 (184 tenant + 11 public)** — **[DOC-M9]** +2 (F21); **[DOC-M14 a DOC-M16]** +3; **[DOC-M49]** +2 tenant (`tenant_ai_knowledge` `0001_initial` + `0002_pin_embedding_dimension_768`) y +1 public (`db_extensions.0001_vector_extension`). Todas aplicadas en los **3 tenants reales** (`home`, `admin`, `aipoc` — `aipoc` es el tenant de POC de §8.7), `makemigrations --check` limpio.
 
 ### 2.3. Apps de Infraestructura Tenant (sin modelos de negocio)
 
@@ -2680,6 +2755,78 @@ implementados** — ver `docs/ai/` (11 documentos, cada uno distingue
 implementado vs. solo diseñado) y `docs/ai/AI_RELEASE_GATE.md` para el
 detalle item por item.
 
+### 8.7. Vector/Retrieval Layer — pgvector (DOC-M49, POC AI-VECTOR-01..05)
+
+Capa de recuperacion semantica para el AI Engine. **No** reemplaza a
+PostgreSQL como fuente de verdad transaccional, **no** duplica el EKG
+(que sigue resolviendo "quien es dueño de que" sin vectores), **no**
+introduce una BD externa, **no** habilita AI WRITE. Bitacora fase por
+fase con evidencia real: `docs/ai/AI_VECTOR_POC_EXECUTION.md`.
+
+**Infraestructura:**
+- Servicio `db` = imagen `pgvector/pgvector:pg16` (§1.1/§1.3). La
+  extension `vector` se instala **una sola vez a nivel de base de datos**
+  via `apps/db_extensions/migrations/0001_vector_extension` (`SHARED_APPS`,
+  `migrate_schemas --shared`). `RunPython` con guard por schema: `CREATE`/
+  `DROP EXTENSION` solo se ejecuta cuando `schema_name == public` — sin el
+  guard, django-tenants 3.9 lo correria por cada tenant y el reverse
+  mataria la extension database-wide (`pg_extension` la registra una vez,
+  namespace `public`; el tipo `vector` es visible desde cualquier tenant
+  por el `search_path` `<tenant>, public`).
+- Precondicion de despliegue/restore documentada en
+  `docs/production/DEPLOYMENT_RUNBOOK.md` (paso 4): `--shared` antes de
+  `--tenant`; una restauracion a servidor nuevo exige la extension ya
+  creada; el cambio de imagen musl→glibc exige `REINDEX DATABASE` una vez.
+
+**Vector Store (`apps/tenant/ai_knowledge/`, `TENANT_APPS`):**
+```
+models.py     AIKnowledgeDocument  (empresa+source_type+source_id unico;
+                                    trazabilidad al origen por strings,
+                                    SIN FK a Cliente/Producto/...; metadata JSON)
+              AIKnowledgeChunk     (FK document, content, embedding
+                                    vector(768) nullable, embedding_model/
+                                    version/dimension/embedded_at)
+services/
+  crud_service.py       persistencia pura empresa-scoped
+  chunking_service.py    ChunkingService -- capa PURA de texto
+  sources.py             INDEXABLE_SOURCES -- allowlist curada a mano =
+                          FRONTERA DE SEGURIDAD (los campos FORBIDDEN/MASKED
+                          de AI_SECURITY_MODEL.md simplemente no estan)
+  embedding_service.py   EmbeddingService.index_text() -- orquesta
+                          chunk->provider->persistencia; IDEMPOTENTE por
+                          source_version + CURRENT_EMBEDDING_VERSION
+  retrieval_service.py   RetrievalService.search() -- SOLO lectura;
+                          CosineDistance exact search (sin indice ANN, plan
+                          S13); filtros source_type + sede/area NULL-safe;
+                          SIN "WHERE tenant_id" (aislamiento = schema real)
+```
+Aislamiento = **Opcion B** de la auditoria: una tabla por schema de
+tenant, nunca `public.ai_chunks + tenant_id`. `public` no recibe ninguna
+tabla `tenant_ai_knowledge_*`.
+
+**Embedding Provider (`apps/services/ai/providers/`):** contrato
+`AIEmbeddingProvider` (ABC, **separado** de `AIProvider.complete()` —
+Anthropic no ofrece embeddings) + `FastEmbedProvider`: **local**,
+`fastembed` (ONNX, sin torch), modelo `jinaai/jina-embeddings-v2-base-es`
+(768d, ES/EN). Sin API key, sin coste, **cero egress** (la regla de
+aislamiento "el proveedor nunca recibe credenciales/campos sensibles/datos
+cross-tenant" se cumple estructuralmente). `get_embedding_provider()`
+factory; config por env `AI_EMBEDDING_PROVIDER`/`AI_EMBEDDING_MODEL`/
+`AI_EMBEDDING_DIMENSION`/`AI_EMBEDDING_TIMEOUT_S`. Named volume
+`crm_sintel_fastembed_cache` (`/app/.fastembed_cache`) para el modelo
+(~0.64 GB, no re-descargar en cada arranque).
+
+**Tenant de POC:** `aipoc` (dedicado, `crear_empresa`), nunca un tenant
+productivo. Dataset: `Cliente.observaciones` / `Producto.descripcion`
+(texto libre no sensible) — el pipeline real de indexacion sobre datos
+del ERP es AI-VECTOR-08.
+
+**Estado:** POC hasta AI-VECTOR-05 (todos los gates PASS). Pendiente:
+AI-VECTOR-06 (gate critico: `cross_tenant_leaks=0`, `forbidden_indexed=0`,
+`unauthorized_retrieval=0`) .. AI-VECTOR-11 (rollout controlado, solo si
+`POC_PASS`). Ningun `RetrievalTool` registrado aun en el `AIToolRegistry`
+(eso es AI-VECTOR-07); flags AI en `false`.
+
 ---
 
 ## 9. Endpoints API REST
@@ -2755,6 +2902,7 @@ detalle item por item.
 | LAN Multi-Tenant -- conflicto de IP real resuelto (2026-09-01) | `docs/network/LAN_MULTI_TENANT_FINAL_REPORT.md` | `192.168.2.15` duplicada con otra maquina fisica real (confirmado por ARP); servidor reasignado a `192.168.2.17`, 7 puntos de codigo con IP hardcodeada corregidos. `PARTIALLY_VERIFIED` -- wildcard DNS interno sigue sin operar |
 | Auditoria de migracion de servidor / SOURCE (2026-09-01) | `docs/migration/SERVER_MIGRATION_FINAL_REPORT.md` | Sin TARGET real disponible -- inventario completo + backup real de 5 schemas con checksums SHA256. 3 hallazgos reales (cert TLS con CN incorrecto, Neo4j sin backup logico, `runserver` en vez de WSGI real). `SOURCE_AUDIT = READY_FOR_MIGRATION` |
 | AI Engine transversal -- nucleo real (2026-09-01) | `docs/ai/AI_RELEASE_GATE.md` | `apps/services/ai/`, provider abstraction + context engine + tool registry + 1 tool READ real (`buscar_cliente`), WRITE bloqueado estructuralmente, 20/20 tests reales. Ver tambien §8.6. `AI_ENGINE = NOT_VERIFIED` (honesto) -- `READ_ONLY_ASSISTANT` para 1 dominio |
+| POC pgvector + Vector/Retrieval Layer (2026-09-03) | `docs/ai/AI_VECTOR_POC_EXECUTION.md` (bitacora fase por fase) + `AI_VECTOR_POC_AUDIT.md` (auditoria previa) + `AI_VECTOR_POC_MASTER_PLAN.md` (plan) | Ver §8.7. AI-VECTOR-01..05 con todos los gates PASS: imagen `pgvector/pgvector:pg16`, `apps/db_extensions` (`CREATE EXTENSION`), Vector Store `apps/tenant/ai_knowledge/`, `FastEmbedProvider` local (jina-es 768d), capa semantica (Chunking/Embedding/Retrieval). Tenant de POC `aipoc`. Pendiente AI-VECTOR-06 (gate de seguridad) .. 11 |
 
 ### 10.2. Documentos de Auditoria por App (SSoT por modulo)
 
@@ -2854,7 +3002,25 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.59.0 — 2026-08-25, DOC-M46)
+## 12. Metricas del Proyecto (v3.62.0 — 2026-09-03, DOC-M49)
+
+**[DOC-M49]** POC pgvector AI-VECTOR-01..05 (§8.7). **2 apps nuevas**:
+`apps/db_extensions/` (`SHARED_APPS`, sin modelos, 1 migracion) y
+`apps/tenant/ai_knowledge/` (`TENANT_APPS`, 2 modelos —
+`AIKnowledgeDocument`/`AIKnowledgeChunk` —, 2 migraciones). **+3
+migraciones totales** (1 public + 2 tenant). **2 deps nuevas**
+(`requirements.txt`): `pgvector>=0.5,<0.6`, `fastembed>=0.8,<0.9`. **5
+archivos de codigo nuevos en `apps/services/ai/providers/`** (contrato
+`AIEmbeddingProvider` + `FastEmbedProvider` + factory) y **6 en
+`apps/tenant/ai_knowledge/services/`** (crud/chunking/sources/embedding/
+retrieval). **Infra modificada**: `docker-compose.yaml` (imagen `db` →
+`pgvector/pgvector:pg16` pineada por digest + named volume
+`fastembed_cache`), `docker-compose.prod.yaml`, `Dockerfile`,
+`docs/production/DEPLOYMENT_RUNBOOK.md`. **Tests nuevos**:
+`apps/tenant/ai_knowledge/tests/` (22), `apps/services/ai/tests/test_embedding_provider.py`
+(9 + 1 `slow`); `pytest.ini` marker `slow`. **Tenant nuevo real**: `aipoc`
+(POC). Sin cambios en `AIContext`/EKG/Service Layer; `AI_WRITE_ENABLED`
+sigue `false`. Bitacora: `docs/ai/AI_VECTOR_POC_EXECUTION.md`.
 
 **[DOC-M46]** Cierre MAIL-19/20 no agrega modelos ni migraciones. **1
 archivo de produccion modificado**: `apps/tenant/empresa/api/viewsets.py`
