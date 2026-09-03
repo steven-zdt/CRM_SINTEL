@@ -130,6 +130,12 @@ TENANT_APPS = [
     "apps.tenant.bancos",       # Gestion de estados bancarios y conciliacion (por tenant)
     "apps.tenant.compras",      # Compras y ordenes de compra (por tenant)
     "apps.tenant.ventas",       # Ordenes de Venta y facturacion directa (por tenant)
+
+    # AI-VECTOR-03: Vector Store tenant-scoped del AI Engine (POC pgvector).
+    # App de DATOS -- la orquestacion vive en apps/services/ai/ (sin modelos).
+    # SOLO en TENANT_APPS: una tabla vectorial por schema de tenant, nunca en
+    # public. Ver docs/ai/AI_VECTOR_POC_EXECUTION.md.
+    "apps.tenant.ai_knowledge",
 ]
 
 # ============================================================================

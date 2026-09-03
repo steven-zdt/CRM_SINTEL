@@ -29,6 +29,21 @@ solicitada. Un release identificable = un commit + tag de imagen.
    docker compose exec web python manage.py migrate_schemas --tenant
    ```
 
+   > **Precondición pgvector (AI-VECTOR-01/02/03).** El servicio `db` debe
+   > correr una imagen con la extensión `vector` compilada
+   > (`pgvector/pgvector:pg16`, ver `docker-compose.yaml`) — la imagen
+   > `postgres:16-alpine` **no** la tiene. `migrate_schemas --shared`
+   > incluye `db_extensions.0001_vector_extension` (`CREATE EXTENSION`), que
+   > **debe** correr antes de `--tenant` (el orden de arriba ya lo
+   > garantiza). Una restauración a un servidor nuevo requiere la extensión
+   > ya presente en la BD destino **antes** de `pg_restore` de cualquier
+   > schema con columnas `vector` — ver `BACKUP_RESTORE_RUNBOOK.md`.
+   > Migrar de `postgres:16-alpine` (musl) a `pgvector/pgvector:pg16`
+   > (Debian/glibc) sobre un volumen existente exige un
+   > `REINDEX DATABASE <db>` una sola vez tras recrear el contenedor
+   > (cambio de proveedor de collation). Detalle:
+   > `docs/ai/AI_VECTOR_POC_EXECUTION.md`.
+
 5. **Static assets:**
    ```bash
    docker compose exec web python manage.py collectstatic --noinput

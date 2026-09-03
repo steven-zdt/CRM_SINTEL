@@ -1,0 +1,61 @@
+"""Fixtures para los tests del Vector Store (AI-VECTOR-03).
+
+Provisiona 2 tenants de prueba con las tablas minimas (`empresa`,
+`tenant_ai_knowledge`) para poder verificar CRUD y aislamiento cross-tenant.
+La extension `vector` la instala la migracion compartida
+`db_extensions.0001` al construir la BD de test.
+"""
+
+import pytest
+from django.core.management import call_command
+from django.db import connection
+from django_tenants.utils import schema_context
+
+from apps.public.tenants.models import Client, Domain
+from apps.tenant.empresa.models import Empresa
+
+
+def _ensure_tenant(schema: str, nombre: str):
+    client = Client.objects.filter(schema_name=schema).first()
+    if not client:
+        with schema_context("public"):
+            client = Client(schema_name=schema, nombre=nombre)
+            client.auto_create_schema = False
+            client.save(force_insert=True)
+    Domain.objects.get_or_create(
+        tenant=client,
+        domain=f"{schema}.sintel.net.co",
+        defaults={"is_primary": True},
+    )
+    with connection.cursor() as cur:
+        cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+
+    with schema_context(schema):
+        tables = set(connection.introspection.table_names())
+    if "empresa_empresa" not in tables:
+        call_command("migrate_schemas", "--tenant", "-s", schema, "empresa", "--noinput", verbosity=0)
+    if "tenant_ai_knowledge_aiknowledgedocument" not in tables:
+        call_command(
+            "migrate_schemas", "--tenant", "-s", schema, "tenant_ai_knowledge", "--noinput", verbosity=0
+        )
+
+    with schema_context(schema):
+        empresa = Empresa.objects.only("id").first()
+        if not empresa:
+            empresa = Empresa.objects.create(
+                razon_social="EMPRESA TEST S.A.S.",
+                nit="901234567",
+                direccion="Direccion de prueba",
+                telefono="3000000000",
+            )
+    return client
+
+
+@pytest.fixture
+def tenant_a(db):
+    return _ensure_tenant("aik_test_a", "AI Knowledge Test A")
+
+
+@pytest.fixture
+def tenant_b(db):
+    return _ensure_tenant("aik_test_b", "AI Knowledge Test B")

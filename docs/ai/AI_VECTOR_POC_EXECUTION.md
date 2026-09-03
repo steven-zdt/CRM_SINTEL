@@ -267,8 +267,129 @@ existing apps = unaffected             = PASS  (check / makemigrations / row cou
 rollback posible                       = PASS  (guard en reverse + backup)
 ```
 
-**AI-VECTOR-02 = PASS.** NEXT: **AI-VECTOR-03** — nueva app `TENANT_APPS`
-`apps/tenant/ai_knowledge/` con `AIKnowledgeDocument` / `AIKnowledgeChunk`
-(`SintelTenantBaseModel`), `crud_service.py`, añadir `pgvector` a
-`requirements.txt`, migración aplicada **solo al tenant `aipoc`**;
-actualizar `DEPLOYMENT_RUNBOOK.md` con la precondición de la extensión.
+**AI-VECTOR-02 = PASS.** NEXT: **AI-VECTOR-03**.
+
+---
+
+## AI-VECTOR-03 — Vector Store tenant-scoped (`apps/tenant/ai_knowledge/`)
+
+**STATUS = PASS** (2026-09-03, rama `feat/onboarding-cookie`)
+
+### Decisión del usuario para esta fase
+
+`entrypoint.sh` (L96) corre `migrate_schemas --tenant` (TODOS los tenants)
+en cada arranque de `web`, y la app necesita `pgvector` (rebuild de imagen
+→ reinicio). "Solo `aipoc`" no se sostiene tras el primer reinicio.
+**Decisión: rebuild ya y aceptar tablas VACÍAS en `home`/`admin`.** El
+aislamiento que importa (datos, y que `public` no reciba tablas de negocio)
+se mantiene; rollback = `migrate_schemas --tenant tenant_ai_knowledge zero`
++ desregistrar.
+
+### EXECUTE (HECHO)
+
+**Archivos nuevos:**
+
+- `apps/tenant/ai_knowledge/__init__.py`
+- `apps/tenant/ai_knowledge/apps.py` — `AiKnowledgeConfig`, `label = "tenant_ai_knowledge"`
+- `apps/tenant/ai_knowledge/models.py` — `AIKnowledgeDocument`, `AIKnowledgeChunk`
+  (heredan `SintelTenantBaseModel`). Trazabilidad `embedding -> chunk ->
+  document -> origen` por `source_type` + `source_id` (string, **sin FK** a
+  los modelos de dominio). `embedding = VectorField(dimensions=None)` —
+  `vector` sin dimensión fija hasta AI-VECTOR-04.
+- `apps/tenant/ai_knowledge/services/__init__.py` + `crud_service.py` —
+  `AIKnowledgeCRUDService`: persistencia pura (`upsert_document`,
+  `replace_chunks`, `set_chunk_embedding`, `get_document`, `delete_document`),
+  todos `empresa`-scoped y `@transaction.atomic`.
+- `apps/tenant/ai_knowledge/migrations/0001_initial.py`
+- `apps/tenant/ai_knowledge/tests/` — `conftest.py` (2 tenants de prueba) +
+  `test_models.py` (7 tests: upsert idempotente, replace_chunks,
+  set_chunk_embedding, query `CosineDistance`, unique constraint, empresa
+  obligatoria, **aislamiento cross-tenant**).
+
+**Archivos modificados:**
+
+- `requirements.txt` — `pgvector>=0.5,<0.6`
+- `config/settings.py` — `"apps.tenant.ai_knowledge"` en **`TENANT_APPS`**
+  (nunca en `SHARED_APPS`).
+- `docs/production/DEPLOYMENT_RUNBOOK.md` — callout de precondición pgvector
+  en el paso 4 (imagen `pgvector/pgvector:pg16`, orden `--shared` antes de
+  `--tenant`, `REINDEX` en el cambio de imagen, precondición de restore).
+
+**Incidente registrado (no oculto):** al añadir la app a `INSTALLED_APPS`, el
+autoreload de `runserver` importó `ai_knowledge/models.py` → `pgvector` aún
+no estaba en la imagen → `web` caído (`ModuleNotFoundError`). Recuperado con
+`pip install pgvector` en los contenedores en caliente, y luego **rebuild
+real** de las imágenes `web`/`celery` (`docker compose build`) para que
+persista. `makemigrations` se hizo con la imagen ya parcheada.
+
+**Iteración de diseño:** la primera `0001` no incluía los índices de la
+`Meta` abstracta de `SintelTenantBaseModel` (Django **no** los fusiona
+cuando la hija declara su propia `Meta.indexes` — mismo comportamiento
+documentado en `SedeAwareModel`). Se añadieron explícitamente
+`Index(empresa)` e `Index(empresa, -created_at)` a ambos modelos y se
+regeneró la migración (nunca se había aplicado).
+
+### VERIFY (VERIFICADO)
+
+| Check | Resultado |
+|---|---|
+| Tablas `tenant_ai_knowledge_*` por schema | `aipoc`=2, `home`=2, `admin`=2, **`public`=0** |
+| `\d aipoc.tenant_ai_knowledge_aiknowledgedocument` | FK `empresa_id` → `aipoc.empresa_empresa` (schema-local); índices `empresa`, `(empresa, created_at DESC)`, `(empresa, source_type, source_id)`, `(empresa, source_type)`; `uniq_aikdoc_empresa_source` |
+| Columna `embedding` | `USER-DEFINED` / `udt_name = vector` (sin dimensión) |
+| CRUD service (aipoc) | `upsert_document` crea; `replace_chunks` crea 2 chunks; `set_chunk_embedding` guarda vector + `embedding_dimension` |
+| Query vectorial | `AIKnowledgeChunk.objects.order_by(CosineDistance('embedding', q)).first()` devuelve el chunk correcto (`[1,0,0]` más cercano a `[0.95,0.05,0]`) |
+| Aislamiento cross-tenant | doc creado en `aipoc` → `home` y `admin` ven **0 docs / 0 chunks** |
+| Datos de prueba | limpiados tras el smoke (`aipoc` vuelve a 0 filas) |
+
+### REGRESSION (VERIFICADO)
+
+| Check | Resultado |
+|---|---|
+| `manage.py check` | `System check identified no issues (0 silenced)` |
+| `manage.py makemigrations --check --dry-run` | `No changes detected` |
+| Tenants existentes (`home`) | 3 clientes / 1 producto — idéntico al baseline |
+| `GET /health` | `200` |
+| Contenedores | todos healthy tras el rebuild |
+| `pytest apps/tenant/ai_knowledge/tests/` (venv local) | **7 passed** en 608s (la mayoría es build de la BD de test multi-tenant) |
+
+### KNOWN_LIMITATIONS
+
+- `home` y `admin` tienen las tablas `tenant_ai_knowledge_*` **vacías**
+  (creadas por el `migrate_schemas --tenant` del entrypoint). Cero datos,
+  cero comportamiento nuevo (sin `RetrievalTool`, flags AI en `false`).
+  Rollback: `migrate_schemas --tenant tenant_ai_knowledge zero` +
+  quitar de `TENANT_APPS` + borrar `apps/tenant/ai_knowledge/`.
+- `embedding` es `vector` sin dimensión → **no admite índice ANN (HNSW)**
+  todavía. Intencional (plan §13: exact search en el POC). AI-VECTOR-04
+  fijará la dimensión con un `AlterField` al conocerse el proveedor.
+- `pgvector` quedó instalado a mano en la imagen vía rebuild; el
+  `docker-compose.prod.yaml` hereda la misma imagen — el primer deploy de
+  prod tras este commit necesita el rebuild (ya cubierto por el paso 3 del
+  `DEPLOYMENT_RUNBOOK.md`).
+
+### ROLLBACK (probado por diseño)
+
+1. `manage.py migrate_schemas --tenant tenant_ai_knowledge zero` (borra las
+   tablas de `aipoc`/`home`/`admin`; no toca la extensión).
+2. Quitar `"apps.tenant.ai_knowledge"` de `TENANT_APPS`; quitar `pgvector`
+   de `requirements.txt`; borrar `apps/tenant/ai_knowledge/`.
+3. Rebuild `web`/`celery` sin `pgvector`.
+4. Backup `sintel_pre_aivector03.dump` disponible.
+
+### GATE — AI-VECTOR-03
+
+```
+\d ai_knowledge_document / _chunk        = PASS  (estructura correcta, FK schema-local)
+tenant aipoc -> tables exist              = PASS  (2 tablas, columna vector real)
+tenant home/admin -> tablas VACIAS         = PASS por decision (entrypoint las migra; 0 datos)
+public -> no business tables               = PASS  (0 tablas tenant_ai_knowledge_* en public)
+CRUD + query vectorial funcionan           = PASS  (CosineDistance ordena correctamente)
+aislamiento cross-tenant (datos)           = PASS  (home/admin no ven data de aipoc)
+regresion ERP                              = PASS  (check / makemigrations / row counts / health)
+rollback posible                           = PASS
+```
+
+**AI-VECTOR-03 = PASS.** NEXT: **AI-VECTOR-04** — contrato
+`AIEmbeddingProvider` (ABC, mismo patrón que `AIProvider`), decisión de
+proveedor con el usuario, primera implementación real; `AlterField` para
+fijar `embedding` a la dimensión del proveedor + (opcional) índice HNSW.

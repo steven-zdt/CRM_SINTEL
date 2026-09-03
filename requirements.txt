@@ -41,6 +41,11 @@ xhtml2pdf>=0.2.11,<0.3  # Generación de PDF desde HTML (ligero, sin dependencia
 # IA — Asistente Contable
 anthropic>=0.40.0,<1.0  # Claude API para sugerencia automática de líneas de asiento
 
+# IA — Vector/Retrieval Layer (POC pgvector, docs/ai/AI_VECTOR_POC_EXECUTION.md)
+pgvector>=0.5,<0.6  # VectorField/HnswIndex para Django + psycopg3 (AI-VECTOR-03). La
+# extension `vector` la provee la imagen pgvector/pgvector:pg16 (AI-VECTOR-01) y la
+# instala apps/db_extensions/migrations/0001 via migrate_schemas --shared (AI-VECTOR-02).
+
 # Búsqueda - OpenSearch
 opensearch-py>=2.0,<3.0  # Cliente Python oficial para OpenSearch
 
