@@ -23,7 +23,13 @@ services:
   # Base de datos PostgreSQL
   db:
     container_name: crm_sintel-db-1
-    image: postgres:16-alpine
+    # AI-VECTOR-01: imagen oficial del proyecto pgvector, PostgreSQL 16 + extension
+    # `vector` ya compilada (Debian bookworm/glibc, reemplaza postgres:16-alpine/musl).
+    # Pineada por digest para reproducibilidad (gate AI-VECTOR-01). Rollback: volver a
+    # `postgres:16-alpine` + `docker compose up -d db` (el volumen no se toca).
+    # Nota: este salto tambien sube 16.14 -> 16.15 (minor de PostgreSQL, drop-in) y
+    # cambia el proveedor de collation musl -> glibc (requiere REINDEX, ver AI-VECTOR-01).
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     environment:
       POSTGRES_DB: ${DATABASE_NAME:-sintel}
       POSTGRES_USER: ${DATABASE_USER:-sintel}
