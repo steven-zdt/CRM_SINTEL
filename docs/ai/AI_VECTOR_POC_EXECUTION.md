@@ -668,8 +668,81 @@ aislamiento por schema probado  = PASS  (no sustituido por "es estructural" -- 2
 regresion ERP                   = PASS
 ```
 
-**AI-VECTOR-06 = PASS.** NEXT: **AI-VECTOR-07** — `RetrievalTool` delgado en
-`apps/services/ai/tools/`, registrado en `AIToolRegistry`, invoca
-`RetrievalService.search_for_context()` vía `AIEngine.run_tool()` sin tocar
-el punto de entrada. Routing: pregunta determinística → READ Tool existente;
-pregunta semántica → `RetrievalTool`.
+**AI-VECTOR-06 = PASS.** NEXT: **AI-VECTOR-07**.
+
+---
+
+## AI-VECTOR-07 — Integración con el AI Engine (`RetrievalTool`)
+
+**STATUS = PASS** (2026-09-03, rama `feat/onboarding-cookie`)
+
+### EXECUTE (HECHO)
+
+- **`apps/services/ai/tools/retrieval_tools.py`** — `RetrievalTool`
+  (`name="buscar_conocimiento"`, `domain="ai_knowledge"`, `kind=READ`,
+  `risk=SAFE_READ`). Tool **delgada**, mismo patrón que `ProjectMapTool`
+  invoca al EKG: `run()` hace import diferido de
+  `apps.tenant.ai_knowledge.services.RetrievalService` y llama
+  **`search_for_context(context, query, ...)`** — el alcance se aplica
+  explícitamente (no se confía en `risk`). Devuelve
+  `ToolResult(status="OK", data=[{content, source_type, source_id,
+  document_uuid, score}])`.
+- **Doble gate:** `kind=READ` → el engine ya exige `AI_READ_ENABLED`; además
+  `run()` chequea **`AI_RETRIEVAL_ENABLED`** (nuevo flag en `settings.py`,
+  default `false`) y devuelve `PERMISSION_DENIED` si está off. Permite
+  encender/apagar SOLO retrieval en el rollout/rollback de AI-VECTOR-11 sin
+  tocar las demás tools READ.
+- **`apps/services/ai/tools/__init__.py`** — `register_tool(RetrievalTool())`.
+  20 tools registradas (era 19).
+- **`apps/services/ai/orchestrator/form_assistant.py`** — 6 líneas al
+  `system` prompt: regla de routing explícita ("si la pregunta pide un DATO
+  EXACTO y hay una tool determinista, usa esa — nunca `buscar_conocimiento`
+  para un dato exacto"). El catálogo de tools que ve el LLM ya sale de
+  `tool_metadata()`, así que la `description` de la tool también guía.
+- **`config/settings.py`** — `AI_RETRIEVAL_ENABLED` (default `false`).
+
+### GATE — lo que NO se tocó (verificado con `git diff`)
+
+```
+apps/services/ai/context/ai_context.py     = SIN CAMBIOS  (AIContext unchanged)
+apps/services/ai/engine/ai_engine.py        = SIN CAMBIOS  (run_tool unchanged)
+apps/services/ai/tools/ekg_tools.py + ekg/   = SIN CAMBIOS  (EKG unchanged)
+otras *_tools.py                             = SIN CAMBIOS  (existing tools unchanged)
+AI_WRITE_ENABLED                             = false        (AI WRITE disabled)
+```
+Solo 2 archivos modificados en `apps/services/ai/`: `__init__.py` (+5,
+registro) y `form_assistant.py` (+6, prompt de routing).
+
+### VERIFY — smoke real end-to-end en `aipoc` (vía `AIEngine.run_tool`)
+
+| Check | Resultado |
+|---|---|
+| `run_tool("buscar_conocimiento", request, query="descuento y condiciones de pago del cliente", k=2)` | `status=OK`; K1 "condiciones comerciales..." (score 0.58) sobre K2 "taladro..." (0.04) |
+| Log del engine | `ai_engine.tool_call tool=buscar_conocimiento kind=READ status=OK user=17 empresa=1` — pasó por el punto de entrada sin modificarlo |
+| `AI_RETRIEVAL_ENABLED=False` (con READ on) | `PERMISSION_DENIED` |
+| Datos de smoke | limpiados |
+
+### REGRESSION
+
+| Check | Resultado |
+|---|---|
+| `manage.py check` / `makemigrations --check` | OK / `No changes detected` |
+| `pytest test_retrieval_tool.py` + `test_toolrisk_not_enforced.py` (venv) | **12 passed** (9 retrieval tool + 3 toolrisk): registro, doble gate, query vacía, k fuera de rango, alcance EMPRESA ve sede B / alcance SEDE(A) no la ve, WRITE off |
+
+### GATE — AI-VECTOR-07
+
+```
+RetrievalTool registrada en AIToolRegistry        = PASS  (buscar_conocimiento, 20 tools)
+AIEngine.run_tool() como punto de entrada, intacto  = PASS  (git diff vacio en ai_engine.py)
+AIContext / EKG / tools existentes sin cambios       = PASS
+alcance aplicado en run() (no se confia en risk)     = PASS  (search_for_context)
+doble feature flag (READ + RETRIEVAL), default off   = PASS
+routing determinista > semantico                     = PASS  (description + system prompt)
+AI WRITE sigue deshabilitado                          = PASS
+```
+
+**AI-VECTOR-07 = PASS.** NEXT: **AI-VECTOR-08** — indexación real del tenant
+`aipoc`: pipeline que itera `INDEXABLE_SOURCES` sobre `Cliente.observaciones`
+/ `Producto.descripcion` reales (vía sus `Selector`s), idempotente por
+`source_version`, **asíncrono con Celery** (`schema_context`, cola `default`,
+`autoretry_for` solo transitorios). Dataset del POC sembrado en `aipoc`.

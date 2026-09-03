@@ -12,6 +12,7 @@ from .inventario_tools import BuscarProductoTool, ValidarProductoTool
 from .proveedores_tools import BuscarProveedorTool, ValidarProveedorTool
 from .proyectos_tools import ConsultarProyectoTool
 from .registry import get_tool, list_tools, register_tool, tool_metadata
+from .retrieval_tools import RetrievalTool
 from .ventas_tools import ConsultarVentaTool
 
 # Registro real de tools implementadas. Ver docs/ai/AI_TOOL_REGISTRY.md
@@ -29,6 +30,10 @@ register_tool(ConsultarFacturaTool())
 register_tool(BuscarEmpleadoTool())
 register_tool(ConsultarCuentaBancariaTool())
 register_tool(SugerirAsientoContableTool())
+
+# AI-VECTOR-07 -- capa de recuperacion semantica (pgvector). Registrada, pero
+# gateada ademas por AI_RETRIEVAL_ENABLED (default false) dentro de su run().
+register_tool(RetrievalTool())
 
 # Fase AI-04 -- Validation Engine (primer lote: dominios sin dependencia
 # de un `request` de Django real en su Serializer.validate()).

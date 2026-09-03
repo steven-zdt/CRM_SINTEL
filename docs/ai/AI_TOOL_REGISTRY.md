@@ -94,11 +94,12 @@ cambian lo que "valid: True" realmente garantiza en cada dominio):
   sin `required=False` -- son requeridos a nivel de serializer aunque
   no lo sean a nivel de base de datos.
 
-## Implementado (19 tools reales: 13 READ/SUGGEST + 6 VALIDATE)
+## Implementado (20 tools reales: 14 READ/SUGGEST + 6 VALIDATE)
 
 | Tool | Dominio | Kind | Risk | Confirmación | Servicio subyacente |
 |---|---|---|---|---|---|
 | `buscar_cliente` | `clientes` | READ | `SAFE_READ` | No | `apps.tenant.clientes.services.selectors.ClienteSelector` |
+| `buscar_conocimiento` | `ai_knowledge` | READ | `SAFE_READ` | No | **[AI-VECTOR-07]** `apps.tenant.ai_knowledge.services.RetrievalService.search_for_context` — recuperación semántica (pgvector) sobre texto libre allowlisted (`Cliente.observaciones`, `Producto.descripcion`). Doble gate: `AI_READ_ENABLED` (engine) + **`AI_RETRIEVAL_ENABLED`** (chequeado en `run()`, default `false`). El alcance sede/área se aplica explícitamente vía `search_for_context` (no se confía en `risk`). FORBIDDEN/MASKED nunca están en el Vector Store (allowlist AI-VECTOR-06). Routing: SOLO preguntas abiertas/exploratorias — nunca para datos exactos. Ver `AI_VECTOR_POC_EXECUTION.md` §AI-VECTOR-07 y `arquitectura_general.md` §8.7 |
 | `ai_project_map` | `platform` (transversal, ver `AI_EKG.md`* nota abajo) | READ | `SAFE_READ` | No | `django.apps.apps.get_models()` (owner) + `tools/ekg/queries.py` + snapshots `tools/ekg/out/<app>.json` (rules/docs/fk) |
 | `buscar_producto` | `inventario` | READ | `SAFE_READ` | No | `apps.tenant.inventario.services.selectors.ProductoSelector` (incluye `stock_actual`, cubre AI-03.2 completa sin tool separada de stock) |
 | `buscar_proveedor` | `proveedores` | READ | `SAFE_READ` | No | `apps.tenant.proveedores.services.selectors.ProveedorSelector` |

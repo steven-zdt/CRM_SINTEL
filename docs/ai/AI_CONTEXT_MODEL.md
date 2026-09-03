@@ -109,3 +109,15 @@ consulta "factura X" -> recuperar: factura + venta + cliente + impuestos + pagos
 reutilizando selectors ya existentes de cada dominio (mismo patrón que
 `ClienteSelector` en `buscar_cliente`), nunca un mecanismo de
 embeddings/vector search nuevo sin necesidad demostrada.
+
+**[AI-VECTOR-07, 2026-09-03]** El "recuperar contexto relevante" para
+texto libre (no para datos por FK, eso sigue siendo selectors) ahora
+existe como **POC**: la tool `buscar_conocimiento` (`RetrievalTool`,
+`apps/services/ai/tools/retrieval_tools.py`) invoca
+`apps.tenant.ai_knowledge.services.RetrievalService.search_for_context()`
+— búsqueda vectorial pgvector tenant-scoped sobre `Cliente.observaciones`
+/ `Producto.descripcion`. Doble feature flag (`AI_READ_ENABLED` +
+`AI_RETRIEVAL_ENABLED`, ambos default `false`). El alcance organizacional
+se traduce desde este `AIContext` **exactamente igual que
+`compras_tools._scope_kwargs`** — no es un segundo esquema de alcance.
+Detalle: `AI_VECTOR_POC_EXECUTION.md`, `arquitectura_general.md` §8.7.

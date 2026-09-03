@@ -984,6 +984,11 @@ AI_READ_ENABLED = os.getenv("AI_READ_ENABLED", "false").lower() == "true"
 AI_VALIDATE_ENABLED = os.getenv("AI_VALIDATE_ENABLED", "false").lower() == "true"
 AI_SUGGEST_ENABLED = os.getenv("AI_SUGGEST_ENABLED", "false").lower() == "true"
 AI_WRITE_ENABLED = os.getenv("AI_WRITE_ENABLED", "false").lower() == "true"
+# AI-VECTOR-07: sub-flag de la capa de recuperacion semantica (pgvector). Es
+# kind=READ, asi que AI_READ_ENABLED tambien debe estar activo; este flag
+# permite habilitar/deshabilitar SOLO el RetrievalTool de forma independiente
+# (rollout gradual y rollback de AI-VECTOR-11). Default false.
+AI_RETRIEVAL_ENABLED = os.getenv("AI_RETRIEVAL_ENABLED", "false").lower() == "true"
 
 # ============================================================================
 # Logging Configuration
