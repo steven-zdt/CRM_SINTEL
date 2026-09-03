@@ -18,10 +18,16 @@ from dataclasses import dataclass
 from django.db.models import Q
 from pgvector.django import CosineDistance
 
+from apps.services.ai.context import AIContext
 from apps.services.ai.providers import AIEmbeddingProvider, get_embedding_provider
 from apps.tenant.ai_knowledge.models import AIKnowledgeChunk
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_empresa_id(empresa) -> int:
+    """Acepta una instancia de Empresa o un id -- devuelve el id."""
+    return int(getattr(empresa, "id", empresa))
 
 DEFAULT_K = 5
 MAX_K = 50
@@ -63,11 +69,12 @@ class RetrievalService:
         if not query or not query.strip():
             return []
         k = max(1, min(int(k), MAX_K))
+        empresa_id = _resolve_empresa_id(empresa)
 
         qvec = self._provider.embed_query(query)
 
         qs = (
-            AIKnowledgeChunk.objects.filter(empresa=empresa, embedding__isnull=False)
+            AIKnowledgeChunk.objects.filter(empresa_id=empresa_id, embedding__isnull=False)
             .select_related("document")
             .only(
                 "content",
@@ -117,6 +124,43 @@ class RetrievalService:
             len(hits),
         )
         return hits
+
+    def search_for_context(
+        self,
+        context: AIContext,
+        query: str,
+        *,
+        k: int = DEFAULT_K,
+        source_types: list[str] | None = None,
+        max_distance: float | None = None,
+    ) -> list[RetrievalHit]:
+        """`search()` con el alcance organizacional derivado del `AIContext`.
+
+        Traduce `context.alcance` eje por eje, EXACTAMENTE igual que
+        `apps/services/ai/tools/compras_tools.py::_scope_kwargs` (no se
+        reinventa un segundo esquema de alcance -- mandato AI-VECTOR-06):
+
+        - EMPRESA -> sin restriccion (sede_ids=None, area_ids=None)
+        - SEDE    -> sede_ids=context.sede_ids (incluso vacia => "nada con sede")
+        - AREA    -> area_ids=context.area_ids (incluso vacia => "nada con area")
+
+        `empresa_id` sale SIEMPRE del contexto real, nunca de un parametro.
+        """
+        if context.alcance == "SEDE":
+            scope = {"sede_ids": context.sede_ids, "area_ids": None}
+        elif context.alcance == "AREA":
+            scope = {"sede_ids": None, "area_ids": context.area_ids}
+        else:
+            scope = {"sede_ids": None, "area_ids": None}
+
+        return self.search(
+            empresa=context.empresa_id,
+            query=query,
+            k=k,
+            source_types=source_types,
+            max_distance=max_distance,
+            **scope,
+        )
 
     @staticmethod
     def _apply_scope(qs, meta_key: str, allowed_ids):

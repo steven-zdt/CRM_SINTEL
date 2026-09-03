@@ -57,6 +57,64 @@ INDEXABLE_SOURCES: tuple[IndexableSource, ...] = (
 _BY_TYPE = {s.source_type: s for s in INDEXABLE_SOURCES}
 
 
+# --- Campos prohibidos (AI-VECTOR-06) --------------------------------------
+# (model_label, field) clasificados FORBIDDEN o MASKED en
+# `docs/ai/AI_SECURITY_MODEL.md`. NINGUN `IndexableSource` puede referenciar
+# uno de estos -- se verifica al importar este modulo (abajo). No es una
+# lista de "campos a filtrar en runtime": es un candado sobre la allowlist.
+FORBIDDEN_MODEL_FIELDS: frozenset[tuple[str, str]] = frozenset(
+    {
+        # empleados -- salud/afiliacion, PII, nomina liquidada, binarios
+        ("tenant_empleados.Empleado", "eps"),
+        ("tenant_empleados.Empleado", "afp"),
+        ("tenant_empleados.Empleado", "arl"),
+        ("tenant_empleados.Empleado", "nivel_riesgo_arl"),
+        ("tenant_empleados.Empleado", "numero_documento"),
+        ("tenant_empleados.Empleado", "email"),
+        ("tenant_empleados.Empleado", "telefono"),
+        ("tenant_empleados.Contrato", "salario_mensual"),
+        ("tenant_empleados.Contrato", "auxilio_transporte"),
+        ("tenant_empleados.Contrato", "prestamos_empresa"),
+        ("tenant_empleados.Contrato", "foto"),
+        ("tenant_empleados.Contrato", "archivo_pdf"),
+        ("tenant_empleados.Devengo", "salario_base"),
+        ("tenant_empleados.Devengo", "salud_empleado"),
+        ("tenant_empleados.Devengo", "pension_empleado"),
+        ("tenant_empleados.Devengo", "prestamos"),
+        ("tenant_empleados.Devengo", "descuentos_operativos"),
+        ("tenant_empleados.Devengo", "valor_horas_extras"),
+        # bancos -- numero de cuenta (MASKED), saldos y montos, notas internas
+        ("bancos.CuentaBancaria", "numero"),
+        ("bancos.ExtractoBancario", "saldo_inicial"),
+        ("bancos.ExtractoBancario", "saldo_final"),
+        ("bancos.TransaccionBancaria", "valor"),
+        ("bancos.TransaccionBancaria", "saldo"),
+        ("bancos.TransaccionBancaria", "notas_conciliacion"),
+    }
+)
+
+
+def _assert_allowlist_safe() -> None:
+    """Candado en tiempo de import: ningun origen indexable toca un campo prohibido."""
+    for src in INDEXABLE_SOURCES:
+        pair = (src.model_label, src.text_field)
+        if pair in FORBIDDEN_MODEL_FIELDS:
+            raise RuntimeError(
+                f"VIOLACION DE SEGURIDAD (AI-VECTOR-06): el IndexableSource "
+                f"'{src.source_type}' apunta a {pair}, clasificado FORBIDDEN/MASKED "
+                f"en AI_SECURITY_MODEL.md. Quitalo de INDEXABLE_SOURCES."
+            )
+        for meta_field in src.metadata_fields:
+            if (src.model_label, meta_field) in FORBIDDEN_MODEL_FIELDS:
+                raise RuntimeError(
+                    f"VIOLACION DE SEGURIDAD (AI-VECTOR-06): '{src.source_type}' "
+                    f"copia el campo prohibido '{meta_field}' a metadata."
+                )
+
+
+_assert_allowlist_safe()
+
+
 def get_source(source_type: str) -> IndexableSource | None:
     return _BY_TYPE.get(source_type)
 

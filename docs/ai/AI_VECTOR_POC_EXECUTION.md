@@ -587,7 +587,89 @@ exact search, sin ANN                              = PASS  (CosineDistance + ord
 "retrieval funcionando dentro de un tenant real"   = PASS  (smoke en aipoc, ranking correcto)
 ```
 
-**AI-VECTOR-05 = PASS.** NEXT: **AI-VECTOR-06** — Seguridad y aislamiento:
-tests obligatorios (2 tenants reales sin fuga; alcance sede/área; documentos
-etiquetados FORBIDDEN/MASKED que el chunking nunca indexa;
-`ToolRisk.SENSITIVE_READ` no es protección automática — enforcement explícito).
+**AI-VECTOR-05 = PASS.** NEXT: **AI-VECTOR-06**.
+
+---
+
+## AI-VECTOR-06 — Seguridad y aislamiento multi-tenant (GATE CRÍTICO)
+
+**STATUS = PASS** (2026-09-03, rama `feat/onboarding-cookie`)
+
+```
+cross_tenant_leaks = 0     unauthorized_retrieval = 0     forbidden_indexed = 0
+```
+
+### EXECUTE (HECHO) — endurecimiento, no nueva funcionalidad
+
+- **`EmbeddingService.index_text`** — nuevo param `allow_unlisted: bool =
+  False`. Si `source_type` no está en `INDEXABLE_SOURCES` y no se pasa
+  `allow_unlisted=True`, **lanza `ValueError` antes de tocar el
+  ChunkingService o el proveedor** y loguea un `warning` (evento de
+  seguridad). La allowlist deja de ser solo documentación: es un candado.
+- **`sources.py`** — `FORBIDDEN_MODEL_FIELDS` (24 pares `(model_label,
+  field)` clasificados FORBIDDEN/MASKED en `AI_SECURITY_MODEL.md`:
+  `Empleado.eps/afp/arl/...`, `Contrato.salario_mensual`,
+  `Devengo.salario_base/...`, `CuentaBancaria.numero`,
+  `ExtractoBancario.saldo_*`, `TransaccionBancaria.valor/saldo/
+  notas_conciliacion`). `_assert_allowlist_safe()` corre **en tiempo de
+  import**: si algún `IndexableSource` apuntara a un campo prohibido (texto
+  o metadata), el módulo no carga.
+- **`RetrievalService.search_for_context(context, query, ...)`** — deriva
+  el alcance organizacional del `AIContext` **exactamente igual que
+  `compras_tools.py::_scope_kwargs`** (EMPRESA → sin restricción; SEDE →
+  `sede_ids` del contexto, incluso vacía; AREA → `area_ids`). El
+  `empresa_id` sale SIEMPRE del contexto, no de un parámetro. Es el punto
+  donde AI-VECTOR-07 conectará el `RetrievalTool`.
+- `RetrievalService.search` — acepta `empresa` como instancia **o** id
+  (`_resolve_empresa_id`), filtra por `empresa_id`.
+
+### Escenario 4 — `ToolRisk.SENSITIVE_READ` NO es enforcement automático
+
+`AIEngine.run_tool()` verifica (leído en `engine/ai_engine.py`): `AI_ENABLED`
+→ tool existe → flag del `kind` → `AUTO_APPROVED_KINDS` (bloqueo WRITE) →
+`build_context`. **Nunca lee `tool.risk`.** `test_toolrisk_not_enforced.py`
+lo pinea: una tool `risk=SENSITIVE_READ` se ejecuta igual (flags mediante);
+lo que la bloquea es `AI_READ_ENABLED=False`, no el riesgo. Un `RetrievalTool`
+sensible (AI-VECTOR-07) **debe** aplicar el alcance explícitamente en su
+`run()` — no puede confiar en `risk`. Un test de candado documental
+(`"ToolRisk" not in inspect.getsource(ai_engine)`) fuerza actualizar
+`AI_SECURITY_MODEL.md` si eso cambia.
+
+### VERIFY — smoke real end-to-end (modelo jina-es, tenants `aipoc` + `home`)
+
+| Escenario | Resultado |
+|---|---|
+| **1. Cross-tenant** — doc "confidencial aipoc" indexado en `aipoc`, doc "confidencial home" en `home` | Buscar desde `aipoc` → solo `SECRET_AIPOC`; desde `home` → solo `SECRET_HOME`. **0 leaks** |
+| Cross-tenant vía `empresa_id` de A dentro del schema de B | `[]` (la tabla vive en el schema; el `empresa_id` de A no existe en B) |
+| **2. Alcance EMPRESA** (`sede_ids=None`) | ve los 3 docs (sede1, sede2, general) |
+| **2. Alcance SEDE(1)** | ve sede1 + general, **NO sede2**. `unauthorized_retrieval = 0` |
+| **2. Alcance SEDE sin asignaciones** (`sede_ids=()`) | solo el doc general (NULL-safe); ninguno con sede |
+| **2. Alcance AREA(7)** | ve area7 + los sin área; AREA(99) no ve area7 |
+| **3. FORBIDDEN/MASKED** — `empleado_salario`, `cuenta_bancaria_numero`, `devengo_salario_base` | `is_indexable() == False`; `index_text()` lanza `ValueError`; **`forbidden_indexed = 0`** |
+| Datos de smoke | limpiados |
+
+### REGRESSION
+
+| Check | Resultado |
+|---|---|
+| `manage.py check` / `makemigrations --check` | OK / `No changes detected` (sin migraciones) |
+| `pytest apps/services/ai/tests/test_toolrisk_not_enforced.py` (venv) | **3 passed** |
+| `pytest apps/tenant/ai_knowledge/tests/` (venv, stub provider) | **42 passed** (7 modelos + 15 servicios + 20 seguridad). 1 fallo transitorio corregido (`int` en vez de instancia `Empresa` en un test, no en el codigo) |
+| AI-VECTOR-05 tests (`test_services.py`) | siguen pasando (usan `source_type` allowlisted) |
+
+### GATE — AI-VECTOR-06
+
+```
+cross_tenant_leaks = 0        = PASS  (smoke aipoc/home + tests 2 tenants reales)
+unauthorized_retrieval = 0     = PASS  (SEDE(1) no ve sede2; empresa_id inexistente -> [])
+forbidden_indexed = 0          = PASS  (allowlist candado import + runtime, 24 pares prohibidos)
+ToolRisk no es automatico       = PASS  (pineado; RetrievalTool debe enforcar en run())
+aislamiento por schema probado  = PASS  (no sustituido por "es estructural" -- 2 tenants reales)
+regresion ERP                   = PASS
+```
+
+**AI-VECTOR-06 = PASS.** NEXT: **AI-VECTOR-07** — `RetrievalTool` delgado en
+`apps/services/ai/tools/`, registrado en `AIToolRegistry`, invoca
+`RetrievalService.search_for_context()` vía `AIEngine.run_tool()` sin tocar
+el punto de entrada. Routing: pregunta determinística → READ Tool existente;
+pregunta semántica → `RetrievalTool`.

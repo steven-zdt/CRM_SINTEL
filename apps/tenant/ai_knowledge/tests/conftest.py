@@ -59,3 +59,42 @@ def tenant_a(db):
 @pytest.fixture
 def tenant_b(db):
     return _ensure_tenant("aik_test_b", "AI Knowledge Test B")
+
+
+class StubEmbeddingProvider:
+    """Proveedor de embeddings determinista sin descargar modelos.
+
+    Vector 768d derivado de un hash del texto -> textos identicos dan el
+    mismo vector, textos distintos vectores distintos. Suficiente para
+    tests de aislamiento/alcance (no de calidad de ranking).
+    """
+
+    name = "stub"
+    model = "stub-model"
+    dimension = 768
+
+    def _vec(self, text: str):
+        import hashlib
+
+        h = hashlib.sha256(text.encode("utf-8")).digest()
+        base = [b / 255.0 for b in h]  # 32 valores en [0,1]
+        v = (base * 24)[: self.dimension]
+        return v
+
+    def embed_documents(self, texts):
+        from apps.services.ai.providers.embedding_base import EmbeddingResult
+
+        return EmbeddingResult(
+            vectors=[self._vec(t) for t in texts],
+            model=self.model,
+            provider=self.name,
+            dimension=self.dimension,
+        )
+
+    def embed_query(self, text):
+        return self._vec(text)
+
+
+@pytest.fixture
+def stub_provider():
+    return StubEmbeddingProvider()

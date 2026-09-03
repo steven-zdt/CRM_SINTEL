@@ -190,3 +190,62 @@ hoy para lo que SÍ está implementado:
 - ¿Expone secretos? **No** -- `AIContext`/`ToolResult` no incluyen `ANTHROPIC_API_KEY` ni ningún secreto; verificado por lectura de código, sin campo que los contenga.
 - ¿Puede activar WRITE desde el frontend? **No** -- los flags son `django.conf.settings`, nunca leídos de `request.data`/query params.
 - ¿MCP expone herramientas críticas sin control? **MCP no expone ninguna herramienta todavía** (ver `AI_MCP_POLICY.md`) -- no aplica.
+
+## Vector/Retrieval Layer — modelo de seguridad (AI-VECTOR-06, 2026-09-03)
+
+POC de recuperación semántica (`apps/tenant/ai_knowledge/`, ver
+`AI_VECTOR_POC_EXECUTION.md` y `arquitectura_general.md` §8.7). Cuatro
+controles, todos con test real:
+
+**1. Aislamiento cross-tenant = schema real de PostgreSQL.** El Vector
+Store es una tabla **por schema de tenant** (`tenant_ai_knowledge_*`),
+nunca `public.ai_chunks + tenant_id`. `RetrievalService.search()` ejecuta
+dentro de `schema_context(tenant)` — físicamente no puede ver la tabla de
+otro tenant. Probado con **2 tenants reales** (`aipoc`/`home`), no dado por
+sentado: `test_security.py::test_cross_tenant_retrieval_no_leak` +
+`test_cross_tenant_empresa_id_falso_no_cruza_schema` (pasar el `empresa_id`
+de A al buscar dentro del schema de B devuelve `[]`).
+`cross_tenant_leaks = 0`.
+
+**2. Alcance organizacional = `AIContext`, no un RBAC nuevo.**
+`RetrievalService.search_for_context(context, query)` traduce
+`context.alcance` eje por eje **exactamente igual que
+`apps/services/ai/tools/compras_tools.py::_scope_kwargs`** (EMPRESA → sin
+restricción; SEDE → `context.sede_ids`, incluso vacía; AREA →
+`context.area_ids`). Filtro NULL-safe: un documento cuyo `metadata` declara
+`sede_id`/`area_id` solo es visible si cae en el alcance; los que no
+declaran ese eje son visibles siempre (mismo criterio que
+`filter_by_scope_null_safe`). El `empresa_id` sale SIEMPRE del contexto.
+`test_security.py::test_alcance_*`. `unauthorized_retrieval = 0`.
+
+**3. FORBIDDEN/MASKED nunca llegan al embedding.** `sources.INDEXABLE_SOURCES`
+es una **allowlist curada a mano** de `(modelo, campo)` — la frontera de
+seguridad. Los campos de las tablas de este documento (`Empleado.eps/afp/
+arl/...`, `Contrato.salario_mensual`, `Devengo.salario_base/...`,
+`CuentaBancaria.numero`, `ExtractoBancario.saldo_*`,
+`TransaccionBancaria.valor/saldo/notas_conciliacion`) están en
+`sources.FORBIDDEN_MODEL_FIELDS` (24 pares) y **no** en la allowlist. Dos
+candados: (a) `_assert_allowlist_safe()` en tiempo de import — el módulo no
+carga si un `IndexableSource` apunta a un campo prohibido; (b)
+`EmbeddingService.index_text()` lanza `ValueError` (y loguea `warning`) si
+el `source_type` no está en la allowlist, **antes** de chunkear o llamar al
+proveedor. `test_security.py::test_indexar_source_no_allowlisted_es_rechazado`.
+`forbidden_indexed = 0`.
+
+**4. `ToolRisk.SENSITIVE_READ` sigue sin enforcement automático.** Sin
+cambios respecto a lo que ya dice este documento arriba: `AIEngine.run_tool()`
+no lee `tool.risk`. El futuro `RetrievalTool` (AI-VECTOR-07) **debe** aplicar
+el alcance organizacional **explícitamente en su `run()`** (llamando a
+`search_for_context`), igual que `consultar_compra` aplica `_scope_kwargs`
+hoy — no puede confiar en `risk=SENSITIVE_READ`.
+`apps/services/ai/tests/test_toolrisk_not_enforced.py` lo pinea, incluido un
+candado documental (`"ToolRisk" not in inspect.getsource(ai_engine)`) que
+obliga a actualizar esta sección si el engine gana ese enforcement.
+
+**Proveedor de embeddings — cero egress.** `FastEmbedProvider` es local
+(`fastembed`/ONNX, modelo `jina-embeddings-v2-base-es`). El texto de un
+chunk nunca sale del contenedor → la regla "el proveedor nunca recibe
+credenciales / campos MASKED/FORBIDDEN / datos cross-tenant" se cumple de
+forma **estructural**, no por política. Si se cambia a un proveedor hosted
+(Voyage/OpenAI), el control (3) sigue siendo la garantía de que solo texto
+allowlisted se envía.

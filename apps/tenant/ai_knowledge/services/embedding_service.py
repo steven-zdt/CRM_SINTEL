@@ -21,6 +21,7 @@ from apps.services.ai.providers import AIEmbeddingProvider, get_embedding_provid
 from apps.tenant.ai_knowledge.models import AIKnowledgeChunk
 from apps.tenant.ai_knowledge.services.chunking_service import ChunkingService
 from apps.tenant.ai_knowledge.services.crud_service import AIKnowledgeCRUDService
+from apps.tenant.ai_knowledge.services.sources import is_indexable
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,24 @@ class EmbeddingService:
         source_version: str = "",
         metadata: dict | None = None,
         force: bool = False,
+        allow_unlisted: bool = False,
     ) -> IndexResult:
+        # Frontera de seguridad (AI-VECTOR-06): solo se indexan origenes de la
+        # allowlist curada (`sources.INDEXABLE_SOURCES`). Un `source_type` que
+        # no este ahi -- ej. un campo FORBIDDEN/MASKED de AI_SECURITY_MODEL.md --
+        # se rechaza aqui, antes de tocar el ChunkingService o el proveedor.
+        # `allow_unlisted=True` es solo para tests/uso interno controlado.
+        if not allow_unlisted and not is_indexable(source_type):
+            logger.warning(
+                "[EmbeddingService] RECHAZADO source_type no permitido: %s (source_id=%s)",
+                source_type,
+                source_id,
+            )
+            raise ValueError(
+                f"source_type '{source_type}' no esta en la allowlist de indexacion "
+                f"(apps/tenant/ai_knowledge/services/sources.py). Los campos "
+                f"FORBIDDEN/MASKED no se indexan."
+            )
         source_id = str(source_id)
         existing = AIKnowledgeCRUDService.get_document(
             empresa=empresa, source_type=source_type, source_id=source_id

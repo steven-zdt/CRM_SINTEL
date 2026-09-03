@@ -7,6 +7,7 @@ from apps.tenant.ai_knowledge.services.embedding_service import (
 )
 from apps.tenant.ai_knowledge.services.retrieval_service import RetrievalHit, RetrievalService
 from apps.tenant.ai_knowledge.services.sources import (
+    FORBIDDEN_MODEL_FIELDS,
     INDEXABLE_SOURCES,
     IndexableSource,
     get_source,
@@ -23,6 +24,7 @@ __all__ = [
     "RetrievalHit",
     "INDEXABLE_SOURCES",
     "IndexableSource",
+    "FORBIDDEN_MODEL_FIELDS",
     "get_source",
     "is_indexable",
 ]
