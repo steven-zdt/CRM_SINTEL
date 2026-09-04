@@ -261,6 +261,18 @@ ejecutar el POC, no valores inventados sin revisión):
   arbitrarias en este documento** — deben fijarse en AI-VECTOR-09 una vez
   exista el dataset real del POC (mandato: "no inventar X arbitrariamente").
 
+**[AI-VECTOR-09, 2026-09-03 — MEDIDO sobre `aipoc`, 24 docs/24 chunks]**
+Ver `AI_VECTOR_POC_EXECUTION.md` §AI-VECTOR-09 para el detalle. Valores del
+gate fijados con evidencia (no umbrales inventados):
+`TOKEN_REDUCTION = 0.775` (baseline "mandar todo" ~1003 tok → vector top-k
+~225 tok); `QUERY_REDUCTION = 0.50`; `RELEVANCE` top-1 coseno medio 0.595,
+precision@1 = 0.625 (match exacto de keyword, cota inferior);
+`LATENCY_GAIN = -24.7` (NEGATIVO a escala de POC: el `embed_query` local
+~41 ms supera el fetch ~3.4 ms — honesto, sin proyeccion);
+`MEMORY_IMPACT` ~357 MB (modelo ONNX; tablas 608 KB);
+**ERP regression = 0** (lecturas transaccionales sub-4 ms, busqueda
+vectorial 0.5 ms sin indice ANN).
+
 ## 17. POC scope
 
 Un único tenant (a seleccionar por el usuario — no una elección técnica

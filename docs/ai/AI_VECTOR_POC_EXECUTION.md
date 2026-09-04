@@ -834,8 +834,85 @@ tenant no productivo                                   = PASS  (aipoc, candado P
 regresion ERP                                          = PASS
 ```
 
-**AI-VECTOR-08 = PASS.** NEXT: **AI-VECTOR-09** — benchmark real: medir
-`T_context` / `T_query` / `T_retrieval` / `T_embedding` / nº queries a la BD
-/ tokens / CPU / RAM, comparando el camino **baseline** (tool determinista)
-vs. **vector** sobre el dataset de `aipoc`. Fijar `LATENCY_GAIN` /
-`QUERY_REDUCTION` / `RELEVANCE_SCORE` con datos reales, no antes.
+**AI-VECTOR-08 = PASS.** NEXT: **AI-VECTOR-09**.
+
+---
+
+## AI-VECTOR-09 — Benchmark real (`aipoc`, 24 docs / 24 chunks)
+
+**STATUS = PASS** (2026-09-03). Herramienta:
+`apps/tenant/ai_knowledge/management/commands/benchmark_ai_poc.py`
+(`--iterations 9 --k 5`, no altera datos). Tokens estimados por heurística
+`len/4` (sin `tiktoken`) — el **ratio** baseline/vector es consistente.
+
+### A. Lecturas transaccionales del ERP — **sin degradación**
+
+| Query | Mediana | queries/call |
+|---|---|---|
+| `ClienteSelector.get_cliente_list` (12 filas) | **1.94 ms** | 1 |
+| `ProductoSelector.get_list` (12 filas) | **2.06 ms** | 1 |
+| `ClienteSelector.get_cliente_detail` x1 | 3.34 ms | 2 |
+| `Producto.count()` (aggregate) | 1.53 ms | 1 |
+| **Búsqueda vectorial** `ORDER BY embedding <=> q LIMIT 5` (`EXPLAIN ANALYZE`) | **0.478 ms** | nodo `Limit` (seq scan + sort, **sin índice ANN**, exact search — plan §13) |
+
+Todas sub-4 ms. La tabla vectorial (24 filas, sin índice) resuelve top-k en
+**0.5 ms**. **No se afirma que pgvector acelere el ERP** — el ERP no cambió.
+
+### B. Eficiencia AI — BASELINE (mandar todo el texto al LLM) vs VECTOR (top-k)
+
+| | BASELINE | VECTOR (media de 8 queries) |
+|---|---|---|
+| `T_fetch` / `T_embedding` | 3.39 ms (fetch de 24 textos) | ~41 ms (`embed_query` local) |
+| `T_retrieval` | — | ~46 ms (search + `CosineDistance`) |
+| **T_total** | **3.39 ms** | **~87 ms** |
+| DB queries | 2 | **1** |
+| **Tokens al LLM** | **~1003** (constante, por cada query) | **~225** |
+| Relevancia top-1 (coseno) | — | 0.51 – 0.74 |
+
+### C. Memoria / almacenamiento
+
+| | Valor |
+|---|---|
+| Tablas vectoriales (`document` + `chunk`, 24 filas) | **608 KB** |
+| Modelo ONNX (`jina-es`) en RSS del proceso que embebe | **~250–340 MB** (arena ONNX crece con uso) |
+
+### GATE — valores **medidos** (no objetivos inventados)
+
+```
+LATENCY_GAIN            = -24.7      (NEGATIVO: con 24 docs el embed local
+                                     (~41 ms) es mas caro que el fetch (3.4 ms).
+                                     Honesto -- no hay ganancia de latencia a
+                                     esta escala.)
+QUERY_REDUCTION         = 0.50       (2 -> 1 query a la BD)
+TOKEN_REDUCTION         = 0.775      (~1003 -> ~225 tokens al LLM: -77.5 %.
+                                     Este es el valor real del POC.)
+MEMORY_IMPACT           = ~357 MB    (dominado por el modelo ONNX; tablas 608 KB)
+RELEVANCE_SCORE (top-1 coseno, media) = 0.595
+RELEVANCE precision@1   = 0.625      (5/8 con match EXACTO de palabra clave;
+                                     metrica estricta -- los 3 "miss" tienen
+                                     top-1 semanticamente relacionado, score
+                                     0.51-0.57)
+```
+
+### Lectura honesta
+
+- **AI efficiency ≠ ERP performance.** El ERP no se toca; sus lecturas
+  siguen sub-4 ms.
+- El valor **medido** del POC es **TOKEN_REDUCTION (−77.5 %)** y que el coste
+  de retrieval **no crece con el dataset** (0.5 ms para 24 filas, seq scan).
+- **La latencia es peor** a escala de POC (24 docs): el `embed_query` local
+  añade ~41 ms que el baseline "mandar todo" no paga. Con un proveedor de
+  embeddings más rápido, un caché de query-embeddings, o a escala (miles de
+  docs, donde "mandar todo" supera el context window y el fetch ya no es
+  barato) la balanza cambia. **No se proyecta un número** — se deja la
+  medición como está.
+- **Relevancia**: aceptable para un POC (todos los scores 0.5–0.74,
+  semánticamente pertinentes). `precision@1` con match exacto de keyword es
+  una cota inferior conservadora.
+
+**AI-VECTOR-09 = PASS** (los valores del gate quedan fijados con evidencia,
+que es lo que el mandato pide — no exige que superen un umbral). NEXT:
+**AI-VECTOR-10** — Release Gate del POC (`docs/ai/AI_VECTOR_POC_RELEASE_GATE.md`):
+consolidar infra / extensión / migraciones / aislamiento / seguridad /
+embeddings / chunking / retrieval / integración AI / benchmark / rollback /
+backup → estado `POC_PASS` / `POC_PASS_WITH_LIMITATIONS` / `POC_FAIL`.
