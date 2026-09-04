@@ -910,9 +910,41 @@ RELEVANCE precision@1   = 0.625      (5/8 con match EXACTO de palabra clave;
   semánticamente pertinentes). `precision@1` con match exacto de keyword es
   una cota inferior conservadora.
 
-**AI-VECTOR-09 = PASS** (los valores del gate quedan fijados con evidencia,
-que es lo que el mandato pide — no exige que superen un umbral). NEXT:
-**AI-VECTOR-10** — Release Gate del POC (`docs/ai/AI_VECTOR_POC_RELEASE_GATE.md`):
-consolidar infra / extensión / migraciones / aislamiento / seguridad /
-embeddings / chunking / retrieval / integración AI / benchmark / rollback /
-backup → estado `POC_PASS` / `POC_PASS_WITH_LIMITATIONS` / `POC_FAIL`.
+**AI-VECTOR-09 = PASS.** NEXT: **AI-VECTOR-10**.
+
+---
+
+## AI-VECTOR-10 — Release Gate del POC
+
+**STATUS = PASS** (2026-09-03). Documento:
+**`docs/ai/AI_VECTOR_POC_RELEASE_GATE.md`** (consolidación de los 12 ejes +
+las 8 condiciones duras + limitaciones conocidas).
+
+### Verificaciones ejecutadas en esta fase
+
+- **Rollback (probado):** `migrate_schemas --tenant --schema=home
+  tenant_ai_knowledge zero` → reverse `0002`→`0001` OK, tablas eliminadas de
+  `home`, **`aipoc` intacto** (2 tablas, 24 chunks), re-migración restaura
+  `vector(768)`. El rollback por schema aísla.
+- **Backup (probado):** `backup_tenant aipoc` → dump custom 1.21 MB que
+  incluye `tenant_ai_knowledge_*` con `TABLE DATA` (embeddings) + constraints.
+- **Regresión final:** `check` limpio, `makemigrations --check` limpio,
+  `/health` 200 (directo + nginx), `home` 3 clientes intactos, `aipoc` 24
+  docs/24 chunks, **156 tests** recolectan.
+
+### Veredicto
+
+```
+POC_STATUS = POC_PASS_WITH_LIMITATIONS
+```
+
+Las 8 condiciones duras de `POC_PASS` se cumplen con evidencia **ejecutada**.
+El calificador `WITH_LIMITATIONS` refleja: dataset sintético (L1),
+`LATENCY_GAIN` negativo a escala POC (L2), sin índice ANN (L3), reindexado
+manual (L4), etc. — ninguna viola una condición de `POC_PASS`, pero todas
+condicionan el rollout. Ver la tabla de limitaciones en el Release Gate.
+
+**AI-VECTOR-10 = PASS.** NEXT: **AI-VECTOR-11** — rollout controlado (solo
+con go-ahead del usuario): tenant piloto con datos reales → 2 → 25 % → 50 %
+→ 100 %, resolviendo antes L1/L2/L4/L8. Rollback siempre disponible
+(`AI_RETRIEVAL_ENABLED=false` inmediato / `migrate_schemas … zero`).

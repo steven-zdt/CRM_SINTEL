@@ -1,7 +1,59 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.62.0
-**Ultima actualizacion:** 2026-09-03 (DOC-M49) — **POC pgvector +
+**Version:** 3.63.0
+**Ultima actualizacion:** 2026-09-03 (DOC-M50) — **POC pgvector fases
+AI-VECTOR-06 a AI-VECTOR-10: seguridad/aislamiento, `RetrievalTool`
+integrada, indexacion real de `aipoc` via Celery, benchmark, Release Gate =
+`POC_PASS_WITH_LIMITATIONS`**. Posterior a DOC-M49 (2026-09-03).
+
+**A. Seguridad y aislamiento (AI-VECTOR-06):** `cross_tenant_leaks=0` /
+`unauthorized_retrieval=0` / `forbidden_indexed=0`, probado con 2 tenants
+reales. `EmbeddingService` rechaza cualquier `source_type` fuera de la
+allowlist; `FORBIDDEN_MODEL_FIELDS` (24 pares) con candado en tiempo de
+import. `RetrievalService.search_for_context()` traduce `AIContext.alcance`
+igual que `compras_tools._scope_kwargs`. `ToolRisk` sigue sin enforcement
+automatico (pineado por test). Seccion nueva en `AI_SECURITY_MODEL.md`.
+
+**B. Integracion AI Engine (AI-VECTOR-07):** tool **`buscar_conocimiento`**
+(`RetrievalTool`, READ/SAFE_READ, `apps/services/ai/tools/retrieval_tools.py`)
+en el `AIToolRegistry` -> **20 tools**. `AIEngine.run_tool()` / `AIContext` /
+EKG / demas tools **sin cambios** (`git diff` vacio). Doble feature flag:
+`AI_READ_ENABLED` (engine) + `AI_RETRIEVAL_ENABLED` (nuevo en `settings.py`,
+default `false`, chequeado en `run()`). Routing determinista > semantico en
+el system prompt del orquestador.
+
+**C. Indexacion real (AI-VECTOR-08):** `IndexingService` (itera
+`INDEXABLE_SOURCES`, `source_version` = SHA-256 del texto, prune de
+huerfanos) + `@shared_task reindex_tenant_knowledge` (patron `maildigester`:
+`schema_context`, `autoretry_for` solo transitorios, cola `default`) +
+`seed_ai_poc` (12 Cliente + 12 Producto sinteticos NO sensibles, candado
+`POC_SCHEMAS`). Ejecutado en el worker real: `aipoc` con 24 docs / 24 chunks
+embebidos (dim 768), 2a corrida idempotente (skipped 24).
+
+**D. Benchmark (AI-VECTOR-09):** `benchmark_ai_poc.py`. Sobre `aipoc`:
+`TOKEN_REDUCTION = 0.775` (baseline "mandar todo" ~1003 tok -> vector top-k
+~225), `QUERY_REDUCTION = 0.50`, `LATENCY_GAIN = -24.7` (NEGATIVO a escala
+POC -- el `embed_query` local ~41 ms supera el fetch ~3.4 ms; honesto, sin
+proyeccion), `RELEVANCE` top-1 coseno 0.595 / p@1 0.625, `MEMORY_IMPACT`
+~357 MB (modelo ONNX; tablas 608 KB). **ERP regression = 0** (lecturas
+sub-4 ms, busqueda vectorial 0.48 ms `EXPLAIN ANALYZE`, nodo `Limit` sin
+indice ANN).
+
+**E. Release Gate (AI-VECTOR-10):** `docs/ai/AI_VECTOR_POC_RELEASE_GATE.md`.
+Las 8 condiciones duras de `POC_PASS` se cumplen con evidencia ejecutada
+(rollback probado: `migrate_schemas … tenant_ai_knowledge zero` en `home`,
+`aipoc` intacto; backup probado: `backup_tenant aipoc` incluye las tablas
+vectoriales con datos). Veredicto `POC_PASS_WITH_LIMITATIONS` -- calificador
+por dataset sintetico, `LATENCY_GAIN` negativo a escala POC, sin indice ANN,
+reindexado manual. `AI_WRITE_ENABLED` sigue `false`; `AIContext`/EKG/Service
+Layer sin cambios. AI-VECTOR-11 (rollout) solo con go-ahead del usuario.
+
+**Tests:** `apps/services/ai/tests/` + `apps/tenant/ai_knowledge/tests/` =
+**156** recolectan; suites focalizadas verdes (venv local).
+
+---
+
+**Actualizacion previa:** 2026-09-03 (DOC-M49) — **POC pgvector +
 Vector/Retrieval Layer multi-tenant para el AI Engine (fases AI-VECTOR-01
 a AI-VECTOR-05, loop gate-by-gate)**. Posterior a DOC-M48 (2026-09-01).
 
@@ -2821,11 +2873,18 @@ productivo. Dataset: `Cliente.observaciones` / `Producto.descripcion`
 (texto libre no sensible) — el pipeline real de indexacion sobre datos
 del ERP es AI-VECTOR-08.
 
-**Estado:** POC hasta AI-VECTOR-05 (todos los gates PASS). Pendiente:
-AI-VECTOR-06 (gate critico: `cross_tenant_leaks=0`, `forbidden_indexed=0`,
-`unauthorized_retrieval=0`) .. AI-VECTOR-11 (rollout controlado, solo si
-`POC_PASS`). Ningun `RetrievalTool` registrado aun en el `AIToolRegistry`
-(eso es AI-VECTOR-07); flags AI en `false`.
+**Estado [DOC-M50]:** `POC_STATUS = POC_PASS_WITH_LIMITATIONS`
+(`docs/ai/AI_VECTOR_POC_RELEASE_GATE.md`). AI-VECTOR-01..10 cerrados con
+verificacion real: aislamiento cross-tenant probado con 2 tenants
+(`cross_tenant_leaks=0` / `unauthorized_retrieval=0` / `forbidden_indexed=0`),
+tool **`buscar_conocimiento`** registrada (20 tools, `AIEngine.run_tool()`
+intacto, doble flag `AI_READ_ENABLED`+`AI_RETRIEVAL_ENABLED` default `false`),
+`aipoc` indexado real via Celery (`reindex_tenant_knowledge`, 24 docs),
+benchmark medido (`TOKEN_REDUCTION 0.775`, `ERP regression = 0`,
+`LATENCY_GAIN -24.7` negativo a escala POC), rollback + backup probados.
+`AI_WRITE_ENABLED` sigue `false`. Pendiente: **AI-VECTOR-11** (rollout
+controlado, solo con go-ahead del usuario) -- resolver dataset sintetico,
+indice ANN, trigger de reindexado.
 
 ---
 
@@ -2902,7 +2961,7 @@ AI-VECTOR-06 (gate critico: `cross_tenant_leaks=0`, `forbidden_indexed=0`,
 | LAN Multi-Tenant -- conflicto de IP real resuelto (2026-09-01) | `docs/network/LAN_MULTI_TENANT_FINAL_REPORT.md` | `192.168.2.15` duplicada con otra maquina fisica real (confirmado por ARP); servidor reasignado a `192.168.2.17`, 7 puntos de codigo con IP hardcodeada corregidos. `PARTIALLY_VERIFIED` -- wildcard DNS interno sigue sin operar |
 | Auditoria de migracion de servidor / SOURCE (2026-09-01) | `docs/migration/SERVER_MIGRATION_FINAL_REPORT.md` | Sin TARGET real disponible -- inventario completo + backup real de 5 schemas con checksums SHA256. 3 hallazgos reales (cert TLS con CN incorrecto, Neo4j sin backup logico, `runserver` en vez de WSGI real). `SOURCE_AUDIT = READY_FOR_MIGRATION` |
 | AI Engine transversal -- nucleo real (2026-09-01) | `docs/ai/AI_RELEASE_GATE.md` | `apps/services/ai/`, provider abstraction + context engine + tool registry + 1 tool READ real (`buscar_cliente`), WRITE bloqueado estructuralmente, 20/20 tests reales. Ver tambien §8.6. `AI_ENGINE = NOT_VERIFIED` (honesto) -- `READ_ONLY_ASSISTANT` para 1 dominio |
-| POC pgvector + Vector/Retrieval Layer (2026-09-03) | `docs/ai/AI_VECTOR_POC_EXECUTION.md` (bitacora fase por fase) + `AI_VECTOR_POC_AUDIT.md` (auditoria previa) + `AI_VECTOR_POC_MASTER_PLAN.md` (plan) | Ver §8.7. AI-VECTOR-01..05 con todos los gates PASS: imagen `pgvector/pgvector:pg16`, `apps/db_extensions` (`CREATE EXTENSION`), Vector Store `apps/tenant/ai_knowledge/`, `FastEmbedProvider` local (jina-es 768d), capa semantica (Chunking/Embedding/Retrieval). Tenant de POC `aipoc`. Pendiente AI-VECTOR-06 (gate de seguridad) .. 11 |
+| POC pgvector + Vector/Retrieval Layer (2026-09-03) | `docs/ai/AI_VECTOR_POC_RELEASE_GATE.md` (veredicto) + `AI_VECTOR_POC_EXECUTION.md` (bitacora fase por fase) + `AI_VECTOR_POC_AUDIT.md` + `AI_VECTOR_POC_MASTER_PLAN.md` | Ver §8.7. **AI-VECTOR-01..10 cerrados**, `POC_STATUS = POC_PASS_WITH_LIMITATIONS`: imagen `pgvector/pgvector:pg16`, `apps/db_extensions`, Vector Store `apps/tenant/ai_knowledge/`, `FastEmbedProvider` local (jina-es 768d), capa semantica, seguridad (0 fugas cross-tenant), tool `buscar_conocimiento`, indexacion real de `aipoc` via Celery, benchmark (`TOKEN_REDUCTION 0.775`, ERP reg 0), rollback+backup probados. Pendiente AI-VECTOR-11 (rollout, solo con go-ahead) |
 
 ### 10.2. Documentos de Auditoria por App (SSoT por modulo)
 
@@ -3002,7 +3061,23 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.62.0 — 2026-09-03, DOC-M49)
+## 12. Metricas del Proyecto (v3.63.0 — 2026-09-03, DOC-M50)
+
+**[DOC-M50]** POC pgvector AI-VECTOR-06..10 (§8.7). **Sin migraciones ni
+modelos nuevos** (todo servicios + 1 tool + tooling). Archivos nuevos:
+`apps/services/ai/tools/retrieval_tools.py` (tool `buscar_conocimiento`) +
+`apps/tenant/ai_knowledge/services/{indexing_service.py}` +
+`apps/tenant/ai_knowledge/tasks.py` (Celery) +
+`apps/tenant/ai_knowledge/management/commands/{seed_ai_poc,benchmark_ai_poc}.py`.
+**Modificados**: `config/settings.py` (`AI_RETRIEVAL_ENABLED` + `CELERY_IMPORTS`),
+`apps/services/ai/orchestrator/form_assistant.py` (routing), `sources.py` /
+`embedding_service.py` / `retrieval_service.py` (candados de seguridad).
+**Tests nuevos**: `test_security.py` (20), `test_indexing.py` (9),
+`test_retrieval_tool.py` (9), `test_toolrisk_not_enforced.py` (3). **Docs**:
+`AI_VECTOR_POC_RELEASE_GATE.md` nuevo; `AI_SECURITY_MODEL.md` /
+`AI_TOOL_REGISTRY.md` / `AI_CONTEXT_MODEL.md` / `DEPLOYMENT_RUNBOOK.md`
+ampliados. `AI_WRITE_ENABLED` sigue `false`. `POC_STATUS =
+POC_PASS_WITH_LIMITATIONS`.
 
 **[DOC-M49]** POC pgvector AI-VECTOR-01..05 (§8.7). **2 apps nuevas**:
 `apps/db_extensions/` (`SHARED_APPS`, sin modelos, 1 migracion) y
