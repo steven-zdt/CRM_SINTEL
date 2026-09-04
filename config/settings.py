@@ -873,6 +873,7 @@ CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutos
 CELERY_IMPORTS = (
     "apps.public.tenants.tasks",  # Tarea crítica de onboarding
     "apps.services.maildigester.tasks",  # Tarea de ingesta de facturas desde correo
+    "apps.tenant.ai_knowledge.tasks",  # AI-VECTOR-08: (re)indexacion del Vector Store
 )
 
 # WARNING: CONFIGURACIÓN CRÍTICA: Colas Prioritarias

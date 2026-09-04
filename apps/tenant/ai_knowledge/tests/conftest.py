@@ -38,6 +38,11 @@ def _ensure_tenant(schema: str, nombre: str):
         call_command(
             "migrate_schemas", "--tenant", "-s", schema, "tenant_ai_knowledge", "--noinput", verbosity=0
         )
+    # AI-VECTOR-08: dominios de origen para los tests del pipeline de indexacion.
+    if "tenant_clientes_cliente" not in tables:
+        call_command("migrate_schemas", "--tenant", "-s", schema, "tenant_clientes", "--noinput", verbosity=0)
+    if "tenant_inventario_producto" not in tables:
+        call_command("migrate_schemas", "--tenant", "-s", schema, "tenant_inventario", "--noinput", verbosity=0)
 
     with schema_context(schema):
         empresa = Empresa.objects.only("id").first()

@@ -5,6 +5,11 @@ from apps.tenant.ai_knowledge.services.embedding_service import (
     EmbeddingService,
     IndexResult,
 )
+from apps.tenant.ai_knowledge.services.indexing_service import (
+    IndexingService,
+    IndexStats,
+    ReindexResult,
+)
 from apps.tenant.ai_knowledge.services.retrieval_service import RetrievalHit, RetrievalService
 from apps.tenant.ai_knowledge.services.sources import (
     FORBIDDEN_MODEL_FIELDS,
@@ -22,6 +27,9 @@ __all__ = [
     "CURRENT_EMBEDDING_VERSION",
     "RetrievalService",
     "RetrievalHit",
+    "IndexingService",
+    "IndexStats",
+    "ReindexResult",
     "INDEXABLE_SOURCES",
     "IndexableSource",
     "FORBIDDEN_MODEL_FIELDS",

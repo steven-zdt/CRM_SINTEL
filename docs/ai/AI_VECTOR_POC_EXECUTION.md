@@ -741,8 +741,101 @@ routing determinista > semantico                     = PASS  (description + syst
 AI WRITE sigue deshabilitado                          = PASS
 ```
 
-**AI-VECTOR-07 = PASS.** NEXT: **AI-VECTOR-08** — indexación real del tenant
-`aipoc`: pipeline que itera `INDEXABLE_SOURCES` sobre `Cliente.observaciones`
-/ `Producto.descripcion` reales (vía sus `Selector`s), idempotente por
-`source_version`, **asíncrono con Celery** (`schema_context`, cola `default`,
-`autoretry_for` solo transitorios). Dataset del POC sembrado en `aipoc`.
+**AI-VECTOR-07 = PASS.** NEXT: **AI-VECTOR-08**.
+
+---
+
+## AI-VECTOR-08 — Indexación real del tenant `aipoc` (pipeline + Celery)
+
+**STATUS = PASS** (2026-09-03, rama `feat/onboarding-cookie`)
+
+### EXECUTE (HECHO)
+
+- **`apps/tenant/ai_knowledge/services/indexing_service.py`** — `IndexingService`.
+  `reindex_source_type(empresa, source_type, prune=True)` /
+  `reindex_all(empresa, source_types=None)`. Itera un `IndexableSource`:
+  lee el modelo de dominio vía **`django.apps.get_model(model_label)`** +
+  `.filter(empresa_id=...).only(...)` (mismo criterio que `ai_project_map`
+  usa `apps.get_models()`; la allowlist garantiza que el campo nunca es
+  FORBIDDEN/MASKED). `source_version` = **SHA-256 del texto** →
+  `EmbeddingService.index_text` salta si no cambió. Texto en blanco →
+  `deindex`. `prune=True` → borra los `AIKnowledgeDocument` cuyo `source_id`
+  ya no existe. Devuelve `IndexStats` (scanned/indexed/skipped/emptied/pruned).
+- **`apps/tenant/ai_knowledge/tasks.py`** — `@shared_task
+  reindex_tenant_knowledge(schema_name, source_types=None)`. Patrón
+  `maildigester`: `schema_context(schema_name)` envuelve todo el ORM;
+  `autoretry_for=(ConnectionError, TimeoutError, OSError)`;
+  `EmbeddingProviderError` se reintenta **solo si `transient=True`**;
+  `_clasificar_excepcion` (transient/security/programming/domain/validation)
+  decide el nivel de log, nunca silencia. Cola `default` (vía
+  `CELERY_TASK_ROUTES '*'`), nunca `high_priority`.
+- **`config/settings.py`** — `"apps.tenant.ai_knowledge.tasks"` en
+  `CELERY_IMPORTS` (registro explícito, como los demás tasks críticos).
+- **`apps/tenant/ai_knowledge/management/commands/seed_ai_poc.py`** — siembra
+  12 `Cliente` (con `observaciones`) + 12 `Producto` (con `descripcion`) de
+  **texto libre sintético NO sensible** (ferretería/eléctrico/salud/
+  construcción — condiciones comerciales, especificaciones). Candado:
+  `POC_SCHEMAS = {"aipoc"}`, requiere `--force` para otros schemas.
+
+### VERIFY — ejecución real vía el worker Celery
+
+```
+reindex_tenant_knowledge.delay('aipoc')   -> task 4bed9e91-...
+Task ... succeeded in 9.05s:
+  totals = {scanned: 24, indexed: 24, skipped: 0, emptied: 0, pruned: 0}
+  by_source: cliente_observaciones 12/12, producto_descripcion 12/12
+```
+
+| Check | Resultado |
+|---|---|
+| `aipoc.tenant_ai_knowledge_aiknowledgedocument` | 12 `cliente_observaciones` + 12 `producto_descripcion` |
+| `..._aiknowledgechunk` | 24 chunks, **24 con embedding**, dimensión 768 |
+| **Idempotencia** — 2ª corrida del task | `scanned: 24, indexed: 0, skipped: 24` |
+| `run_tool("buscar_conocimiento", ...)` sobre el dataset real (dentro de `schema_context('aipoc')`) | "productos resistentes a la corrosión / acero inoxidable" → *"Proyectos de vivienda en zona costera. Exige productos con protección contra corrosión"* (0.63); "herramienta eléctrica para perforar concreto" → *"Taladro percutor eléctrico de 800 W"* (0.74); "protección personal sector salud" → *"insumos de protección y aseo para clínicas: guantes, batas"* (0.58) |
+
+### REGRESSION
+
+| Check | Resultado |
+|---|---|
+| `manage.py check` / `makemigrations --check` | OK / `No changes detected` (sin migraciones nuevas) |
+| Celery worker | `reindex_tenant_knowledge` registrada (`celery inspect registered`) |
+| `pytest apps/tenant/ai_knowledge/tests/` (venv) | **51 passed** (7 modelos + 15 servicios + 20 seguridad + 9 indexación). 2 fallos corregidos: `PermissionError` es subclase de `OSError` → se clasificaba `transient` (reordenado el check); test de `prune` reescrito para no depender de `Cliente.delete()` (el collector de Django exige migrar media docena de apps al schema de test — el flujo delete→prune real está verificado en `aipoc`) |
+
+### KNOWN_LIMITATIONS
+
+- El disparo del task hoy es manual (`reindex_tenant_knowledge.delay(schema)`)
+  o vía `seed_ai_poc` + shell. **No hay** trigger automático desde una
+  escritura del ERP (signal/save) — deliberado: el mandato prohíbe que una
+  escritura normal del ERP bloquee esperando al proveedor, y un
+  fire-and-forget desde cada `Cliente.save()` es ruido para el POC. El
+  refresco periódico (Celery Beat) o el trigger por dominio es diseño de
+  rollout (AI-VECTOR-11), no del POC.
+- El dataset de `aipoc` es **sintético** (12+12 registros). Suficiente para
+  el POC y el benchmark (AI-VECTOR-09); no representa el volumen de un
+  tenant real.
+
+### ROLLBACK
+
+1. `reindex_tenant_knowledge` con la allowlist vacía no aplica; para limpiar:
+   `AIKnowledgeDocument.objects.all().delete()` dentro de `schema_context('aipoc')`.
+2. `seed_ai_poc --schema aipoc --wipe` borra los clientes/productos sembrados.
+3. Quitar `apps.tenant.ai_knowledge.tasks` de `CELERY_IMPORTS`; borrar
+   `indexing_service.py` / `tasks.py` / `management/`.
+
+### GATE — AI-VECTOR-08
+
+```
+pipeline source -> chunk -> embedding -> persistence   = PASS  (24/24 en aipoc)
+idempotencia por source_version                        = PASS  (2a corrida: skipped 24)
+asincrono con Celery (schema_context, cola default)     = PASS  (task en el worker, 9s)
+retry SOLO transitorios                                = PASS  (autoretry_for + transient flag)
+dataset del POC en aipoc                               = PASS  (seed_ai_poc, 12+12, no sensible)
+tenant no productivo                                   = PASS  (aipoc, candado POC_SCHEMAS)
+regresion ERP                                          = PASS
+```
+
+**AI-VECTOR-08 = PASS.** NEXT: **AI-VECTOR-09** — benchmark real: medir
+`T_context` / `T_query` / `T_retrieval` / `T_embedding` / nº queries a la BD
+/ tokens / CPU / RAM, comparando el camino **baseline** (tool determinista)
+vs. **vector** sobre el dataset de `aipoc`. Fijar `LATENCY_GAIN` /
+`QUERY_REDUCTION` / `RELEVANCE_SCORE` con datos reales, no antes.
