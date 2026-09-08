@@ -11,7 +11,11 @@ import logging
 from django.db import transaction
 from django.utils import timezone
 
-from apps.tenant.ai_knowledge.models import AIKnowledgeChunk, AIKnowledgeDocument
+from apps.tenant.ai_knowledge.models import (
+    AIKnowledgeChunk,
+    AIKnowledgeDocument,
+    AIKnowledgeSettings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,3 +133,23 @@ class AIKnowledgeCRUDService:
             deleted,
         )
         return deleted
+
+    @staticmethod
+    @transaction.atomic
+    def get_or_create_settings(*, empresa) -> AIKnowledgeSettings:
+        """Devuelve el AIKnowledgeSettings de la empresa, creandolo (apagado) si no existe."""
+        settings_row, _ = AIKnowledgeSettings.objects.get_or_create(empresa=empresa)
+        return settings_row
+
+    @staticmethod
+    @transaction.atomic
+    def set_retrieval_enabled(*, empresa, enabled: bool) -> AIKnowledgeSettings:
+        """Enciende/apaga buscar_conocimiento para una empresa (rollout AI-VECTOR-11)."""
+        settings_row, _ = AIKnowledgeSettings.objects.get_or_create(empresa=empresa)
+        if settings_row.retrieval_enabled != enabled:
+            settings_row.retrieval_enabled = enabled
+            settings_row.save(update_fields=["retrieval_enabled", "updated_at"])
+        logger.info(
+            "[AIKnowledgeCRUD] retrieval_enabled=%s para empresa=%s", enabled, empresa.id
+        )
+        return settings_row

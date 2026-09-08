@@ -72,6 +72,19 @@ class RetrievalTool(BaseTool):
                 message="La recuperacion semantica esta deshabilitada en este entorno.",
             )
 
+        # Control incremental por tenant del rollout (AI-VECTOR-11). El flag
+        # global de arriba es el kill switch instantaneo de todo el entorno;
+        # este es el que avanza tenant por tenant (piloto -> 2 -> 25% -> ...).
+        from apps.tenant.ai_knowledge.models import AIKnowledgeSettings
+
+        if not AIKnowledgeSettings.objects.filter(
+            empresa_id=context.empresa_id, retrieval_enabled=True
+        ).exists():
+            return ToolResult(
+                status="PERMISSION_DENIED",
+                message="La recuperacion semantica no esta habilitada para este tenant.",
+            )
+
         if not query or not query.strip():
             return ToolResult(status="VALIDATION_ERROR", message="query es obligatorio.")
         if not (1 <= int(k) <= MAX_K):

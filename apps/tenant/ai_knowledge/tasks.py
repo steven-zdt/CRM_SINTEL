@@ -99,3 +99,26 @@ def reindex_tenant_knowledge(self, schema_name: str, source_types: list[str] | N
     }
     logger.info("[reindex_tenant_knowledge] done schema=%s %s", schema_name, payload["totals"])
     return payload
+
+
+@shared_task(bind=True, name="apps.tenant.ai_knowledge.tasks.reindex_enabled_tenants")
+def reindex_enabled_tenants(self) -> dict:
+    """Orquestador de Celery Beat (AI-VECTOR-11, L4): dispara `reindex_tenant_knowledge`
+    solo para los tenants con `AIKnowledgeSettings.retrieval_enabled=True`.
+
+    Liviano a proposito -- delega el trabajo real (chunking + embeddings) a
+    `reindex_tenant_knowledge.delay(schema)` por tenant, nunca lo hace inline.
+    """
+    from apps.public.tenants.models import Client
+
+    scheduled = []
+    for tenant in Client.objects.exclude(schema_name="public").only("schema_name"):
+        with schema_context(tenant.schema_name):
+            from apps.tenant.ai_knowledge.models import AIKnowledgeSettings
+
+            if AIKnowledgeSettings.objects.filter(retrieval_enabled=True).exists():
+                reindex_tenant_knowledge.delay(tenant.schema_name)
+                scheduled.append(tenant.schema_name)
+
+    logger.info("[reindex_enabled_tenants] tenants programados=%s", scheduled)
+    return {"scheduled": scheduled}

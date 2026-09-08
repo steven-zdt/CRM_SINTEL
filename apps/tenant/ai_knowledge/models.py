@@ -147,3 +147,33 @@ class AIKnowledgeChunk(SintelTenantBaseModel):
 
     def __str__(self):
         return f"{self.document_id}#{self.chunk_index}"
+
+
+class AIKnowledgeSettings(SintelTenantBaseModel):
+    """Control de rollout por tenant del Vector Store (AI-VECTOR-11).
+
+    Una fila por empresa. `AI_RETRIEVAL_ENABLED` (settings.py) sigue siendo el
+    kill switch global instantaneo; este flag es el control incremental para
+    avanzar el rollout tenant por tenant (piloto -> 2 tenants -> 25% -> ...)
+    sin exponer `buscar_conocimiento` a todos los tenants a la vez.
+    """
+
+    retrieval_enabled = models.BooleanField(
+        default=False,
+        help_text="Si la tool buscar_conocimiento esta habilitada para este tenant.",
+    )
+
+    class Meta:
+        verbose_name = "AI Knowledge Settings"
+        verbose_name_plural = "AI Knowledge Settings"
+        constraints = [
+            models.UniqueConstraint(fields=["empresa"], name="uniq_aikset_empresa")
+        ]
+        # Django NO fusiona los indexes de la Meta abstracta (mismo gotcha
+        # documentado en AIKnowledgeDocument/AIKnowledgeChunk, AI-VECTOR-03).
+        indexes = [
+            models.Index(fields=["empresa"]),
+        ]
+
+    def __str__(self):
+        return f"empresa={self.empresa_id} retrieval_enabled={self.retrieval_enabled}"

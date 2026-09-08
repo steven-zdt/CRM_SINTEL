@@ -87,10 +87,31 @@ un plan de DR completo — no se infla el alcance del blocker cerrado.
   requiere una medición dedicada contra un volumen representativo antes
   de comprometerse a un SLA de RTO real.
 - **RPO**: determinado por la frecuencia de `backup_tenant`/
-  `backup_all_tenants` programada — **no hay `celery beat` en ningún
-  entorno de este proyecto** (`INFRA-02`, ya documentado), por lo que hoy
-  no hay backups automáticos recurrentes; el RPO real es "desde el
-  último backup manual", indefinido hasta que se programe.
+  `backup_all_tenants` programada. `INFRA-02` ("no hay `celery beat` en
+  ningún entorno") ya no aplica literalmente — AI-VECTOR-11 agregó el
+  contenedor `celery-beat` (reindexado del Vector Store) — pero
+  `backup_tenant`/`backup_all_tenants` siguen sin una entrada en
+  `CELERY_BEAT_SCHEDULE`, así que el RPO real sigue siendo "desde el
+  último backup manual" hasta que alguien la agregue.
+
+### Precondición para pgvector (AI-VECTOR-10/11, antes DEFERRED)
+
+Desde que `db` corre `pgvector/pgvector:pg16` con la extensión `vector`
+instalada en `public` (AI-VECTOR-01/02), restaurar un dump que incluya
+tablas `tenant_ai_knowledge_*` (columnas `vector(768)`) a un **servidor
+nuevo** requiere que la extensión ya exista ahí ANTES del `pg_restore`:
+
+```bash
+docker compose exec web python manage.py migrate_schemas --shared
+```
+
+(`migrate_schemas --shared` aplica `apps/db_extensions/0001_vector_extension.py`,
+que hace `CREATE EXTENSION IF NOT EXISTS vector` una sola vez en `public`
+con guard por schema — ver AI-VECTOR-02). Sin este paso, `pg_restore`
+falla al intentar recrear una columna de tipo `vector` que Postgres no
+reconoce. `restore_tenant.py` no lo verifica automáticamente hoy — es un
+paso manual previo, documentado aquí (cierra L8 del release gate del POC,
+`docs/ai/AI_VECTOR_POC_RELEASE_GATE.md`).
 
 ### Procedimiento (referencia, ya ejecutado arriba)
 

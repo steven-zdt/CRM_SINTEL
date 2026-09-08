@@ -29,6 +29,9 @@ scratch/
 brain/
 ARTIFACTS/
 
+# Celery Beat -- shelve db local del scheduler (AI-VECTOR-11), nunca en git.
+celerybeat-schedule
+
 # Salidas temporales de pruebas y depuracion
 pytest_*.txt
 pytest_*.log

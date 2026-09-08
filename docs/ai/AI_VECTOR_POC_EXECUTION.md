@@ -948,3 +948,106 @@ condicionan el rollout. Ver la tabla de limitaciones en el Release Gate.
 con go-ahead del usuario): tenant piloto con datos reales → 2 → 25 % → 50 %
 → 100 %, resolviendo antes L1/L2/L4/L8. Rollback siempre disponible
 (`AI_RETRIEVAL_ENABLED=false` inmediato / `migrate_schemas … zero`).
+
+---
+
+## AI-VECTOR-11.1 — Piloto sobre `home` (rollout, primer gate)
+
+**STATUS = PASS** (2026-09-08). Go-ahead explícito del usuario para iniciar
+AI-VECTOR-11, con 3 decisiones tomadas antes de implementar: tenant piloto
+`home` (datos reales tal cual, sin volumen mínimo exigido), L4 = Celery Beat
+periódico (no trigger por `save()`), L3 = mantener exact search (no HNSW en
+este gate). Alcance: **solo el primer gate del rollout** (piloto), no los 5
+pasos completos — mismo patrón gate-por-gate de AI-VECTOR-01..10.
+
+**Hallazgo antes de implementar:** `home` tiene exactamente **1**
+`Cliente.observaciones` no vacío y **0** `Producto.descripcion` no vacíos —
+dataset real del piloto = 1 documento. Suficiente para aislamiento/
+seguridad/rollback/reindexado con datos genuinamente reales, no para un
+benchmark de relevancia significativo (documentado, no se infla el resultado).
+
+### EXECUTE (HECHO)
+
+- **`AIKnowledgeSettings`** (nuevo modelo, `apps/tenant/ai_knowledge/models.py`,
+  migración `0003_aiknowledgesettings_and_more`): flag `retrieval_enabled`
+  por empresa (`UniqueConstraint`). Resuelve un gap encontrado en la
+  exploración: `AI_RETRIEVAL_ENABLED` era una única env var global sin
+  control por tenant — imposible progresar un rollout gradual sin esto.
+- **`RetrievalTool.run()`** ahora chequea el flag global (kill switch de todo
+  el entorno, ya existente) Y el flag por tenant (kill switch incremental,
+  nuevo) — `apps/services/ai/tools/retrieval_tools.py`.
+- **Comando** `ai_knowledge_toggle_retrieval <schema> --enable|--disable` —
+  palanca operativa para las siguientes etapas del rollout.
+- **L4 resuelto:** `reindex_enabled_tenants` (orquestador liviano, `tasks.py`)
+  + `apps/tenant/ai_knowledge/celery_beat_schedule.py` (cada 6h), merged en
+  `config/celery.py`. **Hallazgo de infraestructura:** no existía ningún
+  contenedor `celery beat` en `docker-compose.yaml` — el `CELERY_BEAT_SCHEDULE`
+  de `dashboard` ya definido nunca se disparaba. Se agregó el servicio
+  `celery-beat` + fix en `entrypoint.sh` (esperaba Redis solo para
+  `SERVICE_ROLE=celery`, ahora también `celery-beat`).
+- **L8 documentado:** `docs/production/BACKUP_RESTORE_RUNBOOK.md` —
+  precondición `CREATE EXTENSION vector` antes de `pg_restore` en servidor
+  nuevo; corregida también la nota `INFRA-02` ("no hay celery beat en ningún
+  entorno"), que ya no aplica literalmente tras este cambio (aunque
+  `backup_tenant`/`backup_all_tenants` siguen sin entrada en el beat schedule).
+- **Tests:** casos nuevos de `AIKnowledgeSettings` (CRUD, constraint,
+  aislamiento cross-tenant) en `test_models.py`, y del flag por tenant en
+  `RetrievalTool` (fila ausente / apagado / no afecta el flag global) en
+  `test_retrieval_tool.py` — cuyo `setUp()` se actualizó para crear el flag
+  encendido (sin eso, los 12 tests existentes de AI-VECTOR-07 habrían
+  quedado en `PERMISSION_DENIED`).
+
+### VERIFY (VERIFICADO) — evidencia ejecutada, no solo diseñada
+
+| Check | Resultado |
+|---|---|
+| `manage.py check` / `makemigrations --check --dry-run` | limpios, tras aplicar la migración a `home`/`admin`/`aipoc` |
+| `pytest apps/tenant/ai_knowledge/tests/ apps/services/ai/tests/test_retrieval_tool.py` (venv local) | **67 passed** |
+| Reindexado real `reindex_tenant_knowledge.delay('home')` | worker reiniciado (no hace autoreload de código) → 1 documento real indexado, embedding jina-es 768d real |
+| `run_tool("buscar_conocimiento", ...)` en `home` (flag ON) | `status=OK`, devuelve el documento real (`score=0.1396`) |
+| `run_tool("buscar_conocimiento", ...)` en `admin` (sin flag) | `PERMISSION_DENIED` ("no esta habilitada para este tenant") |
+| `celery-beat` levantado (`docker compose up -d celery-beat`) | `app.conf.beat_schedule` confirmado con `ai-knowledge-reindex-enabled-tenants` (cada 6h) |
+| `reindex_enabled_tenants` disparada a mano | programó únicamente `['home']` — no `admin`, no `aipoc` (filtro por tenant real, no solo diseñado) |
+| Rollback: `ai_knowledge_toggle_retrieval home --disable` | apaga solo `home`; `AI_RETRIEVAL_ENABLED` (global) confirmado que sigue `True` — kill switch incremental real, además del global ya probado en AI-VECTOR-10. Re-habilitado después para dejar el piloto activo |
+| `benchmark_ai_poc --schema home --iterations 5 --json` | con n=1 documento real: `TOKEN_REDUCTION=-1.0083`, `RELEVANCE precision@1=0.0`, `LATENCY_GAIN=-6.47` — **peor que el POC sintético** de AI-VECTOR-09, tal como se anticipó (1 documento no es una medición de escala útil). Resuelve L1 (dataset real, no sintético) honestamente; no resuelve L2 |
+
+### REGRESSION (VERIFICADO)
+
+| Check | Resultado |
+|---|---|
+| `GET /health` | `200` |
+| Contenedores | todos healthy (incluye `celery-beat` nuevo) |
+| `home` | datos transaccionales intactos |
+
+**Estado final:** `home` con `retrieval_enabled=True` (piloto activo),
+`admin`/`aipoc` sin flag (apagados por defecto).
+
+### KNOWN_LIMITATIONS
+
+- Dataset real de `home` = 1 documento. L1 resuelto en el sentido estricto
+  (dato real, no sintético) pero **no** en el sentido de "volumen
+  representativo" — `RELEVANCE`/`LATENCY_GAIN`/`TOKEN_REDUCTION` medidos con
+  n=1 no son comparables con los de AI-VECTOR-09 ni sirven de base para
+  proyectar a escala.
+- L2 sigue sin resolver: ningún tenant actual tiene volumen suficiente para
+  que "mandar todo" deje de ser competitivo frente al vector.
+- L3 (HNSW) diferido, decisión tomada explícitamente en este gate.
+
+### GATE — AI-VECTOR-11.1
+
+```
+flag por tenant (nuevo, kill switch incremental) = PASS  (modelo + constraint + enforcement en RetrievalTool)
+aislamiento con datos reales (home ON, admin OFF) = PASS  (run_tool end-to-end)
+reindexado real sobre home                        = PASS  (1 doc, embedding 768d real)
+L4: Celery Beat periodico                         = PASS  (celery-beat nuevo, schedule confirmado, orquestador filtra por tenant)
+L8: precondicion documentada                      = PASS  (BACKUP_RESTORE_RUNBOOK.md)
+rollback incremental probado                      = PASS  (toggle --disable no toca el flag global)
+regresion ERP                                     = PASS  (check / makemigrations / health / tests)
+```
+
+**AI-VECTOR-11.1 = PASS.** NEXT: AI-VECTOR-11.2+ (expandir a 2 tenants / 25%
+/ 50% / 100%) — cada etapa su propio gate, requiere un tenant con volumen
+real de datos para que L1/L2 se resuelvan con evidencia útil (no solo con 1
+documento). HNSW (L3) sigue diferido hasta que el volumen lo justifique.
+Como en AI-VECTOR-10/11, avanzar de gate requiere go-ahead explícito del
+usuario.

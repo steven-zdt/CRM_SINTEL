@@ -4,7 +4,7 @@ import pytest
 from django.db.utils import IntegrityError
 from django_tenants.utils import schema_context
 
-from apps.tenant.ai_knowledge.models import AIKnowledgeChunk, AIKnowledgeDocument
+from apps.tenant.ai_knowledge.models import AIKnowledgeChunk, AIKnowledgeDocument, AIKnowledgeSettings
 from apps.tenant.ai_knowledge.services import AIKnowledgeCRUDService
 from apps.tenant.empresa.models import Empresa
 
@@ -126,6 +126,46 @@ def test_empresa_obligatoria(tenant_a):
         doc = AIKnowledgeDocument(source_type="x", source_id="2")
         with pytest.raises(ValueError):
             doc.save()
+
+
+# --------------- AI-VECTOR-11: AIKnowledgeSettings (flag por tenant) ------- #
+
+def test_get_or_create_settings_crea_apagado_por_defecto(tenant_a):
+    with schema_context(tenant_a.schema_name):
+        empresa = _empresa(tenant_a.schema_name)
+        settings_row = AIKnowledgeCRUDService.get_or_create_settings(empresa=empresa)
+        assert settings_row.retrieval_enabled is False
+        assert AIKnowledgeSettings.objects.filter(empresa=empresa).count() == 1
+
+
+def test_set_retrieval_enabled_prende_y_apaga(tenant_a):
+    with schema_context(tenant_a.schema_name):
+        empresa = _empresa(tenant_a.schema_name)
+        AIKnowledgeCRUDService.set_retrieval_enabled(empresa=empresa, enabled=True)
+        assert AIKnowledgeSettings.objects.get(empresa=empresa).retrieval_enabled is True
+
+        AIKnowledgeCRUDService.set_retrieval_enabled(empresa=empresa, enabled=False)
+        assert AIKnowledgeSettings.objects.get(empresa=empresa).retrieval_enabled is False
+        # sigue siendo 1 sola fila (get_or_create, no duplica)
+        assert AIKnowledgeSettings.objects.filter(empresa=empresa).count() == 1
+
+
+def test_settings_unique_constraint_por_empresa(tenant_a):
+    with schema_context(tenant_a.schema_name):
+        empresa = _empresa(tenant_a.schema_name)
+        AIKnowledgeSettings.objects.create(empresa=empresa)
+        with pytest.raises(IntegrityError):
+            AIKnowledgeSettings.objects.create(empresa=empresa)
+
+
+def test_settings_aislamiento_cross_tenant(tenant_a, tenant_b):
+    with schema_context(tenant_a.schema_name):
+        empresa_a = _empresa(tenant_a.schema_name)
+        AIKnowledgeCRUDService.set_retrieval_enabled(empresa=empresa_a, enabled=True)
+
+    with schema_context(tenant_b.schema_name):
+        # El schema de B no ve el flag de A -- apagar A no lo apaga, encender A no lo prende.
+        assert AIKnowledgeSettings.objects.count() == 0
 
 
 def test_aislamiento_cross_tenant(tenant_a, tenant_b):

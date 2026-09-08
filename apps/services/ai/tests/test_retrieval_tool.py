@@ -14,6 +14,7 @@ from django.test import override_settings
 from apps.services.ai.engine import run_tool
 from apps.services.ai.providers.embedding_base import EmbeddingResult
 from apps.services.ai.tools import get_tool, tool_metadata
+from apps.tenant.ai_knowledge.models import AIKnowledgeSettings
 from apps.tenant.ai_knowledge.services import EmbeddingService
 from apps.tenant.empresa.models import Empresa, Sede
 from apps.tenant.perfil.models import TenantProfile
@@ -77,6 +78,9 @@ class RetrievalToolTests(SintelTenantTestCase):
         self.profile = TenantProfile.objects.create(
             user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="EMPRESA",
         )
+        # AI-VECTOR-11: flag por tenant, encendido por defecto en estos tests
+        # (el rollout gate por gate se prueba explicitamente abajo).
+        AIKnowledgeSettings.objects.create(empresa=self.empresa, retrieval_enabled=True)
         self._p1, self._p2 = _patched_provider()
         self._p1.start(); self._p2.start()
         self.addCleanup(self._p1.stop); self.addCleanup(self._p2.stop)
@@ -152,3 +156,28 @@ class RetrievalToolTests(SintelTenantTestCase):
         from django.conf import settings
 
         assert getattr(settings, "AI_WRITE_ENABLED", False) is False
+
+    # ---------------- AI-VECTOR-11: flag por tenant (rollout gate) -------- #
+    @override_settings(**ALL_ON)
+    def test_deshabilitada_si_no_existe_fila_de_settings_para_la_empresa(self):
+        AIKnowledgeSettings.objects.filter(empresa=self.empresa).delete()
+        res = run_tool("buscar_conocimiento", self._req(), query="condiciones de pago")
+        assert res.status == "PERMISSION_DENIED"
+        assert "tenant" in res.message.lower()
+
+    @override_settings(**ALL_ON)
+    def test_deshabilitada_si_el_flag_de_tenant_esta_apagado(self):
+        AIKnowledgeSettings.objects.filter(empresa=self.empresa).update(retrieval_enabled=False)
+        res = run_tool("buscar_conocimiento", self._req(), query="condiciones de pago")
+        assert res.status == "PERMISSION_DENIED"
+
+    @override_settings(**ALL_ON)
+    def test_apagar_el_flag_de_tenant_no_afecta_el_flag_global(self):
+        # Kill switch incremental: apagar SOLO este tenant no toca
+        # AI_RETRIEVAL_ENABLED (que sigue True via override_settings).
+        AIKnowledgeSettings.objects.filter(empresa=self.empresa).update(retrieval_enabled=False)
+        res = run_tool("buscar_conocimiento", self._req(), query="condiciones de pago")
+        assert res.status == "PERMISSION_DENIED"
+        from django.conf import settings
+
+        assert settings.AI_RETRIEVAL_ENABLED is True

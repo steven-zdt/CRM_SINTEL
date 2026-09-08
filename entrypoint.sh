@@ -69,7 +69,7 @@ wait_for_redis() {
 
 # Esperar servicios dependientes
 wait_for_db
-if [ "$SERVICE_ROLE" = "celery" ]; then
+if [ "$SERVICE_ROLE" = "celery" ] || [ "$SERVICE_ROLE" = "celery-beat" ]; then
     wait_for_redis
 fi
 

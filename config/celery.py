@@ -35,12 +35,16 @@ app.conf.imports = (
 # Celery Beat Schedule — Tareas Periódicas
 # ============================================================================
 from apps.tenant.dashboard.celery_beat_schedule import CELERY_BEAT_SCHEDULE
+from apps.tenant.ai_knowledge.celery_beat_schedule import (
+    CELERY_BEAT_SCHEDULE as AI_KNOWLEDGE_BEAT_SCHEDULE,
+)
 
 # Merge dashboard schedule con schedule existente (si existe)
 if not hasattr(app.conf, 'beat_schedule'):
     app.conf.beat_schedule = {}
 
 app.conf.beat_schedule.update(CELERY_BEAT_SCHEDULE)
+app.conf.beat_schedule.update(AI_KNOWLEDGE_BEAT_SCHEDULE)  # AI-VECTOR-11
 
 
 @app.task(bind=True)

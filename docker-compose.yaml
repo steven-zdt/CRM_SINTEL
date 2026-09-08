@@ -190,6 +190,24 @@ services:
       retries: 5
       start_period: 30s
 
+  # Celery Beat -- scheduler de tareas periodicas (AI-VECTOR-11: reindexado
+  # del Vector Store de los tenants con retrieval_enabled=True). Antes de
+  # este cambio no habia ningun contenedor corriendo `celery beat`, asi que
+  # los CELERY_BEAT_SCHEDULE ya definidos (dashboard, ai_knowledge) no se
+  # disparaban.
+  celery-beat:
+    <<: *app-base
+    container_name: crm_sintel-celery-beat-1
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - SERVICE_ROLE=celery-beat
+      - C_FORCE_ROOT=1
+      - DATABASE_HOST=db
+    command: ["celery", "-A", "config", "beat", "-l", "info"]
+    restart: unless-stopped
+    extra_hosts:
+      - "home.sintel.net.co:192.168.2.200"
+
   # Cloudflare Tunnel
   cloudflared:
     container_name: crm_sintel-cloudflared-1
