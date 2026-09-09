@@ -135,7 +135,18 @@ class ProveedorDetailSerializer(ProveedorNormalizationMixin, serializers.ModelSe
             "regimen_tributario_display",
             "tipo_cuenta_display",
         )
-        read_only_fields = ("id", "created_at", "updated_at", "empresa")
+        # PROVEEDORES-01 (H2): los campos de retencion son de solo lectura --
+        # el calculo real de retenciones vive en contabilidad.ConfiguracionRetenciones
+        # (indexado por NIT, patron Pull ADR-001), ningun flujo real lee estos
+        # campos del Proveedor. Se mantienen en el modelo (dato historico, no se
+        # borra la columna) pero dejan de aceptarse como entrada en create/update
+        # para no sugerir que editarlos tiene algun efecto.
+        read_only_fields = (
+            "id", "created_at", "updated_at", "empresa",
+            "es_retenedor", "aplica_retefuente", "retefuente_porcentaje",
+            "aplica_reteica", "reteica_porcentaje",
+            "aplica_reteiva", "reteiva_porcentaje",
+        )
     
     def validate(self, attrs):
         """

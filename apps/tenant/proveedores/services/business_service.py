@@ -92,9 +92,26 @@ class ProveedorBusinessService:
     def _sanitize_retenciones(self, payload: dict) -> dict:
         """
         Zero Trust: Limpia flags y porcentajes de retención si el proveedor no es retenedor.
+
+        PROVEEDORES-01 (H2): estos campos son `read_only` en
+        `ProveedorDetailSerializer` (nunca vienen en `validated_data` desde la
+        API real -- el calculo real de retenciones vive en
+        `contabilidad.ConfiguracionRetenciones`, no aqui). Si ninguno de ellos
+        viene en el payload, este metodo no debe inyectar valores por defecto:
+        hacerlo resetearia silenciosamente datos historicos en CADA edicion
+        normal del proveedor (ej. solo cambiar el email). Solo se sanea cuando
+        el caller efectivamente envio alguno (ruta legacy de `services.py`).
         """
+        campos_retencion = (
+            "aplica_retefuente", "retefuente_porcentaje",
+            "aplica_reteica", "reteica_porcentaje",
+            "aplica_reteiva", "reteiva_porcentaje",
+        )
+        if "es_retenedor" not in payload and not any(c in payload for c in campos_retencion):
+            return payload
+
         es_retenedor = payload.get("es_retenedor", False)
-        
+
         if not es_retenedor:
             payload["aplica_retefuente"] = False
             payload["retefuente_porcentaje"] = 0

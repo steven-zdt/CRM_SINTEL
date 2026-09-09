@@ -100,13 +100,3 @@ def test_proveedores_list_session_ok(client, django_user_model, tenant):
         f"Verifica que ProveedorViewSet tenga authentication_classes = [SessionAuthentication]. "
         f"Status recibido: {r.status_code}"
     )
-
-
-# WARNING: v2.40: CompraProveedorViewSet eliminado - este test ya no aplica
-# @pytest.mark.django_db
-# def test_compras_proveedor_list_session_ok(client, django_user_model, tenant):
-#     """
-#     WARNING: DEPRECATED: CompraProveedorViewSet fue eliminado en v2.40.
-#     Este test ya no aplica.
-#     """
-#     pass

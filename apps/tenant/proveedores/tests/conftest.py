@@ -10,30 +10,16 @@ from apps.public.tenants.models import Client, Domain
 from apps.tenant.empresa.models import Empresa
 
 
-@pytest.fixture
-def tenant(db):
-    """
-    Simple fixture that returns an existing test tenant.
-    """
-    tenant_obj = (
-        Client.objects.exclude(schema_name='public')
-        .exclude(schema_name__contains='_')
-        .only('id', 'schema_name', 'nombre')
-        .first()
-    )
-    if tenant_obj:
-        schema = tenant_obj.schema_name
-    else:
-        schema = 'testtenant'
-        tenant_obj = Client.objects.filter(schema_name=schema).only('id', 'schema_name', 'nombre').first()
-        if not tenant_obj:
-            with schema_context('public'):
-                tenant_obj = Client(
-                    schema_name=schema,
-                    nombre='Test Tenant'
-                )
-                tenant_obj.auto_create_schema = False
-                tenant_obj.save(force_insert=True)
+def _ensure_tenant(schema_name, nombre):
+    """Crea (o reutiliza) un tenant de prueba con las tablas minimas para
+    los tests de proveedores. Extraido para poder provisionar 2 tenants
+    independientes (aislamiento cross-tenant) sin duplicar la logica."""
+    tenant_obj = Client.objects.filter(schema_name=schema_name).only('id', 'schema_name', 'nombre').first()
+    if not tenant_obj:
+        with schema_context('public'):
+            tenant_obj = Client(schema_name=schema_name, nombre=nombre)
+            tenant_obj.auto_create_schema = False
+            tenant_obj.save(force_insert=True)
 
     Domain.objects.get_or_create(
         tenant=tenant_obj,
@@ -74,10 +60,33 @@ def tenant(db):
         empresa = Empresa.objects.only('id').first()
         if not empresa:
             Empresa.objects.create(
-                razon_social='EMPRESA TEST S.A.S.',
-                nit='901234567',
+                razon_social=f'EMPRESA {nombre.upper()} S.A.S.',
+                nit='901234567' if schema_name.endswith('b') else '901234566',
                 direccion='Direccion de prueba',
                 telefono='3000000000',
             )
 
     return tenant_obj
+
+
+@pytest.fixture
+def tenant(db):
+    """
+    Simple fixture that returns an existing test tenant.
+    """
+    tenant_obj = (
+        Client.objects.exclude(schema_name='public')
+        .exclude(schema_name__contains='_')
+        .only('id', 'schema_name', 'nombre')
+        .first()
+    )
+    if tenant_obj:
+        return _ensure_tenant(tenant_obj.schema_name, tenant_obj.nombre or 'Test Tenant')
+    return _ensure_tenant('testtenant', 'Test Tenant')
+
+
+@pytest.fixture
+def tenant_b(db):
+    """Segundo tenant independiente, para tests de aislamiento cross-tenant
+    (PROVEEDORES-01: CuentasPagar no tenia cobertura de aislamiento)."""
+    return _ensure_tenant('testtenantb', 'Test Tenant B')

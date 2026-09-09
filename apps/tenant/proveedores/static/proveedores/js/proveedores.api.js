@@ -34,12 +34,8 @@
     delete: (id) => w.Sintel.Core.Http.request('DELETE', `${API_URL}${id}/`)
   };
 
-  w.AppProveedor = w.AppProveedor || {};
-  w.AppProveedor.API = proveedoresAPI;
-
-  // Backwards compatibility wrapper
   w.Sintel = w.Sintel || {};
   w.Sintel.Proveedores = w.Sintel.Proveedores || {};
-  w.Sintel.Proveedores.API = w.AppProveedor.API;
+  w.Sintel.Proveedores.API = proveedoresAPI;
 
 })(window);
