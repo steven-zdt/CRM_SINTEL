@@ -227,3 +227,119 @@ def test_search_no_cruza_tenants(tenant_a, tenant_b, fake_provider):
     with schema_context(tenant_b.schema_name):
         emp_b = _empresa(tenant_b.schema_name)
         assert ret.search(empresa=emp_b, query="tornillo acero confidencial", k=10) == []
+
+
+# --------------------------------------------------------------------------- #
+# Cache de query-embeddings (AI-VECTOR-11A)
+# --------------------------------------------------------------------------- #
+class _CountingProvider(FakeEmbeddingProvider):
+    """Mismo provider fake, pero cuenta cuantas veces se invoca embed_query."""
+
+    def __init__(self):
+        self.embed_query_calls = 0
+
+    def embed_query(self, text):
+        self.embed_query_calls += 1
+        return super().embed_query(text)
+
+
+def test_search_cache_hit_no_reembede_texto_repetido(tenant_a):
+    import uuid
+
+    provider = _CountingProvider()
+    emb = EmbeddingService(provider=provider)
+    ret = RetrievalService(provider=provider)
+    q = f"acero tornillo cache test {uuid.uuid4()}"
+    with schema_context(tenant_a.schema_name):
+        emp = _empresa(tenant_a.schema_name)
+        _seed(emb, emp, [("X", "acero tornillo perno")])
+        provider.embed_query_calls = 0  # descartar el embed del seed
+
+        hits1 = ret.search(empresa=emp, query=q, k=5)
+        assert provider.embed_query_calls == 1
+
+        hits2 = ret.search(empresa=emp, query=q, k=5)
+        # 2a llamada: cache hit -- no vuelve a invocar al provider.
+        assert provider.embed_query_calls == 1
+        assert [h.source_id for h in hits1] == [h.source_id for h in hits2]
+
+
+def test_search_cache_miss_con_texto_distinto(tenant_a):
+    import uuid
+
+    provider = _CountingProvider()
+    emb = EmbeddingService(provider=provider)
+    ret = RetrievalService(provider=provider)
+    suffix = uuid.uuid4()
+    with schema_context(tenant_a.schema_name):
+        emp = _empresa(tenant_a.schema_name)
+        _seed(emb, emp, [("X", "acero tornillo perno")])
+        provider.embed_query_calls = 0
+
+        ret.search(empresa=emp, query=f"acero {suffix} uno", k=5)
+        ret.search(empresa=emp, query=f"acero {suffix} dos", k=5)
+        # textos distintos -- 2 embeds reales, ningun cache hit.
+        assert provider.embed_query_calls == 2
+
+
+def test_search_cache_no_cruza_tenants(tenant_a, tenant_b):
+    import uuid
+
+    provider = _CountingProvider()
+    emb = EmbeddingService(provider=provider)
+    ret = RetrievalService(provider=provider)
+    q = f"acero tornillo cache cross-tenant {uuid.uuid4()}"
+
+    with schema_context(tenant_a.schema_name):
+        emp_a = _empresa(tenant_a.schema_name)
+        _seed(emb, emp_a, [("X", "acero tornillo perno")])
+        provider.embed_query_calls = 0
+        ret.search(empresa=emp_a, query=q, k=5)
+        assert provider.embed_query_calls == 1
+
+    with schema_context(tenant_b.schema_name):
+        emp_b = _empresa(tenant_b.schema_name)
+        # mismo texto, tenant distinto -- NO debe reusar el cache de tenant_a
+        # (la key incluye connection.schema_name).
+        ret.search(empresa=emp_b, query=q, k=5)
+        assert provider.embed_query_calls == 2
+
+
+def test_search_cache_invalida_por_modelo(tenant_a):
+    import uuid
+
+    provider = _CountingProvider()
+    emb = EmbeddingService(provider=provider)
+    ret = RetrievalService(provider=provider)
+    q = f"acero tornillo cache modelo {uuid.uuid4()}"
+    with schema_context(tenant_a.schema_name):
+        emp = _empresa(tenant_a.schema_name)
+        _seed(emb, emp, [("X", "acero tornillo perno")])
+        provider.embed_query_calls = 0
+
+        ret.search(empresa=emp, query=q, k=5)
+        assert provider.embed_query_calls == 1
+
+        provider.model = "otro-modelo-v2"  # simula un cambio de proveedor/modelo
+        ret.search(empresa=emp, query=q, k=5)
+        # modelo distinto -> key distinta -> cache miss, no sirve un vector viejo.
+        assert provider.embed_query_calls == 2
+
+
+def test_search_cache_fail_open_si_redis_no_responde(tenant_a, monkeypatch):
+    from apps.tenant.ai_knowledge.services import query_embedding_cache
+
+    def _broken_redis():
+        raise ConnectionError("redis no disponible (test)")
+
+    monkeypatch.setattr(query_embedding_cache, "_redis", _broken_redis)
+
+    provider = _CountingProvider()
+    emb = EmbeddingService(provider=provider)
+    ret = RetrievalService(provider=provider)
+    with schema_context(tenant_a.schema_name):
+        emp = _empresa(tenant_a.schema_name)
+        _seed(emb, emp, [("X", "acero tornillo perno")])
+        # sin cache disponible, search() sigue funcionando (fail-open).
+        hits = ret.search(empresa=emp, query="acero", k=5)
+        assert hits and hits[0].source_id == "X"

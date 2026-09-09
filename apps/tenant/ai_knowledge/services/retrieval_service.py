@@ -21,6 +21,10 @@ from pgvector.django import CosineDistance
 from apps.services.ai.context import AIContext
 from apps.services.ai.providers import AIEmbeddingProvider, get_embedding_provider
 from apps.tenant.ai_knowledge.models import AIKnowledgeChunk
+from apps.tenant.ai_knowledge.services.query_embedding_cache import (
+    get_cached_embedding,
+    set_cached_embedding,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +75,13 @@ class RetrievalService:
         k = max(1, min(int(k), MAX_K))
         empresa_id = _resolve_empresa_id(empresa)
 
-        qvec = self._provider.embed_query(query)
+        # AI-VECTOR-11A: cache de query-embeddings (L2). El mismo texto+modelo
+        # siempre da el mismo vector -- evita re-correr la inferencia ONNX en
+        # consultas repetidas. Fail-open: si el cache falla, se embebe normal.
+        qvec = get_cached_embedding(query, self._provider.model)
+        if qvec is None:
+            qvec = self._provider.embed_query(query)
+            set_cached_embedding(query, self._provider.model, qvec)
 
         qs = (
             AIKnowledgeChunk.objects.filter(empresa_id=empresa_id, embedding__isnull=False)

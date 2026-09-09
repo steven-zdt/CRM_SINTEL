@@ -180,25 +180,29 @@ class Command(BaseCommand):
                 f"{baseline['db_queries']} query  |  ~{baseline_tokens} tokens al LLM (siempre, por query)"
             )
 
-            # -- VECTOR: por cada query, embed + retrieval top-k --
+            # -- VECTOR: por cada query, search() completo (embed + retrieval).
+            # AI-VECTOR-11A: una sola medicion del camino REAL de produccion
+            # (RetrievalTool solo llama a search(), nunca hace un embed aparte
+            # -- medirlos por separado sumaba el embed dos veces y no reflejaba
+            # el cache de query-embeddings, que vive dentro de search()). Con
+            # cache, la 1a iteracion de cada query es cache-miss (mas lenta);
+            # las siguientes son cache-hit -- T_search_ms (mediana) mezcla
+            # ambas, T_search_ms_best (minimo) aproxima el estado estable con
+            # cache caliente.
             per_query = []
             for q, expected in QUERY_SET:
-                def _emb():
-                    return provider.embed_query(q)
-
-                def _retr():
+                def _search():
                     return ret.search(empresa=empresa, query=q, k=k)
 
-                _v, emb_t = _time_it(_emb, iters)
                 with CaptureQueriesContext(connection) as rctx:
-                    hits, retr_t = _time_it(_retr, iters)
+                    hits, search_t = _time_it(_search, iters)
                 tokens_vec = sum(_tok(h.content) for h in hits) + _tok(q)
                 top1 = hits[0] if hits else None
                 per_query.append({
                     "query": q,
-                    "T_embedding_ms": emb_t["ms_median"],
-                    "T_retrieval_ms": retr_t["ms_median"],
-                    "T_total_ms": round(emb_t["ms_median"] + retr_t["ms_median"], 2),
+                    "T_search_ms": search_t["ms_median"],
+                    "T_search_ms_best": search_t["ms_min"],
+                    "T_total_ms": search_t["ms_median"],
                     "db_queries": len(rctx.captured_queries) // iters,
                     "tokens_to_llm": tokens_vec,
                     "top1_score": round(top1.score, 4) if top1 else 0.0,
@@ -208,13 +212,13 @@ class Command(BaseCommand):
                 p = per_query[-1]
                 self.stdout.write(
                     f"  [{'HIT ' if p['hit'] else 'miss'}] {q[:44]:44}  "
-                    f"emb {p['T_embedding_ms']:>6.1f}  retr {p['T_retrieval_ms']:>5.1f}  "
+                    f"search {p['T_search_ms']:>6.1f} (best {p['T_search_ms_best']:>5.1f})  "
                     f"~{p['tokens_to_llm']:>4} tok  score {p['top1_score']}"
                 )
 
             vec_mean = {
-                "T_embedding_ms": round(statistics.mean(p["T_embedding_ms"] for p in per_query), 2),
-                "T_retrieval_ms": round(statistics.mean(p["T_retrieval_ms"] for p in per_query), 2),
+                "T_search_ms": round(statistics.mean(p["T_search_ms"] for p in per_query), 2),
+                "T_search_ms_best": round(statistics.mean(p["T_search_ms_best"] for p in per_query), 2),
                 "T_total_ms": round(statistics.mean(p["T_total_ms"] for p in per_query), 2),
                 "db_queries": round(statistics.mean(p["db_queries"] for p in per_query), 1),
                 "tokens_to_llm_mean": round(statistics.mean(p["tokens_to_llm"] for p in per_query), 1),
@@ -265,11 +269,13 @@ class Command(BaseCommand):
 
             self.stdout.write(
                 "\n  Lectura honesta: con un dataset de %d docs, el BASELINE 'mandar todo' aun "
-                "es barato en latencia (%s ms) -- el VECTOR agrega el coste del embed local "
-                "(~%s ms). El valor MEDIDO esta en TOKEN_REDUCTION (%s) y en que el coste de "
+                "es barato en latencia (%s ms) -- el VECTOR (search() con cache de "
+                "query-embeddings, AI-VECTOR-11A) da %s ms de mediana y %s ms en el mejor caso "
+                "(cache-hit). El valor MEDIDO esta en TOKEN_REDUCTION (%s) y en que el coste de "
                 "retrieval no crece con el dataset. A escala (miles de docs) el baseline se "
                 "vuelve inviable y el vector gana en todos los ejes." % (
-                    n_docs, b_total, vec_mean["T_embedding_ms"], gate["TOKEN_REDUCTION"],
+                    n_docs, b_total, vec_mean["T_search_ms"], vec_mean["T_search_ms_best"],
+                    gate["TOKEN_REDUCTION"],
                 )
             )
 

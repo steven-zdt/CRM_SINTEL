@@ -10,6 +10,10 @@ from apps.tenant.ai_knowledge.services.indexing_service import (
     IndexStats,
     ReindexResult,
 )
+from apps.tenant.ai_knowledge.services.query_embedding_cache import (
+    get_cached_embedding,
+    set_cached_embedding,
+)
 from apps.tenant.ai_knowledge.services.retrieval_service import RetrievalHit, RetrievalService
 from apps.tenant.ai_knowledge.services.sources import (
     FORBIDDEN_MODEL_FIELDS,
@@ -35,4 +39,6 @@ __all__ = [
     "FORBIDDEN_MODEL_FIELDS",
     "get_source",
     "is_indexable",
+    "get_cached_embedding",
+    "set_cached_embedding",
 ]

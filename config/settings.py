@@ -990,6 +990,11 @@ AI_WRITE_ENABLED = os.getenv("AI_WRITE_ENABLED", "false").lower() == "true"
 # permite habilitar/deshabilitar SOLO el RetrievalTool de forma independiente
 # (rollout gradual y rollback de AI-VECTOR-11). Default false.
 AI_RETRIEVAL_ENABLED = os.getenv("AI_RETRIEVAL_ENABLED", "false").lower() == "true"
+# AI-VECTOR-11A: TTL (segundos) del cache de query-embeddings en Redis
+# (apps/tenant/ai_knowledge/services/query_embedding_cache.py). El vector de
+# un texto+modelo no "vence" semanticamente -- el TTL solo acota el
+# crecimiento de memoria en Redis frente a queries variadas del LLM.
+AI_EMBED_CACHE_TTL_S = int(os.getenv("AI_EMBED_CACHE_TTL_S", str(6 * 3600)))
 
 # ============================================================================
 # Logging Configuration

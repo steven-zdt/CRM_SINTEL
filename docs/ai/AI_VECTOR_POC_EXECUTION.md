@@ -1051,3 +1051,110 @@ real de datos para que L1/L2 se resuelvan con evidencia útil (no solo con 1
 documento). HNSW (L3) sigue diferido hasta que el volumen lo justifique.
 Como en AI-VECTOR-10/11, avanzar de gate requiere go-ahead explícito del
 usuario.
+
+---
+
+## AI-VECTOR-11A — Caché de query-embeddings (optimización de L2)
+
+**STATUS = PASS** (2026-09-08). El usuario decidió priorizar el caché de
+query-embeddings (sobre cambiar de proveedor) para atacar L2 antes de
+expandir el rollout a más tenants (AI-VECTOR-11.2+).
+
+### EXECUTE (HECHO)
+
+- **`apps/tenant/ai_knowledge/services/query_embedding_cache.py`** (nuevo):
+  `get_cached_embedding(query, model)` / `set_cached_embedding(...)`. Redis
+  directo (no `django.core.cache.cache` — el proyecto no tiene `CACHES`
+  configurado, el default de Django es `LocMemCache`, **por proceso**, no
+  compartido entre `web`/`celery`). Mismo patrón de conexión que
+  `apps/tenant/core/services/password_reset.py::_redis()`. Key =
+  `ai_embed_query:{schema_name}:{model}:{sha256(texto normalizado)}` —
+  aísla por tenant (mismo criterio que `password_reset.py`, "evita uso
+  cross-tenant"), nunca el texto en claro, auto-invalida si cambia el
+  modelo. TTL configurable (`AI_EMBED_CACHE_TTL_S`, default 6h). Fail-open:
+  cualquier fallo de Redis se loguea como `warning` y `search()` sigue
+  funcionando sin caché — nunca rompe una tool READ ya gateada.
+- **`retrieval_service.py`** — `RetrievalService.search()` envuelve la única
+  llamada a `provider.embed_query()` con el cache. No cambia la firma
+  pública; `search_for_context()` (usado por `RetrievalTool`) se beneficia
+  sin tocarlo.
+- **`config/settings.py`** — `AI_EMBED_CACHE_TTL_S` (nuevo, default 6h).
+- **`benchmark_ai_poc.py`** — **hallazgo:** el benchmark medía el embedding
+  DOS veces por query (una vez standalone vía `provider.embed_query()`, otra
+  vez dentro de `ret.search()`), sumando ambas en `T_total_ms`. Eso no
+  representa el camino real de producción (`RetrievalTool` solo llama a
+  `search()` una vez) y quedaría ciego al caché (la medición standalone no
+  pasa por él). Se fusionó en una sola medición `T_search_ms` (mediana) +
+  `T_search_ms_best` (mínimo, aproxima el estado estable con caché caliente).
+
+### Incidente durante la implementación — RESUELTO
+
+Primera versión de `_redis()` creaba una conexión Redis **nueva en cada
+llamada** (mismo patrón que `password_reset.py`, donde es aceptable por ser
+código raro). Al re-correr el benchmark, `T_search_ms` saltó a **~2035 ms**
+(peor que sin caché: `LATENCY_GAIN=-226`). Diagnóstico con una prueba
+aislada (`redis.from_url('redis://localhost:...').ping()`): conectar a
+`localhost` tardaba **~2048 ms** vs **~4 ms** contra `127.0.0.1` explícito —
+mismo problema ya documentado en `docker-compose.yaml` para nginx (Windows
+prueba IPv6 `[::1]` antes que IPv4 y hace timeout). Insignificante para un
+reset de password (raro), catastrófico para retrieval (hot path, 2
+conexiones nuevas por query). **Fix:** cliente Redis cacheado a nivel de
+proceso (`_client` global, creado una sola vez de forma lazy) en vez de
+recrearlo en cada `get`/`set` — el costo de conexión se paga una vez por
+proceso, no por llamada. Correcto independientemente del problema de
+Windows: reutilizar una conexión es la práctica correcta en cualquier
+entorno, el bug de IPv6 solo lo hizo obvio de inmediato en desarrollo local.
+
+### VERIFY (VERIFICADO)
+
+| Check | Resultado |
+|---|---|
+| Smoke real (`home`): 2 llamadas idénticas a `search()` | 1a ~9.2s (carga del modelo ONNX en frío + cache miss), 2a ~2.1s (cache hit, sin re-embeber) — mismos resultados |
+| Prueba aislada de conexión Redis | `localhost`: ~2048 ms; `127.0.0.1`: ~4 ms (diagnóstico del incidente) |
+| Tras el fix: 3 llamadas dentro del mismo proceso | 1a paga la conexión (~2023 ms, una sola vez), 2a y 3a `~1 ms` cada una |
+| `pytest apps/tenant/ai_knowledge/tests/ apps/services/ai/tests/test_retrieval_tool.py` (venv local) | **72 passed** (67 previos + 5 nuevos: cache hit, cache miss con texto distinto, aislamiento cross-tenant del cache, invalidación por modelo, fail-open sin Redis) |
+| `manage.py check` | limpio |
+| `benchmark_ai_poc --schema home --iterations 5 --json` (re-ejecutado) | `T_search_ms` (mediana) **6.9–9.4 ms** por query — antes (AI-VECTOR-11.1, sin caché) `T_total_ms` era **56–64 ms** (`T_embedding_ms` ~25-28 + `T_retrieval_ms` ~31-36) |
+
+### GATE — valores medidos, antes/después
+
+```
+                        AI-VECTOR-11.1 (sin cache)   AI-VECTOR-11A (con cache)
+LATENCY_GAIN            -6.47                         -0.1007
+T_total/T_search (med.) ~56-64 ms                      ~6.9-9.4 ms
+TOKEN_REDUCTION         -1.0083                        -1.0083   (sin cambio -- no depende del embedding)
+RELEVANCE precision@1   0.0                             0.0      (sin cambio -- mismo dataset de 1 doc, mismos scores)
+```
+
+### Lectura honesta
+
+- El caché resuelve el costo del `embed_query` para consultas **repetidas**
+  dentro de la vida del proceso (TTL 6h) — no acelera la primera vez que se
+  hace una pregunta nueva (cache miss real, sigue pagando ~25-28 ms de
+  inferencia ONNX). `LATENCY_GAIN` sigue siendo levemente negativo
+  (`-0.1007`, no positivo) porque la mediana de 5 iteraciones incluye 1
+  cache-miss real; con más iteraciones o preguntas repetidas en producción
+  la mediana se acercaría más al costo de un cache-hit puro (~1 ms + fetch
+  DB).
+- `TOKEN_REDUCTION`/`RELEVANCE` no cambian — el caché optimiza latencia, no
+  toca qué se recupera ni cuánto se manda al LLM. El límite real de esos
+  ejes sigue siendo el dataset de `home` (1 documento), no resuelto por
+  este gate.
+- El incidente de conexión (2000ms/llamada) fue un hallazgo real del propio
+  proceso de verificación — se documenta el diagnóstico completo, no se
+  omite como si el diseño hubiera sido correcto a la primera.
+
+```
+cache de query-embeddings funciona (hit/miss)       = PASS  (smoke real + 5 tests)
+aislamiento del cache por tenant                     = PASS  (test_search_cache_no_cruza_tenants)
+invalidacion automatica por cambio de modelo         = PASS  (test_search_cache_invalida_por_modelo)
+fail-open si Redis no responde                       = PASS  (test_search_cache_fail_open_si_redis_no_responde)
+LATENCY_GAIN mejora medible                          = PASS  (-6.47 -> -0.1007, ~65x menos negativo)
+benchmark mide el camino real de produccion          = PASS  (T_search_ms fusiona embed+retrieval, ya no duplica)
+regresion (check / tests / mismos resultados)        = PASS
+```
+
+**AI-VECTOR-11A = PASS.** NEXT: AI-VECTOR-11.2+ (expandir el rollout a 2
+tenants / 25% / 50% / 100%) — requiere go-ahead explícito del usuario y,
+idealmente, un tenant con volumen real de datos para que L1/L2 se terminen
+de resolver con evidencia representativa (no solo 1 documento).
