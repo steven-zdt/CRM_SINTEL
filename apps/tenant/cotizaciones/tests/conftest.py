@@ -15,28 +15,13 @@ from django.contrib.auth import get_user_model
 from apps.public.tenants.models import TenantMembership
 
 
-@pytest.fixture
-def tenant(db):
-    """
-    Fixture that returns an existing test tenant and sets up database schema.
-    """
-    tenant_obj = (
-        Client.objects.exclude(schema_name='public')
-        .exclude(schema_name__contains='_')
-        .only('id', 'schema_name', 'nombre')
-        .first()
-    )
+def _ensure_tenant(schema_name, nombre):
+    tenant_obj = Client.objects.filter(schema_name=schema_name).only('id', 'schema_name', 'nombre').first()
     if not tenant_obj:
-        schema = 'testtenant'
-        tenant_obj = Client.objects.filter(schema_name=schema).only('id', 'schema_name', 'nombre').first()
-        if not tenant_obj:
-            with schema_context('public'):
-                tenant_obj = Client(
-                    schema_name=schema,
-                    nombre='Test Tenant'
-                )
-                tenant_obj.auto_create_schema = False
-                tenant_obj.save(force_insert=True)
+        with schema_context('public'):
+            tenant_obj = Client(schema_name=schema_name, nombre=nombre)
+            tenant_obj.auto_create_schema = False
+            tenant_obj.save(force_insert=True)
 
     Domain.objects.get_or_create(
         tenant=tenant_obj,
@@ -51,11 +36,36 @@ def tenant(db):
     # 'facturas' agregado para el test de bloqueo de DELETE por Factura
     # vinculada (Factura.cotizacion_uuid) -- auditoria REL Cotizaciones
     # FASE 5, 2026-08-26.
-    required_apps = ['empresa', 'perfil', 'tenant_clientes', 'tenant_cotizaciones', 'facturas']
+    # 'tenant_ventas' agregado para los tests de convertir_a_venta()
+    # (COTIZACIONES-01, 2026-09-08).
+    required_apps = ['empresa', 'perfil', 'tenant_clientes', 'tenant_cotizaciones', 'facturas', 'tenant_ventas']
     for app in required_apps:
         call_command('migrate_schemas', '--tenant', '-s', tenant_obj.schema_name, app, '--noinput', verbosity=0)
 
     return tenant_obj
+
+
+@pytest.fixture
+def tenant(db):
+    """
+    Fixture that returns an existing test tenant and sets up database schema.
+    """
+    tenant_obj = (
+        Client.objects.exclude(schema_name='public')
+        .exclude(schema_name__contains='_')
+        .only('id', 'schema_name', 'nombre')
+        .first()
+    )
+    if tenant_obj:
+        return _ensure_tenant(tenant_obj.schema_name, tenant_obj.nombre or 'Test Tenant')
+    return _ensure_tenant('testtenant', 'Test Tenant')
+
+
+@pytest.fixture
+def tenant_b(db):
+    """Segundo tenant independiente, para tests de aislamiento cross-tenant
+    (COTIZACIONES-01: Cotizacion->Venta, 2026-09-08)."""
+    return _ensure_tenant('testtenantb_cot', 'Test Tenant B Cotizaciones')
 
 
 @pytest.fixture

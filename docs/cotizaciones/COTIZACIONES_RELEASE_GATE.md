@@ -70,3 +70,53 @@ Los fixes de backend/frontend que sí se hicieron hoy (DELETE vía Service Layer
 ## Resumen de commits de esta misión
 
 Todos los cambios de código de esta pasada (backend + frontend + 2 migraciones + 5 tests nuevos) se consolidan en un solo commit tras la verificación final de la suite completa (ver mensaje de commit para el detalle línea por línea).
+
+---
+
+## Actualización 2026-09-08 — COTIZACIONES-01: máquina de estados + Cotización→Venta
+
+**Veredicto actualizado:**
+
+```
+COTIZACIONES = COMPLETED_WITH_DEFERRED
+```
+
+Se mantiene el mismo veredicto (no `VERIFIED` puro) porque el catálogo
+Producto/Servicio inalcanzable en UI (arriba) sigue sin resolver — es un
+`GAP_DE_NEGOCIO` explícito, no algo que esta misión debía decidir. Pero los
+2 gaps más grandes de "Otra deuda documentada" (§61-66 arriba) **se cierran
+en esta pasada**:
+
+- ✅ **Máquina de estados**: `CotizacionService.TRANSICIONES_VALIDAS` +
+  `cambiar_estado()`. `estado` removido de `allowed_fields` — ya no es
+  editable vía `PATCH` genérico. Endpoints `enviar/volver-a-borrador/
+  aceptar/cancelar`. Nombres reales (`BORRADOR/ENVIADA/ACEPTADA/CANCELADA`),
+  no los `APROBADA/ARCHIVADA` que asumía el mission brief original — decisión
+  explícita del usuario tras verificar que esos nombres no existen en el
+  dominio real. Detalle completo: `docs/cotizaciones/COTIZACIONES_STATE_MACHINE.md`.
+- ✅ **Cotización→Venta**: `CotizacionService.convertir_a_venta()`, endpoint
+  `convertir-a-venta`. Solo desde `ACEPTADA`, idempotente (`Venta.
+  cotizacion_uuid` nuevo campo `unique=True` + `select_for_update`). Items
+  copiados como snapshot (sin vincular catálogo de Inventario — no existe
+  mapeo real entre `cotizaciones.Producto/Servicio` e `inventario.Producto/
+  Servicio`, ver `COTIZACIONES_INTEGRATIONS.md`).
+- ✅ **H8** (gap de aislamiento sin explotar, hallado en esta pasada):
+  `get_cotizacion_for_totals`/`get_items_subtotal` ahora exigen `empresa_id`.
+
+**No tocado en esta pasada** (decisión explícita del usuario, ver
+`COTIZACIONES_FLOW.md`): el bridge manual `Factura.cotizacion_uuid` (salta
+Ventas) se deja como está — ya tiene datos reales en producción. El catálogo
+Producto/Servicio inalcanzable en UI sigue como `GAP_DE_NEGOCIO`. Permisos
+se mantienen binarios (mismo criterio ya aplicado a `proveedores` en la
+misma sesión).
+
+**Governance**: `manage.py check` limpio, `makemigrations --check --dry-run`
+limpio, 1 migración nueva (`tenant_ventas.0004_venta_cotizacion_uuid`,
+aditiva) aplicada a los 3 tenants reales sin conflicto. Tests: **42 passed,
+0 failed** (suite completa de `apps/tenant/cotizaciones/tests/`, venv local
+— incluye los 22 preexistentes + 20 nuevos: 13 de máquina de estados, 7 de
+conversión a venta).
+
+Documentación nueva de esta pasada: `docs/cotizaciones/
+COTIZACIONES_STATE_MACHINE.md`, `COTIZACIONES_INTEGRATIONS.md`,
+`COTIZACIONES_FLOW.md`.

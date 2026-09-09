@@ -180,6 +180,19 @@ class Venta(SintelTenantBaseModel):
         verbose_name=_("Factura electronica DIAN"),
     )
 
+    cotizacion_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        db_index=True,
+        verbose_name=_("Cotizacion de origen"),
+        help_text=_(
+            "Soft-reference (sin FK) a la Cotizacion desde la que se convirtio "
+            "esta Venta -- COTIZACIONES-01. unique=True garantiza idempotencia: "
+            "una Cotizacion solo puede generar una Venta."
+        ),
+    )
+
     fecha_emision = models.DateField(verbose_name=_("Fecha de emision"))
     fecha_vencimiento = models.DateField(null=True, blank=True, verbose_name=_("Fecha de vencimiento"))
 

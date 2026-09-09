@@ -31,6 +31,22 @@ class CotizacionService:
     MONEY_Q = Decimal("0.01")
     HUNDRED = Decimal("100")
 
+    # COTIZACIONES-01: unica fuente de verdad de transiciones validas. Los
+    # nombres son los reales del modelo (BORRADOR/ENVIADA/ACEPTADA/CANCELADA)
+    # -- no BORRADOR/ENVIADA/APROBADA/ARCHIVADA, que no existen en este
+    # dominio. ACEPTADA y CANCELADA son terminales: no se permite revertir
+    # una cotizacion ya aceptada (evita cambios comerciales silenciosos
+    # sobre una propuesta ya aprobada por el cliente), ni reactivar una
+    # cancelada sin crear una nueva.
+    TRANSICIONES_VALIDAS = {
+        Cotizacion.Estado.BORRADOR: {Cotizacion.Estado.ENVIADA, Cotizacion.Estado.CANCELADA},
+        Cotizacion.Estado.ENVIADA: {
+            Cotizacion.Estado.BORRADOR, Cotizacion.Estado.ACEPTADA, Cotizacion.Estado.CANCELADA,
+        },
+        Cotizacion.Estado.ACEPTADA: set(),
+        Cotizacion.Estado.CANCELADA: set(),
+    }
+
     @staticmethod
     def _to_decimal(value, field_name="value", default="0.00"):
         if value is None:
@@ -197,7 +213,7 @@ class CotizacionService:
             cls._sync_items(cotizacion, items_data)
 
         # Recalcular totales finales
-        cls.calcular_totales(cotizacion.id)
+        cls.calcular_totales(cotizacion.id, empresa.id)
         cotizacion.refresh_from_db()
 
         # Generar PDF sincronizado con datos guardados
@@ -220,9 +236,9 @@ class CotizacionService:
         return f"{prefijo}{siguiente:04d}{sufijo}"
 
     @staticmethod
-    def calcular_totales(cotizacion_id):
-        cotizacion = CotizacionCRUDService.get_cotizacion_for_totals(cotizacion_id)
-        subtotal = CotizacionCRUDService.get_items_subtotal(cotizacion.id)
+    def calcular_totales(cotizacion_id, empresa_id):
+        cotizacion = CotizacionCRUDService.get_cotizacion_for_totals(cotizacion_id, empresa_id)
+        subtotal = CotizacionCRUDService.get_items_subtotal(cotizacion.id, empresa_id)
 
         aiu_admin = subtotal * (Decimal(str(cotizacion.porcentaje_aiu_admin or 0)) / CotizacionService.HUNDRED)
         aiu_imprevistos = subtotal * (Decimal(str(cotizacion.porcentaje_aiu_imprevistos or 0)) / CotizacionService.HUNDRED)
@@ -247,8 +263,14 @@ class CotizacionService:
         """
         items_data = datos.pop('items', None)
 
+        # COTIZACIONES-01: 'estado' NO es editable via PATCH generico -- la
+        # unica via para transicionar es cambiar_estado() (accion de dominio
+        # explicita, con validacion de transicion). Antes estaba en esta
+        # lista y se podia hacer PATCH {"estado": "ACEPTADA"} sin ninguna
+        # validacion (deuda documentada en varias auditorias previas del
+        # modulo, nunca cerrada hasta ahora).
         allowed_fields = [
-            'cliente', 'configuracion', 'tipo_cotizacion', 'estado',
+            'cliente', 'configuracion', 'tipo_cotizacion',
             'fecha_emision', 'iva_porcentaje',
             'porcentaje_aiu_admin', 'porcentaje_aiu_imprevistos', 'porcentaje_aiu_utilidad',
             'dias_totales', 'dias_infraestructura', 'dias_instalacion', 'dias_configuracion', 'dias_pruebas'
@@ -273,7 +295,7 @@ class CotizacionService:
             cls._sync_items(updated_instance, items_data)
 
         # Recalcular totales
-        cls.calcular_totales(updated_instance.id)
+        cls.calcular_totales(updated_instance.id, updated_instance.empresa_id)
         updated_instance.refresh_from_db()
 
         # Generar PDF sincronizado con datos guardados
@@ -311,3 +333,147 @@ class CotizacionService:
             })
 
         CotizacionCRUDService.delete_cotizacion(instance)
+
+    # ==================================================================
+    # Maquina de estados (COTIZACIONES-01)
+    # ==================================================================
+
+    @classmethod
+    @transaction.atomic
+    def cambiar_estado(cls, instance, nuevo_estado):
+        """
+        Unica via para transicionar el estado de una Cotizacion. Nunca via
+        PATCH generico -- 'estado' fue removido a proposito de
+        allowed_fields en actualizar_cotizacion().
+
+        select_for_update() serializa transiciones concurrentes sobre la
+        MISMA cotizacion (2 clicks de "Enviar" a la vez) -- mismo patron ya
+        usado en generar_codigo_unico() para el consecutivo.
+
+        Idempotente (mandato §10): repetir la transicion actual (ej. ENVIAR
+        de nuevo sobre algo que ya esta ENVIADA) no es un error, devuelve la
+        cotizacion tal cual sin tocarla -- solo una transicion a un estado
+        DISTINTO no permitido por TRANSICIONES_VALIDAS es rechazada.
+        """
+        from rest_framework.exceptions import ValidationError
+
+        if nuevo_estado not in Cotizacion.Estado.values:
+            raise ValidationError({"estado": [f"Estado '{nuevo_estado}' invalido."]})
+
+        cotizacion = Cotizacion.objects.select_for_update().filter(pk=instance.pk).first()
+        if not cotizacion:
+            raise ValidationError({"cotizacion": ["No encontrada."]})
+
+        actual = cotizacion.estado
+        if nuevo_estado == actual:
+            return cotizacion
+
+        permitidos = cls.TRANSICIONES_VALIDAS.get(actual, set())
+        if nuevo_estado not in permitidos:
+            raise ValidationError({
+                "estado": [f"Transicion no permitida: {actual} -> {nuevo_estado}."]
+            })
+
+        cotizacion.estado = nuevo_estado
+        cotizacion.save(update_fields=["estado", "updated_at"])
+        logger.info(
+            "[CotizacionService] estado %s -> %s (uuid=%s)", actual, nuevo_estado, cotizacion.uuid,
+        )
+        return cotizacion
+
+    # ==================================================================
+    # Cotizacion -> Venta (COTIZACIONES-01, mandato §12-14)
+    # ==================================================================
+
+    @classmethod
+    @transaction.atomic
+    def convertir_a_venta(cls, instance):
+        """
+        Convierte una Cotizacion ACEPTADA en una Venta. Venta pasa a ser
+        dueña del proceso comercial desde aqui -- Cotizaciones no vuelve a
+        tocar la Venta creada.
+
+        Idempotente (mandato §14): si ya existe una Venta con este
+        cotizacion_uuid, la devuelve tal cual en vez de crear una segunda.
+        select_for_update() sobre la Cotizacion serializa conversiones
+        concurrentes (doble click) igual que cambiar_estado().
+
+        Los items se copian como snapshot (descripcion + cantidad + precio +
+        IVA), SIN vincular producto/servicio de Inventario:
+        CotizacionItem.producto/servicio apuntan al catalogo PROPIO de
+        Cotizaciones (cotizaciones.Producto/Servicio), no a
+        inventario.Producto/Servicio -- no existe un mapeo real entre ambos
+        catalogos (ver docs/cotizaciones/COTIZACIONES_INTEGRATIONS.md).
+        Inventar una correspondencia por nombre/codigo seria una regla no
+        respaldada por evidencia real, con riesgo de vincular el producto
+        de inventario incorrecto.
+        """
+        from rest_framework.exceptions import ValidationError
+
+        from apps.tenant.ventas.models import Venta
+        from apps.tenant.ventas.services.crud_service import VentaCRUDService
+
+        cotizacion = Cotizacion.objects.select_for_update().filter(pk=instance.pk).first()
+        if not cotizacion:
+            raise ValidationError({"cotizacion": ["No encontrada."]})
+
+        existente = Venta.objects.filter(
+            cotizacion_uuid=cotizacion.uuid, empresa_id=cotizacion.empresa_id,
+        ).first()
+        if existente:
+            return existente
+
+        if cotizacion.estado != Cotizacion.Estado.ACEPTADA:
+            raise ValidationError({
+                "estado": [
+                    f"Solo una cotizacion ACEPTADA puede convertirse en venta "
+                    f"(estado actual: {cotizacion.estado})."
+                ]
+            })
+
+        if not cotizacion.cliente_id:
+            raise ValidationError({
+                "cliente": ["La cotizacion debe tener un cliente asignado para convertirla en venta."]
+            })
+
+        items = list(cotizacion.items.select_related("producto", "servicio").all())
+        if not items:
+            raise ValidationError({"items": ["La cotizacion no tiene items para convertir."]})
+
+        items_data = []
+        for item in items:
+            descripcion = (item.descripcion or "").strip()
+            if not descripcion:
+                if item.producto_id and item.producto:
+                    descripcion = item.producto.nombre
+                elif item.servicio_id and item.servicio:
+                    descripcion = item.servicio.nombre
+                else:
+                    descripcion = "Item de cotizacion"
+            items_data.append({
+                "descripcion": descripcion,
+                "cantidad": item.cantidad,
+                "precio_unitario": item.precio_unitario_venta,
+                "porcentaje_iva": cotizacion.iva_porcentaje,
+            })
+
+        venta = VentaCRUDService.crear_venta(
+            empresa=cotizacion.empresa,
+            cliente=cotizacion.cliente,
+            data={
+                "fecha_emision": timezone.now().date(),
+                "observaciones": (
+                    f"Generada desde Cotizacion "
+                    f"{cotizacion.codigo_unico or cotizacion.numero_cotizacion}."
+                ),
+            },
+            items_data=items_data,
+        )
+        venta.cotizacion_uuid = cotizacion.uuid
+        venta.save(update_fields=["cotizacion_uuid"])
+
+        logger.info(
+            "[CotizacionService] Venta uuid=%s creada desde Cotizacion uuid=%s",
+            venta.uuid, cotizacion.uuid,
+        )
+        return venta

@@ -100,7 +100,7 @@ class CotizacionItemBusinessService:
         # CotizacionItemViewSet (item individual via API) no cambia --
         # sigue recalculando de inmediato por defecto.
         if recalcular:
-            CotizacionService.calcular_totales(item.cotizacion_id)
+            CotizacionService.calcular_totales(item.cotizacion_id, empresa_id)
 
         return item
 
@@ -109,9 +109,10 @@ class CotizacionItemBusinessService:
     def eliminar_item(cls, instance, recalcular=True):
         from .business_service import CotizacionService  # WARNING: IMPORT LAZY — circular
         cotizacion_id = instance.cotizacion_id
+        empresa_id = instance.empresa_id
         CotizacionItemCRUDService.eliminar(instance)
         if recalcular:
-            CotizacionService.calcular_totales(cotizacion_id)
+            CotizacionService.calcular_totales(cotizacion_id, empresa_id)
         return True
 
 class CotizacionItemServiceMixin:

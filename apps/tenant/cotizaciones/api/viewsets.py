@@ -220,9 +220,62 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
     @action(detail=True, methods=['post'], url_path='recalcular')
     def recalcular(self, request, **kwargs):
         instance = self.get_object()
-        CotizacionService.calcular_totales(instance.id)
+        CotizacionService.calcular_totales(instance.id, instance.empresa_id)
         instance.refresh_from_db()
         return Response(self.get_serializer(instance).data)
+
+    # ------------------------------------------------------------------
+    # Maquina de estados (COTIZACIONES-01) -- accion de dominio explicita,
+    # nunca PATCH generico al campo 'estado'.
+    # ------------------------------------------------------------------
+    def _cambiar_estado_action(self, nuevo_estado):
+        # CotizacionService.cambiar_estado() lanza rest_framework.exceptions
+        # .ValidationError -- DRF la captura automaticamente y responde 400
+        # con el detalle estructurado, igual que create()/update() de esta
+        # misma vista (no envuelven sus propias llamadas al service).
+        instance = self.get_object()
+        cotizacion = CotizacionService.cambiar_estado(instance, nuevo_estado)
+        return Response(self.get_serializer(cotizacion).data)
+
+    @action(detail=True, methods=['post'], url_path='enviar')
+    def enviar(self, request, **kwargs):
+        return self._cambiar_estado_action(Cotizacion.Estado.ENVIADA)
+
+    @action(detail=True, methods=['post'], url_path='volver-a-borrador')
+    def volver_a_borrador(self, request, **kwargs):
+        return self._cambiar_estado_action(Cotizacion.Estado.BORRADOR)
+
+    @action(detail=True, methods=['post'], url_path='aceptar')
+    def aceptar(self, request, **kwargs):
+        return self._cambiar_estado_action(Cotizacion.Estado.ACEPTADA)
+
+    @action(detail=True, methods=['post'], url_path='cancelar')
+    def cancelar(self, request, **kwargs):
+        return self._cambiar_estado_action(Cotizacion.Estado.CANCELADA)
+
+    @action(detail=True, methods=['post'], url_path='convertir-a-venta')
+    def convertir_a_venta(self, request, **kwargs):
+        """Solo desde ACEPTADA (mandato §13). Idempotente (§14): un segundo
+        POST devuelve la misma Venta ya creada, con 200 (no 201). Import
+        diferido de Venta (apps externas siempre dentro del metodo, mismo
+        criterio que eliminar_cotizacion() con Factura)."""
+        from apps.tenant.ventas.models import Venta
+
+        instance = self.get_object()
+        ya_existia = Venta.objects.filter(
+            cotizacion_uuid=instance.uuid, empresa_id=instance.empresa_id,
+        ).exists()
+        venta = CotizacionService.convertir_a_venta(instance)
+        payload = {
+            "uuid": str(venta.uuid),
+            "estado": venta.estado,
+            "cliente_id": venta.cliente_id,
+            "subtotal": str(venta.subtotal),
+            "impuestos": str(venta.impuestos),
+            "total_neto": str(venta.total_neto),
+            "cotizacion_uuid": str(venta.cotizacion_uuid),
+        }
+        return Response(payload, status=status.HTTP_200_OK if ya_existia else status.HTTP_201_CREATED)
 
 
 class CotizacionItemViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionItemServiceMixin, BaseTenantViewSet):
