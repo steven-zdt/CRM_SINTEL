@@ -224,14 +224,44 @@ class DevengoServiceMixin(BaseServiceMixin):
         )
 
     def service_validar_duplicado(self, payload):
-        """Valida que no exista devengo duplicado."""
+        """
+        Valida que no exista devengo duplicado.
+
+        WARNING [mision auditoria nomina "sincronizacion backend<->frontend",
+        2026-09-10]: bug real encontrado al auditar el contrato JSON con un
+        POST real -- este pre-check (corre ANTES de que el serializer
+        resuelva el FK) asumia que 'empleado' siempre venia como PK entero,
+        y crasheaba con un ValueError interno filtrado al usuario
+        ("Field 'id' expected a number but got '<uuid>'") si se enviaba UUID
+        -- la forma correcta segun AGENTS.md Sec.14 y lo que
+        UUIDOrPKRelatedField acepta explicitamente. Se resuelve aqui el
+        mismo UUID-o-PK que el serializer resolveria, ANTES de filtrar.
+        """
         empresa_id = self.get_empresa_id()
+        empleado_id = self._resolver_empleado_id(payload.get('empleado'), empresa_id)
         return self.business_service_class.validar_duplicado(
-            empleado_id=payload.get('empleado'),
+            empleado_id=empleado_id,
             periodo_mes=payload.get('periodo_mes'),
             fecha_pago=payload.get('fecha_pago'),
             empresa_id=empresa_id
         )
+
+    @staticmethod
+    def _resolver_empleado_id(valor, empresa_id):
+        """UUID-o-PK -> PK entero (o None si no resuelve), mismo criterio de
+        deteccion que UUIDOrPKRelatedField.to_internal_value() (serializers.py):
+        '-' presente y no son puros digitos => es UUID."""
+        if valor is None or valor == '':
+            return None
+        valor_str = str(valor).strip()
+        if '-' in valor_str and not valor_str.isdigit():
+            return Empleado.objects.filter(
+                empresa_id=empresa_id, uuid=valor_str
+            ).values_list('id', flat=True).first()
+        try:
+            return int(valor_str)
+        except (TypeError, ValueError):
+            return None
 
     def service_calcular_nomina(self, contrato, dias_laborados, **kwargs):
         """Calcula nomina usando servicio de calculo."""

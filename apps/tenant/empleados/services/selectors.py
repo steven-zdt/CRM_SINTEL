@@ -291,6 +291,39 @@ class EmpleadoSelector:
             id__in=solapados
         ).only('id', 'uuid', 'primer_nombre', 'primer_apellido', 'numero_documento')
 
+    @staticmethod
+    def get_empleados_pendientes_para_periodo(periodo):
+        """
+        Fuente unica de "empleados pendientes" de un PeriodoNomina especifico
+        (mision auditoria nomina FASE 4/6/15, 2026-09-10): empleados ACTIVOS
+        con contrato ACTIVO que todavia NO tienen un Devengo (no anulado)
+        vinculado a ESTE periodo. A diferencia de get_disponibles_para_periodo()
+        (que mira solapamiento de fechas para decidir elegibilidad ANTES de
+        preliquidar), este metodo mira el estado REAL del periodo DESPUES de
+        preliquidar -- es lo que responde "a quien le falta liquidar" y lo que
+        bloquea el cierre en PeriodoNominaBusinessService.cerrar_periodo().
+        """
+        tiene_devengo_en_periodo = Devengo.objects.filter(
+            empleado_id=OuterRef('pk'), periodo_id=periodo.id, anulado=False,
+        )
+        has_contract = Contrato.objects.filter(
+            empleado_id=OuterRef('pk'), activo=True, estado='ACTIVO', empresa_id=periodo.empresa_id,
+        )
+        return Empleado.objects.filter(
+            empresa_id=periodo.empresa_id, estado='ACTIVO',
+        ).annotate(
+            tiene_contrato_activo=Exists(has_contract),
+            tiene_devengo_en_periodo=Exists(tiene_devengo_en_periodo),
+            # FASE 11: la tabla de pendientes muestra cargo/tipo de contrato,
+            # nunca IDs tecnicos -- se anotan aqui para evitar N+1 en el
+            # endpoint (un solo query, no un fetch de Contrato por empleado).
+            contrato_uuid=Subquery(has_contract.values('uuid')[:1]),
+            contrato_cargo=Subquery(has_contract.values('cargo')[:1]),
+            contrato_tipo=Subquery(has_contract.values('tipo')[:1]),
+        ).filter(
+            tiene_contrato_activo=True, tiene_devengo_en_periodo=False,
+        ).only('id', 'uuid', 'primer_nombre', 'primer_apellido', 'numero_documento', 'fecha_ingreso')
+
 
 class ContratoSelector:
     """Read-only selectors para modelo Contrato."""
@@ -363,6 +396,21 @@ class DevengoSelector:
             )
 
         return qs.order_by('-fecha_pago', '-periodo_mes', 'id')
+
+    @staticmethod
+    def get_by_periodo(empresa_id: int, periodo_id: int):
+        """
+        FASE 17 (mision auditoria nomina, correccion arquitectonica 2026-09-10):
+        tab "Liquidados" de un PeriodoNomina especifico -- Devengo (no anulados)
+        vinculados a ESE periodo, con datos humanos de presentacion (nunca solo
+        UUID/PK). Complementa EmpleadoSelector.get_empleados_pendientes_para_
+        periodo() -- juntos responden "quien ya se liquido" y "a quien le falta".
+        """
+        return Devengo.objects.filter(
+            empresa_id=empresa_id, periodo_id=periodo_id, anulado=False,
+        ).select_related('empleado', 'contrato').only(
+            *DEVENGO_LIST_FIELDS, *_DEVENGO_LIST_TRAVERSALS
+        ).order_by('empleado__primer_apellido', 'empleado__primer_nombre')
 
     @staticmethod
     def get_detail(empresa_id: int, devengo_uuid):
@@ -454,9 +502,21 @@ class PeriodoNominaSelector:
 
     @staticmethod
     def get_list(empresa_id: int, estado: str = None):
+        """
+        mision auditoria nomina "correccion arquitectonica" (2026-09-10),
+        FASE 23: el historico (lista de periodos) debe mostrar Empleados y
+        Total Neto de un vistazo, no solo tras entrar a cada periodo -- se
+        anota via agregacion (una sola query, sin N+1 por fila de tabla).
+        """
         qs = PeriodoNomina.objects.filter(empresa_id=empresa_id).only(*PERIODO_NOMINA_LIST_FIELDS)
         if estado:
             qs = qs.filter(estado=estado)
+        qs = qs.annotate(
+            empleados_count=Count('devengos', filter=Q(devengos__anulado=False), distinct=True),
+            total_neto_periodo=Coalesce(
+                Sum('devengos__neto_pagar', filter=Q(devengos__anulado=False)), Decimal('0.00')
+            ),
+        )
         return qs.order_by('-periodo_mes', '-id')
 
     @staticmethod
@@ -478,6 +538,12 @@ class PeriodoNominaSelector:
         de empleados incluidos -- calculado SOLO sobre Devengo no anulados
         del periodo (Devengo sigue siendo la fuente de verdad del calculo
         individual, este selector solo agrega, nunca recalcula).
+
+        WARNING [mision auditoria nomina FASE 6/9/15, 2026-09-10]: agrega
+        'pendientes' (conteo, via EmpleadoSelector.get_empleados_pendientes_
+        para_periodo()) -- antes esta pantalla no mostraba a quien le faltaba
+        liquidar, que es exactamente lo que PeriodoNominaBusinessService.
+        cerrar_periodo() ahora bloquea.
         """
         qs = Devengo.objects.filter(
             empresa_id=empresa_id, periodo_id=periodo_id, anulado=False
@@ -498,7 +564,13 @@ class PeriodoNominaSelector:
             total_neto=Coalesce(Sum('neto_pagar'), Decimal('0.00')),
             empleados_incluidos=Count('id'),
         )
-        return {k: (str(v) if isinstance(v, Decimal) else v) for k, v in agregados.items()}
+        resultado = {k: (str(v) if isinstance(v, Decimal) else v) for k, v in agregados.items()}
+
+        periodo = PeriodoNomina.objects.filter(id=periodo_id, empresa_id=empresa_id).only('id', 'empresa_id').first()
+        resultado['pendientes'] = (
+            EmpleadoSelector.get_empleados_pendientes_para_periodo(periodo).count() if periodo else 0
+        )
+        return resultado
 
 
 # Compatibilidad legacy - tuplas de campos por modelo

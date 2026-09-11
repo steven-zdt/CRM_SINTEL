@@ -216,10 +216,33 @@
           </div>
           <div class="col-6">
             <label for="empleado-estado" class="form-label">Estado</label>
-            <select class="form-select" id="empleado-estado" name="estado" required>
+            <select class="form-select" id="empleado-estado" name="estado" required
+                    onchange="document.getElementById('empleado-retiro-fields').style.display = (this.value === 'RETIRADO') ? '' : 'none';
+                              document.getElementById('empleado-motivo_retiro').required = (this.value === 'RETIRADO');
+                              document.getElementById('empleado-fecha_retiro').required = (this.value === 'RETIRADO');">
               <option value="ACTIVO" {% if empleado.estado == "ACTIVO" %}selected{% endif %}>Activo</option>
               <option value="RETIRADO" {% if empleado.estado == "RETIRADO" %}selected{% endif %}>Retirado</option>
             </select>
+          </div>
+          <div id="empleado-retiro-fields" class="col-12 row g-3 mt-0"
+               style="display: {% if empleado.estado == 'RETIRADO' %}block{% else %}none{% endif %};">
+            <div class="col-6">
+              <label for="empleado-fecha_retiro" class="form-label">Fecha de Retiro</label>
+              <input type="date" class="form-control" id="empleado-fecha_retiro" name="fecha_retiro"
+                     value="{{ empleado.fecha_retiro|date:'Y-m-d' }}"
+                     {% if empleado.estado == "RETIRADO" %}required{% endif %}>
+            </div>
+            <div class="col-6">
+              <label for="empleado-motivo_retiro" class="form-label">Motivo de Retiro</label>
+              <select class="form-select" id="empleado-motivo_retiro" name="motivo_retiro"
+                      {% if empleado.estado == "RETIRADO" %}required{% endif %}>
+                <option value="">Seleccionar motivo...</option>
+                {% for value, label in motivo_retiro_choices %}
+                  <option value="{{ value }}" {% if empleado.motivo_retiro == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+              <small class="form-text text-muted">Determina si aplica indemnización por despido (CST art. 64).</small>
+            </div>
           </div>
         </div>
       </div>

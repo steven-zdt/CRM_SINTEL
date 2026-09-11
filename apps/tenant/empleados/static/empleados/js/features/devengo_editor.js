@@ -16,6 +16,11 @@
     // Estado: indica si se está cargando un empleado preseleccionado
     let _precargarEmpleado = false;
     let _empleadoPreseleccionado = null;
+    // mision auditoria nomina "correccion arquitectonica" (2026-09-10):
+    // UUID del PeriodoNomina activo cuando se abre "Liquidar" desde la
+    // pantalla de un periodo especifico -- null en el flujo clasico
+    // (Master-Detail de nomina_list.js, sin periodo).
+    let _periodoContexto = null;
 
     // ── Abrir formulario unificado ────────────────────────────────────────────
 
@@ -42,13 +47,18 @@
     }
 
     // Abrir formulario con empleado específico (llamado desde botón Nueva en Master)
-    async function openParaEmpleado(uuid, nombre) {
+    // periodoUuid (opcional): mision "correccion arquitectonica" (2026-09-10) --
+    // cuando se liquida desde la pantalla de un PeriodoNomina especifico
+    // (tab Pendientes), vincula el Devengo a ese periodo sin forzar sus dias.
+    async function openParaEmpleado(uuid, nombre, periodoUuid) {
         if (!uuid) return;
         _precargarEmpleado = true;
         _empleadoPreseleccionado = { uuid, nombre: nombre || 'Empleado' };
+        _periodoContexto = periodoUuid || null;
 
-        const url = `${API_URL}devengos/render-offcanvas/crear/?empleado=${encodeURIComponent(uuid)}`;
-        console.log(`${MOD} Abriendo formulario para empleado: ${nombre} (${uuid})`);
+        let url = `${API_URL}devengos/render-offcanvas/crear/?empleado=${encodeURIComponent(uuid)}`;
+        if (periodoUuid) url += `&periodo=${encodeURIComponent(periodoUuid)}`;
+        console.log(`${MOD} Abriendo formulario para empleado: ${nombre} (${uuid})${periodoUuid ? ` en periodo ${periodoUuid}` : ''}`);
         try {
             await htmx.ajax('GET', url, { target: `#${CONTAINER_ID}`, swap: 'innerHTML' });
         } catch (err) {
@@ -665,6 +675,7 @@
                 console.log(`${MOD} Cerrando offcanvas - limpiando estado preseleccionado`);
                 _precargarEmpleado = false;
                 _empleadoPreseleccionado = null;
+                _periodoContexto = null;
 
                 // Resetear campos ocultos
                 const empInput   = d.getElementById('devengo-empleado-id');
@@ -692,6 +703,9 @@
 
             if (evt.detail.successful) {
                 const oc = d.getElementById('offcanvas-devengo');
+                // Capturar ANTES de cerrar: hide.bs.offcanvas limpia
+                // _periodoContexto de forma asincrona (setupOffcanvasLoadListener).
+                const periodoAfectado = _periodoContexto;
 
                 // Cerrar offcanvas con transición suave
                 if (oc) {
@@ -703,6 +717,19 @@
 
                 // Notificar éxito y recargar ambas tablas
                 w.UIManager?.notifySuccess('✓ Nómina registrada correctamente');
+
+                // mision "correccion arquitectonica" (2026-09-10): si la
+                // liquidacion se hizo desde la pantalla de un periodo,
+                // refrescar SUS tablas Pendientes/Liquidados -- sin
+                // location.reload() (FASE 16/29 de la mision).
+                if (periodoAfectado) {
+                    // Pequeño delay: deja terminar la transicion de cierre de
+                    // ESTE offcanvas antes de reabrir el de PeriodoDetail
+                    // (evita solape visual entre dos .offcanvas-end).
+                    setTimeout(() => {
+                        w.Sintel?.Empleados?.PeriodoDetail?.refrescarListas?.(periodoAfectado);
+                    }, 350);
+                }
 
                 // Recargar Master (lista de empleados con nóminas)
                 setTimeout(() => {

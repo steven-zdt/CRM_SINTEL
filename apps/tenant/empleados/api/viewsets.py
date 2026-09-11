@@ -40,13 +40,14 @@ from apps.tenant.empleados.choices import (
     AFP_CHOICES,
     ARL_CHOICES,
     RIESGO_ARL_CHOICES,
+    MOTIVO_RETIRO_CHOICES,
 )
 from apps.tenant.empleados.services import (
     ContratoServiceMixin,
     DevengoServiceMixin,
     EmpleadoServiceMixin,
 )
-from apps.tenant.empleados.services.selectors import ContratoSelector, EmpleadoSelector
+from apps.tenant.empleados.services.selectors import ContratoSelector, EmpleadoSelector, DevengoSelector
 from apps.tenant.empleados.services.business_service import NominaCalculationService
 
 logger = logging.getLogger(__name__)
@@ -359,6 +360,7 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
                 'AFP_CHOICES':         AFP_CHOICES,
                 'ARL_CHOICES':         ARL_CHOICES,
                 'RIESGO_ARL_CHOICES':  RIESGO_ARL_CHOICES,
+                'motivo_retiro_choices': MOTIVO_RETIRO_CHOICES,
                 'sedes':               SedeSelector.get_list(empresa_id),
                 'areas':               AreaSelector.get_list(empresa_id),
                 'resoluciones_activas': resoluciones_activas,
@@ -866,6 +868,7 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
             
             dias_salario_pendiente = request.query_params.get('dias_salario_pendiente', 0)
             indemnizacion = request.query_params.get('indemnizacion', 0)
+            motivo_retiro = request.query_params.get('motivo_retiro')
             try:
                 dias_salario_pendiente = int(dias_salario_pendiente) if dias_salario_pendiente else 0
             except (ValueError, TypeError):
@@ -878,6 +881,20 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
             if not fecha_corte:
                 fecha_corte = date.today().isoformat()
 
+            # mision auditoria nomina FASE 21 (2026-09-10): si se pasa
+            # motivo_retiro, calcular la indemnizacion automaticamente (CST
+            # art. 64) en vez de exigir que el caller la invente. `indemnizacion`
+            # explicito sigue funcionando como override manual.
+            indemnizacion_info = None
+            if motivo_retiro:
+                from django.utils.dateparse import parse_date
+                fc = parse_date(fecha_corte) if isinstance(fecha_corte, str) else fecha_corte
+                indemnizacion_info = NominaCalculationService.calcular_indemnizacion_despido(
+                    contrato=contrato, fecha_retiro=fc, motivo_retiro=motivo_retiro,
+                )
+                if not request.query_params.get('indemnizacion'):
+                    indemnizacion = indemnizacion_info['valor']
+
             resultados = NominaCalculationService.calcular_liquidacion_prestaciones(
                 contrato=contrato,
                 tipo_liquidacion=tipo_liquidacion,
@@ -885,11 +902,18 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
                 dias_salario_pendiente=dias_salario_pendiente,
                 indemnizacion=indemnizacion
             )
+            if indemnizacion_info:
+                resultados['indemnizacion_detalle'] = indemnizacion_info
 
             # Convertir Decimal a String para JSONResponse
             for k, v in list(resultados.items()):
                 if isinstance(v, Decimal):
                     resultados[k] = str(v)
+            if resultados.get('indemnizacion_detalle'):
+                resultados['indemnizacion_detalle'] = {
+                    k: (str(v) if isinstance(v, Decimal) else v)
+                    for k, v in resultados['indemnizacion_detalle'].items()
+                }
 
             return Response(resultados, status=status.HTTP_200_OK)
         except Exception as e:
@@ -1595,6 +1619,17 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
             except Empleado.DoesNotExist:
                 pass
 
+        # mision auditoria nomina "correccion arquitectonica" (2026-09-10):
+        # contexto de PeriodoNomina cuando se abre "Liquidar" desde la pantalla
+        # de un periodo especifico -- el periodo es SOLO informativo/de
+        # vinculacion (FASE 12), nunca determina dias_laborados.
+        periodo_param = request.query_params.get('periodo')
+        if periodo_param:
+            try:
+                context['periodo'] = PeriodoNominaSelector.get_detail(empresa.id, periodo_param)
+            except PeriodoNomina.DoesNotExist:
+                pass
+
         # Inject defaults if present
         context['periodo_mes_default'] = request.query_params.get('periodo_mes', '')
         context['fecha_inicio_default'] = request.query_params.get('fecha_inicio', '')
@@ -1791,6 +1826,27 @@ class LiquidacionPrestacionViewSet(SintelDSVMixin, BaseTenantViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # mision auditoria nomina FASE 20 (2026-09-10): "No permitir liquidacion
+        # definitiva sin fecha de retiro." Antes se podia generar una
+        # LIQUIDACION_DEFINITIVA para un empleado que seguia ACTIVO.
+        if tipo_liq == 'LIQUIDACION_DEFINITIVA':
+            empleado_id = request.data.get('empleado_id')
+            try:
+                empleado_check = Empleado.objects.filter(
+                    empresa_id=empresa.id, id=int(empleado_id)
+                ).only('id', 'estado', 'fecha_retiro').get()
+            except (Empleado.DoesNotExist, ValueError, TypeError):
+                return Response(
+                    {'detail': 'empleado_id requerido y debe pertenecer a este tenant para LIQUIDACION_DEFINITIVA.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if empleado_check.estado != 'RETIRADO' or not empleado_check.fecha_retiro:
+                return Response(
+                    {'detail': 'No se puede generar una liquidacion definitiva para un empleado sin fecha de retiro. '
+                               'Retire al empleado primero (PATCH estado=RETIRADO con motivo_retiro y fecha_retiro).'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         # Calcular prestaciones con NominaCalculationService
         resultados = NominaCalculationService.calcular_liquidacion_prestaciones(
             contrato=contrato,
@@ -1965,6 +2021,7 @@ class LiquidacionPrestacionViewSet(SintelDSVMixin, BaseTenantViewSet):
         # Nuevos parametros opcionales
         dias_salario_pendiente = request.query_params.get('dias_salario_pendiente', 0)
         indemnizacion = request.query_params.get('indemnizacion', 0)
+        motivo_retiro = request.query_params.get('motivo_retiro')
 
         try:
             dias_salario_pendiente = int(dias_salario_pendiente) if dias_salario_pendiente else 0
@@ -1992,6 +2049,18 @@ class LiquidacionPrestacionViewSet(SintelDSVMixin, BaseTenantViewSet):
         except (Contrato.DoesNotExist, ValueError, TypeError):
             return Response({'error': 'Contrato no encontrado o no pertenece a este tenant'}, status=404)
 
+        # mision auditoria nomina FASE 21 (2026-09-10): calculo automatico de
+        # indemnizacion por causal (CST art. 64) cuando se pasa motivo_retiro.
+        indemnizacion_info = None
+        if motivo_retiro:
+            from django.utils.dateparse import parse_date
+            fc = parse_date(fecha_corte) if isinstance(fecha_corte, str) else fecha_corte
+            indemnizacion_info = NominaCalculationService.calcular_indemnizacion_despido(
+                contrato=contrato, fecha_retiro=fc, motivo_retiro=motivo_retiro,
+            )
+            if not request.query_params.get('indemnizacion'):
+                indemnizacion = indemnizacion_info['valor']
+
         try:
             resultados = NominaCalculationService.calcular_liquidacion_prestaciones(
                 contrato=contrato,
@@ -2000,6 +2069,11 @@ class LiquidacionPrestacionViewSet(SintelDSVMixin, BaseTenantViewSet):
                 dias_salario_pendiente=dias_salario_pendiente,
                 indemnizacion=indemnizacion
             )
+            if indemnizacion_info:
+                resultados['indemnizacion_detalle'] = {
+                    k: (str(v) if isinstance(v, Decimal) else v)
+                    for k, v in indemnizacion_info.items()
+                }
 
             if tipo_liq == 'PRIMA_SERVICIOS':
                 dias = resultados['dias_primas']
@@ -2190,6 +2264,59 @@ class PeriodoNominaViewSet(SintelDSVMixin, BaseTenantViewSet):
         periodo = self._get_periodo_or_404()
         resultado = PeriodoNominaBusinessService.preliquidar_periodo(periodo, self.get_empresa().id)
         return Response(resultado, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'], url_path='empleados-pendientes')
+    def empleados_pendientes(self, request, **kwargs):
+        """
+        GET /periodos-nomina/<uuid>/empleados-pendientes/ (mision auditoria
+        nomina, correccion arquitectonica 2026-09-10, FASE 9-11): unica
+        fuente de verdad de "a quien le falta liquidar" en ESTE periodo --
+        el frontend NUNCA calcula esto localmente. Solo datos humanos
+        (nombre/documento/cargo/tipo contrato/fecha ingreso), no exponer
+        IDs tecnicos como dato principal.
+        """
+        periodo = self._get_periodo_or_404()
+        pendientes = EmpleadoSelector.get_empleados_pendientes_para_periodo(periodo)
+        data = [
+            {
+                'uuid': str(e.uuid),
+                'nombre_completo': e.nombre_completo,
+                'numero_documento': e.numero_documento,
+                'cargo': getattr(e, 'contrato_cargo', '') or '',
+                'contrato_tipo': getattr(e, 'contrato_tipo', '') or '',
+                'contrato_uuid': str(getattr(e, 'contrato_uuid', '') or ''),
+                'fecha_ingreso': e.fecha_ingreso.isoformat() if e.fecha_ingreso else None,
+            }
+            for e in pendientes
+        ]
+        return Response(data)
+
+    @action(detail=True, methods=['get'], url_path='empleados-liquidados')
+    def empleados_liquidados(self, request, **kwargs):
+        """
+        GET /periodos-nomina/<uuid>/empleados-liquidados/ (FASE 17): empleados
+        con Devengo (no anulado) YA vinculado a este periodo -- cada uno con
+        SUS PROPIOS dias_laborados/totales, nunca forzados a coincidir entre si.
+        """
+        periodo = self._get_periodo_or_404()
+        devengos = DevengoSelector.get_by_periodo(self.get_empresa().id, periodo.id)
+        data = [
+            {
+                'uuid': str(d.uuid),
+                'empleado_nombre': d.empleado.nombre_completo,
+                'empleado_documento': d.empleado.numero_documento,
+                'dias_laborados': str(d.dias_laborados),
+                'total_devengado': str(
+                    d.salario_base + d.auxilio_transporte + d.otros_devengos + d.valor_horas_extras
+                ),
+                'total_deducciones': str(
+                    d.salud_empleado + d.pension_empleado + d.prestamos + d.descuentos_operativos
+                ),
+                'neto_pagar': str(d.neto_pagar),
+            }
+            for d in devengos
+        ]
+        return Response(data)
 
     @action(detail=True, methods=['post'], url_path='enviar-revision')
     def enviar_a_revision(self, request, **kwargs):

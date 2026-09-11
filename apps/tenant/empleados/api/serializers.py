@@ -67,7 +67,7 @@ class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
 # WARNING: v2.60: Importar campos desde services.py (SSoT)
 from apps.tenant.empresa.models import Area, Empresa, Sede
 
-from ..choices import AFP_CHOICES, ARL_CHOICES, EPS_CHOICES, RIESGO_ARL_CHOICES
+from ..choices import AFP_CHOICES, ARL_CHOICES, EPS_CHOICES, MOTIVO_RETIRO_CHOICES, RIESGO_ARL_CHOICES
 from ..models import Contrato, Devengo, Empleado
 
 
@@ -305,7 +305,26 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
         required=True,
         help_text="ID o UUID del contrato activo"
     )
-    
+    # mision auditoria nomina "correccion arquitectonica" (2026-09-10): antes
+    # de este campo, la UNICA forma de vincular un Devengo a un PeriodoNomina
+    # era preliquidar_periodo() (forzaba dias_laborados=30 para TODOS). Este
+    # campo habilita la liquidacion INDIVIDUAL dentro de un periodo -- cada
+    # empleado con sus propios dias_laborados (8, 15, 5...), el periodo es
+    # solo el contenedor administrativo, nunca determina los dias.
+    periodo = UUIDOrPKRelatedField(
+        queryset=PeriodoNomina.objects.none(),
+        required=False,
+        allow_null=True,
+        help_text="UUID del PeriodoNomina al que pertenece esta liquidacion (opcional)"
+    )
+    periodo_info = serializers.SerializerMethodField()
+
+    def get_periodo_info(self, obj):
+        p = obj.periodo
+        if not p:
+            return None
+        return {'uuid': str(p.uuid), 'periodo_mes': p.periodo_mes, 'estado': p.estado}
+
     # WARNING: v2.60: Campos calculados - READ_ONLY
     salario_base        = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     auxilio_transporte  = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
@@ -358,6 +377,10 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
                     'estado', 'activo', 'salario_mensual', 'auxilio_transporte',
                     'prestamos_empresa', 'tipo', 'horas_semanales',
                 )
+            if 'periodo' in self.fields:
+                self.fields['periodo'].queryset = PeriodoNomina.objects.filter(
+                    empresa_id=empresa_id,
+                ).only('id', 'uuid', 'empresa_id', 'estado', 'periodo_mes')
 
     class Meta:
         model = Devengo
@@ -370,7 +393,7 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
             'empleado_uuid', 'empleado_nombre', 'empleado_documento',
             'contrato_tipo', 'contrato_tipo_display', 'contrato_cargo',
             # Período
-            'periodo_mes', 'fecha_pago', 'dias_laborados',
+            'periodo_mes', 'periodo', 'periodo_info', 'fecha_pago', 'dias_laborados',
             # Devengos
             'salario_base', 'auxilio_transporte', 'otros_devengos',
             # Horas extras y recargos
@@ -389,14 +412,40 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
             'anulado',
             'empleado_uuid', 'empleado_nombre', 'empleado_documento',
             'contrato_tipo', 'contrato_tipo_display', 'contrato_cargo',
+            'periodo_info',
         )
-    
+
     def validate(self, attrs):
         """
         WARNING: v2.60: Zero Trust - Normalizacion estricta antes de persistir.
         """
         attrs = self.normalize_data(attrs)
-        
+
+        # mision auditoria nomina "correccion arquitectonica" (2026-09-10):
+        # liquidacion individual dentro de un periodo. El periodo es SOLO el
+        # contenedor administrativo -- nunca fuerza dias_laborados (ver
+        # dias_laborados arriba, validado independientemente 0.5-31).
+        periodo = attrs.get('periodo')
+        if periodo:
+            empresa_id = self._get_empresa_id()
+            if empresa_id and periodo.empresa_id != empresa_id:
+                raise serializers.ValidationError({'periodo': 'El periodo no pertenece a esta empresa.'})
+            if periodo.estado not in ('ABIERTO', 'PRELIQUIDADO'):
+                raise serializers.ValidationError({
+                    'periodo': f'No se pueden registrar liquidaciones en un periodo en estado {periodo.estado}.'
+                })
+            empleado_periodo = attrs.get('empleado')
+            if empleado_periodo:
+                qs_dup = Devengo.objects.filter(
+                    empleado=empleado_periodo, periodo=periodo, anulado=False,
+                ).only('id')
+                if self.instance:
+                    qs_dup = qs_dup.exclude(pk=self.instance.pk)
+                if qs_dup.exists():
+                    raise serializers.ValidationError({
+                        'periodo': 'Este empleado ya tiene una liquidacion registrada en este periodo. Anulela primero para volver a liquidar.'
+                    })
+
         # Validar formato de periodo_mes (YYYY-MM)
         periodo_mes = attrs.get('periodo_mes')
         if periodo_mes:
@@ -568,6 +617,7 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
     segundo_apellido = serializers.CharField(required=False, allow_blank=True, allow_null=False)
     telefono = serializers.CharField(required=False, allow_blank=True, allow_null=False)
     fecha_retiro = serializers.DateField(required=False, allow_null=True)
+    motivo_retiro = serializers.ChoiceField(choices=MOTIVO_RETIRO_CHOICES, required=False, allow_null=True, allow_blank=True)
 
     # WARNING: v2.95: Campos de seguridad social
     eps = serializers.ChoiceField(choices=EPS_CHOICES, required=True)
@@ -609,7 +659,7 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
             'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido',
             'email', 'telefono',
             'eps', 'afp', 'arl', 'nivel_riesgo_arl',
-            'estado', 'fecha_ingreso', 'fecha_retiro',
+            'estado', 'fecha_ingreso', 'fecha_retiro', 'motivo_retiro',
             'foto', 'foto_url',
             'nombre_completo', 'contratos',
             'sede', 'area', 'sede_nombre', 'area_nombre',
@@ -682,6 +732,22 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'area': 'No tiene permiso para asignar esta area (fuera de su alcance organizacional).'}
             )
+
+        # mision auditoria nomina FASE 22 (2026-09-10): retirar un empleado
+        # exige motivo_retiro + fecha_retiro -- ya no basta con estado=RETIRADO
+        # (ver EmpleadoBusinessService.retirar_empleado(), unica fuente de
+        # verdad de esta regla; se repite aqui para dar el error en el punto
+        # mas temprano posible, no para duplicar la logica de negocio).
+        estado_actual = self.instance.estado if self.instance else None
+        if attrs.get('estado') == 'RETIRADO' and estado_actual != 'RETIRADO':
+            if not attrs.get('motivo_retiro'):
+                raise serializers.ValidationError(
+                    {'motivo_retiro': 'Motivo de retiro requerido para retirar un empleado.'}
+                )
+            if not attrs.get('fecha_retiro'):
+                raise serializers.ValidationError(
+                    {'fecha_retiro': 'Fecha de retiro requerida para retirar un empleado.'}
+                )
 
         return attrs
     

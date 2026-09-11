@@ -63,9 +63,100 @@
         BLOQUEADO:    [], // manejado aparte -- requiere elegir estado destino
     };
 
+    // mision auditoria nomina "correccion arquitectonica" (2026-09-10):
+    // tabs Pendientes/Liquidados (FASE 9-17) -- backend es la UNICA autoridad
+    // de quien esta pendiente (EmpleadoSelector.get_empleados_pendientes_
+    // para_periodo()), este modulo nunca calcula eso localmente.
+    let _periodoActualUuid = null;
+
     function _money(v) {
         const n = Number(v || 0);
         return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+    }
+
+    function _esc(s) {
+        return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    async function _cargarTablasEmpleados(uuid) {
+        const pendWrap = d.getElementById('periodo-pendientes-body');
+        const liqWrap = d.getElementById('periodo-liquidados-body');
+        if (!pendWrap || !liqWrap) return;
+
+        const api = w.Sintel.Empleados.API.periodos;
+        const [resPend, resLiq] = await Promise.all([
+            w.Sintel.Core.Http.request('GET', api.empleadosPendientes(uuid)),
+            w.Sintel.Core.Http.request('GET', api.empleadosLiquidados(uuid)),
+        ]);
+
+        const countPend = d.getElementById('periodo-tab-pendientes-count');
+        const countLiq = d.getElementById('periodo-tab-liquidados-count');
+
+        if (resPend.ok) {
+            const rows = resPend.data || [];
+            if (countPend) countPend.textContent = rows.length;
+            pendWrap.innerHTML = rows.length ? `
+                <table class="table table-sm table-hover mb-0">
+                  <thead><tr>
+                    <th>Empleado</th><th>Documento</th><th>Cargo</th>
+                    <th>Tipo contrato</th><th>Fecha ingreso</th><th class="text-end">Acción</th>
+                  </tr></thead>
+                  <tbody>
+                    ${rows.map(e => `
+                      <tr>
+                        <td>${_esc(e.nombre_completo)}</td>
+                        <td>${_esc(e.numero_documento)}</td>
+                        <td>${_esc(e.cargo) || '<span class="text-muted">—</span>'}</td>
+                        <td>${_esc(e.contrato_tipo)}</td>
+                        <td>${_esc(e.fecha_ingreso)}</td>
+                        <td class="text-end">
+                          <button type="button" class="btn btn-sm btn-primary btn-liquidar-pendiente"
+                            data-empleado-uuid="${_esc(e.uuid)}" data-empleado-nombre="${_esc(e.nombre_completo)}">
+                            <i class="bi bi-cash-coin me-1"></i>Liquidar
+                          </button>
+                        </td>
+                      </tr>`).join('')}
+                  </tbody>
+                </table>` : '<p class="text-muted small p-3 mb-0">No hay empleados pendientes en este período.</p>';
+        } else {
+            pendWrap.innerHTML = '<div class="alert alert-danger m-3">No se pudo cargar la lista de pendientes.</div>';
+        }
+
+        if (resLiq.ok) {
+            const rows = resLiq.data || [];
+            if (countLiq) countLiq.textContent = rows.length;
+            liqWrap.innerHTML = rows.length ? `
+                <table class="table table-sm table-hover mb-0">
+                  <thead><tr>
+                    <th>Empleado</th><th>Documento</th><th class="text-end">Días</th>
+                    <th class="text-end">Devengado</th><th class="text-end">Deducciones</th><th class="text-end">Neto</th>
+                  </tr></thead>
+                  <tbody>
+                    ${rows.map(dv => `
+                      <tr>
+                        <td>${_esc(dv.empleado_nombre)}</td>
+                        <td>${_esc(dv.empleado_documento)}</td>
+                        <td class="text-end">${_esc(dv.dias_laborados)}</td>
+                        <td class="text-end">${_money(dv.total_devengado)}</td>
+                        <td class="text-end">${_money(dv.total_deducciones)}</td>
+                        <td class="text-end fw-semibold text-success">${_money(dv.neto_pagar)}</td>
+                      </tr>`).join('')}
+                  </tbody>
+                </table>` : '<p class="text-muted small p-3 mb-0">Aún no hay empleados liquidados en este período.</p>';
+        } else {
+            liqWrap.innerHTML = '<div class="alert alert-danger m-3">No se pudo cargar la lista de liquidados.</div>';
+        }
+    }
+
+    async function refrescarListas(uuid) {
+        // mision "correccion arquitectonica" (2026-09-10), FASE 16/29: refresco
+        // SELECTIVO del panel (re-fetch + re-render), nunca location.reload()
+        // de la pagina completa. Reusa open() -- reabre el offcanvas (se oculto
+        // al abrir "Liquidar", ver btn-liquidar-pendiente abajo) ya con datos
+        // frescos: contadores Pendientes/Liquidados + ambas tablas.
+        const target = uuid || _periodoActualUuid;
+        if (!target) return;
+        open(target);
     }
 
     function _mostrar() {
@@ -135,14 +226,14 @@
             </div>
             <div class="col-6 col-md-3">
               <div class="border rounded p-2 text-center h-100">
-                <div class="text-muted small">Devengado</div>
-                <div class="fw-bold">${_money(data.total_devengado)}</div>
+                <div class="text-muted small">Pendientes</div>
+                <div class="fw-bold ${data.pendientes ? 'text-warning' : ''}">${data.pendientes ?? 0}</div>
               </div>
             </div>
             <div class="col-6 col-md-3">
               <div class="border rounded p-2 text-center h-100">
-                <div class="text-muted small">Deducciones</div>
-                <div class="fw-bold">${_money(data.total_deducciones)}</div>
+                <div class="text-muted small">Devengado</div>
+                <div class="fw-bold">${_money(data.total_devengado)}</div>
               </div>
             </div>
             <div class="col-6 col-md-3">
@@ -153,12 +244,33 @@
             </div>
           </div>
 
-          <div class="small">
+          <div class="small mb-3">
             <div><span class="text-muted">Fecha de pago planeada:</span> ${periodo.fecha_pago}</div>
             ${periodo.creado_por_nombre ? `<div><span class="text-muted">Creado por:</span> ${periodo.creado_por_nombre}</div>` : ''}
             ${periodo.aprobado_por_nombre ? `<div><span class="text-muted">Aprobado por:</span> ${periodo.aprobado_por_nombre}</div>` : ''}
             ${periodo.pagado_por_nombre ? `<div><span class="text-muted">Pagado por:</span> ${periodo.pagado_por_nombre}</div>` : ''}
             ${periodo.observaciones ? `<div class="mt-1"><span class="text-muted">Observaciones:</span> ${periodo.observaciones}</div>` : ''}
+          </div>
+
+          <ul class="nav nav-tabs nav-tabs-sm" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-periodo-pendientes" type="button">
+              Pendientes <span class="badge bg-warning text-dark ms-1" id="periodo-tab-pendientes-count">…</span>
+            </button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-periodo-liquidados" type="button">
+              Liquidados <span class="badge bg-success ms-1" id="periodo-tab-liquidados-count">…</span>
+            </button></li>
+          </ul>
+          <div class="tab-content border border-top-0 rounded-bottom mb-3" style="max-height:320px; overflow-y:auto;">
+            <div class="tab-pane fade show active" id="tab-periodo-pendientes">
+              <div id="periodo-pendientes-body">
+                <div class="text-center text-muted p-3 small"><span class="spinner-border spinner-border-sm me-1"></span>Cargando...</div>
+              </div>
+            </div>
+            <div class="tab-pane fade" id="tab-periodo-liquidados">
+              <div id="periodo-liquidados-body">
+                <div class="text-center text-muted p-3 small"><span class="spinner-border spinner-border-sm me-1"></span>Cargando...</div>
+              </div>
+            </div>
           </div>
 
           <div id="periodo-detalle-feedback" class="alert d-none mt-3 mb-0" role="alert"></div>
@@ -178,6 +290,7 @@
         const res = await w.Sintel.Core.Http.request('GET', w.Sintel.Empleados.API.periodos.resumen(uuid));
         if (res.ok) {
             _render(res.data);
+            _cargarTablasEmpleados(uuid);
         } else {
             body.innerHTML = `<div class="alert alert-danger">No se pudo cargar el período: ${res.data?.detail || 'error desconocido'}</div>`;
         }
@@ -185,6 +298,7 @@
 
     function open(uuid) {
         if (!uuid) return;
+        _periodoActualUuid = uuid;
         _mostrar();
         _cargar(uuid);
     }
@@ -239,15 +353,34 @@
         const body = d.getElementById(BODY_ID);
         if (!body) return;
         body.addEventListener('click', async (ev) => {
-            const btn = ev.target.closest('.btn-accion-periodo');
-            if (!btn) return;
-            ev.preventDefault();
-            const accion = btn.dataset.accion;
-            const uuid = btn.dataset.uuid;
-            if (btn.dataset.confirm) {
-                if (!(await w.UIManager?.confirm(btn.dataset.confirm))) return;
+            const btnAccion = ev.target.closest('.btn-accion-periodo');
+            if (btnAccion) {
+                ev.preventDefault();
+                const accion = btnAccion.dataset.accion;
+                const uuid = btnAccion.dataset.uuid;
+                if (btnAccion.dataset.confirm) {
+                    if (!(await w.UIManager?.confirm(btnAccion.dataset.confirm))) return;
+                }
+                _ejecutarAccion(accion, uuid, btnAccion);
+                return;
             }
-            _ejecutarAccion(accion, uuid, btn);
+
+            // mision "correccion arquitectonica" (2026-09-10), FASE 12: abrir
+            // liquidacion individual con empleado + periodo preseleccionados.
+            // Se oculta este offcanvas (dos offcanvas .offcanvas-end
+            // superpuestos producen backdrops en conflicto) -- se reabre
+            // automaticamente al guardar (ver htmx:afterRequest en
+            // devengo_editor.js) con los datos ya refrescados.
+            const btnLiquidar = ev.target.closest('.btn-liquidar-pendiente');
+            if (btnLiquidar) {
+                ev.preventDefault();
+                const empUuid = btnLiquidar.dataset.empleadoUuid;
+                const empNombre = btnLiquidar.dataset.empleadoNombre;
+                const periodoUuid = _periodoActualUuid;
+                const ocInst = w.bootstrap?.Offcanvas?.getInstance(d.getElementById(OC_ID));
+                if (ocInst) ocInst.hide();
+                w.Sintel?.Empleados?.DevengoEditor?.openParaEmpleado?.(empUuid, empNombre, periodoUuid);
+            }
         });
     }
 
@@ -257,6 +390,6 @@
         _attach();
     }
 
-    w.Sintel.Empleados.PeriodoDetail = { open };
+    w.Sintel.Empleados.PeriodoDetail = { open, refrescarListas };
 
 })(window, document);

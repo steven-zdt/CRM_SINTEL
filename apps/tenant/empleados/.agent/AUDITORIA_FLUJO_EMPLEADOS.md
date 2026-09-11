@@ -1,10 +1,131 @@
 # [PORTAL] Auditoría y SSoT: Módulo Empleados
 
-**Versión:** v4.9.0 (SINTEL v3.16.x)
-**Estado:** ✅ PRODUCTION READY — 0 CRÍTICOS
+**Versión:** v4.11.0 (SINTEL v3.16.x)
+**Estado:** ⚠️ PRODUCTION READY CON DEUDAS DOCUMENTADAS (ver §Deudas Técnicas — la auditoría 2026-09-10 encontró y corrigió 3 brechas críticas de negocio en 2 pasadas; quedan 2 abiertas, ver abajo)
 **Ubicación:** `apps/tenant/empleados/`
-**Última Auditoría:** 2026-08-21 (v4.9.0: PeriodoNomina — ver `docs/nomina/NOMINA_FLUJO_EMPRESARIAL.md` para el detalle completo; base v4.8.1 sin cambios, auditor original Claude Haiku 4.5)
-**Auditor:** Claude Haiku 4.5 (Anthropic) — v4.9.0 por Claude Sonnet 5 (Anthropic)
+**Última Auditoría:** 2026-09-10 (v4.11.0: corrección arquitectónica — liquidación individual por período, días laborados independientes por empleado; base v4.10.0 sin cambios salvo lo indicado)
+**Auditor:** Claude Sonnet 5 (Anthropic) — v4.9.0, v4.10.0, v4.11.0. v4.8.1 y anteriores: Claude Haiku 4.5 (Anthropic)
+
+---
+
+## v4.11.0 — Corrección Arquitectónica: Liquidación Individual por Período (2026-09-10)
+
+**Regla oficial de dominio establecida en esta pasada:** `PeriodoNomina` es
+exclusivamente un contenedor administrativo (empresa, fechas, nombre,
+frecuencia, estado) — **nunca determina los días laborados de un
+empleado**. `Devengo` es la liquidación individual; cada empleado dentro
+de un mismo período puede tener `dias_laborados` completamente distintos
+(ej. Juan 8, Pedro 15, María 5, los tres en el mismo período).
+
+**Brecha encontrada (evidencia de código, no de documentación):**
+`DevengoSerializer` **no tenía campo `periodo`** — la única forma de
+vincular un `Devengo` a un `PeriodoNomina` era `preliquidar_periodo()`
+(batch), que genera una nómina BASE de 30 días idéntica para todos los
+elegibles. Es decir, la liquidación individual (offcanvas "Liquidar",
+usada desde siempre para nóminas fuera de un período) **no podía**
+asociarse a ningún `PeriodoNomina` — por diseño incompleto, no por un bug
+puntual.
+
+**Corregido:**
+- `DevengoSerializer.periodo` — nuevo campo (`UUIDOrPKRelatedField`,
+  opcional). Valida: pertenece a la empresa (DSV), `periodo.estado` en
+  `{ABIERTO, PRELIQUIDADO}` (no se puede liquidar en un período en
+  revisión/aprobado/pagado/cerrado/anulado/bloqueado), y que el empleado
+  no tenga ya un `Devengo` no-anulado en ese período (anti-duplicado
+  específico, adicional al `UniqueConstraint` legado por
+  `periodo_mes`+`fecha_pago`).
+- `GET /periodos-nomina/{uuid}/empleados-pendientes/` — nuevo endpoint,
+  única fuente de verdad backend-driven (reutiliza
+  `EmpleadoSelector.get_empleados_pendientes_para_periodo()`, ya
+  construido en la pasada anterior para el guard de `cerrar_periodo()`).
+  Solo datos humanos (nombre, documento, cargo, tipo contrato, fecha
+  ingreso) — nunca UUID como dato principal.
+- `GET /periodos-nomina/{uuid}/empleados-liquidados/` — nuevo, vía
+  `DevengoSelector.get_by_periodo()`.
+- `PeriodoNominaSelector.get_resumen()` ahora incluye `pendientes` (conteo).
+- **Frontend:** `offcanvas_crear_devengo.html` acepta contexto de período
+  (`?periodo=<uuid>` en `render-offcanvas/crear/`) — campo oculto +
+  panel informativo, sin tocar el flujo clásico (sin período) existente.
+  `periodo_detail.js` gana tabs Pendientes/Liquidados con botón "Liquidar"
+  por fila que preselecciona empleado+período; guarda vía el mismo
+  `POST /devengos/` de siempre. Refresco selectivo tras guardar (fetch +
+  re-render del offcanvas), nunca `location.reload()`.
+- `preliquidar_periodo()` (batch, 30 días para todos) **se mantiene sin
+  cambios** — sigue siendo una base rápida corregible, ahora con su
+  docstring aclarando explícitamente que no es la vía recomendada para
+  días individuales; la vía correcta es la liquidación individual descrita
+  arriba. No se eliminó para no romper el flujo ya probado de la pasada
+  anterior (`test_periodo_nomina_state_machine.py`).
+
+**Tests:** nuevo `tests/test_liquidacion_individual_por_periodo.py` (4
+casos: el escenario obligatorio Juan 8/Pedro 15/María 5 en el mismo
+período, pendientes antes de liquidar, anti-duplicado, guard de período
+cerrado). Un caso de DSV cross-empresa fue descartado explícitamente: no
+se puede simular con una segunda fila `Empresa` en el mismo schema
+(`Empresa` es singleton por schema, constraint `singleton_key`) — ese
+aislamiento ya está cubierto por el patrón `tenant1`/`tenant2` existente.
+
+**Histórico (FASE 23) reforzado:** `PeriodoNominaSelector.get_list()` ahora
+anota `empleados_count`/`total_neto_periodo` (una sola query de agregación,
+sin N+1) y `PeriodoNominaTable` (`tables.py`) las muestra — el listado de
+períodos (ya existente, django-tables2, incluye todo estado incl.
+`CERRADO`) ahora es un histórico real de un vistazo: `Período | Vigencia |
+Fecha Pago | Empleados | Total Neto | Estado`, sin entrar a cada período.
+Verificado en shell (no hay test automatizado dedicado a esta tabla —
+ver Deudas Técnicas).
+
+---
+
+## v4.10.0 — Retiro de Empleado Controlado + Indemnización por Causal (auditoría integral nómina, 2026-09-10)
+
+**Contexto:** auditoría integral del flujo de nómina (PROMPT MAESTRO) contrastó
+esta documentación contra el código real. Encontró que el modelo `PeriodoNomina`
+(v4.9.0) existía en código pero **no estaba documentado en este archivo**
+(la tabla "6 modelos" de abajo nunca se actualizó), y 2 brechas críticas de
+negocio no documentadas como deuda:
+
+1. **Retirar un empleado era literalmente `PATCH estado=RETIRADO`** — sin
+   catálogo de motivo, sin flujo de liquidación definitiva forzado. Corregido:
+   `EmpleadoBusinessService.retirar_empleado()` es ahora el único punto de
+   entrada (el PATCH genérico delega a él); exige `motivo_retiro` +
+   `fecha_retiro`, cierra el contrato con `fecha_fin=fecha_retiro` (antes
+   usaba incorrectamente la fecha de hoy), y genera automáticamente una
+   `LiquidacionPrestacion` tipo `LIQUIDACION_DEFINITIVA` cuando hay contrato
+   y nóminas previas.
+2. **`indemnizacion` se recibía como número manual** del caller (frontend o
+   Postman), nunca calculado. Corregido:
+   `NominaCalculationService.calcular_indemnizacion_despido()` implementa
+   CST art. 64 (Ley 789/2002 art. 28) — solo aplica con
+   `motivo_retiro=SIN_JUSTA_CAUSA`; escala por tipo de contrato (INDEF:
+   umbral 10 SMLMV + días/año; FIJO: salarios del tiempo restante pactado;
+   OBRA: ídem con mínimo legal 15 días si hay `fecha_fin`; PRESTACION: no
+   aplica). Siempre retorna `explicacion` + `base_legal`, nunca solo un
+   número. Nuevo catálogo `MOTIVO_RETIRO_CHOICES` (`choices.py`) y campo
+   `Empleado.motivo_retiro` (migración 0015).
+3. **`LiquidacionPrestacionViewSet.create()` permitía generar una
+   `LIQUIDACION_DEFINITIVA` para un empleado que seguía `ACTIVO`** (FASE 20:
+   "no permitir liquidación definitiva sin fecha de retiro"). Corregido: ahora
+   exige `empleado.estado=RETIRADO` y `fecha_retiro` seteada antes de aceptar
+   ese tipo.
+
+**Nuevo setting:** `SMLMV_VIGENTE` (`config/settings.py`, env var) — SMLMV
+2025 por defecto, **debe actualizarse cada enero** (afecta el umbral legal de
+10 SMLMV en la fórmula INDEF).
+
+**Frontend actualizado:** `offcanvas_editar_empleado.html` ahora muestra
+`fecha_retiro` + `motivo_retiro` (con explicación inline) cuando se
+selecciona `estado=RETIRADO`; `empleado_editor.js` los incluye en el submit.
+
+**Tests:** nuevo `tests/test_retiro_empleado.py` (8 casos: validaciones de
+entrada, cálculo de indemnización por escenario, guard de liquidación
+definitiva). `tests/test_empleados_delete.py` actualizado (los PATCH de
+retiro ahora incluyen `motivo_retiro`).
+
+**Deliberadamente NO corregido en esta pasada** (quedan como deuda abierta,
+ver tabla de Deudas Técnicas): validación de "sin pendientes/errores" antes
+de `cerrar_periodo()`/`enviar_a_revision()` en `PeriodoNomina`, y suite de
+tests para la máquina de estados de `PeriodoNomina` (hoy: cero tests la
+cubren en todo el repo).
 
 ---
 
@@ -75,7 +196,7 @@ bancaria real, modelo `Novedad` separado, frontend).
 
 ---
 
-## Modelos (`models.py`) — 6 modelos, 13 migraciones
+## Modelos (`models.py`) — 7 modelos, 15 migraciones
 
 ### `Empleado`
 **Herencia:** `SintelTenantBaseModel` ✅
@@ -96,6 +217,7 @@ bancaria real, modelo `Novedad` separado, frontend).
 | `estado` | CharField | `ACTIVO / RETIRADO`, `default='ACTIVO'` |
 | `fecha_ingreso` | DateField | |
 | `fecha_retiro` | DateField | nullable |
+| `motivo_retiro` | CharField | choices `MOTIVO_RETIRO_CHOICES` (mig 0015, v4.10.0) — requerido al retirar, ver `EmpleadoBusinessService.retirar_empleado()` |
 | `sede` | FK → `Sede` | `SET_NULL`, nullable (mig 0009) |
 | `area` | FK → `Area` | `SET_NULL`, nullable (mig 0009) |
 | `resolucion_dian` | FK → `ResolucionDIAN` | `SET_NULL`, nullable (mig 0012) — resolución DIAN preferida para DSPNE |
@@ -211,7 +333,31 @@ bancaria real, modelo `Novedad` separado, frontend).
 
 ---
 
-### Migraciones (13 aplicadas)
+### `PeriodoNomina` (v4.9.0 — mig 0014)
+
+Orquesta el ciclo de aprobación en lote de un mismo ciclo de pago. Ver
+`docs/nomina/NOMINA_FLUJO_EMPRESARIAL.md` para el diseño completo.
+**No calcula montos** — delega siempre a `procesar_devengo()`.
+
+| Campo | Notas |
+|-------|-------|
+| `uuid` | único, indexado |
+| `periodo_mes` | `YYYY-MM` |
+| `fecha_inicio`, `fecha_fin`, `fecha_pago` | DateField |
+| `estado` | `ABIERTO / PRELIQUIDADO / EN_REVISION / APROBADO / PAGADO / CERRADO / ANULADO / BLOQUEADO` |
+| `creado_por`, `aprobado_por`, `pagado_por` | FK → `perfil.TenantProfile`, `SET_NULL` |
+| `fecha_aprobacion`, `fecha_pago_real` | auditoría de transición |
+
+**Constraint:** `UNIQUE(empresa, periodo_mes) WHERE estado != 'ANULADO'`
+**Máquina de estados:** `PeriodoNominaBusinessService.TRANSICIONES_VALIDAS`
+(única fuente de verdad, `services/business_service.py`).
+**⚠️ Deuda abierta (v4.10.0):** ni `cerrar_periodo()` ni `enviar_a_revision()`
+verifican ausencia de empleados pendientes/errores antes de transicionar —
+ver §Deudas Técnicas DEUDA-22.
+
+---
+
+### Migraciones (15 aplicadas)
 
 | # | Contenido |
 |---|-----------|
@@ -228,6 +374,8 @@ bancaria real, modelo `Novedad` separado, frontend).
 | 0011 | Crea `ResolucionDIAN`, `TransmisionNominaDIAN`, `LiquidacionPrestacion` |
 | 0012 | Agrega `resolucion_dian` FK a `Empleado` |
 | 0013 | Agrega `desglose_conceptos` (JSONField) a `LiquidacionPrestacion` |
+| 0014 | Crea `PeriodoNomina`, agrega `Devengo.periodo` FK (v4.9.0) |
+| 0015 | Agrega `Empleado.motivo_retiro` (v4.10.0) |
 
 ---
 
@@ -265,7 +413,8 @@ DEVENGO_DETAIL_FIELDS   = + observaciones
 | `get_by_id(empresa_id, empleado_id)` | PK lookup (solo payloads internos validados) |
 | `get_empleados_activos(empresa_id)` | Solo ACTIVO |
 | `get_empleados_sin_contrato(empresa_id)` | ACTIVO sin contrato activo |
-| `get_disponibles_para_periodo(empresa_id, fecha_inicio, fecha_fin)` | Con contrato activo y sin nóminas solapadas |
+| `get_disponibles_para_periodo(empresa_id, fecha_inicio, fecha_fin)` | Elegibilidad ANTES de preliquidar: contrato activo y sin nóminas solapadas por rango de fechas |
+| `get_empleados_pendientes_para_periodo(periodo)` | (v4.10.0) SSoT de "pendientes" DESPUÉS de preliquidar: contrato activo sin `Devengo` (no anulado) vinculado a ESE `PeriodoNomina` específico. Usado por `PeriodoNominaSelector.get_resumen()` y por el guard de `cerrar_periodo()` (DEUDA-22) |
 
 #### ContratoSelector
 | Método | Descripción |
@@ -551,6 +700,14 @@ masterTable.on('rowClick', _seleccionarEmpleado);
 | DEUDA-06-CERRADO | `api/viewsets.py` | ~~ALTA~~ | `_RESOLUCION_LIST_FIELDS` y `_LIQUIDACION_LIST_FIELDS` agregados. Ambos `get_queryset()` usan `.only()`. | CERRADO |
 | DEUDA-07-CERRADO | `business_service.py` | ~~CRÍTICA~~ | `calcular_dias_360()` corregido. Verified: año=360d, 2do sem=180d, Q1=90d. Impacto financiero ~$6.000 COP/empleado/período. | CERRADO |
 | DEUDA-21-CERRADO | `api/viewsets.py` | ~~CRÍTICA~~ | `perform_create()` → `create()` completo pre-calcula campos antes de `is_valid()`. | CERRADO |
+| DEUDA-22-CERRADO | `business_service.py` (`PeriodoNominaBusinessService`) | ~~ALTA~~ | `cerrar_periodo()` no validaba ausencia de empleados pendientes antes de transicionar (FASE 15: "no permitir CERRAR si hay empleados pendientes"). Corregido: guard vía `EmpleadoSelector.get_empleados_pendientes_para_periodo()`, probado en `test_cerrar_bloqueado_si_hay_empleados_pendientes`. `enviar_a_revision()` NO se tocó (avanzar con preliquidación parcial es una decisión de diseño ya documentada en `NOMINA_FLUJO_EMPRESARIAL.md` §3, no un bug). | CERRADO |
+| DEUDA-23-CERRADO | `tests/` | ~~ALTA~~ | Cero tests automatizados cubrían la máquina de estados de `PeriodoNomina`. Corregido: `tests/test_periodo_nomina_state_machine.py` (8 casos: flujo completo, transiciones inválidas, duplicados, cierre con pendientes, anulación en cascada, bloqueo/desbloqueo, permisos por rol). | CERRADO |
+| DEUDA-24-CERRADO | `models.py`, `business_service.py`, `api/viewsets.py` | ~~CRÍTICA~~ | Retiro de empleado era un PATCH directo sin motivo ni liquidación forzada; indemnización era un número manual; se podía crear LIQUIDACION_DEFINITIVA sin retiro. Corregido v4.10.0: `retirar_empleado()` + `calcular_indemnizacion_despido()` (CST art. 64) + guard en `LiquidacionPrestacionViewSet.create()`. | CERRADO |
+| DEUDA-25-CERRADO | `api/serializers.py`, `api/viewsets.py`, frontend | ~~CRÍTICA~~ | `DevengoSerializer` no tenía campo `periodo` — imposible liquidar individualmente a un empleado dentro de un `PeriodoNomina` (la única vía, `preliquidar_periodo()`, fuerza 30 días para todos). Corregido v4.11.0: campo `periodo` + endpoints `empleados-pendientes`/`empleados-liquidados` + UI de tabs Pendientes/Liquidados. Ver sección v4.11.0 arriba. | CERRADO |
+| DEUDA-26 | `business_service.py` (`preliquidar_periodo`) | BAJA (documentada, no oculta) | El batch `preliquidar_periodo()` sigue generando una base de 30 días idéntica para todos los elegibles — sigue siendo válido como atajo rápido, pero ya no es la única vía (ver DEUDA-25-CERRADO); su docstring ahora aclara explícitamente que la liquidación individual es la vía recomendada para días reales por empleado. No se eliminó ni se modificó su comportamiento para no romper `test_periodo_nomina_state_machine.py`. | **ABIERTO (por diseño, bajo impacto)** |
+| DEUDA-27 | `tables.py` (`PeriodoNominaTable`) | BAJA | Columnas nuevas `empleados_count`/`total_neto_periodo` (FASE 23, histórico) verificadas manualmente en shell (queryset anotado + valores correctos) pero sin test automatizado dedicado a la tabla/vista HTML. | **ABIERTO** |
+| DEUDA-28 | `api/viewsets.py` (`DevengoViewSet.render_offcanvas_detalle`) | MEDIA | FASE 19 pide una vista de "revisión individual" de solo lectura para cada Devengo. Hoy `render_offcanvas_detalle` reutiliza el MISMO template que crear (`offcanvas_crear_devengo.html`) pasando `devengo` en el contexto — no es un template de detalle dedicado ni garantiza que los campos queden deshabilitados/no editables en la UI (el backend sí bloquea `update`/`partial_update` con 405, así que no hay riesgo de escritura real, pero la UX no comunica claramente "solo lectura"). | **ABIERTO** |
+| DEUDA-29 | Frontend (`static/empleados/js/`) | BAJA (arquitectura, no funcional) | FASE 30 de la misión pide un objeto `NominaStore` explícito como única fuente de verdad en el cliente. No se implementó: el patrón actual ya evita la causa raíz que ese Store buscaría prevenir (Tabulator/HTML nunca calculan pendientes ni montos — todo viene de `fetch` a los endpoints backend en cada apertura/refresco), pero el estado vive disperso en variables de módulo (`_periodoActualUuid`, `_periodoContexto`, etc.) en vez de un objeto centralizado. Refactor de arquitectura pura, alto esfuerzo/riesgo de regresión, sin beneficio funcional adicional sobre lo ya corregido — no se hizo en esta pasada. | **ABIERTO (arquitectura, bajo impacto funcional)** |
 
 ---
 
@@ -558,16 +715,17 @@ masterTable.on('rowClick', _seleccionarEmpleado);
 
 ```
 Sistema: 0 errores
-py_compile: OK (todos los .py)
-node --check: OK (todos los .js)
-Migraciones: 0013 aplicada en public + todos los tenants
+python manage.py check: 0 errores (verificado 2026-09-10)
+py_compile: OK (archivos tocados en v4.10.0)
+node --check: no disponible en este entorno (sin `node` instalado ni en host ni en contenedor `web`) -- cambio JS de v4.10.0 es un string agregado a un array literal, revisado manualmente.
+Migraciones: 0015 aplicada en public + los 3 tenants (2026-09-10)
 ```
 
 ---
 
-**Última Actualización:** 2026-06-17 (v4.8.1)
-**Auditor:** Claude Haiku 4.5 (Anthropic)
-**Status:** ✅ PRODUCTION READY — 0 CRÍTICOS — 23/23 AGENTS.md COMPLIANCE
-**Cambios v4.8.1:** Master-Detail refactorización (4 fases): contexto preseleccionado empleado → precarga automática → bloqueo selector → limpieza reset. Nuevo endpoint `/info-empleado/`. Mejoras visuales: badges success-subtle, sincronización tablas automática.
-**Migraciones:** 0001–0013 (13 total, todas aplicadas)
-**Tests:** Suite pendiente re-ejecución post-feature v4.8.1
+**Última Actualización:** 2026-09-10 (v4.10.0)
+**Auditor:** Claude Sonnet 5 (Anthropic)
+**Status:** ⚠️ PRODUCTION READY CON DEUDAS DOCUMENTADAS — ver §Deudas Técnicas (DEUDA-22, DEUDA-23 abiertas) — 23/23 AGENTS.md COMPLIANCE
+**Cambios v4.10.0:** Retiro de empleado controlado (`retirar_empleado()`) + indemnización por causal CST art. 64 (`calcular_indemnizacion_despido()`) + guard de liquidación definitiva sin retiro. Ver sección v4.10.0 arriba para el detalle completo.
+**Migraciones:** 0001–0015 (15 total, todas aplicadas)
+**Tests:** `tests/test_retiro_empleado.py` (nuevo, 8 casos) + `tests/test_empleados_delete.py` (actualizado) ejecutados via venv local 2026-09-10. `PeriodoNomina` (v4.9.0) sigue sin cobertura de tests (DEUDA-23).

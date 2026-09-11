@@ -18,6 +18,19 @@
       <input type="hidden" id="devengo-empleado-id"  name="empleado"{% if empleado %} value="{{ empleado.id }}"{% endif %}>
       <input type="hidden" id="devengo-contrato-id"  name="contrato"{% if contrato %} value="{{ contrato.id }}"{% endif %}>
       <input type="hidden" id="devengo-periodo_mes"  name="periodo_mes">
+      {# mision auditoria nomina "correccion arquitectonica" (2026-09-10): FK
+         al PeriodoNomina contenedor -- solo vincula, nunca fuerza dias_laborados. #}
+      <input type="hidden" id="devengo-periodo-uuid" name="periodo"{% if periodo %} value="{{ periodo.uuid }}"{% endif %}>
+
+      {% if periodo %}
+      <div class="alert alert-primary py-2 px-3 mb-3 small d-flex align-items-center">
+        <i class="bi bi-calendar-range me-2"></i>
+        <span>Período: <strong>{{ periodo.periodo_mes }}</strong>
+          ({{ periodo.fecha_inicio|date:"d/m/Y" }} → {{ periodo.fecha_fin|date:"d/m/Y" }})
+          — <span class="badge bg-primary-subtle text-primary-emphasis">{{ periodo.get_estado_display }}</span>
+        </span>
+      </div>
+      {% endif %}
 
       {# ── 1. Período y Empleado ─────────────────────────────────────────────── #}
       <div class="mb-4">

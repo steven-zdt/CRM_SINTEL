@@ -29,7 +29,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.tenant.core.models import SintelTenantBaseModel
 from apps.tenant.empresa.models import Empresa
 
-from .choices import AFP_CHOICES, ARL_CHOICES, EPS_CHOICES, RIESGO_ARL_CHOICES
+from .choices import AFP_CHOICES, ARL_CHOICES, EPS_CHOICES, MOTIVO_RETIRO_CHOICES, RIESGO_ARL_CHOICES
 
 
 class Empleado(SintelTenantBaseModel):
@@ -82,6 +82,14 @@ class Empleado(SintelTenantBaseModel):
     estado = models.CharField(max_length=12, choices=ESTADOS, default='ACTIVO')
     fecha_ingreso = models.DateField()
     fecha_retiro = models.DateField(null=True, blank=True)
+    # mision auditoria nomina FASE 21/22 (2026-09-10): catalogo controlado de
+    # causal de retiro -- requerido por EmpleadoBusinessService.retirar_empleado()
+    # al transicionar ACTIVO->RETIRADO. Determina si aplica indemnizacion por
+    # despido sin justa causa (CST art. 64).
+    motivo_retiro = models.CharField(
+        max_length=30, choices=MOTIVO_RETIRO_CHOICES, null=True, blank=True,
+        verbose_name=_('Motivo de Retiro'),
+    )
 
     # Sede y Area (FASE 1: Capa de Datos)
     sede = models.ForeignKey(

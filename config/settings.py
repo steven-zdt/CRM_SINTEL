@@ -704,6 +704,18 @@ DJANGORESTFRAMEWORK_MCP = {
     'BYPASS_VIEWSET_PERMISSIONS': False,
 }
 
+# ============================================================================
+# n8n (N8N-SINTEL-01) -- orquestador de automatizacion EXTERNO a SINTEL.
+# ============================================================================
+# N8N_WEBHOOK_URL: endpoint del nodo Webhook de n8n que recibe eventos de
+# dominio (Fase 8). Vacio por defecto -- apps/services/integration_events/
+# no envia nada si no esta configurado (nunca rompe la operacion de negocio
+# que publica el evento). N8N_WEBHOOK_SECRET firma cada entrega con
+# HMAC-SHA256 (header X-Sintel-Signature) -- n8n debe validarla antes de
+# procesar (Fase 13, "signed webhook"). Ver docs/n8n/N8N_SECURITY.md.
+N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "")
+N8N_WEBHOOK_SECRET = os.getenv("N8N_WEBHOOK_SECRET", "")
+
 # drf-spectacular (OpenAPI Schema)
 # Docs: https://drf-spectacular.readthedocs.io/
 SPECTACULAR_SETTINGS = {
@@ -874,6 +886,7 @@ CELERY_IMPORTS = (
     "apps.public.tenants.tasks",  # Tarea crítica de onboarding
     "apps.services.maildigester.tasks",  # Tarea de ingesta de facturas desde correo
     "apps.tenant.ai_knowledge.tasks",  # AI-VECTOR-08: (re)indexacion del Vector Store
+    "apps.services.integration_events.tasks",  # N8N-SINTEL-01: entrega de eventos a n8n
 )
 
 # WARNING: CONFIGURACIÓN CRÍTICA: Colas Prioritarias
@@ -953,6 +966,19 @@ OWNER_ACTIVATION_TOKEN_TTL_MINUTES = int(os.getenv('OWNER_ACTIVATION_TOKEN_TTL_M
 # Backups
 BACKUP_DIR = os.getenv('BACKUP_DIR', 'backups')
 BACKUP_RETENTION_DAYS = int(os.getenv('BACKUP_RETENTION_DAYS', 30))  # Días de retención de backups
+
+# ============================================================================
+# Nomina — Salario Minimo Legal Mensual Vigente (SMLMV)
+# ============================================================================
+# WARNING: ACTUALIZAR CADA ENERO con el valor oficial del Decreto del
+# Gobierno Nacional. Usado unicamente para el umbral de 10 SMLMV que decide
+# la formula de indemnizacion por despido sin justa causa (CST art. 64,
+# modificado por Ley 789/2002 art. 28) en
+# apps/tenant/empleados/services/business_service.py
+# (NominaCalculationService.calcular_indemnizacion_despido). Valor por
+# defecto = SMLMV 2025 (COP 1.423.500) -- confirmar/actualizar via env var
+# antes de calcular indemnizaciones en un año distinto.
+SMLMV_VIGENTE = os.getenv('SMLMV_VIGENTE', '1423500')
 
 # ============================================================================
 # Feature Flags - Pipeline Universal de Documentos (v2.40)

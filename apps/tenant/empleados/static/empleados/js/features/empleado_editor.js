@@ -181,7 +181,7 @@
             'primer_nombre', 'segundo_nombre', 'primer_apellido', 'segundo_apellido',
             'email', 'telefono',
             'eps', 'afp', 'arl', 'nivel_riesgo_arl',
-            'fecha_ingreso', 'estado', 'fecha_retiro',
+            'fecha_ingreso', 'estado', 'fecha_retiro', 'motivo_retiro',
             'sede', 'area',
         ];
         campos.forEach(c => {

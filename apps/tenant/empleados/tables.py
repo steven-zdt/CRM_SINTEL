@@ -254,16 +254,25 @@ _BADGE_ESTADO_PERIODO = {
 
 
 class PeriodoNominaTable(tables.Table):
+    """
+    mision auditoria nomina "correccion arquitectonica" (2026-09-10), FASE
+    23: columnas Empleados/Total Neto agregadas -- el historico se lee de
+    un vistazo desde esta tabla (basada en PeriodoNomina), no solo tras
+    entrar a cada periodo. Requieren que el queryset venga anotado con
+    empleados_count/total_neto_periodo (PeriodoNominaSelector.get_list()).
+    """
     periodo_mes = tables.Column(verbose_name="Período")
     vigencia = tables.Column(empty_values=(), orderable=False, verbose_name="Vigencia")
     fecha_pago = tables.Column(verbose_name="Fecha de Pago")
+    empleados_count = tables.Column(verbose_name="Empleados", orderable=False)
+    total_neto_periodo = tables.Column(verbose_name="Total Neto", orderable=False)
     estado = tables.Column(verbose_name="Estado")
     acciones = tables.Column(empty_values=(), orderable=False, verbose_name="")
 
     class Meta:
         model = PeriodoNomina
         fields = ()
-        sequence = ("periodo_mes", "vigencia", "fecha_pago", "estado", "acciones")
+        sequence = ("periodo_mes", "vigencia", "fecha_pago", "empleados_count", "total_neto_periodo", "estado", "acciones")
         attrs = {"class": "table table-hover align-middle mb-0", "id": "tabla-periodos-nomina"}
         empty_text = "No hay períodos de nómina registrados"
         order_by = ("-periodo_mes",)
@@ -275,6 +284,16 @@ class PeriodoNominaTable(tables.Table):
         return format_html(
             '<span class="small"><i class="bi bi-calendar-range text-muted me-1"></i>{} → {}</span>',
             record.fecha_inicio, record.fecha_fin,
+        )
+
+    def render_empleados_count(self, value):
+        return format_html('<span class="badge bg-secondary-subtle text-secondary-emphasis">{}</span>', value or 0)
+
+    def render_total_neto_periodo(self, value):
+        monto = value or 0
+        return format_html(
+            '<span class="fw-semibold text-success">{}</span>',
+            f"${monto:,.0f}".replace(",", "."),
         )
 
     def render_estado(self, value, record):

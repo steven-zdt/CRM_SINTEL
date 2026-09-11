@@ -79,6 +79,8 @@
             anular:          (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/anular/`,
             bloquear:        (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/bloquear/`,
             desbloquear:     (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/desbloquear/`,
+            empleadosPendientes: (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/empleados-pendientes/`,
+            empleadosLiquidados: (uuid) => `/api/v1/empleados/periodos-nomina/${uuid}/empleados-liquidados/`,
         },
         // Liquidaciones de Prestaciones
         liquidaciones: {

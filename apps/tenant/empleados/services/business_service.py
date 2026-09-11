@@ -15,7 +15,7 @@ from django.db.models import Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.tenant.empleados.models import Contrato, Devengo, Empleado, PeriodoNomina
+from apps.tenant.empleados.models import Contrato, Devengo, Empleado, LiquidacionPrestacion, PeriodoNomina
 from apps.tenant.empleados.services.crud_service import (
     ContratoCRUDService,
     DevengoCRUDService,
@@ -70,26 +70,163 @@ class EmpleadoBusinessService:
         return EmpleadoCRUDService.crear_empleado(data, empresa)
 
     @staticmethod
+    @transaction.atomic
     def actualizar_empleado(empleado: Empleado, data: dict) -> Empleado:
         """
         Orquesta la actualizacion de un empleado.
-        Si el estado cambia a RETIRADO, cancela contratos activos.
+
+        WARNING [mision auditoria nomina FASE 22, 2026-09-10]: si `estado`
+        transiciona ACTIVO->RETIRADO, delega SIEMPRE a retirar_empleado()
+        -- ya no basta con cambiar el campo `estado` (esa era exactamente
+        la brecha detectada: "no permitir que simplemente se cambie
+        estado=RETIRADO sin ejecutar las validaciones correspondientes").
+        Este es el unico punto de entrada tanto para el PATCH generico del
+        ViewSet como para cualquier otro caller futuro.
         """
         nuevo_estado = data.get('estado', empleado.estado)
         estado_anterior = empleado.estado
 
-        empleado = EmpleadoCRUDService.actualizar_empleado(empleado, data)
-
-        # Si se retira el empleado, cancelar contratos activos
         if estado_anterior != 'RETIRADO' and nuevo_estado == 'RETIRADO':
-            count = EmpleadoBusinessService.cancelar_contratos_activos(empleado)
-            if count > 0:
-                logger.info(
-                    f"[EmpleadoBusiness] Empleado {empleado.id} retirado. "
-                    f"Cancelados {count} contrato(s) activo(s)."
+            motivo_retiro = data.pop('motivo_retiro', None)
+            fecha_retiro = data.pop('fecha_retiro', None)
+            data.pop('estado', None)
+            # Aplicar el resto de campos editados en el mismo request (ej.
+            # telefono, email) antes de ejecutar el flujo de retiro.
+            if data:
+                empleado = EmpleadoCRUDService.actualizar_empleado(empleado, data)
+            resultado = EmpleadoBusinessService.retirar_empleado(
+                empleado=empleado,
+                motivo_retiro=motivo_retiro,
+                fecha_retiro=fecha_retiro,
+                empresa_id=empleado.empresa_id,
+            )
+            return resultado['empleado']
+
+        return EmpleadoCRUDService.actualizar_empleado(empleado, data)
+
+    @staticmethod
+    @transaction.atomic
+    def retirar_empleado(
+        empleado: Empleado,
+        motivo_retiro: str,
+        fecha_retiro,
+        empresa_id: int,
+        dias_salario_pendiente: int = 0,
+    ) -> dict:
+        """
+        Flujo controlado de retiro (mision auditoria nomina FASE 21/22,
+        2026-09-10): Empleado ACTIVO -> registrar retiro (fecha + motivo) ->
+        cerrar contrato -> calcular indemnizacion si aplica -> generar
+        liquidacion definitiva -> Empleado RETIRADO.
+
+        Reutiliza NominaCalculationService.calcular_liquidacion_prestaciones()
+        (motor ya probado, sin duplicar formulas) para prima/cesantias/
+        intereses/vacaciones/salario pendiente; solo la indemnizacion es
+        nueva (calcular_indemnizacion_despido()).
+
+        SUPUESTO DOCUMENTADO: si el empleado no tiene contrato activo o no
+        tiene ningun Devengo registrado, el retiro procede igual (el
+        empleado queda RETIRADO) pero NO se genera LiquidacionPrestacion
+        automatica -- no hay base de calculo real que liquidar. Se reporta
+        en el resultado ('liquidacion': None), no se falla silenciosamente.
+        """
+        if empresa_id is not None and empleado.empresa_id != empresa_id:
+            raise ValidationError({'empleado': 'El empleado no pertenece a la empresa activa.'})
+
+        if empleado.estado == 'RETIRADO':
+            raise ValidationError({'estado': 'El empleado ya esta retirado.'})
+
+        motivos_validos = {c[0] for c in Empleado._meta.get_field('motivo_retiro').choices}
+        if not motivo_retiro or motivo_retiro not in motivos_validos:
+            raise ValidationError({
+                'motivo_retiro': f'Motivo de retiro requerido. Valores validos: {sorted(motivos_validos)}.'
+            })
+
+        if not fecha_retiro:
+            raise ValidationError({'fecha_retiro': 'La fecha de retiro es requerida para retirar un empleado.'})
+        if isinstance(fecha_retiro, str):
+            from django.utils.dateparse import parse_date
+            parsed = parse_date(fecha_retiro)
+            if not parsed:
+                raise ValidationError({'fecha_retiro': 'Formato de fecha invalido.'})
+            fecha_retiro = parsed
+        if fecha_retiro < empleado.fecha_ingreso:
+            raise ValidationError({'fecha_retiro': 'La fecha de retiro no puede ser anterior a la fecha de ingreso.'})
+
+        contrato = ContratoSelector.get_activo_for_empleado(empresa_id, empleado.id)
+
+        indemnizacion_info = None
+        if contrato:
+            indemnizacion_info = NominaCalculationService.calcular_indemnizacion_despido(
+                contrato=contrato, fecha_retiro=fecha_retiro, motivo_retiro=motivo_retiro,
+            )
+
+        empleado = EmpleadoCRUDService.actualizar_empleado(empleado, {
+            'estado': 'RETIRADO',
+            'fecha_retiro': fecha_retiro,
+            'motivo_retiro': motivo_retiro,
+        })
+
+        contrato_cancelado = False
+        if contrato:
+            Contrato.objects.filter(pk=contrato.pk).update(
+                estado='INACTIVO', activo=False, fecha_fin=fecha_retiro,
+            )
+            contrato_cancelado = True
+            logger.info(
+                f"[EmpleadoBusiness] Empleado {empleado.id} retirado (motivo={motivo_retiro}, "
+                f"fecha={fecha_retiro}). Contrato {contrato.id} cerrado con fecha_fin={fecha_retiro}."
+            )
+        else:
+            logger.info(f"[EmpleadoBusiness] Empleado {empleado.id} retirado (motivo={motivo_retiro}) sin contrato activo.")
+
+        liquidacion = None
+        if contrato:
+            try:
+                valor_indemnizacion = indemnizacion_info['valor'] if indemnizacion_info else Decimal('0.00')
+                resultado_calc = NominaCalculationService.calcular_liquidacion_prestaciones(
+                    contrato=contrato,
+                    tipo_liquidacion='LIQUIDACION_DEFINITIVA',
+                    fecha_corte=fecha_retiro,
+                    dias_salario_pendiente=dias_salario_pendiente,
+                    indemnizacion=valor_indemnizacion,
+                )
+                # JSONField sin encoder Decimal-safe (igual que el patron ya
+                # usado en LiquidacionPrestacionViewSet.create()) -- stringificar
+                # todo Decimal antes de guardar o falla con TypeError en save().
+                desglose = {
+                    k: (str(v) if isinstance(v, Decimal) else v)
+                    for k, v in resultado_calc.items()
+                }
+                desglose['indemnizacion_detalle'] = {
+                    k: (str(v) if isinstance(v, Decimal) else v)
+                    for k, v in (indemnizacion_info or {}).items()
+                }
+                liquidacion = LiquidacionPrestacion.objects.create(
+                    empresa_id=empresa_id,
+                    empleado=empleado,
+                    contrato=contrato,
+                    tipo_liquidacion='LIQUIDACION_DEFINITIVA',
+                    fecha_corte=fecha_retiro,
+                    dias_base_calculo=resultado_calc['dias_cesantias'],
+                    base_salarial=Decimal(str(contrato.salario_mensual)) + Decimal(str(contrato.auxilio_transporte)),
+                    valor_total=resultado_calc['total_neto'],
+                    estado='PROYECTADO',
+                    desglose_conceptos=desglose,
+                    observaciones=f'Generada automaticamente por retiro (motivo: {motivo_retiro}).',
+                )
+            except ValidationError as exc:
+                logger.warning(
+                    f"[EmpleadoBusiness] No se genero liquidacion definitiva automatica para "
+                    f"empleado {empleado.id}: {exc}"
                 )
 
-        return empleado
+        return {
+            'empleado': empleado,
+            'contrato_cancelado': contrato_cancelado,
+            'indemnizacion': indemnizacion_info,
+            'liquidacion': liquidacion,
+        }
 
     @staticmethod
     def eliminar_empleado_retirado(empleado: Empleado, empresa_id: int = None) -> dict:
@@ -576,6 +713,15 @@ class PeriodoNominaBusinessService:
         nada): un fallo puntual (ej. limite de dias, sin resolucion DIAN
         vigente) no bloquea al resto de la nomina de la empresa -- se
         reporta en 'fallidos', no se descarta silenciosamente.
+
+        WARNING [mision "correccion arquitectonica" nomina, 2026-09-10]: esto
+        sigue siendo una BASE de 30 dias identica para todos -- util como
+        punto de partida rapido, NUNCA como sustituto de la liquidacion real
+        de cada empleado. Para dias_laborados individuales (8, 15, 5...) use
+        la liquidacion individual: POST /devengos/ con el campo `periodo`
+        (ver DevengoSerializer.periodo) -- ese es el flujo correcto y
+        recomendado; preliquidar_periodo() no debe ser la unica via para
+        cerrar un periodo con datos reales.
         """
         PeriodoNominaBusinessService._validar_transicion(periodo, 'PRELIQUIDADO')
 
@@ -676,7 +822,34 @@ class PeriodoNominaBusinessService:
     @staticmethod
     @transaction.atomic
     def cerrar_periodo(periodo: PeriodoNomina) -> PeriodoNomina:
+        """
+        mision auditoria nomina FASE 15 (2026-09-10): "No permitir CERRAR si
+        hay empleados pendientes." Antes de esta correccion, cerrar_periodo()
+        solo validaba la transicion de estado (PAGADO->CERRADO) -- un periodo
+        con empleados elegibles que nunca llegaron a tener un Devengo (por
+        fallidos en la preliquidacion, o por altas posteriores a esa
+        preliquidacion) podia cerrarse igual, congelandolo sin que jamas se
+        les pagara. enviar_a_revision()/aprobar()/marcar_pagado() se dejan
+        SIN este bloqueo -- ese comportamiento (avanzar con preliquidacion
+        parcial) fue una decision de diseño ya documentada y justificada en
+        NOMINA_FLUJO_EMPRESARIAL.md §3; el conteo de 'pendientes' ya es
+        visible en esas pantallas via PeriodoNominaSelector.get_resumen()
+        para revision humana, sin bloquear las transiciones intermedias.
+        """
         PeriodoNominaBusinessService._validar_transicion(periodo, 'CERRADO')
+
+        pendientes = EmpleadoSelector.get_empleados_pendientes_para_periodo(periodo)
+        if pendientes.exists():
+            nombres = [f"{e.nombre_completo} ({e.numero_documento})" for e in pendientes[:10]]
+            raise ValidationError({
+                'periodo': (
+                    f"No se puede cerrar el periodo: {pendientes.count()} empleado(s) "
+                    f"elegible(s) todavia no tienen nomina liquidada en este periodo. "
+                    f"Preliquide o registre su nomina, o retirelos, antes de cerrar."
+                ),
+                'pendientes': nombres,
+            })
+
         return PeriodoNominaCRUDService.actualizar_estado(periodo, 'CERRADO')
 
     @staticmethod
@@ -1046,6 +1219,152 @@ class NominaCalculationService:
             'fecha_inicio_primas': start_primas.strftime('%Y-%m-%d'),
             'fecha_inicio_cesantias': start_cesantias.strftime('%Y-%m-%d'),
             'fecha_inicio_vacaciones': start_vacaciones.strftime('%Y-%m-%d'),
+        }
+
+    # Motivos que NO generan indemnizacion por despido (CST art. 64): la ley
+    # solo indemniza la terminacion UNILATERAL del empleador SIN justa causa.
+    MOTIVOS_SIN_INDEMNIZACION_DESPIDO = {
+        'RENUNCIA', 'MUTUO_ACUERDO', 'VENCIMIENTO_TERMINO',
+        'TERMINACION_OBRA', 'JUSTA_CAUSA', 'MUERTE', 'OTRO',
+    }
+
+    @staticmethod
+    def calcular_indemnizacion_despido(contrato: Contrato, fecha_retiro, motivo_retiro: str) -> dict:
+        """
+        Indemnizacion por terminacion unilateral del contrato SIN JUSTA CAUSA
+        por parte del empleador (CST art. 64, modificado por Ley 789/2002
+        art. 28). Mision auditoria nomina FASE 21 (2026-09-10): "no asumir
+        automaticamente indemnizacion. Determinarla segun tipo contrato,
+        motivo, causal, regla legal aplicable. Mostrar la explicacion del
+        calculo" -- de ahi que el dict de retorno siempre incluya
+        'aplica' y 'explicacion', no solo el monto.
+
+        SUPUESTOS DOCUMENTADOS (Regla Critica de la mision: no inventar sin
+        evidencia normativa):
+        - Solo motivo_retiro == 'SIN_JUSTA_CAUSA' genera esta indemnizacion.
+          Los demas motivos (renuncia, mutuo acuerdo, vencimiento normal del
+          plazo, terminacion normal de obra, justa causa, muerte) retornan
+          monto 0 con la explicacion de por que no aplica.
+        - Base salarial: solo salario_mensual del contrato (SIN auxilio de
+          transporte -- jurisprudencia mayoritaria lo excluye de esta base
+          por no ser factor salarial permanente).
+        - "Años de servicio" se cuenta con calcular_dias_360() (misma
+          convencion comercial 30/360 que el resto del motor de nomina,
+          NO 365) para mantener una sola definicion de "año" en toda la app.
+        - SMLMV: lee settings.SMLMV_VIGENTE (ver config/settings.py) -- un
+          valor desactualizado sesga el umbral legal de 10 SMLMV.
+        - PRESTACION: no aplica (es un contrato civil, no laboral bajo CST).
+        - OBRA sin fecha_fin pactada: no es posible calcular "tiempo que
+          falte para terminar la obra" sin un dato inventado -- retorna 0
+          con explicacion pidiendo fecha_fin o ajuste manual.
+        """
+        from django.conf import settings as dj_settings
+
+        base = {
+            'aplica': False,
+            'dias': 0,
+            'valor': Decimal('0.00'),
+            'base_legal': 'CST art. 64 (modificado por Ley 789/2002 art. 28)',
+            'explicacion': '',
+        }
+
+        if motivo_retiro in NominaCalculationService.MOTIVOS_SIN_INDEMNIZACION_DESPIDO:
+            base['explicacion'] = (
+                f"Motivo de retiro '{motivo_retiro}' no genera indemnizacion por "
+                f"despido: el CST art. 64 solo indemniza la terminacion unilateral "
+                f"del contrato SIN JUSTA CAUSA por parte del empleador."
+            )
+            return base
+
+        if motivo_retiro != 'SIN_JUSTA_CAUSA':
+            base['explicacion'] = f"Motivo de retiro '{motivo_retiro}' no reconocido para calculo de indemnizacion."
+            return base
+
+        if contrato.tipo == 'PRESTACION':
+            base['explicacion'] = (
+                'Contrato de Prestacion de Servicios: no es un contrato laboral '
+                'bajo el CST, no genera indemnizacion por despido.'
+            )
+            return base
+
+        salario_basico = _to_decimal(contrato.salario_mensual)
+        salario_diario = salario_basico / _DIAS_MENSUALES
+
+        if contrato.tipo == 'FIJO':
+            if not contrato.fecha_fin or contrato.fecha_fin <= fecha_retiro:
+                base['explicacion'] = (
+                    'Contrato a Termino Fijo sin fecha_fin vigente posterior al '
+                    'retiro: no hay tiempo restante que indemnizar.'
+                )
+                return base
+            dias = NominaCalculationService.calcular_dias_360(fecha_retiro, contrato.fecha_fin)
+            valor = (dias * salario_diario).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+            return {
+                'aplica': True,
+                'dias': dias,
+                'valor': valor,
+                'base_legal': base['base_legal'],
+                'explicacion': (
+                    f"Contrato a Termino Fijo, despido sin justa causa: se indemniza "
+                    f"el tiempo que falta para el vencimiento pactado ({dias} dias "
+                    f"hasta {contrato.fecha_fin}) a razon de salario diario "
+                    f"({salario_diario.quantize(MONEY_Q)}) = {valor} COP."
+                ),
+            }
+
+        if contrato.tipo == 'OBRA':
+            if not contrato.fecha_fin:
+                base['explicacion'] = (
+                    'Contrato de Obra o Labor sin fecha_fin pactada: no es posible '
+                    'determinar el "tiempo que falte para terminar la obra" sin ese '
+                    'dato. Ajuste manual requerido (ver desglose_conceptos).'
+                )
+                return base
+            dias = max(NominaCalculationService.calcular_dias_360(fecha_retiro, contrato.fecha_fin), 15)
+            valor = (dias * salario_diario).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+            return {
+                'aplica': True,
+                'dias': dias,
+                'valor': valor,
+                'base_legal': base['base_legal'],
+                'explicacion': (
+                    f"Contrato de Obra o Labor, despido sin justa causa: se indemniza "
+                    f"el tiempo que falta para terminar la obra (minimo legal 15 dias), "
+                    f"{dias} dias a razon de salario diario "
+                    f"({salario_diario.quantize(MONEY_Q)}) = {valor} COP."
+                ),
+            }
+
+        # INDEF -- escala de Ley 789/2002 art. 28 segun umbral de 10 SMLMV.
+        smlmv = _to_decimal(dj_settings.SMLMV_VIGENTE)
+        umbral = smlmv * Decimal('10')
+        dias_servicio = NominaCalculationService.calcular_dias_360(contrato.fecha_inicio, fecha_retiro)
+
+        if salario_basico < umbral:
+            dias_base, dias_adicional_por_anio = Decimal('30'), Decimal('20')
+        else:
+            dias_base, dias_adicional_por_anio = Decimal('20'), Decimal('15')
+
+        if dias_servicio <= 360:
+            dias = dias_base
+        else:
+            anios_adicionales = (Decimal(dias_servicio) - Decimal('360')) / Decimal('360')
+            dias = dias_base + (anios_adicionales * dias_adicional_por_anio)
+
+        valor = (dias * salario_diario).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+        return {
+            'aplica': True,
+            'dias': float(dias.quantize(Decimal('0.01'))),
+            'valor': valor,
+            'base_legal': base['base_legal'],
+            'explicacion': (
+                f"Contrato a Termino Indefinido, despido sin justa causa. Salario "
+                f"({salario_basico}) {'menor' if salario_basico < umbral else 'mayor o igual'} "
+                f"a 10 SMLMV ({umbral}, SMLMV={smlmv}). {dias_servicio} dias de servicio "
+                f"({dias_servicio / 360:.2f} años). Formula: {dias_base} dias primer año + "
+                f"{dias_adicional_por_anio} dias/año adicional (prorrateado) = "
+                f"{dias:.2f} dias x salario diario ({salario_diario.quantize(MONEY_Q)}) = {valor} COP."
+            ),
         }
 
 

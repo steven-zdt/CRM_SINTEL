@@ -45,3 +45,18 @@ RIESGO_ARL_CHOICES = [
     ('IV', 'Clase IV (Riesgo Alto)'),
     ('V', 'Clase V (Riesgo Máximo)'),
 ]
+
+# Motivo de retiro del empleado (mision auditoria nomina FASE 21, 2026-09-10).
+# Determina si aplica indemnizacion por despido sin justa causa (CST art. 64,
+# Ley 789/2002 art. 28) -- ver NominaCalculationService.calcular_indemnizacion_despido().
+# Solo SIN_JUSTA_CAUSA genera esa indemnizacion automaticamente.
+MOTIVO_RETIRO_CHOICES = [
+    ('RENUNCIA', 'Renuncia Voluntaria'),
+    ('MUTUO_ACUERDO', 'Mutuo Acuerdo'),
+    ('VENCIMIENTO_TERMINO', 'Vencimiento del Término Pactado'),
+    ('TERMINACION_OBRA', 'Terminación de Obra o Labor'),
+    ('JUSTA_CAUSA', 'Justa Causa (Empleador, Art. 62 CST)'),
+    ('SIN_JUSTA_CAUSA', 'Sin Justa Causa (Empleador, Art. 64 CST)'),
+    ('MUERTE', 'Fallecimiento del Trabajador'),
+    ('OTRO', 'Otro'),
+]

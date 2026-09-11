@@ -38,7 +38,7 @@ class TestEmpleadoDeleteRecreate(TenantAPITestCase):
         self.assertJSONResponse(res_del_fail, status.HTTP_409_CONFLICT)
         
         # 3. Change state to RETIRADO
-        res_patch = self.tpatch(url_detail, data={'estado': 'RETIRADO', 'fecha_retiro': '2024-01-01'})
+        res_patch = self.tpatch(url_detail, data={'estado': 'RETIRADO', 'fecha_retiro': '2024-01-01', 'motivo_retiro': 'RENUNCIA'})
         self.assertJSONResponse(res_patch, status.HTTP_200_OK)
         
         # 4. Delete successfully
@@ -57,7 +57,7 @@ class TestEmpleadoDeleteRecreate(TenantAPITestCase):
         emp_uuid = res_post.data['uuid']
         url_detail = f"{self.url_list}{emp_uuid}/"
 
-        res_patch = self.tpatch(url_detail, data={'estado': 'RETIRADO', 'fecha_retiro': '2024-01-01'})
+        res_patch = self.tpatch(url_detail, data={'estado': 'RETIRADO', 'fecha_retiro': '2024-01-01', 'motivo_retiro': 'RENUNCIA'})
         self.assertJSONResponse(res_patch, status.HTTP_200_OK)
 
         # 2. Create an active contract in tenant schema
@@ -88,7 +88,7 @@ class TestEmpleadoDeleteRecreate(TenantAPITestCase):
         emp_uuid = res_post.data['uuid']
         url_detail = f"{self.url_list}{emp_uuid}/"
 
-        res_patch = self.tpatch(url_detail, data={'estado': 'RETIRADO', 'fecha_retiro': '2024-01-01'})
+        res_patch = self.tpatch(url_detail, data={'estado': 'RETIRADO', 'fecha_retiro': '2024-01-01', 'motivo_retiro': 'RENUNCIA'})
         self.assertJSONResponse(res_patch, status.HTTP_200_OK)
 
         # 2. Create inactive contract and an active non-annulled payroll (Devengo) in tenant schema
@@ -131,7 +131,7 @@ class TestEmpleadoDeleteRecreate(TenantAPITestCase):
         emp_uuid = res_post.data['uuid']
         url_detail = f"{self.url_list}{emp_uuid}/"
 
-        res_patch = self.tpatch(url_detail, data={'estado': 'RETIRADO', 'fecha_retiro': '2024-01-01'})
+        res_patch = self.tpatch(url_detail, data={'estado': 'RETIRADO', 'fecha_retiro': '2024-01-01', 'motivo_retiro': 'RENUNCIA'})
         self.assertJSONResponse(res_patch, status.HTTP_200_OK)
 
         # 2. Create inactive contract and an annulled payroll (Devengo) in tenant schema
