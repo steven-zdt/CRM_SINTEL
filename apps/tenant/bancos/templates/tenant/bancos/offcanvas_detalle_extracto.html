@@ -96,8 +96,8 @@
     <span><i class="bi bi-arrow-up-circle text-success me-1"></i>Ingresos: <strong>{{ kpis.ingresos|currency_cop }}</strong></span>
     <span><i class="bi bi-arrow-down-circle text-danger me-1"></i>Egresos: <strong>{{ kpis.egresos|currency_cop }}</strong></span>
     <span><i class="bi bi-dash-circle me-1"></i>Neto: <strong>{{ kpis.neto|currency_cop }}</strong></span>
-    <span><i class="bi bi-hourglass-split text-warning me-1"></i>Pendientes: <strong>{{ kpis.pendientes }}</strong></span>
-    <span><i class="bi bi-check2-all text-success me-1"></i>Conciliados: <strong>{{ kpis.conciliadas }}</strong>/{{ kpis.total }}</span>
+    <span><i class="bi bi-hourglass-split text-warning me-1"></i>Pendientes: <strong id="kpi-pendientes">{{ kpis.pendientes }}</strong></span>
+    <span><i class="bi bi-check2-all text-success me-1"></i>Conciliados: <strong id="kpi-conciliados">{{ kpis.conciliadas }}</strong>/<span id="kpi-total">{{ kpis.total }}</span></span>
   </div>
 
   <div class="offcanvas-body">

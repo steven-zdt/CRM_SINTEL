@@ -507,7 +507,23 @@
           badge.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Parcial';
         }
       }
+      _recalcularKpiConciliacion(container);
     }
+  }
+
+  // Fase 19: el KPI de Pendientes/Conciliados se renderiza server-side al
+  // abrir el offcanvas -- tras aplicar/quitar una aplicacion el badge de la
+  // fila ya se actualiza en el DOM (arriba), asi que el conteo se recalcula
+  // aqui mismo contando filas en vez de re-pedir todo el offcanvas al server.
+  function _recalcularKpiConciliacion(container) {
+    const totalEl = container.querySelector('#kpi-total');
+    const total = totalEl ? parseInt(totalEl.textContent, 10) || 0 : 0;
+    if (!total) return;
+    const conciliadas = container.querySelectorAll('.tx-row[data-conciliado="1"]').length;
+    const elConc = container.querySelector('#kpi-conciliados');
+    const elPend = container.querySelector('#kpi-pendientes');
+    if (elConc) elConc.textContent = String(conciliadas);
+    if (elPend) elPend.textContent = String(total - conciliadas);
   }
 
   function _renderAplicaciones(container, aplicaciones) {

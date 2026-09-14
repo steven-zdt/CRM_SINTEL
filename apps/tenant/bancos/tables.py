@@ -95,11 +95,11 @@ class ExtractoBancarioTable(tables.Table):
     def render_archivo_s3(self, value):
         if not value:
             return "—"
-        nombre = value.rsplit("/", 1)[-1]
+        nombre = value.name.rsplit("/", 1)[-1]
         return format_html(
             '<a href="{0}" target="_blank" class="text-decoration-none small text-truncate d-inline-block" '
             'style="max-width:150px;" title="{1}"><i class="bi bi-file-earmark-excel text-success me-1"></i>{1}</a>',
-            value, nombre,
+            value.url, nombre,
         )
 
     def render_procesado(self, value):
