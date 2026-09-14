@@ -1,4 +1,5 @@
 from django.urls import path
+
 from apps.tenant.bancos.api.viewsets import ExtractoBancarioViewSet
 from apps.tenant.bancos.views import CuentaBancariaTableView, ExtractoBancarioTableView
 

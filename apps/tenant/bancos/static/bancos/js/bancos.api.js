@@ -108,6 +108,34 @@
         if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
         return callHttp('PATCH', `${API_BASE}/transacciones/${uuid}/conciliar/`, payload);
       },
+      sugerencias: async (uuid) => {
+        console.log(`[${MOD}] transacciones.sugerencias(${uuid})`);
+        if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+        return callHttp('GET', `${API_BASE}/transacciones/${uuid}/sugerencias/`);
+      },
+      listarAplicaciones: async (uuid) => {
+        console.log(`[${MOD}] transacciones.listarAplicaciones(${uuid})`);
+        if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+        return callHttp('GET', `${API_BASE}/transacciones/${uuid}/aplicaciones/`);
+      },
+      crearAplicacion: async (uuid, payload) => {
+        console.log(`[${MOD}] transacciones.crearAplicacion(${uuid})`, payload);
+        if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+        return callHttp('POST', `${API_BASE}/transacciones/${uuid}/aplicaciones/`, payload);
+      },
+    },
+
+    aplicaciones: {
+      editar: async (uuid, payload) => {
+        console.log(`[${MOD}] aplicaciones.editar(${uuid})`, payload);
+        if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+        return callHttp('PATCH', `${API_BASE}/aplicaciones/${uuid}/`, payload);
+      },
+      eliminar: async (uuid) => {
+        console.log(`[${MOD}] aplicaciones.eliminar(${uuid})`);
+        if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+        return callHttp('DELETE', `${API_BASE}/aplicaciones/${uuid}/`);
+      },
     },
   };
 

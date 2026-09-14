@@ -1,5 +1,5 @@
 import logging
-from django.shortcuts import get_object_or_404
+
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status
 from rest_framework.decorators import action
@@ -8,26 +8,35 @@ from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
-from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
-from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.base import BaseTenantViewSet
-from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
-
-from apps.tenant.bancos.models import CuentaBancaria, ExtractoBancario, TransaccionBancaria
+from apps.tenant.api.mixins import SintelDSVMixin
+from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.bancos.api.serializers import (
+    CuentaBancariaSerializer,
+    ExtractoBancarioCreateSerializer,
+    ExtractoBancarioDetailSerializer,
+    ExtractoBancarioListSerializer,
+    MovimientoBancarioAplicacionSerializer,
+    MovimientoBancarioSugerenciaSerializer,
+    TransaccionBancariaConciliarSerializer,
+    TransaccionBancariaDetailSerializer,
+    TransaccionBancariaListSerializer,
+)
+from apps.tenant.bancos.models import (
+    CuentaBancaria,
+    ExtractoBancario,
+    MovimientoBancarioAplicacion,
+    TransaccionBancaria,
+)
 from apps.tenant.bancos.services.api_mixins import (
     CuentaBancariaServiceMixin,
     ExtractoBancarioServiceMixin,
+    MovimientoBancarioAplicacionServiceMixin,
     TransaccionBancariaServiceMixin,
 )
-from apps.tenant.bancos.api.serializers import (
-    CuentaBancariaSerializer,
-    ExtractoBancarioListSerializer,
-    ExtractoBancarioCreateSerializer,
-    ExtractoBancarioDetailSerializer,
-    TransaccionBancariaListSerializer,
-    TransaccionBancariaDetailSerializer,
-    TransaccionBancariaConciliarSerializer,
-)
+from apps.tenant.bancos.services.matching_service import BankTransactionMatchingService
+from apps.tenant.bancos.services.selectors import MovimientoBancarioAplicacionSelector
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 
 logger = logging.getLogger(__name__)
 
@@ -204,12 +213,20 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
     @action(detail=True, methods=["post"], url_path="procesar")
     def procesar(self, request, uuid=None):
         """
-        Executes parser on statement Excel to load transactions.
+        Importa (XLSX/CSV) -> normaliza -> valida balance -> ingesta transacciones.
+
+        Body opcional: {"forzar": true} -- requerido para reprocesar un
+        extracto que ya tiene transacciones conciliadas/con aplicaciones
+        (Fase 24, importacion no destructiva).
         """
         try:
             extracto = self.get_object()
-            num_tx = self.service_procesar_extracto(extracto)
-            return Response({"message": f"Se procesaron {num_tx} transacciones exitosamente."}, status=status.HTTP_200_OK)
+            forzar = bool(request.data.get("forzar", False))
+            resultado = self.service_procesar_extracto(extracto, forzar=forzar)
+            resultado["message"] = (
+                f"Se procesaron {resultado['transacciones_importadas']} transacciones exitosamente."
+            )
+            return Response(resultado, status=status.HTTP_200_OK)
         except Exception as e:
             return self.handle_service_error(e)
 
@@ -245,10 +262,31 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
             .order_by('-fecha', '-created_at')
         )
 
+        # Fase 19: KPI resumido del extracto (ingresos/egresos/neto/pendientes/conciliados).
+        from decimal import Decimal
+
+        from django.db.models import Case, Count, DecimalField, F, Q, Sum, Value, When
+        from django.db.models.functions import Coalesce
+
+        cero_decimal = Value(Decimal("0.00"), output_field=DecimalField())
+        kpis = transacciones.aggregate(
+            ingresos=Coalesce(
+                Sum(Case(When(valor__gte=0, then="valor"), output_field=DecimalField())), cero_decimal
+            ),
+            egresos=Coalesce(
+                Sum(Case(When(valor__lt=0, then=-1 * F("valor")), output_field=DecimalField())), cero_decimal
+            ),
+            total=Count("id"),
+            conciliadas=Count("id", filter=Q(conciliado=True)),
+        )
+        kpis["neto"] = kpis["ingresos"] - kpis["egresos"]
+        kpis["pendientes"] = kpis["total"] - kpis["conciliadas"]
+
         context = {
             "extracto": extracto,
             "transacciones": transacciones,
             "empresa_id": empresa_id,
+            "kpis": kpis,
         }
         return Response(context, template_name="tenant/bancos/offcanvas_detalle_extracto.html")
 
@@ -263,7 +301,7 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
     """
     queryset = TransaccionBancaria.objects.none()
     serializer_class = TransaccionBancariaDetailSerializer
-    http_method_names = ["get", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
     pagination_class = StandardResultsSetPagination
     renderer_classes = [JSONRenderer]
 
@@ -311,6 +349,47 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
         except Exception as e:
             return self.handle_service_error(e)
 
+    @action(detail=True, methods=["get"], url_path="sugerencias")
+    def sugerencias(self, request, uuid=None):
+        """
+        Fase 8-12: motor de sugerencias. Solo lectura -- nunca escribe.
+        GET /api/v1/bancos/transacciones/{uuid}/sugerencias/
+        """
+        try:
+            transaccion = self.get_object()
+            candidatos = BankTransactionMatchingService.sugerir(transaccion)
+            serializer = MovimientoBancarioSugerenciaSerializer(candidatos, many=True)
+            return Response({"results": serializer.data}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    @action(detail=True, methods=["get", "post"], url_path="aplicaciones")
+    def aplicaciones(self, request, uuid=None):
+        """
+        Fase 5-7: aplicaciones multiples por movimiento (split de pagos).
+        GET  /api/v1/bancos/transacciones/{uuid}/aplicaciones/  -> lista
+        POST /api/v1/bancos/transacciones/{uuid}/aplicaciones/  -> crea
+        Editar/eliminar una aplicacion puntual: ver MovimientoBancarioAplicacionViewSet
+        (/api/v1/bancos/aplicaciones/{uuid}/).
+        """
+        try:
+            transaccion = self.get_object()
+            empresa_id = self.get_empresa_id()
+
+            if request.method == "GET":
+                qs = MovimientoBancarioAplicacionSelector.get_list(empresa_id, transaccion_uuid=transaccion.uuid)
+                serializer = MovimientoBancarioAplicacionSerializer(qs, many=True)
+                return Response({"results": serializer.data}, status=status.HTTP_200_OK)
+
+            serializer = MovimientoBancarioAplicacionSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            aplicacion = self.service_crear_aplicacion(transaccion, serializer.validated_data)
+            return Response(
+                MovimientoBancarioAplicacionSerializer(aplicacion).data, status=status.HTTP_201_CREATED
+            )
+        except Exception as e:
+            return self.handle_service_error(e)
+
     @action(detail=False, methods=["get"], url_path="search-facturas")
     def search_facturas(self, request):
         """
@@ -321,8 +400,9 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
         - naturaleza=COMPRA: facturas recibidas de proveedor.
         - sin naturaleza: ambas.
         """
-        from apps.tenant.facturas.models import Factura
         from django.db.models import Q
+
+        from apps.tenant.facturas.models import Factura
 
         empresa_id = self.get_empresa_id()
         q          = request.query_params.get('q', '').strip()
@@ -395,8 +475,9 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
         Busca proveedores por NIT, razon_social o nombre_comercial.
         GET /api/v1/bancos/transacciones/search-proveedores/?q=<term>
         """
-        from apps.tenant.proveedores.models import Proveedor
         from django.db.models import Q
+
+        from apps.tenant.proveedores.models import Proveedor
 
         empresa_id = self.get_empresa_id()
         q          = request.query_params.get('q', '').strip()
@@ -439,8 +520,9 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
         Busca clientes por NIT, razon_social, nombre_comercial o ciudad.
         GET /api/v1/bancos/transacciones/search-clientes/?q=<term>
         """
-        from apps.tenant.clientes.models import Cliente
         from django.db.models import Q
+
+        from apps.tenant.clientes.models import Cliente
 
         empresa_id = self.get_empresa_id()
         q          = request.query_params.get('q', '').strip()
@@ -471,3 +553,51 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
             for c in qs[:page_size]
         ]
         return Response({'results': results}, status=status.HTTP_200_OK)
+
+
+class MovimientoBancarioAplicacionViewSet(
+    OrganizationalContextMixin, MovimientoBancarioAplicacionServiceMixin, SintelDSVMixin, BaseTenantViewSet
+):
+    """
+    Editar/eliminar una aplicacion puntual (Fase 5-7).
+
+    Crear/listar por transaccion: ver
+    TransaccionBancariaViewSet.aplicaciones() (/transacciones/{uuid}/aplicaciones/),
+    que es el flujo principal desde el detalle del extracto. Este ViewSet
+    cubre GET/PATCH/DELETE directos por uuid de la aplicacion (ej. desde un
+    listado propio de "todas mis aplicaciones pendientes").
+    """
+    queryset = MovimientoBancarioAplicacion.objects.none()
+    serializer_class = MovimientoBancarioAplicacionSerializer
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+    pagination_class = StandardResultsSetPagination
+    renderer_classes = [JSONRenderer]
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ["fecha_aplicacion", "monto_aplicado", "created_at"]
+    ordering = ["-fecha_aplicacion", "-created_at"]
+    permission_classes = [IsTenantMember]
+
+    def get_queryset(self):
+        if not hasattr(self, "action") or self.action is None:
+            return MovimientoBancarioAplicacion.objects.none()
+        if self.action == "list":
+            return self.get_qs_list()
+        return self.get_qs_detail()
+
+    def update(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            aplicacion = self.service_editar_aplicacion(instance, serializer.validated_data)
+            return Response(self.get_serializer(aplicacion).data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            instance = self.get_object()
+            self.service_eliminar_aplicacion(instance)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return self.handle_service_error(e)

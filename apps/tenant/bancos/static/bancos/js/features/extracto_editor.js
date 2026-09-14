@@ -232,6 +232,9 @@
         // Mostrar formulario
         if (placeholder) placeholder.style.display = 'none';
         form.classList.add('visible');
+
+        // Paso 5: cargar aplicaciones multiples de esta transaccion (Fase 5-12)
+        _cargarAplicaciones(container, uuid);
       });
     });
 
@@ -406,6 +409,187 @@
         btnQuitar.disabled = false;
       });
     }
+
+    // ── Paso 5: Aplicaciones multiples (Fase 5-12, v3.0) ────────────────
+    const btnSugerencias = container.querySelector('#btn-sugerencias');
+    if (btnSugerencias) {
+      btnSugerencias.addEventListener('click', async () => {
+        const uuid = concUuid.value;
+        if (!uuid) return;
+        btnSugerencias.disabled = true;
+        const res = await w.Sintel.Bancos.API.transacciones.sugerencias(uuid);
+        btnSugerencias.disabled = false;
+        if (!res?.ok) return;
+        _renderSugerencias(container, res.data?.results || []);
+      });
+    }
+
+    const btnAgregar = container.querySelector('#btn-agregar-aplicacion');
+    if (btnAgregar) {
+      btnAgregar.addEventListener('click', async () => {
+        const uuid = concUuid.value;
+        const feedback = container.querySelector('#apl-feedback');
+        if (!uuid) return;
+
+        const tipo = container.querySelector('#apl-tipo')?.value;
+        const montoRaw = container.querySelector('#apl-monto')?.value;
+        const notas = container.querySelector('#apl-notas')?.value?.trim() || null;
+        const referenciaUuid = container.querySelector('#apl-referencia-uuid')?.value || null;
+
+        if (!montoRaw || parseFloat(montoRaw) <= 0) {
+          _mostrarFeedback(feedback, 'warning', 'Ingresa un monto valido mayor a 0.');
+          return;
+        }
+
+        btnAgregar.disabled = true;
+        const payload = {
+          tipo_referencia: tipo,
+          monto_aplicado: montoRaw,
+          referencia_uuid: referenciaUuid,
+          notas,
+        };
+        const res = await w.Sintel.Bancos.API.transacciones.crearAplicacion(uuid, payload);
+        btnAgregar.disabled = false;
+
+        if (!res?.ok) {
+          const msg = res?.data?.monto_aplicado?.[0] || res?.data?.detail || JSON.stringify(res?.data) || 'Error al aplicar.';
+          _mostrarFeedback(feedback, 'danger', msg);
+          return;
+        }
+
+        container.querySelector('#apl-monto').value = '';
+        container.querySelector('#apl-notas').value = '';
+        container.querySelector('#apl-referencia-uuid').value = '';
+        container.querySelector('#apl-sugerencias-box')?.classList.add('d-none');
+        _mostrarFeedback(feedback, 'success', 'Aplicacion agregada.');
+        await _cargarAplicaciones(container, uuid);
+      });
+    }
+  }
+
+  // ── Aplicaciones multiples (Fase 5-12) ────────────────────────────────
+  async function _cargarAplicaciones(container, uuid) {
+    const [aplicacionesRes, txRes] = await Promise.all([
+      w.Sintel.Bancos.API.transacciones.listarAplicaciones(uuid),
+      w.Sintel.Bancos.API.transacciones.get(uuid),
+    ]);
+    const aplicaciones = aplicacionesRes?.ok ? (aplicacionesRes.data?.results || []) : [];
+    const tx = txRes?.ok ? txRes.data : null;
+
+    _renderAplicaciones(container, aplicaciones);
+
+    if (tx) {
+      const aplicado = parseFloat(tx.monto_aplicado || '0');
+      const pendiente = parseFloat(tx.monto_pendiente || '0');
+      const monto = aplicado + pendiente;
+      const pct = monto > 0 ? Math.min(100, Math.round((aplicado / monto) * 100)) : 0;
+
+      const elAplicado = container.querySelector('#apl-total-aplicado');
+      const elPendiente = container.querySelector('#apl-total-pendiente');
+      const bar = container.querySelector('#apl-progress-bar');
+      if (elAplicado) elAplicado.textContent = '$' + _fmt(aplicado);
+      if (elPendiente) elPendiente.textContent = '$' + _fmt(pendiente);
+      if (bar) bar.style.width = pct + '%';
+
+      // Sincroniza el badge de estado de la fila con el estado real del servidor
+      // (conciliado puede haber ascendido a True via aplicaciones, ver crud_service).
+      const row = container.querySelector(`.tx-row[data-uuid="${uuid}"]`);
+      if (row) {
+        row.dataset.conciliado = tx.conciliado ? '1' : '0';
+        const badge = row.querySelector('td:last-child .badge');
+        if (badge && tx.conciliado) {
+          badge.className = 'badge bg-success';
+          badge.style.fontSize = '.62rem';
+          badge.innerHTML = '<i class="bi bi-check2-all me-1"></i>Conciliado';
+        } else if (badge && tx.estado_aplicacion === 'PARCIAL') {
+          badge.className = 'badge bg-warning text-dark';
+          badge.style.fontSize = '.62rem';
+          badge.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Parcial';
+        }
+      }
+    }
+  }
+
+  function _renderAplicaciones(container, aplicaciones) {
+    const box = container.querySelector('#apl-lista');
+    if (!box) return;
+    if (!aplicaciones.length) {
+      box.innerHTML = '<div class="text-muted" style="font-size:.72rem;">Sin aplicaciones registradas.</div>';
+      return;
+    }
+    box.innerHTML = aplicaciones.map(a => `
+      <div class="d-flex justify-content-between align-items-center border rounded px-2 py-1 mb-1">
+        <div class="min-w-0">
+          <div class="fw-semibold text-truncate" style="max-width:180px;">
+            ${a.tipo_referencia_display || a.tipo_referencia}
+          </div>
+          <div class="text-muted text-truncate" style="max-width:180px;font-size:.68rem;">
+            ${a.notas ? a.notas : (a.referencia_uuid ? 'Ref: ...' + a.referencia_uuid.slice(-8) : 'Sin referencia')}
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+          <span class="fw-bold">$${_fmt(a.monto_aplicado)}</span>
+          <button type="button" class="btn btn-sm btn-link text-danger p-0 btn-eliminar-aplicacion" data-uuid="${a.uuid}" title="Quitar">
+            <i class="bi bi-x-circle"></i>
+          </button>
+        </div>
+      </div>`).join('');
+
+    box.querySelectorAll('.btn-eliminar-aplicacion').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const aplicacionUuid = btn.dataset.uuid;
+        const txUuid = container.querySelector('#conc-uuid')?.value;
+        btn.disabled = true;
+        const res = await w.Sintel.Bancos.API.aplicaciones.eliminar(aplicacionUuid);
+        if (res?.ok && txUuid) {
+          await _cargarAplicaciones(container, txUuid);
+        } else {
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  const _TIPO_POR_CANDIDATO = {
+    FACTURA_VENTA: 'FACTURA_VENTA',
+    FACTURA_COMPRA: 'FACTURA_COMPRA',
+    CLIENTE: 'CARTERA',
+    PROVEEDOR: 'CUENTA_POR_PAGAR',
+    GASTO: 'GASTO',
+  };
+
+  function _renderSugerencias(container, sugerencias) {
+    const box = container.querySelector('#apl-sugerencias-box');
+    if (!box) return;
+    if (!sugerencias.length) {
+      box.innerHTML = '<div class="text-muted p-2" style="font-size:.72rem;">Sin sugerencias para este movimiento.</div>';
+      box.classList.remove('d-none');
+      return;
+    }
+    box.innerHTML = sugerencias.map((s, i) => `
+      <div class="ac-item" data-idx="${i}">
+        <div class="d-flex justify-content-between">
+          <span class="ac-name text-truncate">${s.descripcion}</span>
+          <span class="badge bg-info text-dark" style="font-size:.6rem;">${Math.round(s.score * 100)}%</span>
+        </div>
+        <div class="ac-sub">${(s.reason || []).join(' · ')}</div>
+      </div>`).join('');
+    box.classList.remove('d-none');
+
+    box.querySelectorAll('.ac-item').forEach((el, i) => {
+      el.addEventListener('click', () => {
+        const s = sugerencias[i];
+        const tipoSel = container.querySelector('#apl-tipo');
+        const montoInp = container.querySelector('#apl-monto');
+        const notasInp = container.querySelector('#apl-notas');
+        const refInp = container.querySelector('#apl-referencia-uuid');
+        if (tipoSel && _TIPO_POR_CANDIDATO[s.tipo]) tipoSel.value = _TIPO_POR_CANDIDATO[s.tipo];
+        if (montoInp && s.monto) montoInp.value = s.monto;
+        if (notasInp) notasInp.value = s.descripcion;
+        if (refInp) refInp.value = s.uuid;
+        box.classList.add('d-none');
+      });
+    });
   }
 
   // ── Helpers de autocomplete ───────────────────────────────────────────

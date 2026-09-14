@@ -1,9 +1,20 @@
 import logging
+from decimal import Decimal
+
 from django.db import transaction
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-from apps.tenant.bancos.models import CuentaBancaria, ExtractoBancario, TransaccionBancaria
+
+from apps.tenant.bancos.models import (
+    CuentaBancaria,
+    ExtractoBancario,
+    MovimientoBancarioAplicacion,
+    TransaccionBancaria,
+)
 
 logger = logging.getLogger(__name__)
+
+TOLERANCIA_APLICACION = Decimal("0.01")
 
 class CuentaBancariaCRUDService:
     """Pure CRUD operations for CuentaBancaria."""
@@ -159,6 +170,13 @@ class TransaccionBancariaCRUDService:
                         )
                     })
 
+        # DEUDA-C03 "Clientes + Cartera" (decision del usuario, 2026-09-11):
+        # capturado ANTES de aplicar los cambios, para saber si `conciliado`
+        # esta transicionando False/None -> True AHORA (evita disparar un
+        # segundo abono en Cartera si se re-guarda una conciliacion ya
+        # existente sin cambiar el flag, ej. solo se edita notas_conciliacion).
+        conciliado_previo = transaccion.conciliado
+
         campos_a_guardar = []
         for field in CAMPOS_CONCILIACION:
             if field in data:
@@ -192,4 +210,150 @@ class TransaccionBancariaCRUDService:
                     transaccion.factura_uuid, exc
                 )
 
+            # DEUDA-C03 "Clientes + Cartera" (decision del usuario,
+            # 2026-09-11): Cartera es la UNICA SSoT real de pagos -- al
+            # conciliar una transaccion contra una Factura de VENTA, Bancos
+            # dispara automaticamente un abono en la Cartera asociada (la
+            # crea si no existia todavia, mismo patron get_or_create que ya
+            # usa CarteraViewSet.render_offcanvas_abono_factura()). Solo se
+            # dispara en la transicion real no-conciliada -> conciliada
+            # (evita doble abono si se re-guarda sin cambiar el flag).
+            # LIMITACION CONOCIDA, documentada, no resuelta aqui:
+            # des-conciliar una transaccion (True -> False) NO revierte el
+            # abono ya aplicado -- Cartera no tiene hoy un mecanismo de
+            # reverso de abonos (ver mision seccion 74, "no improvisar un
+            # DELETE"); si esto se necesita, es una mision aparte.
+            if transaccion.conciliado and not conciliado_previo:
+                try:
+                    from apps.tenant.clientes.services.business_service import (
+                        CarteraBusinessService,
+                    )
+                    CarteraBusinessService.registrar_abono_desde_conciliacion_bancaria(
+                        empresa_id=transaccion.empresa_id,
+                        factura_uuid=transaccion.factura_uuid,
+                        monto=abs(transaccion.valor),
+                        fecha=transaccion.fecha,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "[TransaccionBancariaCRUD] No se pudo sincronizar abono en Cartera para factura_uuid=%s: %s",
+                        transaccion.factura_uuid, exc
+                    )
+
         return transaccion
+
+
+class MovimientoBancarioAplicacionCRUDService:
+    """Fase 5-7 (mision Bancos v3.0): CRUD de aplicaciones multiples por
+    movimiento. Deliberadamente NO dispara ningun efecto lateral cross-app
+    (Cartera, estado_pago) -- ese automatismo sigue siendo exclusivo del
+    vinculo legado 1:1 (TransaccionBancariaCRUDService.conciliar_transaccion),
+    documentado en AUDITORIA_FLUJO_COMPLETO.md v3.0 §5. Esta capa solo
+    clasifica/aplica y sincroniza el flag `conciliado` hacia arriba (nunca
+    lo revierte a False -- evita pisar un vinculo legado ya completo)."""
+
+    @staticmethod
+    def _validar_no_sobreaplicar(transaccion: TransaccionBancaria, monto_nuevo: Decimal, excluir_uuid=None):
+        monto_movimiento = abs(transaccion.valor)
+        qs = MovimientoBancarioAplicacion.objects.filter(
+            transaccion=transaccion, empresa_id=transaccion.empresa_id
+        )
+        if excluir_uuid:
+            qs = qs.exclude(uuid=excluir_uuid)
+        monto_existente = sum((a.monto_aplicado for a in qs), Decimal("0.00"))
+        total = monto_existente + monto_nuevo
+        if total - monto_movimiento > TOLERANCIA_APLICACION:
+            raise ValidationError({
+                "monto_aplicado": (
+                    f"El monto aplicado total ({total}) excederia el valor del movimiento "
+                    f"({monto_movimiento}). Ya hay {monto_existente} aplicado; el maximo "
+                    f"disponible para esta aplicacion es {monto_movimiento - monto_existente}."
+                )
+            })
+        return monto_existente
+
+    @staticmethod
+    def _sincronizar_conciliado(transaccion: TransaccionBancaria):
+        """Solo ASCIENDE conciliado a True cuando el 100% del movimiento
+        esta aplicado -- nunca lo revierte a False (ver docstring de clase)."""
+        if transaccion.conciliado:
+            return
+        monto_movimiento = abs(transaccion.valor)
+        total_aplicado = sum(
+            (a.monto_aplicado for a in MovimientoBancarioAplicacion.objects.filter(
+                transaccion=transaccion, empresa_id=transaccion.empresa_id
+            )),
+            Decimal("0.00"),
+        )
+        if monto_movimiento - total_aplicado <= TOLERANCIA_APLICACION:
+            transaccion.conciliado = True
+            transaccion.save(update_fields=["conciliado"])
+
+    @staticmethod
+    @transaction.atomic
+    def crear_aplicacion(transaccion: TransaccionBancaria, data: dict, empresa) -> MovimientoBancarioAplicacion:
+        # select_for_update: serializa aplicaciones concurrentes sobre el
+        # mismo movimiento para que el guard de sobreaplicacion sea real
+        # (Fase 6).
+        transaccion = TransaccionBancaria.objects.select_for_update().get(pk=transaccion.pk)
+
+        monto_aplicado = data["monto_aplicado"]
+        MovimientoBancarioAplicacionCRUDService._validar_no_sobreaplicar(transaccion, monto_aplicado)
+
+        aplicacion = MovimientoBancarioAplicacion(
+            empresa=empresa,
+            transaccion=transaccion,
+            tipo_referencia=data["tipo_referencia"],
+            referencia_uuid=data.get("referencia_uuid"),
+            tercero_tipo=data.get("tercero_tipo"),
+            tercero_uuid=data.get("tercero_uuid"),
+            monto_aplicado=monto_aplicado,
+            fecha_aplicacion=data.get("fecha_aplicacion") or timezone.localdate(),
+            notas=data.get("notas"),
+            origen_matching=data.get("origen_matching", "MANUAL"),
+            confianza=data.get("confianza"),
+        )
+        aplicacion.full_clean()
+        aplicacion.save()
+
+        MovimientoBancarioAplicacionCRUDService._sincronizar_conciliado(transaccion)
+
+        logger.info(
+            "[MovimientoBancarioAplicacionCRUD] Creada aplicacion uuid=%s tipo=%s monto=%s tx=%s",
+            aplicacion.uuid, aplicacion.tipo_referencia, aplicacion.monto_aplicado, transaccion.uuid,
+        )
+        return aplicacion
+
+    @staticmethod
+    @transaction.atomic
+    def editar_aplicacion(aplicacion: MovimientoBancarioAplicacion, data: dict) -> MovimientoBancarioAplicacion:
+        transaccion = TransaccionBancaria.objects.select_for_update().get(pk=aplicacion.transaccion_id)
+
+        if "monto_aplicado" in data:
+            MovimientoBancarioAplicacionCRUDService._validar_no_sobreaplicar(
+                transaccion, data["monto_aplicado"], excluir_uuid=aplicacion.uuid
+            )
+
+        for field in ("tipo_referencia", "referencia_uuid", "tercero_tipo", "tercero_uuid",
+                      "monto_aplicado", "fecha_aplicacion", "notas"):
+            if field in data:
+                setattr(aplicacion, field, data[field])
+        aplicacion.full_clean()
+        aplicacion.save()
+
+        MovimientoBancarioAplicacionCRUDService._sincronizar_conciliado(transaccion)
+        return aplicacion
+
+    @staticmethod
+    @transaction.atomic
+    def eliminar_aplicacion(aplicacion: MovimientoBancarioAplicacion) -> None:
+        aplicacion_uuid = aplicacion.uuid
+        transaccion_id = aplicacion.transaccion_id
+        aplicacion.delete()
+        logger.info(
+            "[MovimientoBancarioAplicacionCRUD] Eliminada aplicacion uuid=%s tx_id=%s",
+            aplicacion_uuid, transaccion_id,
+        )
+        # Eliminar SI puede bajar el total aplicado por debajo del 100%, pero
+        # nunca revertimos `conciliado` automaticamente (ver docstring de
+        # clase) -- el usuario decide si quitar el vinculo legado tambien.

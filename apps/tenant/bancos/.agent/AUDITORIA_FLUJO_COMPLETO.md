@@ -1,20 +1,179 @@
 # AUDITORIA_FLUJO_COMPLETO.md — Bancos
 
-## Fecha: 2026-06-04
+## Fecha: 2026-06-04 (actualizado 2026-09-14)
 ## Modulo: tenant/bancos
-## Version: v2.0 — Conciliacion Bancaria Completa (Master-Detail + Flujo Guiado)
+## Version: v3.0 — Importacion Multiformato + Aplicaciones Multiples + Matching (motor operativo)
 
 ---
 
-## RESUMEN DE ESTADO
+## v3.0 (2026-09-14) — Motor operativo `IMPORTAR -> NORMALIZAR -> CLASIFICAR -> SUGERIR -> VINCULAR -> APLICAR -> CONCILIAR`
+
+**Estado honesto: READY FOR TESTING (no "PRODUCTION READY").** Verificado con
+evidencia real (fixture bancario real, no sintetico) para lo que SI se
+construyo; varios items de la mision original quedaron DEFERRED de forma
+explicita (ver tabla al final de esta seccion) -- no se fabrico una
+funcionalidad que no existe.
+
+**Verificado:** `pytest apps/tenant/bancos/tests/` completo -> **58 passed,
+0 failed** (15 preexistentes sin regresion + 43 nuevos: parser monetario,
+importador XLSX contra el fixture real, CSV, validacion de balance,
+aplicaciones multiples, matching service, aislamiento cross-tenant, KPIs).
+1 bug real encontrado y corregido durante esta verificacion:
+`Coalesce(Sum(...), 0)` en el KPI de `render_offcanvas_detalle` mezclaba
+`DecimalField`/`IntegerField` sin `output_field` -> 500 real, reproducido
+por el test `test_render_offcanvas_detalle_incluye_kpis_fase19`, corregido
+con `Value(Decimal("0.00"), output_field=DecimalField())`.
+
+### Que cambio (evolutivo, no reescritura -- se conservo todo lo de v2.0)
+
+1. **Parser monetario robusto** (`services/parsing/money.py`): `parse_money()`
+   unico punto de normalizacion, siempre `Decimal`. Soporta formato US
+   (coma=miles, punto=decimal, el que usa el extracto real) y formato
+   colombiano (punto=miles, coma=decimal), simbolos de moneda y parentesis
+   contables. Verificado contra los 7 casos exactos de la mision + edge
+   cases (`tests/test_money_parser.py`).
+
+2. **Arquitectura de importacion desacoplada del formato**
+   (`services/importers/`): `BankStatementImporter` (ABC) ->
+   `XLSXBankStatementImporter` / `CSVBankStatementImporter` /
+   `XMLBankStatementImporter`. DTOs internos `NormalizedBankStatement` /
+   `NormalizedBankTransaction`. `get_importer_for(nombre_archivo)` selecciona
+   por extension; extension desconocida -> `UnsupportedFormatError`
+   controlado (nunca 500).
+   - **XLSX**: reutiliza la estrategia YA probada en produccion (escanear
+     cada fila buscando el patron de fecha corta `D/M`, ignora
+     automaticamente titulos/bloques repetidos/"FIN ESTADO DE CUENTA" sin
+     asumir posicion fija), + deteccion dinamica de columnas por encabezado
+     real (fallback al layout por defecto si no se encuentra) + extraccion
+     best-effort del bloque "Resumen:" (saldo anterior, total abonos/cargos,
+     saldo actual).
+   - **CSV**: `csv.Sniffer` + fallback manual para `,`/`;`/tab, BOM UTF-8,
+     decimales colombianos/americanos via `parse_money`, encabezados por
+     alias (FECHA/DATE, DESCRIPCION/DETALLE/CONCEPTO, VALOR/MONTO/AMOUNT...).
+   - **XML**: contrato/adapter (`XMLBankStatementImporter.importar()` ->
+     `NormalizedBankStatement`, mismo shape que XLSX/CSV) sin parser real --
+     no existe hoy un esquema XML bancario de referencia disponible para
+     este proyecto. `STATUS = UNSUPPORTED_FORMAT` controlado, no rompe el
+     resto del sistema. `ADAPTERS_POR_BANCO` preparado para Fase 27
+     (agregar un banco = una subclase, sin tocar el resto).
+
+3. **Validacion de balance obligatoria** (Fase 1): `saldo_inicial (derivado
+   de la primera fila) + creditos - debitos == saldo_final (ultima fila)`,
+   tolerancia `Decimal("0.01")`. Format-agnostica (se deriva de los propios
+   movimientos, no depende de que el archivo exponga un bloque resumen). Si
+   falla, `ValidationError` -> 422, `extracto.procesado` NUNCA se marca
+   `True`. `ExtractoBancario.saldo_inicial/saldo_final` ahora se
+   autocompletan desde el archivo procesado (antes eran solo un input manual
+   del usuario en la creacion, casi siempre en 0.00).
+
+4. **`MovimientoBancarioAplicacion`** (modelo nuevo, migracion `0007`):
+   `TransaccionBancaria` 1->N aplicaciones. 12 `tipo_referencia` (soft-ref
+   UUID, `referencia_uuid` opcional -- permite `OTRO`/`referencia_uuid=None`
+   para clasificar sin bloquear, Fase 30). Guard de sobreaplicacion real
+   (`select_for_update` sobre la transaccion + suma de aplicaciones
+   existentes, tolerancia 0.01) en creacion Y edicion. **Deliberadamente
+   NO dispara ningun efecto lateral cross-app** (Cartera, estado_pago) --
+   ese automatismo sigue siendo EXCLUSIVO del vinculo legado 1:1
+   (`conciliar_transaccion()`, sin tocar, mismos tests v2.0 en verde). Unico
+   punto de acoplamiento entre ambos mecanismos: `conciliado` solo ASCIENDE
+   a `True` cuando el 100% del movimiento queda aplicado via el nuevo
+   modelo -- nunca lo revierte a `False` (evita pisar un vinculo legado ya
+   completo).
+
+5. **`BankTransactionMatchingService`** (`services/matching_service.py`):
+   solo lectura, nunca escribe. CREDITO -> Factura VENTA + Cliente; DEBITO ->
+   Factura COMPRA + Proveedor + `DocumentoSoporte` (el "Gasto" real del
+   proyecto -- no existe un modelo `Gasto` propiamente dicho, ver
+   `apps/tenant/gastos/models.py`). Score ponderado: documento bancario
+   (dcto) > NIT en descripcion > nombre/razon social > numero de documento >
+   monto (exacto/~5%) > proximidad de fecha.
+
+6. **Endpoints nuevos** (`TransaccionBancariaViewSet`):
+   `GET /transacciones/{uuid}/sugerencias/`,
+   `GET|POST /transacciones/{uuid}/aplicaciones/`. ViewSet nuevo
+   `MovimientoBancarioAplicacionViewSet` -> `GET|PATCH|DELETE
+   /aplicaciones/{uuid}/`. `POST .../procesar/` ahora acepta
+   `{"forzar": true}` (Fase 24 -- bloquea reprocesar un extracto con
+   transacciones ya conciliadas/con aplicaciones salvo `forzar` explicito) y
+   devuelve un resultado real (`filas_leidas/importadas/omitidas`, totales,
+   formato) en vez de un mensaje generico.
+
+7. **Frontend**: Paso 5 nuevo en `offcanvas_detalle_extracto.html` (barra
+   aplicado/pendiente, lista de aplicaciones con quitar, alta con selector
+   de 12 tipos + boton "Sugerir" que trae candidatos clicables). `bancos.api.js`
+   SSoT ampliado (`sugerencias`, `listarAplicaciones`, `crearAplicacion`,
+   `aplicaciones.editar/eliminar`). Sigue usando `window.Sintel.Core.Http`
+   (el wrapper real que usa este modulo -- no `window.http()` directo, que
+   es lo que documentaba la mision generica; se siguio el codigo real, no la
+   suposicion).
+
+### Validado contra el extracto real `10800014844_AGO2026.xlsx`
 
 ```
-Score Global:     10/10
-Status:           PRODUCTION READY ✅
+60 movimientos (24 creditos, 36 debitos)         -- OK, exacto
+Creditos:  $8.656.342,15   Debitos: $9.633.350,20  -- OK, exacto
+Saldo inicial: $986.830,85 -> Saldo final: $9.822,80 -- OK, exacto
+Balance interno (inicial + creditos - debitos = final) -- OK, cuadra exacto
+```
+Ver `apps/tenant/bancos/tests/test_import_xlsx_real_fixture.py`.
+
+### DEFERRED explicito (no fabricado, documentado para una fase posterior)
+
+| Item | Por que se deja fuera |
+|---|---|
+| XML real (Fase 2/27) | No hay esquema XML bancario de referencia disponible en este proyecto -- el adapter/contrato SI esta listo. |
+| Transferencias entre cuentas propias, vinculo de 2 movimientos (Fase 13) | Requiere UI/servicio propio (buscar el movimiento espejo en otra `CuentaBancaria`) -- `TRANSFERENCIA_INTERNA` ya existe como `tipo_referencia` aplicable individualmente, falta el vinculo par-a-par. |
+| Previsualizacion de efecto contable / "Ver efecto contable" (Fase 23) | Requiere leer la logica real de determinacion de cuenta de Contabilidad (`APP_ORIGEN_PREFIJOS`) para no inventar cuentas -- fuera de alcance de esta pasada. |
+| Resolver nombres reales para vinculos legados pre-existentes (BAN-06/07, deuda ya documentada en v2.0) | Sigue igual -- el nuevo panel de Aplicaciones SI resuelve nombre humano en el momento de crear (desde la sugerencia elegida), pero al recargar una aplicacion ya guardada solo muestra `tipo_referencia_display` + notas + UUID truncado (mejor que v2.0, no perfecto). |
+| Click-through real en navegador (Fase 35) | Igual que el resto del proyecto (ver AI-UI-01, Mail Hub) -- sandbox del asistente no permite abrir un navegador real contra el dominio del tenant. Verificado via API real (pytest + DRF test client) en su lugar. |
+| Bancos hardcodeados por adapter especifico (Fase 27) | Solo existe el layout generico (verificado contra Bancolombia); `ADAPTERS_POR_BANCO` esta preparado pero vacio -- no se inventaron adapters para bancos sin fixture real. |
+
+---
+
+## v2.0 (2026-06-04, Fix B-1 2026-09-12) — historico, preservado abajo
+
+```
+Score Global:     10/10 (2026-06-04) -- 1 hallazgo ALTO nuevo encontrado y
+                   corregido 2026-09-12 (B-1), ver seccion abajo. Verificado:
+                   pytest apps/tenant/bancos/tests/ completo -> 14 passed
+                   (sin regresion) + 1 test nuevo -> 1 passed.
+Status:           PRODUCTION READY ✅ (fix B-1 aplicado y verificado, alcance v2.0)
 Hallazgos:        0 criticos | 0 importantes | 2 menores (heredados v1.0)
 Conformidad:      AGENTS.md §4, §5, §13, §14, §18, §24, §26, §27, §29, §30, §31
-Migraciones:      0001 → 0005 (5 aplicadas, public + todos los tenants)
+Migraciones:      0001 → 0007 (7 aplicadas, public + todos los tenants -- 0007 agrega MovimientoBancarioAplicacion, v3.0)
 ```
+
+## 2026-09-12 — Fase 2 de remediación: B-1 (ALTO, `docs/remediation/AUDIT_BASELINE_20260912.md`)
+
+**✅ Verificado.** `pytest apps/tenant/bancos/tests/` completo → **14 passed**
+(suite preexistente, cero regresión) + `test_b1_resolucion_empresa_id_fallback.py`
+(nuevo, mockea `get_empresa_id()` para lanzar `AttributeError`) → **1 passed**.
+
+Auditoría "Bancos — extractos, causación, CRUD" (parte de
+`docs/remediation/AUDIT_BASELINE_20260912.md`) trazó la cadena completa
+subir→persistir→refresh HTMX→listar extracto y la encontró correctamente
+cableada en todos sus eslabones (contrario al síntoma reportado
+originalmente). El único punto de fragilidad real encontrado: en
+`_BancosTableViewBase._resolver_empresa_id()` (`views.py`) — la vista
+server-rendered que realmente maneja la UI de extractos/cuentas (Fase
+5-BIS) — solo atrapaba `DRFValidationError`, a diferencia del path de
+creación (API), que usa `BaseServiceMixin._get_empresa_id_seguro()` y cae
+a un fallback amplio (cualquier excepción → singleton `Empresa`). Si la
+resolución de `empresa_id` fallaba por cualquier otro motivo justo en el
+GET que repuebla el panel (ej. justo después de subir un extracto), la
+tabla caía silenciosamente a queryset vacío sin ningún error visible,
+aunque la fila existiera en BD — coincide con el síntoma "subí el extracto
+y no aparece". **Fix**: `_resolver_empresa_id()` ahora replica el mismo
+fallback amplio (atrapa cualquier excepción, cae al singleton `Empresa`).
+
+**También confirmado en la misma auditoría (no re-abrir)**: ADR-001
+respetado — `conciliar_transaccion()` nunca instancia `AsientoContable`/
+`MovimientoContable` directamente, solo dispara las APIs propias de
+`facturas`/`clientes` (Pull Model). El doc `.agent` sigue describiendo
+Tabulator en §1/§5 (línea ~78, ~368+) mientras el código real ya migró a
+django-tables2+HTMX (Fase 5-BIS) — deuda documentada preexistente
+(hallazgo B-6 del baseline), no corregida en esta pasada por estar fuera
+de los 8 ALTO priorizados.
 
 ---
 

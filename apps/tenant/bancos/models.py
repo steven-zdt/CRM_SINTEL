@@ -1,7 +1,10 @@
 import uuid as uuid_module
 from decimal import Decimal
+
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+
 from apps.tenant.core.models import SintelTenantBaseModel
 
 MES_CHOICES = [
@@ -119,3 +122,99 @@ class TransaccionBancaria(SintelTenantBaseModel):
 
     def __str__(self):
         return f"{self.fecha} - {self.descripcion[:30]} - {self.valor}"
+
+
+class TipoReferenciaAplicacion(models.TextChoices):
+    """Fase 5 (mision Bancos v3.0): tipos de concepto que puede aplicarse a
+    un movimiento bancario. Lista ampliable -- OTRO/OTRO_INGRESO/OTRO_EGRESO
+    existen deliberadamente para no bloquear el flujo cuando el concepto
+    todavia no tiene un dominio propio integrado."""
+    FACTURA_VENTA = "FACTURA_VENTA", _("Factura de Venta")
+    FACTURA_COMPRA = "FACTURA_COMPRA", _("Factura de Compra")
+    CARTERA = "CARTERA", _("Cartera (Cliente)")
+    CUENTA_POR_PAGAR = "CUENTA_POR_PAGAR", _("Cuenta por Pagar (Proveedor)")
+    GASTO = "GASTO", _("Gasto")
+    NOMINA = "NOMINA", _("Nomina")
+    IMPUESTO = "IMPUESTO", _("Impuesto")
+    TRANSFERENCIA_INTERNA = "TRANSFERENCIA_INTERNA", _("Transferencia entre Cuentas Propias")
+    ANTICIPO = "ANTICIPO", _("Anticipo")
+    OTRO_INGRESO = "OTRO_INGRESO", _("Otro Ingreso")
+    OTRO_EGRESO = "OTRO_EGRESO", _("Otro Egreso")
+    AJUSTE = "AJUSTE", _("Ajuste")
+    OTRO = "OTRO", _("Otro / Sin clasificar")
+
+
+class OrigenMatchingAplicacion(models.TextChoices):
+    MANUAL = "MANUAL", _("Manual")
+    SUGERIDO = "SUGERIDO", _("Sugerido por el sistema")
+
+
+class MovimientoBancarioAplicacion(SintelTenantBaseModel):
+    """Fase 5 (mision Bancos v3.0): permite aplicar UN movimiento bancario a
+    VARIOS conceptos/documentos (split de pagos, pagos combinados, etc.).
+
+    Soft references (UUID) a otros dominios -- Bounded Context §18, igual
+    que factura_uuid/proveedor_uuid/cliente_uuid en TransaccionBancaria. NO
+    exige que referencia_uuid resuelva a una fila real: permite
+    tipo_referencia=OTRO con referencia_uuid=None para clasificar/probar
+    manualmente sin bloquear el flujo (Fase 30).
+
+    NO dispara automaticamente el abono en Cartera (a diferencia del
+    vinculo legado 1:1 en TransaccionBancaria.conciliar_transaccion(), que
+    se mantiene intacto para compatibilidad -- ver AUDITORIA_FLUJO_COMPLETO.md
+    v3.0 §5). Ese trigger sigue siendo responsabilidad exclusiva del path
+    legado hasta que una fase posterior decida unificarlos.
+    """
+
+    uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
+    transaccion = models.ForeignKey(
+        TransaccionBancaria, on_delete=models.CASCADE, related_name="aplicaciones",
+        verbose_name=_("Transaccion Bancaria"),
+    )
+    tipo_referencia = models.CharField(
+        max_length=30, choices=TipoReferenciaAplicacion.choices,
+        verbose_name=_("Tipo de Referencia"),
+    )
+    referencia_uuid = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        verbose_name=_("UUID Referencia"),
+        help_text=_("Soft ref al documento/concepto aplicado (Factura, Gasto, PeriodoNomina, etc.)."),
+    )
+    tercero_tipo = models.CharField(
+        max_length=20, null=True, blank=True,
+        verbose_name=_("Tipo de Tercero"),
+        help_text=_("CLIENTE | PROVEEDOR | EMPLEADO, cuando aplica."),
+    )
+    tercero_uuid = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        verbose_name=_("UUID Tercero"),
+    )
+    monto_aplicado = models.DecimalField(
+        max_digits=15, decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name=_("Monto Aplicado"),
+    )
+    fecha_aplicacion = models.DateField(verbose_name=_("Fecha de Aplicacion"))
+    notas = models.TextField(null=True, blank=True, verbose_name=_("Notas"))
+    origen_matching = models.CharField(
+        max_length=20, choices=OrigenMatchingAplicacion.choices,
+        default=OrigenMatchingAplicacion.MANUAL, verbose_name=_("Origen"),
+    )
+    confianza = models.DecimalField(
+        max_digits=5, decimal_places=4, null=True, blank=True,
+        verbose_name=_("Confianza del Matching"),
+        help_text=_("Score 0-1 cuando origen_matching=SUGERIDO."),
+    )
+
+    class Meta:
+        db_table = "bancos_movimiento_aplicacion"
+        verbose_name = _("Aplicacion de Movimiento Bancario")
+        verbose_name_plural = _("Aplicaciones de Movimientos Bancarios")
+        ordering = ["-fecha_aplicacion", "-created_at"]
+        indexes = [
+            models.Index(fields=["empresa", "transaccion"]),
+            models.Index(fields=["empresa", "tipo_referencia", "referencia_uuid"]),
+        ]
+
+    def __str__(self):
+        return f"{self.tipo_referencia} - {self.monto_aplicado} ({self.transaccion_id})"

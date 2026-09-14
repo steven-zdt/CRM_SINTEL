@@ -1,5 +1,16 @@
+from decimal import Decimal
+
+from django.db.models import Sum
 from rest_framework import serializers
-from apps.tenant.bancos.models import CuentaBancaria, ExtractoBancario, TransaccionBancaria
+
+from apps.tenant.bancos.models import (
+    CuentaBancaria,
+    ExtractoBancario,
+    MovimientoBancarioAplicacion,
+    TransaccionBancaria,
+)
+
+TOLERANCIA_APLICACION = Decimal("0.01")
 
 class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
     """Field that accepts either UUID (string) or internal PK (integer) for lookups, scoped to the current tenant."""
@@ -173,6 +184,29 @@ class TransaccionBancariaListSerializer(serializers.ModelSerializer):
     factura_info        = serializers.SerializerMethodField(read_only=True)
     proveedor_info      = serializers.SerializerMethodField(read_only=True)
     conciliacion_display = serializers.SerializerMethodField(read_only=True)
+    monto_aplicado      = serializers.SerializerMethodField(read_only=True)
+    monto_pendiente     = serializers.SerializerMethodField(read_only=True)
+    estado_aplicacion   = serializers.SerializerMethodField(read_only=True)
+
+    def _monto_aplicado_total(self, obj):
+        # Viene anotado por el selector (Sum) -- evita N+1 en listados.
+        return getattr(obj, "monto_aplicado_total", None) or Decimal("0.00")
+
+    def get_monto_aplicado(self, obj):
+        return str(self._monto_aplicado_total(obj))
+
+    def get_monto_pendiente(self, obj):
+        pendiente = abs(obj.valor) - self._monto_aplicado_total(obj)
+        return str(max(pendiente, Decimal("0.00")))
+
+    def get_estado_aplicacion(self, obj):
+        aplicado = self._monto_aplicado_total(obj)
+        monto = abs(obj.valor)
+        if aplicado <= 0:
+            return "PENDIENTE"
+        if monto - aplicado <= TOLERANCIA_APLICACION:
+            return "CONCILIADO"
+        return "PARCIAL"
 
     def get_factura_info(self, obj):
         """Info snapshot de factura (read-only)."""
@@ -210,6 +244,7 @@ class TransaccionBancariaListSerializer(serializers.ModelSerializer):
             "factura_uuid", "proveedor_uuid", "cliente_uuid", "conciliado",
             "factura_info", "proveedor_info", "conciliacion_display",
             "notas_conciliacion",
+            "monto_aplicado", "monto_pendiente", "estado_aplicacion",
         )
         read_only_fields = fields
 
@@ -221,6 +256,29 @@ class TransaccionBancariaDetailSerializer(serializers.ModelSerializer):
     monto           = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
     created_at      = serializers.DateTimeField(read_only=True)
     updated_at      = serializers.DateTimeField(read_only=True)
+    monto_aplicado    = serializers.SerializerMethodField(read_only=True)
+    monto_pendiente   = serializers.SerializerMethodField(read_only=True)
+    estado_aplicacion = serializers.SerializerMethodField(read_only=True)
+
+    def _monto_aplicado_total(self, obj):
+        total = obj.aplicaciones.aggregate(total=Sum("monto_aplicado"))["total"]
+        return total or Decimal("0.00")
+
+    def get_monto_aplicado(self, obj):
+        return str(self._monto_aplicado_total(obj))
+
+    def get_monto_pendiente(self, obj):
+        pendiente = abs(obj.valor) - self._monto_aplicado_total(obj)
+        return str(max(pendiente, Decimal("0.00")))
+
+    def get_estado_aplicacion(self, obj):
+        aplicado = self._monto_aplicado_total(obj)
+        monto = abs(obj.valor)
+        if aplicado <= 0:
+            return "PENDIENTE"
+        if monto - aplicado <= TOLERANCIA_APLICACION:
+            return "CONCILIADO"
+        return "PARCIAL"
 
     class Meta:
         model = TransaccionBancaria
@@ -232,6 +290,7 @@ class TransaccionBancariaDetailSerializer(serializers.ModelSerializer):
             "factura_uuid", "proveedor_uuid", "cliente_uuid", "conciliado",
             "created_at", "updated_at",
             "notas_conciliacion",
+            "monto_aplicado", "monto_pendiente", "estado_aplicacion",
         )
         read_only_fields = fields
 
@@ -250,3 +309,42 @@ class TransaccionBancariaConciliarSerializer(serializers.ModelSerializer):
         if factura_uuid or proveedor_uuid or cliente_uuid:
             attrs.setdefault("conciliado", True)
         return attrs
+
+
+class MovimientoBancarioAplicacionSerializer(serializers.ModelSerializer):
+    """Serializer de lectura/creacion para aplicaciones multiples (Fase 5/17)."""
+    transaccion_uuid = serializers.UUIDField(source="transaccion.uuid", read_only=True)
+    tipo_referencia_display = serializers.CharField(source="get_tipo_referencia_display", read_only=True)
+    # Opcional: el frontend no siempre la envia (el flujo tipico es "aplicar
+    # hoy") -- crud_service.crear_aplicacion() la completa con la fecha
+    # actual cuando no se especifica.
+    fecha_aplicacion = serializers.DateField(required=False)
+
+    class Meta:
+        model = MovimientoBancarioAplicacion
+        fields = (
+            "id", "uuid", "transaccion_uuid",
+            "tipo_referencia", "tipo_referencia_display", "referencia_uuid",
+            "tercero_tipo", "tercero_uuid",
+            "monto_aplicado", "fecha_aplicacion", "notas",
+            "origen_matching", "confianza",
+            "created_at",
+        )
+        read_only_fields = ("id", "uuid", "transaccion_uuid", "tipo_referencia_display", "created_at")
+
+    def validate_monto_aplicado(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("El monto aplicado debe ser mayor a 0.")
+        return value
+
+
+class MovimientoBancarioSugerenciaSerializer(serializers.Serializer):
+    """Serializer de solo-lectura para los candidatos que produce
+    BankTransactionMatchingService (Fase 8). No es un ModelSerializer --
+    los candidatos son dicts, nunca se persisten desde aqui."""
+    tipo = serializers.CharField()
+    uuid = serializers.CharField()
+    descripcion = serializers.CharField()
+    monto = serializers.CharField(allow_null=True)
+    score = serializers.FloatField()
+    reason = serializers.ListField(child=serializers.CharField())

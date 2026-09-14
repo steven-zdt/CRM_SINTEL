@@ -9,7 +9,6 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django_tables2 import SingleTableView
-from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.bancos.models import CuentaBancaria, ExtractoBancario
@@ -23,14 +22,27 @@ class _BancosTableViewBase(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
     table_pagination = {"per_page": 20}
 
     def _resolver_empresa_id(self):
+        """
+        BUG (2026-09-12, hallazgo B-1): solo atrapaba DRFValidationError,
+        a diferencia del path de creacion (BaseServiceMixin._get_empresa_id_seguro(),
+        apps/tenant/api/mixins.py) que atrapa cualquier excepcion y cae al
+        singleton Empresa del schema del tenant. Si la resolucion fallaba
+        por otro motivo en el GET que repuebla el panel (ej. justo despues
+        de subir un extracto), esta tabla server-rendered caia
+        silenciosamente a queryset vacio aunque la fila existiera en BD --
+        mismo sintoma reportado ("subi el extracto y no aparece"). Se
+        replica el mismo fallback amplio que ya usa la capa API.
+        """
         try:
             return self.get_empresa_id()
-        except DRFValidationError:
+        except Exception:
             logger.warning(
-                "[%s] Sin empresa resuelta para user=%s",
-                self.__class__.__name__, self.request.user.pk,
+                "[%s] get_empresa_id() fallo para user=%s, usando fallback singleton",
+                self.__class__.__name__, self.request.user.pk, exc_info=True,
             )
-            return None
+            from apps.tenant.empresa.models import Empresa
+            empresa = Empresa.objects.only('id').first()
+            return empresa.id if empresa else None
 
 
 class CuentaBancariaTableView(_BancosTableViewBase):

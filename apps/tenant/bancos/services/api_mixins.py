@@ -1,17 +1,20 @@
 from apps.tenant.api.mixins import BaseServiceMixin
-from apps.tenant.bancos.services.selectors import (
-    CuentaBancariaSelector,
-    ExtractoBancarioSelector,
-    TransaccionBancariaSelector,
+from apps.tenant.bancos.services.business_service import (
+    ExtractoBancarioBusinessService,
 )
 from apps.tenant.bancos.services.crud_service import (
     CuentaBancariaCRUDService,
     ExtractoBancarioCRUDService,
+    MovimientoBancarioAplicacionCRUDService,
     TransaccionBancariaCRUDService,
 )
-from apps.tenant.bancos.services.business_service import (
-    ExtractoBancarioBusinessService,
+from apps.tenant.bancos.services.selectors import (
+    CuentaBancariaSelector,
+    ExtractoBancarioSelector,
+    MovimientoBancarioAplicacionSelector,
+    TransaccionBancariaSelector,
 )
+
 
 class CuentaBancariaServiceMixin(BaseServiceMixin):
     """Bridge service methods for CuentaBancaria ViewSet."""
@@ -63,8 +66,8 @@ class ExtractoBancarioServiceMixin(BaseServiceMixin):
     def service_eliminar_extracto(self, extracto):
         return self.crud_service_class.eliminar_extracto(extracto)
 
-    def service_procesar_extracto(self, extracto):
-        return self.business_service_class.procesar_archivo_extracto(extracto)
+    def service_procesar_extracto(self, extracto, forzar=False):
+        return self.business_service_class.procesar_archivo_extracto(extracto, forzar=forzar)
 
 class TransaccionBancariaServiceMixin(BaseServiceMixin):
     """Bridge service methods for TransaccionBancaria ViewSet."""
@@ -91,3 +94,28 @@ class TransaccionBancariaServiceMixin(BaseServiceMixin):
 
     def service_conciliar_transaccion(self, transaccion, data: dict):
         return self.crud_service_class.conciliar_transaccion(transaccion, data)
+
+    def service_crear_aplicacion(self, transaccion, data: dict):
+        empresa = self._get_empresa()
+        return MovimientoBancarioAplicacionCRUDService.crear_aplicacion(transaccion, data, empresa)
+
+
+class MovimientoBancarioAplicacionServiceMixin(BaseServiceMixin):
+    """Bridge service methods for MovimientoBancarioAplicacion ViewSet (Fase 5/7)."""
+    selector_class = MovimientoBancarioAplicacionSelector
+    crud_service_class = MovimientoBancarioAplicacionCRUDService
+
+    def get_qs_list(self):
+        empresa_id = self._get_empresa_id_seguro()
+        transaccion_uuid = self.request.query_params.get("transaccion_uuid") if hasattr(self, "request") else None
+        return self.selector_class.get_list(empresa_id, transaccion_uuid=transaccion_uuid)
+
+    def get_qs_detail(self):
+        empresa_id = self._get_empresa_id_seguro()
+        return self.selector_class.get_detail(empresa_id)
+
+    def service_editar_aplicacion(self, aplicacion, data):
+        return self.crud_service_class.editar_aplicacion(aplicacion, data)
+
+    def service_eliminar_aplicacion(self, aplicacion):
+        return self.crud_service_class.eliminar_aplicacion(aplicacion)

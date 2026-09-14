@@ -1,5 +1,12 @@
-from django.db.models import Count, Q
-from apps.tenant.bancos.models import CuentaBancaria, ExtractoBancario, TransaccionBancaria
+from django.db.models import Count, DecimalField, Q, Sum, Value
+from django.db.models.functions import Coalesce
+
+from apps.tenant.bancos.models import (
+    CuentaBancaria,
+    ExtractoBancario,
+    MovimientoBancarioAplicacion,
+    TransaccionBancaria,
+)
 
 CUENTA_LIST_FIELDS = (
     "id", "uuid", "nombre", "banco", "tipo", "numero", "empresa_id"
@@ -101,7 +108,16 @@ class TransaccionBancariaSelector:
         conciliado: str = None,
     ):
         """Get optimized TransaccionBancaria list."""
-        qs = TransaccionBancaria.objects.filter(empresa_id=empresa_id).select_related("extracto").only(*TRANSACCION_LIST_FIELDS)
+        qs = (
+            TransaccionBancaria.objects.filter(empresa_id=empresa_id)
+            .select_related("extracto")
+            .only(*TRANSACCION_LIST_FIELDS)
+            .annotate(
+                monto_aplicado_total=Coalesce(
+                    Sum("aplicaciones__monto_aplicado"), Value(0), output_field=DecimalField()
+                )
+            )
+        )
         if extracto_uuid:
             qs = qs.filter(extracto__uuid=extracto_uuid)
         if search:
@@ -127,6 +143,35 @@ class TransaccionBancariaSelector:
     def get_detail(empresa_id: int, uuid=None):
         """Get optimized TransaccionBancaria detail."""
         qs = TransaccionBancaria.objects.filter(empresa_id=empresa_id).select_related("extracto").only(*TRANSACCION_DETAIL_FIELDS)
+        if uuid:
+            return qs.filter(uuid=uuid)
+        return qs
+
+
+APLICACION_FIELDS = (
+    "id", "uuid", "transaccion_id", "transaccion__uuid",
+    "tipo_referencia", "referencia_uuid", "tercero_tipo", "tercero_uuid",
+    "monto_aplicado", "fecha_aplicacion", "notas",
+    "origen_matching", "confianza", "empresa_id", "created_at",
+)
+
+
+class MovimientoBancarioAplicacionSelector:
+    """Read-only selectors for MovimientoBancarioAplicacion (Fase 5/18)."""
+
+    @staticmethod
+    def get_list(empresa_id: int, transaccion_uuid=None):
+        qs = (
+            MovimientoBancarioAplicacion.objects.filter(empresa_id=empresa_id)
+            .only(*APLICACION_FIELDS)
+        )
+        if transaccion_uuid:
+            qs = qs.filter(transaccion__uuid=transaccion_uuid)
+        return qs.order_by("-fecha_aplicacion", "-created_at")
+
+    @staticmethod
+    def get_detail(empresa_id: int, uuid=None):
+        qs = MovimientoBancarioAplicacion.objects.filter(empresa_id=empresa_id).only(*APLICACION_FIELDS)
         if uuid:
             return qs.filter(uuid=uuid)
         return qs

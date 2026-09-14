@@ -91,6 +91,15 @@
     </div>
   </div>
 
+  {# Fase 19: KPI resumido del extracto #}
+  <div class="d-flex flex-wrap gap-3 px-4 py-2 border-bottom bg-light" style="font-size:.72rem;">
+    <span><i class="bi bi-arrow-up-circle text-success me-1"></i>Ingresos: <strong>{{ kpis.ingresos|currency_cop }}</strong></span>
+    <span><i class="bi bi-arrow-down-circle text-danger me-1"></i>Egresos: <strong>{{ kpis.egresos|currency_cop }}</strong></span>
+    <span><i class="bi bi-dash-circle me-1"></i>Neto: <strong>{{ kpis.neto|currency_cop }}</strong></span>
+    <span><i class="bi bi-hourglass-split text-warning me-1"></i>Pendientes: <strong>{{ kpis.pendientes }}</strong></span>
+    <span><i class="bi bi-check2-all text-success me-1"></i>Conciliados: <strong>{{ kpis.conciliadas }}</strong>/{{ kpis.total }}</span>
+  </div>
+
   <div class="offcanvas-body">
     <div class="det-split">
 
@@ -321,13 +330,65 @@
           <div id="conc-feedback" class="d-none" style="font-size:.8rem;"></div>
 
           {# Acciones #}
-          <div class="d-flex gap-2 mt-auto pt-2 border-top">
+          <div class="d-flex gap-2 pt-2 border-top">
             <button class="btn btn-outline-danger btn-sm" id="btn-quitar-vinculo">
               <i class="bi bi-x-circle me-1"></i>Quitar
             </button>
             <button class="btn btn-primary btn-sm flex-fill fw-semibold" id="btn-guardar-vinculo">
-              <i class="bi bi-link-45deg me-1"></i>Guardar vínculo
+              <i class="bi bi-link-45deg me-1"></i>Guardar vínculo rápido
             </button>
+          </div>
+
+          {# ── PASO 5: Aplicaciones múltiples (Fase 5-12, v3.0) ─────── #}
+          <div class="conc-step mt-3 pt-3 border-top">
+            <div class="conc-step-header">
+              <span class="conc-step-num">5</span>
+              <span class="conc-step-label">Aplicaciones (split / múltiples conceptos)</span>
+              <button type="button" class="btn btn-xs btn-outline-secondary ms-auto" id="btn-sugerencias"
+                      style="font-size:.65rem;padding:2px 8px;">
+                <i class="bi bi-magic me-1"></i>Sugerir
+              </button>
+            </div>
+            <div class="conc-step-body">
+              <div class="d-flex justify-content-between align-items-center mb-1" style="font-size:.72rem;">
+                <span>Aplicado: <strong id="apl-total-aplicado" class="text-success">$0</strong></span>
+                <span>Pendiente: <strong id="apl-total-pendiente" class="text-danger">$0</strong></span>
+              </div>
+              <div class="progress mb-2" style="height:6px;">
+                <div class="progress-bar bg-success" id="apl-progress-bar" style="width:0%;"></div>
+              </div>
+
+              <div id="apl-sugerencias-box" class="d-none mb-2" style="max-height:140px;overflow-y:auto;border:1px solid #dee2e6;border-radius:6px;"></div>
+
+              <div id="apl-lista" class="mb-2" style="font-size:.75rem;"></div>
+
+              <div class="d-flex gap-1 mb-1">
+                <select id="apl-tipo" class="form-select form-select-sm" style="font-size:.75rem;">
+                  <option value="FACTURA_VENTA">Factura de Venta</option>
+                  <option value="FACTURA_COMPRA">Factura de Compra</option>
+                  <option value="CARTERA">Cartera (Cliente)</option>
+                  <option value="CUENTA_POR_PAGAR">Cuenta por Pagar (Proveedor)</option>
+                  <option value="GASTO">Gasto</option>
+                  <option value="NOMINA">Nomina</option>
+                  <option value="IMPUESTO">Impuesto</option>
+                  <option value="TRANSFERENCIA_INTERNA">Transferencia Interna</option>
+                  <option value="ANTICIPO">Anticipo</option>
+                  <option value="OTRO_INGRESO">Otro Ingreso</option>
+                  <option value="OTRO_EGRESO">Otro Egreso</option>
+                  <option value="AJUSTE">Ajuste</option>
+                  <option value="OTRO" selected>Otro / Sin clasificar</option>
+                </select>
+                <input type="number" id="apl-monto" class="form-control form-control-sm" step="0.01" min="0.01"
+                       placeholder="Monto" style="max-width:110px;font-size:.75rem;">
+              </div>
+              <input type="text" id="apl-notas" class="form-control form-control-sm mb-1"
+                     placeholder="Notas (opcional)" style="font-size:.75rem;">
+              <input type="hidden" id="apl-referencia-uuid">
+              <button class="btn btn-outline-primary btn-sm w-100" id="btn-agregar-aplicacion" style="font-size:.75rem;">
+                <i class="bi bi-plus-lg me-1"></i>Agregar aplicación
+              </button>
+              <div id="apl-feedback" class="d-none mt-1" style="font-size:.72rem;"></div>
+            </div>
           </div>
         </div>
       </div>
