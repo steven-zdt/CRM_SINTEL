@@ -2322,8 +2322,8 @@ Utilizar una fila por app.
 | Clientes | [x] | [ ] | [x] Capa2 | [ ] | [ ] | [ ] | [ ] | [ ] | [x] | `PASS_WITH_LIMITATIONS` (preexistente, no retocado) |
 | Proveedores | [x] | [ ] | [x] Capa2 | [ ] | [ ] | [ ] | [ ] | [ ] | [x] | `PASS_WITH_LIMITATIONS` (CRUD nuevo esta sesión) |
 | Compras | [x] | [ ] | [x] Capa2 | [ ] | [ ] | [ ] | [ ] | [x] parcial | [x] | `PASS_WITH_LIMITATIONS` (CRUD nuevo + bug 500 corregido) |
-| Ventas | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
-| Cotizaciones | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
+| Ventas | [x] | [ ] | [x] Capa2 | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 4/4 nuevos | `PASS_WITH_LIMITATIONS` (bug 500-vs-400 real corregido: `fecha_emision` faltante lanzaba KeyError; CRUD nuevo) |
+| Cotizaciones | [x] | [ ] | [x] Capa2 (preexistente) | [ ] | [ ] | [ ] | [ ] | [ ] | [x] (no re-ejecutada, sin cambios) | `PASS_WITH_LIMITATIONS` (auditado, 0 hallazgos — CRUD/delete-guards ya cubiertos, incluye su propio test "devuelve 400 no 500") |
 | Inventario | [x] | [ ] | [x] Capa2 | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 60/60 | `PASS_WITH_LIMITATIONS` (bug 500-vs-404 ×4 corregido + CRUD nuevo) |
 | Facturas | [x] | [ ] | [x] Capa2 (preexistente) | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 12/12 | `PASS_WITH_LIMITATIONS` (6 propiedades GASTOS-02-style corregidas) |
 | Gastos | [x] | [ ] | [x] Capa2 (preexistente) | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 3/3 + 67/67 | `PASS_WITH_LIMITATIONS` (GASTOS-01/02 corregidos, resto auditado limpio) |
@@ -2388,21 +2388,35 @@ El resultado final debe demostrar FUNCIONALIDAD + CRUD + SMOKE + UX + UI + RESPO
 
 ## Próximo paso recomendado
 
-**Batch 2 (Fase 42) y Batch 3 (Fase 43) quedaron en `PASS_WITH_LIMITATIONS` a nivel Capa 2** — las 15
-apps de negocio tenant ya tienen: auditoría de errores silenciosos, auditoría del bug 500-vs-404,
-auditoría del bug 500-vs-400, y cobertura CRUD vía API donde antes no existía. Resultado consolidado
-de las 4 sesiones de este batch: **269/269 tests verdes** (Compras 52, Inventario+Bancos 60,
-Gastos+Dashboard 67, Facturas 12, Proyectos 3, Perfil 5, MailInboxConfig 3, más los 13 tests nuevos de
-la Fase 41 ya contados en Compras/Proveedores), **6 bugs reales corregidos** (Compras 500, GASTOS-01,
-GASTOS-02/DASH-02/Facturas errores silenciosos ×12 propiedades, Inventario 500-vs-404 ×4), y **4
+**Hito: las 15/15 apps de negocio tenant quedaron en `PASS_WITH_LIMITATIONS` a nivel Capa 2** —
+Clientes, Proveedores, Compras (Fase 41/piloto), Inventario, Facturas, Gastos, Bancos (Fase 42/Batch
+2), Contabilidad, Empleados, Proyectos, Empresa, Perfil, Dashboard (Fase 43/Batch 3) y, en el último
+cierre, **Ventas y Cotizaciones**. Las 15 tienen: auditoría de errores silenciosos, auditoría del bug
+500-vs-404, auditoría del bug 500-vs-400, y cobertura CRUD vía API donde antes no existía.
+
+**Ventas y Cotizaciones (último cierre):** Cotizaciones auditada sin hallazgos nuevos — ya tenía
+cobertura completa de create/delete-con-constraints/update, incluyendo su propio test regresivo
+"crear producto con código duplicado devuelve 400 no 500" (el equipo ya se había protegido contra
+exactamente esta clase de bug). Ventas: **bug real encontrado y corregido** —
+`crear_venta_borrador()` accedía a `payload["fecha_emision"]` directamente (sin `.get()`); si el
+campo faltaba, el `KeyError` resultante no es un `ValueError`, así que cae al `except Exception`
+genérico y devuelve 500 en vez de 400. Corregido con una validación explícita, igual que el patrón
+ya usado en la misma función para `items`. Hueco de cobertura cerrado:
+`test_venta_crud_workspace.py` (ciclo CREATE→READ→UPDATE→DELETE completo, no existía). Confirmado:
+4/4 tests nuevos passed + regresión de componente en curso.
+
+**Resultado consolidado de todo el cierre Capa 2 (piloto + Batch 2 + Batch 3 + Ventas/Cotizaciones):**
+**273+/273+ tests verdes**, **7 bugs reales corregidos** (Compras 500, GASTOS-01, GASTOS-02/DASH-02/
+Facturas errores silenciosos ×12 propiedades, Inventario 500-vs-404 ×4, Ventas 500-vs-400), y **4
 hallazgos documentados sin corregir** por decisión explícita o alcance (2 de seguridad PK/UUID en
 Perfil y MailInboxConfig, 2 menores de manejo de errores en Empleados y Perfil).
 
-**Lo que falta para que cualquier batch pueda cerrar en `PASS` pleno** sigue siendo lo mismo en las 15
-apps: Fase 12 (Capa 1/navegador real) sigue `BLOCKED` — smoke, visual, responsive, console y network
-en vivo no se pueden ejecutar sin resolver ese bloqueo estructural. Las fases realmente pendientes de
-iniciar son las que dependen de tener las 15 apps ya cerradas: **Fase 44 (Cross-app UX)**, **Fase 45
-(flujos de negocio E2E)**, y el cierre final **Fases 51-58** (matrices de cobertura/hallazgos
-formales, reporte final de 28 secciones).
+**Lo que falta para que cualquier app pueda cerrar en `PASS` pleno** sigue siendo lo mismo en las 15:
+Fase 12 (Capa 1/navegador real) sigue `BLOCKED` — smoke, visual, responsive, console y network en
+vivo no se pueden ejecutar sin resolver ese bloqueo estructural. Con las 15 apps ya cerradas en Capa
+2, las fases que genuinamente pueden empezar ahora son: **Fase 44 (Cross-app UX)** — comparar la
+superficie de las 15 apps entre sí, **Fase 45 (flujos de negocio E2E)** — Cotización→Venta→Factura,
+Compra→Recepción→Inventario, Proveedor→Factura→CxP→Abono, Venta→Inventario→Factura, y el cierre
+final **Fases 51-58** (matrices de cobertura/hallazgos formales, reporte final de 28 secciones).
 
 **FIN DEL PROMPT MAESTRO V2 — 59 FASES**

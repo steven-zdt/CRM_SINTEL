@@ -450,6 +450,13 @@ class VentaBusinessService:
             if not items_data:
                 return False, {"detail": "Debe incluir al menos un item."}, 400
 
+            # Hallazgo Batch 5 (mision UI/UX): payload["fecha_emision"] (acceso
+            # directo, sin .get()) lanzaba KeyError si el campo faltaba, y
+            # KeyError no es ValueError -- caia al except Exception generico de
+            # abajo, devolviendo 500 en vez de 400 ante un dato faltante real.
+            if not payload.get("fecha_emision"):
+                return False, {"detail": "El campo 'fecha_emision' es obligatorio."}, 400
+
             cliente_uuid = str(payload.get("cliente", ""))
             cliente = VentaBusinessService._dsv_cliente(cliente_uuid, empresa.id)
             items_validos = VentaBusinessService._dsv_items(items_data, empresa.id)
