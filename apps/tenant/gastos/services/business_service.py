@@ -337,8 +337,7 @@ def materializar_gasto_desde_dto(dto: dict) -> Tuple[dict, int]:
     from django.core.exceptions import ValidationError
     from decimal import Decimal, InvalidOperation
     from django.utils.dateparse import parse_datetime
-    import datetime
-    
+
     # 1. Validaciones del DTO
     if not dto or not isinstance(dto, dict):
         raise ValidationError("El DTO no es un diccionario valido.")
@@ -382,16 +381,19 @@ def materializar_gasto_desde_dto(dto: dict) -> Tuple[dict, int]:
         raise ValidationError("El total no es un valor decimal valido.")
         
     # 3. Obtener contexto del Tenant activo (Empresa SSoT)
+    # GASTOS-01 (mision UI/UX): este materializador corre sin supervision
+    # humana desde el pipeline de ingesta de correo (document_router.py).
+    # Antes fabricaba silenciosamente una Empresa/ResolucionDIAN falsa
+    # (NIT "123456789", resolucion "999999") y las usaba para crear un
+    # DocumentoSoporte real -- un dato fiscal legalmente significativo no
+    # puede depender de datos inventados. Ahora falla explicito: el
+    # document_router ya distingue ValidationError (esperado, ver su
+    # except dedicado) de un error inesperado.
     from apps.tenant.empresa.models import Empresa
     empresa = Empresa.objects.first()
     if not empresa:
-        empresa = Empresa.objects.create(
-            razon_social="Empresa Autocreada",
-            nit="123456789",
-            dv="1",
-            direccion="Calle Ficticia 123",
-            moneda="COP",
-            activa=True
+        raise ValidationError(
+            "No se puede materializar el gasto: la Empresa del tenant aun no esta configurada."
         )
         
     # 4. Obtener/Crear Proveedor (NIT es numero_documento en Proveedor)
@@ -440,20 +442,13 @@ def materializar_gasto_desde_dto(dto: dict) -> Tuple[dict, int]:
             "created": False
         }, 200
         
-    # 6. Obtener/Crear Resolucion DIAN
+    # 6. Obtener Resolucion DIAN vigente (GASTOS-01: ya no se fabrica una
+    # falsa -- una resolucion DIAN es un rango numerico real registrado
+    # ante la autoridad tributaria, no un dato que el sistema pueda inventar).
     resolucion = ResolucionDIAN.objects.filter(empresa=empresa, vigente=True).first()
     if not resolucion:
-        resolucion = ResolucionDIAN.objects.create(
-            empresa=empresa,
-            numero_resolucion="999999",
-            rango_desde=1,
-            rango_hasta=100000,
-            fecha_resolucion=datetime.date(2025, 1, 1),
-            fecha_inicio=datetime.date(2025, 1, 1),
-            fecha_fin=datetime.date(2035, 1, 1),
-            vigente=True,
-            prefijo="GAS",
-            consecutivo=1
+        raise ValidationError(
+            "No se puede materializar el gasto: la empresa no tiene una Resolucion DIAN vigente configurada."
         )
         
     # 7. Persistir DocumentoSoporte usando CRUDService

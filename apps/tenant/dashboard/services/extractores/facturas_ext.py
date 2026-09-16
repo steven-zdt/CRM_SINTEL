@@ -2,6 +2,7 @@
 Extractor de Facturas para Dashboard v3.9.5 — datos reales.
 Pull Model: usa FacturaSelectors, no importa models.py directamente.
 """
+import logging
 from decimal import Decimal
 
 from django.db.models import Sum
@@ -10,6 +11,7 @@ from django.utils import timezone
 from apps.tenant.dashboard.services.dtos import WidgetFacturasDTO
 
 _ZERO = Decimal('0.00')
+logger = logging.getLogger(__name__)
 
 
 class FacturasExtractor:
@@ -52,4 +54,5 @@ class FacturasExtractor:
             )
 
         except Exception:
+            logger.exception("FacturasExtractor: fallo calculando metricas (empresa_id=%s)", empresa_id)
             return WidgetFacturasDTO(0, 0, 0, _ZERO, _ZERO)

@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
@@ -133,6 +134,13 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
 
             out_serializer = OrdenCompraDetailSerializer(result)
             return Response(out_serializer.data, status=status.HTTP_201_CREATED)
+        except ValidationError as e:
+            # Hallazgo UI/UX (piloto Compras): serializer.is_valid(raise_exception=True)
+            # caia en el except generico de abajo y devolvia 500 "error_interno" con el
+            # traceback de Python expuesto, en vez de 400 con los errores de campo reales
+            # (items vacios, fecha_entrega invalida). Viola CLAUDE.md ("no mostrar
+            # ValidationError/Traceback al usuario final").
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error en OrdenCompraViewSet.create: {e}", exc_info=True)
             return Response(

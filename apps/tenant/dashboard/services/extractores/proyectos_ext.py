@@ -3,9 +3,13 @@ Extractor de Proyectos para Dashboard v3.9.5 — datos reales.
 Pull Model: usa qs_list de proyectos. No importa models.py directamente.
 Modelo Proyecto usa: fase_actual y estado_tarea (no campo 'estado').
 """
+import logging
+
 from django.utils import timezone
 
 from apps.tenant.dashboard.services.dtos import WidgetProyectosDTO
+
+logger = logging.getLogger(__name__)
 
 
 class ProyectosExtractor:
@@ -41,4 +45,5 @@ class ProyectosExtractor:
             )
 
         except Exception:
+            logger.exception("ProyectosExtractor: fallo calculando metricas (empresa_id=%s)", empresa_id)
             return WidgetProyectosDTO(0, 0, 0, 0)

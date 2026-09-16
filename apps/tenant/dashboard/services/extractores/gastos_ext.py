@@ -2,11 +2,13 @@
 Extractor de Gastos para Dashboard v3.9.5 — datos reales.
 Pull Model: usa DocumentoSelector, no importa models.py directamente.
 """
+import logging
 from decimal import Decimal
 
 from apps.tenant.dashboard.services.dtos import WidgetGastosDTO
 
 _ZERO = Decimal('0.00')
+logger = logging.getLogger(__name__)
 
 
 class GastosExtractor:
@@ -36,4 +38,5 @@ class GastosExtractor:
             )
 
         except Exception:
+            logger.exception("GastosExtractor: fallo calculando metricas (empresa_id=%s)", empresa_id)
             return WidgetGastosDTO(_ZERO, 0, 0, _ZERO)

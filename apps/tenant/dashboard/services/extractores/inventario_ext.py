@@ -3,14 +3,15 @@ Extractor de Inventario para Dashboard v3.9.5 — datos reales.
 Pull Model: usa ProductoSelector, ActivoFijoSelector, ServicioSelector,
 MovimientoInventarioSelector. No importa models.py directamente.
 """
+import logging
 from decimal import Decimal
 
 from django.db.models import F, Sum
-from django.utils import timezone
 
 from apps.tenant.dashboard.services.dtos import WidgetInventarioDTO
 
 _ZERO = Decimal('0.00')
+logger = logging.getLogger(__name__)
 
 
 class InventarioExtractor:
@@ -19,10 +20,10 @@ class InventarioExtractor:
     def extraer_metricas(empresa_id: int) -> WidgetInventarioDTO:
         try:
             from apps.tenant.inventario.services.selectors import (
-                ProductoSelector,
                 ActivoFijoSelector,
-                ServicioSelector,
                 MovimientoInventarioSelector,
+                ProductoSelector,
+                ServicioSelector,
             )
 
             prod_qs     = ProductoSelector.get_list(empresa_id)
@@ -57,4 +58,5 @@ class InventarioExtractor:
             )
 
         except Exception:
+            logger.exception("InventarioExtractor: fallo calculando metricas (empresa_id=%s)", empresa_id)
             return WidgetInventarioDTO(0, 0, 0, _ZERO, _ZERO)

@@ -99,11 +99,11 @@ class DashboardBusinessService:
 
             return metricas
 
-        except Exception as e:
-            # Log del error (en producción, esto iría a Sentry)
+        except Exception:
+            # Log del error con traceback completo (en producción, esto iría a Sentry)
             import logging
             logger = logging.getLogger(__name__)
-            logger.warning(f"Error obteniendo métricas para empresa {empresa_id}: {str(e)}")
+            logger.exception("Error obteniendo métricas para empresa %s", empresa_id)
 
             # Retornar estructura vacía pero válida
             from decimal import Decimal

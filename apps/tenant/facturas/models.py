@@ -6,6 +6,7 @@ Modelos de facturación por tenant.
 SSoT histórico: snapshots de emisor/receptor al momento de emisión.
 """
 
+import logging
 import uuid
 from decimal import Decimal
 
@@ -15,6 +16,8 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.tenant.core.models import SintelTenantBaseModel  # [v2.61.4] Herencia SSoT
+
+logger = logging.getLogger(__name__)
 
 
 class Factura(SintelTenantBaseModel):
@@ -297,6 +300,10 @@ class Factura(SintelTenantBaseModel):
                 tipo='RETEFUENTE',
             )
         except Exception:
+            # Hallazgo Batch 2 (mision UI/UX, mismo patron que GASTOS-02): un
+            # fallo real de RetencionesService era indistinguible de "sin
+            # retencion" -- ahora queda en logs (ERROR REAL -> ERROR EXPLICITO).
+            logger.exception("total_retencion_fuente: fallo leyendo RetencionesService (factura_id=%s)", self.id)
             return Decimal('0.00')
 
     @property
@@ -314,6 +321,7 @@ class Factura(SintelTenantBaseModel):
                 tipo='RETEICA',
             )
         except Exception:
+            logger.exception("total_reteica: fallo leyendo RetencionesService (factura_id=%s)", self.id)
             return Decimal('0.00')
 
     @property
@@ -331,6 +339,7 @@ class Factura(SintelTenantBaseModel):
                 tipo='RETEIVA',
             )
         except Exception:
+            logger.exception("total_reteiva: fallo leyendo RetencionesService (factura_id=%s)", self.id)
             return Decimal('0.00')
 
     # ── Pull Model: Bancos (v3.11.0, ADR-001) ──────────────────────────────
@@ -503,6 +512,7 @@ class ItemFactura(SintelTenantBaseModel):
                 tipo='RETEFUENTE',
             )
         except Exception:
+            logger.exception("total_retefuente_item: fallo leyendo RetencionesService (item_factura_id=%s)", self.id)
             return self.valor_retefuente or Decimal('0.00')
 
     @property
@@ -520,6 +530,7 @@ class ItemFactura(SintelTenantBaseModel):
                 tipo='RETEIVA',
             )
         except Exception:
+            logger.exception("total_reteiva_item: fallo leyendo RetencionesService (item_factura_id=%s)", self.id)
             return self.valor_reteiva or Decimal('0.00')
 
     @property
@@ -537,6 +548,7 @@ class ItemFactura(SintelTenantBaseModel):
                 tipo='RETEICA',
             )
         except Exception:
+            logger.exception("total_reteica_item: fallo leyendo RetencionesService (item_factura_id=%s)", self.id)
             return self.valor_reteica or Decimal('0.00')
 
 

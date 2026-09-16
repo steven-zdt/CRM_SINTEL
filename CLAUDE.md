@@ -38,8 +38,12 @@ make smoke                       # Smoke test suite
 `test específico → componente → app → integración → suite global`. NUNCA correr `make test`
 (suite completa) por defecto tras un cambio pequeño — reservarlo para cierres de fase, cambios
 transversales (`apps/tenant/api/`, `apps/tenant/core/`, mixins heredados por 3+ apps) o releases.
-Verificar siempre `docker top <container> | grep pytest` antes de lanzar una nueva corrida (nunca
-en paralelo).
+Correr varias suites acotadas en paralelo dentro del contenedor está permitido cuando conviene.
+Nota técnica real (no una preferencia): todas las corridas de `pytest` comparten la misma base
+de datos de test (`test_sintel`, alias `default`) — pytest-django la crea/destruye al arrancar,
+así que dos corridas simultáneas SÍ chocan ahí ("database test_sintel is being accessed by other
+users"), sin importar en qué schema/tenant trabaje cada una. Si conviene paralelismo real, usar
+`--reuse-db`/`--keepdb` o serializar; si no, ejecutar una corrida a la vez.
 
 ### Code quality
 ```bash

@@ -2,11 +2,13 @@
 Extractor de Empleados para Dashboard v3.9.5 — datos reales.
 Pull Model: usa NominaSummarySelector + EmpleadoSelector, no importa models.py.
 """
+import logging
 from decimal import Decimal
 
 from apps.tenant.dashboard.services.dtos import WidgetEmpleadosDTO
 
 _ZERO = Decimal('0.00')
+logger = logging.getLogger(__name__)
 
 
 class EmpleadosExtractor:
@@ -16,7 +18,6 @@ class EmpleadosExtractor:
         try:
             from apps.tenant.empleados.services.selectors import (
                 NominaSummarySelector,
-                EmpleadoSelector,
             )
 
             summary = NominaSummarySelector.get_summary(empresa_id)
@@ -37,4 +38,5 @@ class EmpleadosExtractor:
             )
 
         except Exception:
+            logger.exception("EmpleadosExtractor: fallo calculando metricas (empresa_id=%s)", empresa_id)
             return WidgetEmpleadosDTO(0, 0, 0, _ZERO)

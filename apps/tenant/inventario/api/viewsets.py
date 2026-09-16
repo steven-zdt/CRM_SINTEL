@@ -153,10 +153,17 @@ class CategoriaItemViewSet(BaseViewSet, inv_services.CategoriaItemServiceMixin):
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.CategoriaItemSelector.get_detail(
-            empresa_id=empresa.id,
-            categoria_uuid=self.kwargs[self.lookup_url_kwarg],
-        )
+        try:
+            return inv_services.CategoriaItemSelector.get_detail(
+                empresa_id=empresa.id,
+                categoria_uuid=self.kwargs[self.lookup_url_kwarg],
+            )
+        except ObjectDoesNotExist as exc:
+            # Mismo bug ya identificado en MovimientoInventarioViewSet
+            # (OSF Fase F13): un DoesNotExist sin envolver se propagaba como
+            # 500 en vez de 404. Se propaga el mismo fix aqui (Batch 2, mision
+            # UI/UX) -- nunca se habia aplicado a este ViewSet.
+            raise NotFound("Categoria no encontrada o no pertenece a este tenant.") from exc
     
     def get_empresa(self):
         return inv_services.get_empresa_singleton()
@@ -214,10 +221,18 @@ class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.ProductoSelector.get_detail(
-            empresa_id=empresa.id,
-            producto_uuid=self.kwargs[self.lookup_url_kwarg],
-        )
+        try:
+            return inv_services.ProductoSelector.get_detail(
+                empresa_id=empresa.id,
+                producto_uuid=self.kwargs[self.lookup_url_kwarg],
+            )
+        except ObjectDoesNotExist as exc:
+            # Mismo bug ya identificado en MovimientoInventarioViewSet
+            # (OSF Fase F13): un DoesNotExist sin envolver se propagaba como
+            # 500 en vez de 404. Se propaga el mismo fix aqui (Batch 2, mision
+            # UI/UX) -- confirmado con test real (GET a UUID inexistente
+            # devolvia 500 "INTERNAL_SERVER_ERROR" en vez de 404).
+            raise NotFound("Producto no encontrado o no pertenece a este tenant.") from exc
     
     def create(self, request: Request, *args, **kwargs) -> Response:
         """
@@ -410,10 +425,15 @@ class ServicioViewSet(BaseViewSet, inv_services.ServicioServiceMixin):
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.ServicioSelector.get_detail(
-            empresa_id=empresa.id,
-            servicio_uuid=self.kwargs[self.lookup_url_kwarg],
-        )
+        try:
+            return inv_services.ServicioSelector.get_detail(
+                empresa_id=empresa.id,
+                servicio_uuid=self.kwargs[self.lookup_url_kwarg],
+            )
+        except ObjectDoesNotExist as exc:
+            # Mismo bug ya identificado en MovimientoInventarioViewSet
+            # (OSF Fase F13). Ver nota en ProductoViewSet.get_object().
+            raise NotFound("Servicio no encontrado o no pertenece a este tenant.") from exc
     
     def destroy(self, request, *args, **kwargs):
         """
@@ -470,10 +490,15 @@ class ActivoFijoViewSet(BaseViewSet, inv_services.ActivoFijoServiceMixin):
     
     def get_object(self):
         empresa = inv_services.get_empresa_singleton()
-        return inv_services.ActivoFijoSelector.get_detail(
-            empresa_id=empresa.id,
-            activo_uuid=self.kwargs[self.lookup_url_kwarg],
-        )
+        try:
+            return inv_services.ActivoFijoSelector.get_detail(
+                empresa_id=empresa.id,
+                activo_uuid=self.kwargs[self.lookup_url_kwarg],
+            )
+        except ObjectDoesNotExist as exc:
+            # Mismo bug ya identificado en MovimientoInventarioViewSet
+            # (OSF Fase F13). Ver nota en ProductoViewSet.get_object().
+            raise NotFound("Activo fijo no encontrado o no pertenece a este tenant.") from exc
     
     def destroy(self, request, *args, **kwargs):
         """

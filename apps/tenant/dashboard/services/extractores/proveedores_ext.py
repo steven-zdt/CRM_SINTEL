@@ -2,8 +2,12 @@
 Extractor de Proveedores para Dashboard - Pull Model.
 Usa ProveedorSelector y CuentasPagarSelector, no importa models.py directamente.
 """
+import logging
 from decimal import Decimal
+
 from apps.tenant.dashboard.services.dtos import WidgetProveedoresDTO
+
+logger = logging.getLogger(__name__)
 
 
 class ProveedoresExtractor:
@@ -11,7 +15,10 @@ class ProveedoresExtractor:
     @staticmethod
     def extraer_metricas(empresa_id: int) -> WidgetProveedoresDTO:
         try:
-            from apps.tenant.proveedores.services.selectors import ProveedorSelector, CuentasPagarSelector
+            from apps.tenant.proveedores.services.selectors import (
+                CuentasPagarSelector,
+                ProveedorSelector,
+            )
 
             # total_provedores
             proveedores_qs = ProveedorSelector.get_list(empresa_id).filter(activo=True)
@@ -32,4 +39,5 @@ class ProveedoresExtractor:
             )
 
         except Exception:
+            logger.exception("ProveedoresExtractor: fallo calculando metricas (empresa_id=%s)", empresa_id)
             return WidgetProveedoresDTO(0, Decimal('0.00'), Decimal('0.00'))

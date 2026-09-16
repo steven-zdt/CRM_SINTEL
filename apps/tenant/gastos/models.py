@@ -9,6 +9,7 @@ NOTA: La integridad legal debe ser gestionada por procesos administrativos, el s
 El formato del documento debe cumplir con la normativa DIAN colombiana.
 """
 import datetime
+import logging
 import uuid as uuid_module
 from decimal import Decimal
 
@@ -21,6 +22,8 @@ from apps.tenant.core.models import SintelTenantBaseModel
 from apps.tenant.empresa.models import Empresa  # SSoT empresa (singleton por tenant)
 
 from .choices.categoria_contable import CATEGORIA_CONTABLE_CHOICES
+
+logger = logging.getLogger(__name__)
 
 
 class ResolucionDIAN(SintelTenantBaseModel):
@@ -285,6 +288,10 @@ class DocumentoSoporte(SintelTenantBaseModel):
             ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
             return Decimal(str(total))
         except Exception:
+            # Hallazgo GASTOS-02 (mision UI/UX): un fallo real de la consulta
+            # cross-schema era indistinguible de "sin retencion" -- ahora queda
+            # en logs (ERROR REAL -> ERROR EXPLICITO, nunca $0 silencioso).
+            logger.exception("total_retefuente: fallo leyendo Retencion (documento_soporte_id=%s)", self.id)
             return Decimal('0.00')
 
     @property
@@ -303,6 +310,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
             ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
             return Decimal(str(total))
         except Exception:
+            logger.exception("total_reteica: fallo leyendo Retencion (documento_soporte_id=%s)", self.id)
             return Decimal('0.00')
 
     @property
@@ -321,6 +329,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
             ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
             return Decimal(str(total))
         except Exception:
+            logger.exception("total_reteiva: fallo leyendo Retencion (documento_soporte_id=%s)", self.id)
             return Decimal('0.00')
     @property
     def vendedor_nombre(self): return self.proveedor.razon_social
@@ -385,6 +394,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
             ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
             return Decimal(str(total))
         except Exception:
+            logger.exception("total_retenciones: fallo leyendo Retencion (documento_soporte_id=%s)", self.id)
             return Decimal('0.00')
 
     @property
@@ -402,6 +412,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
             ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
             return Decimal(str(monto))
         except Exception:
+            logger.exception("retefuente_calculada: fallo leyendo Retencion (documento_soporte_id=%s)", self.id)
             return Decimal('0.00')
 
     @property
@@ -419,6 +430,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
             ).aggregate(models.Sum('monto'))['monto__sum'] or Decimal('0.00')
             return Decimal(str(monto))
         except Exception:
+            logger.exception("reteica_calculada: fallo leyendo Retencion (documento_soporte_id=%s)", self.id)
             return Decimal('0.00')
 
     @property
