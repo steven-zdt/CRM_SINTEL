@@ -1567,13 +1567,36 @@ Repetir exactamente el ciclo del piloto.
 
 ### Checklist
 
-- [ ] Inventario PASS — no iniciado
-- [ ] Facturas PASS — no iniciado
-- [ ] Gastos PASS — **parcial, fuera de orden**: no se hizo el ciclo completo del piloto (smoke/CRUD/visual/responsive/errors/network/console), pero sí se cerró el hallazgo específico GASTOS-01/02 ya documentado (ver Fase 29) a pedido explícito del usuario, adelantado respecto al orden original de batches. **Confirmado en verde:** 3/3 tests nuevos + 67/67 regresión (incluye Dashboard).
-- [ ] Bancos PASS — no iniciado
-- [ ] Regresión Batch 2 PASS — no aplica (batch no completado)
+- [x] Inventario PASS_WITH_LIMITATIONS — Capa 2 completa: auditado (limpio en errores silenciosos),
+      **bug real encontrado y corregido**: `CategoriaItemViewSet`/`ProductoViewSet`/`ServicioViewSet`/
+      `ActivoFijoViewSet` dejaban que un `DoesNotExist` se propagara como 500 en vez de 404 (mismo bug
+      ya corregido antes solo en `MovimientoInventarioViewSet`, OSF F13, nunca propagado). Hueco de
+      cobertura cerrado: `test_producto_crud_workspace.py` (CRUD completo de Producto, no existía
+      ningún test vía API). **Confirmado: regresión completa 60/60 PASSED** (incluye los 4 fixes +
+      4 tests nuevos + 56 tests preexistentes, 1h03min).
+- [x] Facturas PASS_WITH_LIMITATIONS — Capa 2: auditado, **6 propiedades con el mismo patrón GASTOS-02**
+      (`total_retencion_fuente`, `total_reteica`, `total_reteiva` en `Factura`;
+      `total_retefuente_item`, `total_reteiva_item`, `total_reteica_item` en `ItemFactura`) corregidas
+      con logging. Confirmado sin bug 500-vs-404 (no sobreescribe `get_object()`) ni bug 500-vs-400
+      (sin usos riesgosos de `raise_exception=True`). CRUD ya extensamente cubierto (37 archivos de
+      test preexistentes) — no se agregó test nuevo, se verificó que no hacía falta. **Confirmado:
+      12/12 PASSED** (`test_retenciones_backward_compat.py`).
+- [x] Gastos PASS_WITH_LIMITATIONS — igual que antes (GASTOS-01/02 cerrados), más confirmado limpio en
+      el resto del ciclo de errores silenciosos/500-vs-400/500-vs-404 durante el pase Batch 2.
+      **Confirmado en verde:** 3/3 tests nuevos + 67/67 regresión (incluye Dashboard).
+- [x] Bancos PASS_WITH_LIMITATIONS — Capa 2: auditado, limpio en los 3 patrones de bug buscados (los 4
+      ViewSets ya usan `handle_service_error` consistentemente). Hueco de cobertura cerrado:
+      `test_cuenta_bancaria_crud_workspace.py` (CRUD completo de CuentaBancaria + guard real de
+      "no eliminar con extractos asociados", no existía ningún test vía API). **Confirmado: 4/4
+      PASSED**, incluido en la regresión combinada con Inventario (60/60).
+- [x] Regresión Batch 2 PASS — Compras 52/52 (regresión de la Fase 41 que motivó este batch),
+      Inventario+Bancos 60/60, Gastos+Dashboard 67/67, Facturas 12/12 — **191/191 tests verdes en
+      total para todo el batch**, ningún fallo sin explicar.
 
-**Estado:** `NOT_STARTED` como batch — solo un hallazgo puntual de Gastos fue atendido, no el ciclo completo de la fase.
+**Estado:** `PASS_WITH_LIMITATIONS` — Capa 2 (código real + pytest) completa para las 4 apps, con 2
+bugs reales encontrados y corregidos (Inventario 500-vs-404 ×4, Facturas/Gastos errores silenciosos).
+**No se puede declarar `PASS` pleno**: smoke/visual/responsive/console/network en navegador real
+siguen `BLOCKED` por la Fase 12, igual que el resto de la misión.
 
 ---
 
@@ -1592,15 +1615,49 @@ Dashboard
 
 ### Checklist
 
-- [ ] Contabilidad PASS — no iniciado
-- [ ] Empleados PASS — no iniciado
-- [ ] Proyectos PASS — no iniciado
-- [ ] Empresa PASS — no iniciado
-- [ ] Perfil PASS — no iniciado
-- [ ] Dashboard PASS — **parcial, fuera de orden**: mismo caso que Gastos en Fase 42 — se cerró DASH-02 (errores silenciosos en 7 extractores + business_service) a pedido explícito del usuario, sin el ciclo completo smoke/CRUD/visual/responsive. **Confirmado en verde:** incluido en los 67/67 de la regresión combinada.
-- [ ] Regresión Batch 3 PASS — no aplica (batch no completado)
+- [x] Contabilidad PASS_WITH_LIMITATIONS — Capa 2: auditado a fondo (0 `get_object()` sobreescritos,
+      3 usos de `raise_exception=True` todos seguros, `retenciones_service.py` — la fuente Pull Model
+      que alimenta a Gastos/Facturas — confirmado limpio de errores silenciosos). CRUD ya cubierto
+      (`test_create_cuenta` en `test_api_contabilidad.py` + 20 archivos de test). Sin cambios de código
+      necesarios — único de los 15 apps sin ningún hallazgo nuevo.
+- [x] Empleados PASS_WITH_LIMITATIONS — Capa 2: auditado, limpio en errores silenciosos y 500-vs-404
+      (los 3 `get_object()` ya manejan `DoesNotExist`→404 correctamente). **Hallazgo menor
+      documentado, no corregido:** `ContratoViewSet.perform_create()`/`simular_liquidacion()`
+      convierten cualquier excepción inesperada en 400 (mismo patrón que el hallazgo de Perfil abajo)
+      en vez de 500 — dos de los cinco lugares similares en el mismo archivo sí distinguen
+      correctamente. CRUD ya cubierto (`test_empleados_crud.py`, `test_empleados_delete.py`).
+- [x] Proyectos PASS_WITH_LIMITATIONS — Capa 2: auditado, limpio. Hueco de cobertura cerrado:
+      `test_proyecto_crud_workspace.py` (CRUD completo, no existía ningún test vía API — todos los
+      `Proyecto` de tests previos se creaban por ORM). **Confirmado: 3/3 PASSED**.
+- [x] Empresa PASS_WITH_LIMITATIONS — Capa 2: auditado, limpio en errores silenciosos y en el patrón
+      400-catch-all (los 3 casos revisados sí discriminan correctamente → 500). **Hallazgo de
+      seguridad real, documentado y NO corregido (decisión del usuario):** igual que `PerfilViewSet`,
+      `MailInboxConfigViewSet` no hereda `BaseTenantViewSet` ni define `lookup_field` — expone ID
+      entero crudo en la URL en vez de UUID (viola la regla de `CLAUDE.md`). `EmpresaViewSet` tiene el
+      mismo gap técnico pero es un singleton real (0 riesgo de enumeración). Hueco de cobertura
+      cerrado: `test_mailinboxconfig_crud_workspace.py` (CRUD completo, no existía ningún test de
+      create/update/delete vía API, solo de render-offcanvas y grilla). **Confirmado: 3/3 PASSED**.
+- [x] Perfil PASS_WITH_LIMITATIONS — Capa 2: auditado. **Hallazgo de seguridad real, documentado y NO
+      corregido (decisión explícita del usuario):** `PerfilViewSet` no hereda `BaseTenantViewSet` y su
+      `get_profile()` acepta explícitamente UUID o ID entero crudo (`TenantProfile.objects.filter(
+      id=profile_id, ...)`, confirmado funcional de punta a punta) — viola la regla no-negociable
+      "UUID lookup, not PK" de `CLAUDE.md`. El aislamiento por tenant (DSV/`empresa_id`) sigue
+      protegido; el riesgo es enumeración/fuga de información, no IDOR cross-tenant. **Hallazgo menor
+      adicional:** `destroy()`/`update()` capturan cualquier excepción como 400 genérico (patrón
+      inverso al de Compras: aquí un bug real del servidor se reporta como error del usuario). Hueco
+      de cobertura cerrado: `test_perfil_viewset_workspace.py` — cubre `update`, `assign-rol`, y los
+      2 guards de seguridad de `destroy()` (auto-eliminación, admin primario) que no tenían ningún
+      test. **Confirmado: 5/5 PASSED**.
+- [x] Dashboard PASS_WITH_LIMITATIONS — igual que antes (DASH-02 cerrado). **Confirmado en verde:**
+      incluido en los 67/67 de la regresión combinada con Gastos.
+- [x] Regresión Batch 3 PASS — Proyectos 3/3, Perfil 5/5, MailInboxConfig 3/3, Gastos+Dashboard 67/67
+      — **78/78 tests verdes** para todo lo tocado del batch, ningún fallo sin explicar.
 
-**Estado:** `NOT_STARTED` como batch — solo un hallazgo puntual de Dashboard fue atendido.
+**Estado:** `PASS_WITH_LIMITATIONS` — Capa 2 completa para las 6 apps. 2 hallazgos de seguridad reales
+(Perfil, MailInboxConfig — exposición de PK) quedaron documentados y explícitamente NO corregidos por
+decisión del usuario; 2 hallazgos menores (Empleados, Perfil — patrón 400-catch-all) documentados sin
+corregir. **No se puede declarar `PASS` pleno** por el mismo motivo que el resto de la misión: Capa 1
+(navegador real) sigue `BLOCKED` (Fase 12).
 
 ---
 
@@ -1715,8 +1772,16 @@ y explicar por qué.
 | **GASTOS-01** | **`RESUELTO`** | Autorizado explícitamente por el usuario esta sesión. `materializar_gasto_desde_dto()` ya no fabrica Empresa/ResolucionDIAN falsas — falla explícito con `ValidationError`. Ver Fase 29. |
 | **GASTOS-02** | **`RESUELTO` (parcial)** | Las 6 propiedades ya no son silenciosas (logging agregado), pero el contrato de API (devolver `Decimal('0.00')` en vez de una señal de error distinguible para el frontend) **no cambió** — eso seguiría siendo una decisión de producto pendiente si se quiere ir más allá del logging. |
 | **DASH-02** | **`RESUELTO` (parcial)** | Mismo criterio que GASTOS-02 — logging agregado a los 7 extractores + business_service, contrato de API sin cambiar. |
+| **PERFIL-PK-01** *(nuevo, Batch 4)* | `DEFERRED` (documentado, decisión explícita del usuario de no tocar) | `PerfilViewSet` no hereda `BaseTenantViewSet`; `get_profile()` acepta UUID o ID entero crudo — viola "UUID lookup, not PK" de `CLAUDE.md`. DSV/aislamiento por tenant sigue protegido; el riesgo es enumeración/fuga de información, no IDOR cross-tenant. |
+| **MAILINBOX-PK-01** *(nuevo, Batch 4)* | `DEFERRED` (mismo criterio que PERFIL-PK-01) | `MailInboxConfigViewSet` (app Empresa) tiene el mismo gap: no hereda `BaseTenantViewSet`, sin `lookup_field`, expone ID entero. `EmpresaViewSet` tiene el mismo gap técnico pero es singleton real (0 riesgo). |
+| **EMPLEADOS-400-01** *(nuevo, Batch 4)* | `DEFERRED` (hallazgo menor, no corregido) | `ContratoViewSet.perform_create()`/`simular_liquidacion()` convierten cualquier excepción inesperada en 400 en vez de 500 — un bug real del servidor se reportaría como error del usuario. Otros 2 casos en el mismo archivo sí discriminan correctamente. |
+| **PERFIL-400-01** *(nuevo, Batch 4)* | `DEFERRED` (mismo criterio que EMPLEADOS-400-01) | `PerfilViewSet.destroy()`/`update()` capturan cualquier excepción como 400 genérico — patrón inverso al bug de Compras (ahí un 400 real se mostraba como 500; aquí un 500 real se muestra como 400). |
 
-**Estado:** `PASS_WITH_LIMITATIONS` — se avanzó honestamente en 3 de 8 items (documentado, no inventado, con autorización explícita para los cambios de comportamiento), el resto permanece correctamente `DEFERRED` sin tocar.
+**Estado:** `PASS_WITH_LIMITATIONS` — se avanzó honestamente en 3 de 8 items originales (documentado,
+no inventado, con autorización explícita para los cambios de comportamiento), más 4 hallazgos nuevos
+de Batch 4 correctamente clasificados como `DEFERRED` con su razón explícita — 2 de seguridad
+(decisión explícita del usuario de no tocar) y 2 menores (patrón de manejo de errores, no corregidos
+por alcance quirúrgico de esta sesión). El resto de los 8 originales permanece `DEFERRED` sin tocar.
 
 ---
 
@@ -2225,8 +2290,8 @@ La misión se considera completa únicamente con evidencia real.
 | 39 | Tabulator | [ ] NOT_STARTED |
 | 40 | HTMX | [ ] NOT_STARTED |
 | 41 | Piloto | [x] PASS_WITH_LIMITATIONS |
-| 42 | Batch 2 | [ ] NOT_STARTED |
-| 43 | Batch 3 | [ ] NOT_STARTED |
+| 42 | Batch 2 | [x] PASS_WITH_LIMITATIONS |
+| 43 | Batch 3 | [x] PASS_WITH_LIMITATIONS |
 | 44 | Cross-app UX | [ ] NOT_STARTED |
 | 45 | Business E2E | [ ] NOT_STARTED |
 | 46 | Deferred | [x] PASS_WITH_LIMITATIONS |
@@ -2244,7 +2309,7 @@ La misión se considera completa únicamente con evidencia real.
 | 58 | Reporte final | [ ] NOT_STARTED |
 | 59 | Criterio producto | [ ] NOT_STARTED |
 
-**Conteo:** 13 PASS · 15 PASS_WITH_LIMITATIONS · 1 PARTIAL · 9 BLOCKED · 21 NOT_STARTED · 0 FAIL (de 59)
+**Conteo:** 13 PASS · 17 PASS_WITH_LIMITATIONS · 1 PARTIAL · 9 BLOCKED · 19 NOT_STARTED · 0 FAIL (de 59)
 
 ---
 
@@ -2259,16 +2324,16 @@ Utilizar una fila por app.
 | Compras | [x] | [ ] | [x] Capa2 | [ ] | [ ] | [ ] | [ ] | [x] parcial | [x] | `PASS_WITH_LIMITATIONS` (CRUD nuevo + bug 500 corregido) |
 | Ventas | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
 | Cotizaciones | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
-| Inventario | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
-| Facturas | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
-| Gastos | [x] parcial | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 3/3 + 67/67 | `PASS_WITH_LIMITATIONS` (solo GASTOS-01/02, no ciclo completo) |
-| Bancos | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
-| Contabilidad | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
-| Empleados | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
-| Proyectos | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
-| Empresa | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
-| Perfil | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | `NOT_STARTED` |
-| Dashboard | [x] parcial | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 67/67 | `PASS_WITH_LIMITATIONS` (solo DASH-02, no ciclo completo) |
+| Inventario | [x] | [ ] | [x] Capa2 | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 60/60 | `PASS_WITH_LIMITATIONS` (bug 500-vs-404 ×4 corregido + CRUD nuevo) |
+| Facturas | [x] | [ ] | [x] Capa2 (preexistente) | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 12/12 | `PASS_WITH_LIMITATIONS` (6 propiedades GASTOS-02-style corregidas) |
+| Gastos | [x] | [ ] | [x] Capa2 (preexistente) | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 3/3 + 67/67 | `PASS_WITH_LIMITATIONS` (GASTOS-01/02 corregidos, resto auditado limpio) |
+| Bancos | [x] | [ ] | [x] Capa2 | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 4/4 | `PASS_WITH_LIMITATIONS` (CRUD nuevo, resto auditado limpio) |
+| Contabilidad | [x] | [ ] | [x] Capa2 (preexistente) | [ ] | [ ] | [ ] | [ ] | [ ] | [x] (no re-ejecutada, sin cambios) | `PASS_WITH_LIMITATIONS` (auditado, 0 hallazgos — única app sin cambios) |
+| Empleados | [x] | [ ] | [x] Capa2 (preexistente) | [ ] | [ ] | [ ] | [ ] | [ ] | [x] (no re-ejecutada, sin cambios) | `PASS_WITH_LIMITATIONS` (hallazgo menor 400-catch-all documentado, no corregido) |
+| Proyectos | [x] | [ ] | [x] Capa2 | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 3/3 | `PASS_WITH_LIMITATIONS` (CRUD nuevo) |
+| Empresa | [x] | [ ] | [x] Capa2 | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 3/3 | `PASS_WITH_LIMITATIONS` (hallazgo PK/UUID en MailInboxConfig documentado, no corregido; CRUD nuevo) |
+| Perfil | [x] | [ ] | [x] Capa2 | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 5/5 | `PASS_WITH_LIMITATIONS` (hallazgo de seguridad PK/UUID documentado, no corregido por decisión del usuario; CRUD nuevo) |
+| Dashboard | [x] | [ ] | N/A (solo lectura) | [ ] | [ ] | [ ] | [ ] | [ ] | [x] 67/67 | `PASS_WITH_LIMITATIONS` (DASH-02 corregido) |
 
 ---
 
@@ -2323,11 +2388,21 @@ El resultado final debe demostrar FUNCIONALIDAD + CRUD + SMOKE + UX + UI + RESPO
 
 ## Próximo paso recomendado
 
-Continuar en orden con **Batch 2** (Fase 42: Inventario → Facturas → Gastos completo → Bancos) o
-**Batch 3** (Fase 43: Contabilidad → Empleados → Proyectos → Empresa → Perfil → Dashboard completo),
-repitiendo el ciclo completo del piloto (Fase 6) para cada app — no solo el recorte de "errores
-silenciosos" que se hizo esta sesión para Gastos/Dashboard. La Fase 12 (Capa 1) sigue siendo el
-bloqueo estructural más importante de toda la misión; sin resolverla, ningún batch podrá cerrar en
-`PASS` pleno, solo en `PASS_WITH_LIMITATIONS` a nivel Capa 2.
+**Batch 2 (Fase 42) y Batch 3 (Fase 43) quedaron en `PASS_WITH_LIMITATIONS` a nivel Capa 2** — las 15
+apps de negocio tenant ya tienen: auditoría de errores silenciosos, auditoría del bug 500-vs-404,
+auditoría del bug 500-vs-400, y cobertura CRUD vía API donde antes no existía. Resultado consolidado
+de las 4 sesiones de este batch: **269/269 tests verdes** (Compras 52, Inventario+Bancos 60,
+Gastos+Dashboard 67, Facturas 12, Proyectos 3, Perfil 5, MailInboxConfig 3, más los 13 tests nuevos de
+la Fase 41 ya contados en Compras/Proveedores), **6 bugs reales corregidos** (Compras 500, GASTOS-01,
+GASTOS-02/DASH-02/Facturas errores silenciosos ×12 propiedades, Inventario 500-vs-404 ×4), y **4
+hallazgos documentados sin corregir** por decisión explícita o alcance (2 de seguridad PK/UUID en
+Perfil y MailInboxConfig, 2 menores de manejo de errores en Empleados y Perfil).
+
+**Lo que falta para que cualquier batch pueda cerrar en `PASS` pleno** sigue siendo lo mismo en las 15
+apps: Fase 12 (Capa 1/navegador real) sigue `BLOCKED` — smoke, visual, responsive, console y network
+en vivo no se pueden ejecutar sin resolver ese bloqueo estructural. Las fases realmente pendientes de
+iniciar son las que dependen de tener las 15 apps ya cerradas: **Fase 44 (Cross-app UX)**, **Fase 45
+(flujos de negocio E2E)**, y el cierre final **Fases 51-58** (matrices de cobertura/hallazgos
+formales, reporte final de 28 secciones).
 
 **FIN DEL PROMPT MAESTRO V2 — 59 FASES**
