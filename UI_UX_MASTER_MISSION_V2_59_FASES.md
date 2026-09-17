@@ -405,15 +405,28 @@ UI EXISTE
 
 ### Checklist
 
-- [ ] Todas las apps listadas
-- [ ] Rutas reales identificadas
-- [ ] Submódulos identificados
-- [ ] Tabs identificadas
-- [ ] Formularios identificados
-- [ ] Acciones especiales identificadas
-- [ ] Modelo/UI diferenciados
+- [x] Todas las apps listadas — las 15 apps de negocio tenant
+- [x] Rutas reales identificadas — `urls.py`/`api/urls.py`/`api/viewsets.py` de cada app
+- [x] Submódulos identificados — ~85 filas de entidad/submódulo relevadas
+- [x] Tabs identificadas
+- [x] Formularios identificados — Crear/Editar/Detalle por submódulo
+- [x] Acciones especiales identificadas
+- [x] Modelo/UI diferenciados — columna explícita "Modelo existe" vs "UI existe" en cada fila
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión. `MAPA_EXPERIENCIA_UX.md` (misión UX previa, 2026-08-21) cubre un mapeo similar pero no fue re-verificado ni es exactamente este inventario.
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — ejecutado como auditoría estática de solo lectura
+(no requiere Capa 1, `BLOCKED`): 5 agentes en paralelo recorrieron `urls.py`, `api/urls.py`,
+`api/viewsets.py`, `models.py` y templates/JS reales de las 15 apps. Resultado completo en
+`UI_UX_INVENTARIO_UI.md`. Limitación declarada: granularidad por entidad/submódulo principal, no por
+cada tab/pantalla individual (la misma limitación que ya declaró `UI_UX_COVERAGE_MATRIX.md`).
+**Hallazgo más importante:** 11 modelos/acciones de backend confirmados sin ninguna UI alcanzable
+(ej. `TrasladoInventario` en Inventario con CRUD+flujo de aprobación completo y cero templates; 9 de
+11 acciones de `CotizacionViewSet` — aprobar/rechazar/archivar/convertir-a-venta/facturar-venta/
+convertir-a-proyecto/etc. — inalcanzables desde la UI; 3 modelos huérfanos en Proyectos:
+`AsignacionPersonal`, `PedidoProyecto`, `ItemPedido`), más 2 templates huérfanos confirmados y 1 bug
+de código real (`DevengoViewSet.render_offcanvas_crear` duplicado en
+`apps/tenant/empleados/api/viewsets.py`, líneas 1545 y 1613 — la segunda definición sobreescribe
+silenciosamente la primera). `MAPA_EXPERIENCIA_UX.md` (misión UX previa, 2026-08-21) cubre un mapeo
+similar pero no fue reutilizado como sustituto — este inventario se construyó leyendo el código actual.
 
 ---
 
@@ -466,13 +479,27 @@ OBSOLETE
 
 ### Checklist
 
-- [ ] Patrones identificados
-- [ ] Patrones duplicados detectados
-- [ ] Inconsistencias detectadas
-- [ ] Casos específicos de dominio preservados
-- [ ] Elementos candidatos a shared identificados
+- [x] Patrones identificados — Page Header, Toolbar, Search, Filters, KPI, Tabs, Table, Pagination, Badge, Button, Dropdown, Offcanvas, Form, Confirm, Alert, Empty/Loading/Error State, en las 6 apps exigidas
+- [x] Patrones duplicados detectados — ~24 ocurrencias `DUPLICATE`, concentradas en Search/KPI/Offcanvas/Loading State reimplementados a mano en vez de usar el partial compartido existente
+- [x] Inconsistencias detectadas — ~13 ocurrencias `INCONSISTENT`, mismo propósito resuelto distinto dentro de la MISMA app (Tabulator legado conviviendo con django-tables2, Confirm nativo vs. `UIManager.confirm()`)
+- [x] Casos específicos de dominio preservados — ~15 ocurrencias `APP_SPECIFIC` (Badges de estado de negocio, Toolbars) correctamente no forzadas a compartir
+- [x] Elementos candidatos a shared identificados — ~6 `CANDIDATE_SHARED` (KPI inline strip, filtros por chips, autocomplete de proveedor, patrón de subida batch con progreso)
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión. `UX_MASTER_BASELINE.md` (misión previa) ya documenta componentes compartidos existentes (`empty_state.html`, `filter_bar.html`, `kpi_card.html`, `loading_state.html`, `_base_offcanvas.html`) — reutilizar esa base antes de re-auditar desde cero.
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — ejecutado como auditoría estática de solo lectura
+sobre las 6 apps que exige la fase (Clientes, Proveedores, Compras, Ventas, Inventario, Facturas).
+Resultado completo en `UI_UX_PATRONES_VISUALES.md`, reutilizando como línea base el sistema de
+componentes ya documentado en `UX_MASTER_BASELINE.md` (`sintel_kpi_card`, `sintel_empty_state`,
+`filter_bar.html`, `loading_state.html`, `_base_offcanvas.html`, `error_handler.html`) en vez de
+re-derivarlo desde cero. **Hallazgo más severo:** un uso confirmado del anti-patrón prohibido
+explícitamente por `CLAUDE.md` —
+`apps/tenant/proveedores/templates/tenant/proveedores/partials/representantes_directory.html:236`
+tiene un fallback a `bootstrap.Offcanvas.getOrCreateInstance().show()` en vez de
+`mostrarOffcanvasSeguro()` — único caso detectado en las 6 apps, candidato a fix quirúrgico inmediato
+(no solo deuda documentada). **Patrón más repetido:** `_base_offcanvas.html` (compartido) solo lo
+adopta 1 de las 6 apps (Gastos); las otras 5 reimplementan a mano el mismo `<style>` de
+header/botón-cerrar/footer en más de 15 templates. También 3 casos `OBSOLETE` confirmados
+(`contactos_list.html` en Clientes, grid Tabulator de `representantes_directory.html` en Proveedores,
+`offcanvas_importar_factura.html` en Facturas).
 
 ---
 
@@ -2363,8 +2390,8 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 5 | Principio fundamental | [x] PASS |
 | 6 | Loop obligatorio | [x] PASS_WITH_LIMITATIONS |
 | 7 | Protección trabajo existente | [x] PASS |
-| 8 | Inventario UI | [ ] NOT_STARTED |
-| 9 | Patrones visuales | [ ] NOT_STARTED |
+| 8 | Inventario UI | [x] PASS_WITH_LIMITATIONS |
+| 9 | Patrones visuales | [x] PASS_WITH_LIMITATIONS |
 | 10 | Regla de diseño | [ ] NOT_STARTED |
 | 11 | Contrato visual | [ ] NOT_STARTED |
 | 12 | Capa 1 navegador | [x] BLOCKED |
@@ -2416,7 +2443,7 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 58 | Reporte final | [x] PASS |
 | 59 | Criterio producto | [ ] NOT_STARTED |
 
-**Conteo:** 14 PASS · 20 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 14 NOT_STARTED · 0 FAIL (de 59)
+**Conteo:** 14 PASS · 22 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 12 NOT_STARTED · 0 FAIL (de 59)
 
 ---
 
