@@ -56,7 +56,7 @@
 
       this.clearAllItems();
 
-      fetch('/api/v1/cotizaciones/items/?cotizacion_id=' + uuid + '&page_size=200', { headers: headers })
+      fetch(this._api.itemsUrl + '?cotizacion_id=' + uuid + '&page_size=200', { headers: headers })
         .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
         .then(function (data) {
           var items = data.results || data;

@@ -280,6 +280,30 @@ no afecta integridad de datos) · `P3` (hallazgo menor / deuda documentada).
 
 ---
 
+## COTIZACIONES-SSOT-01 — URL de items hardcodeada en vez de usar el SSoT de `cotizaciones.api.js`
+
+- **App / Screen:** Cotizaciones / Editor (carga de ítems al abrir una cotización existente).
+- **Type:** Violación de la regla de SSoT para URLs de API (Fase 37, "Cada `api.js` debe seguir siendo
+  SSoT de URLs/HTTP methods").
+- **Severity:** P3 (no afecta el comportamiento actual — el endpoint es el mismo — pero rompe la
+  regla de mantenibilidad: un cambio futuro de esa URL en `cotizaciones.api.js` no se reflejaría aquí).
+- **Reproduction:** abrir el editor de una cotización existente y revisar la llamada de red a
+  `/api/v1/cotizaciones/items/`.
+- **Current (antes):** `apps/tenant/cotizaciones/static/cotizaciones/js/features/cotizacion_editor.js:59`
+  hacía `fetch('/api/v1/cotizaciones/items/?cotizacion_id=' + uuid + '&page_size=200', ...)` con la
+  URL base escrita a mano, en vez de usar `this._api.itemsUrl` (definido en
+  `cotizaciones.api.js:100` como `BASE + '/items/'`).
+- **Expected:** usar el wrapper SSoT ya existente, igual que el resto del archivo hace para
+  productos/servicios (`this._api.productosUrl`, `this._api.serviciosUrl`).
+- **Root cause:** el código de carga de ítems se escribió antes de o sin usar el wrapper `itemsUrl`
+  ya definido en el mismo `api.js`, probablemente copiado de un `fetch()` de prueba y nunca migrado.
+- **Fix:** reemplazado por `fetch(this._api.itemsUrl + '?cotizacion_id=' + uuid + '&page_size=200', ...)`.
+- **Test:** ninguno nuevo — cambio de una línea, mismo endpoint resultante, sin cambio de
+  comportamiento observable.
+- **Status:** `FIXED`.
+
+---
+
 ## Resumen
 
 | ID | App | Severidad | Status |
@@ -295,8 +319,9 @@ no afecta integridad de datos) · `P3` (hallazgo menor / deuda documentada).
 | CROSSAPP-UI-01 | Transversal (10 apps) | P3 | `DEFERRED` |
 | EMISION-FISCAL-01 | Ventas, Cotizaciones | N/A | `DEFERRED` (por diseño/regulación) |
 | PROVEEDORES-OFFCANVAS-01 | Proveedores | P3 | `FIXED` |
+| COTIZACIONES-SSOT-01 | Cotizaciones | P3 | `FIXED` |
 
-**8 bugs reales corregidos con evidencia de test o de código verificado. 6 hallazgos documentados y
+**9 bugs reales corregidos con evidencia de test o de código verificado. 6 hallazgos documentados y
 explícitamente diferidos** (2 por decisión del usuario, 3 por alcance quirúrgico, 1 por ser una
 restricción de producto/regulación ya existente). **0 hallazgos inventados** — cada uno cita el
 archivo y línea real que lo origina.

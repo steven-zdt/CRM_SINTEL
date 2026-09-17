@@ -1536,13 +1536,44 @@ No introducir globals innecesarios.
 
 ### Checklist
 
-- [x] Namespace correcto — no se tocó JS esta sesión, namespace preexistente intacto
-- [ ] API SSoT — no auditado esta sesión
-- [x] Sin globals innecesarios — no se introdujeron
-- [ ] UI separada de API cuando corresponda — no auditado
-- [ ] No duplicación HTTP — no auditado
+- [x] Namespace correcto — verificado en las 25 `*.api.js` del repo: **24/25 usan
+      `window.Sintel.<App>`** consistentemente; la única excepción
+      (`apps/tenant/empresa/static/empresa/js/empresa.api.js`) está auto-documentada como
+      `⚠️ DEPRECATED v2.40: Este archivo NO se carga y NO debe usarse` — no es una violación activa,
+      es código muerto candidato (cross-referencia con Fase 38).
+- [x] API SSoT — **auditado, 1 violación real encontrada y corregida**: `cotizaciones/features/
+      cotizacion_editor.js:59` hacía `fetch('/api/v1/cotizaciones/items/?cotizacion_id=' + uuid + ...)`
+      con la URL escrita a mano, en vez de usar `this._api.itemsUrl` — que `cotizaciones.api.js:100` ya
+      define exactamente para ese propósito. Corregido a
+      `fetch(this._api.itemsUrl + '?cotizacion_id=' + uuid + ..., ...)`. No se encontraron más casos de
+      `fetch('/api/...)` hardcodeado fuera de un archivo `*.api.js` en el resto de `features/*.js`
+      auditado (grep dirigido, no exhaustivo línea por línea de los 164 archivos JS del repo).
+- [x] Sin globals innecesarios — muestreo de 164 archivos JS estáticos: 159 envueltos en IIFE; los 5
+      "sin IIFE aparente" resultaron ser 3 falsos positivos (patrón correcto y deliberado
+      `window.Sintel.X = window.Sintel.X || {}` seguido de IIFE con el objeto como parámetro, en
+      Proveedores) y 2 casos genuinamente distintos: `dashboard.js`/`contabilidad.js` bajo
+      `static/tenant/dashboard/` usan **ES Modules** (`import`/`export`) en vez del patrón IIFE+`window.Sintel`
+      del resto del proyecto — no generan globals (los módulos ES son de alcance léxico por diseño), pero
+      es un segundo sistema de módulos coexistiendo con el estándar documentado. Coincide con el hallazgo ya
+      señalado por la misión previa F33 (`F33_APP_EXPANSION_MATRIX.md` #11): este árbol de
+      `core/static/tenant/core/dashboard/` "requiere su propio análisis... fuera del alcance" — no se
+      investiga más a fondo aquí por la misma razón.
+- [x] UI separada de API cuando corresponda — confirmado por el propio patrón `*.api.js` (URLs/HTTP) +
+      `features/*.js` (interacción DOM) que ya usan las 24 apps con namespace correcto; el hallazgo de
+      SSoT de arriba es la única mezcla real detectada.
+- [x] No duplicación HTTP — no se encontró llamada HTTP duplicada a un mismo endpoint desde dos
+      wrappers distintos. Sí existe duplicación de **lógica JS no-HTTP** ya documentada en la Fase 9:
+      `mostrarFeedback()`/`ocultarFeedback()` copiadas idénticas en `resolucion_editor.js` y
+      `venta_editor.js` (Ventas) — no se tocó (fuera del alcance quirúrgico de "no duplicación HTTP",
+      que es lo que pide literalmente esta fase).
 
-**Estado:** `NOT_STARTED` como auditoría dedicada — ningún archivo JS fue tocado esta sesión (todos los cambios fueron backend Python: modelos, viewsets, extractores, tests).
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — auditoría real ejecutada esta sesión (grep dirigido
+sobre los 25 `*.api.js` y muestreo de los 164 archivos JS estáticos), con 1 violación de SSoT real
+encontrada y corregida (`cotizacion_editor.js`) y 1 código muerto auto-documentado detectado
+(`empresa.api.js`). No se declara `PASS` pleno porque el muestreo de "no duplicación HTTP" no fue
+línea por línea de los 164 archivos (sería desproporcionado para esta fase), y porque el hallazgo de
+los dos sistemas de módulos coexistiendo (`window.Sintel` IIFE vs. ES Modules) no se investigó a fondo
+— se documenta y se deja como estaba, siguiendo el mismo criterio de alcance ya usado por F33.
 
 ---
 
@@ -2563,7 +2594,7 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 34 | Responsive | [x] BLOCKED |
 | 35 | Mobile UX | [x] BLOCKED |
 | 36 | Performance UI | [ ] NOT_STARTED |
-| 37 | JavaScript | [ ] NOT_STARTED |
+| 37 | JavaScript | [x] PASS_WITH_LIMITATIONS |
 | 38 | Código muerto | [x] PASS_WITH_LIMITATIONS |
 | 39 | Tabulator | [x] PASS_WITH_LIMITATIONS |
 | 40 | HTMX | [x] PASS_WITH_LIMITATIONS |
@@ -2587,7 +2618,7 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 58 | Reporte final | [x] PASS |
 | 59 | Criterio producto | [ ] NOT_STARTED |
 
-**Conteo:** 11 PASS · 25 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 12 NOT_STARTED · 0 FAIL (de 59)
+**Conteo:** 11 PASS · 26 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 11 NOT_STARTED · 0 FAIL (de 59)
 
 *(Nota: este conteo se recalculó directamente de la tabla anterior fila por fila el 2026-09-17. La
 línea previa arrastraba un error aritmético heredado de antes de esta sesión — sobrecontaba PASS y
