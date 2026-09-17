@@ -233,7 +233,7 @@
       if (w.UIManager?.handleOffcanvas) {
         w.UIManager.handleOffcanvas(offcanvasEl, 'show');
       } else {
-        w.bootstrap?.Offcanvas?.getOrCreateInstance?.(offcanvasEl)?.show?.();
+        w.Sintel?.Core?.mostrarOffcanvasSeguro?.(offcanvasEl);
       }
     }
   });

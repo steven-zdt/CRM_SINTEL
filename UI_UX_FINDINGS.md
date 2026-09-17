@@ -1,6 +1,7 @@
 # UI_UX_FINDINGS — SINTEL ERP
 
-**Fecha:** 2026-09-16. **Rama:** `feat/onboarding-cookie`. **Fase:** 52 de `UI_UX_MASTER_MISSION_V2_59_FASES.md`.
+**Fecha:** 2026-09-16 (creado en Fase 52), actualizado 2026-09-17 (Fase 9). **Rama:**
+`feat/onboarding-cookie`.
 
 Consolida cada hallazgo real de esta sesión — corregido o documentado — con reproducción, causa raíz,
 fix aplicado (o razón explícita de por qué no se corrigió) y el test que lo prueba. Ningún hallazgo
@@ -248,6 +249,37 @@ no afecta integridad de datos) · `P3` (hallazgo menor / deuda documentada).
 
 ---
 
+## PROVEEDORES-OFFCANVAS-01 — `getOrCreateInstance().show()` prohibido en el fallback de apertura de offcanvas
+
+- **App / Screen:** Proveedores / Representantes (directorio, tab del detalle de Proveedor).
+- **Type:** Violación de regla arquitectónica no-negociable (`CLAUDE.md`: "`getOrCreateInstance().show()`
+  en Offcanvas — PROHIBIDO, acumula backdrops. Usar `mostrarOffcanvasSeguro(el)`"), hallazgo de la
+  Fase 9 (Inventario de patrones visuales).
+- **Severity:** P3 (no es un bug funcional visible en un solo uso — el riesgo es acumulación de
+  backdrops/listeners huérfanos en aperturas repetidas del mismo offcanvas).
+- **Reproduction:** abrir el offcanvas de creación/edición de Representante repetidas veces desde
+  `representantes_directory.html` en un navegador donde `window.UIManager` no esté cargado (rama de
+  fallback).
+- **Current (antes):** el listener de `htmx:afterSettle` en
+  `apps/tenant/proveedores/templates/tenant/proveedores/partials/representantes_directory.html:233-237`
+  usaba `w.UIManager?.handleOffcanvas` como camino principal, con un fallback a
+  `w.bootstrap?.Offcanvas?.getOrCreateInstance?.(offcanvasEl)?.show?.()` — el único caso detectado en
+  las 6 apps auditadas en la Fase 9.
+- **Expected:** usar siempre `window.Sintel.Core.mostrarOffcanvasSeguro(el)`
+  (`apps/tenant/core/static/core/js/common/offcanvas.helper.js`), que hace `dispose()` de la instancia
+  previa antes de crear una nueva — `UIManager.handleOffcanvas` ya delega en el mismo helper como
+  alias, así que ambos caminos deberían converger al mismo código.
+- **Root cause:** código legado de cuando `mostrarOffcanvasSeguro`/`UIManager.handleOffcanvas` aún no
+  existían como SSoT consolidado; el fallback nunca se actualizó al mismo estándar que el camino
+  principal.
+- **Fix:** `apps/tenant/proveedores/templates/tenant/proveedores/partials/representantes_directory.html`
+  — se reemplazó el fallback por `w.Sintel?.Core?.mostrarOffcanvasSeguro?.(offcanvasEl)`.
+- **Test:** ninguno nuevo — no existía un test cubriendo específicamente la rama de fallback (el
+  camino principal, `UIManager.handleOffcanvas`, sigue intacto y ya delega en el mismo helper).
+- **Status:** `FIXED`.
+
+---
+
 ## Resumen
 
 | ID | App | Severidad | Status |
@@ -262,8 +294,9 @@ no afecta integridad de datos) · `P3` (hallazgo menor / deuda documentada).
 | EMPLEADOS-400-01 / PERFIL-400-01 | Empleados, Perfil | P3 | `DEFERRED` |
 | CROSSAPP-UI-01 | Transversal (10 apps) | P3 | `DEFERRED` |
 | EMISION-FISCAL-01 | Ventas, Cotizaciones | N/A | `DEFERRED` (por diseño/regulación) |
+| PROVEEDORES-OFFCANVAS-01 | Proveedores | P3 | `FIXED` |
 
-**7 bugs reales corregidos con evidencia de test. 6 hallazgos documentados y explícitamente
-diferidos** (2 por decisión del usuario, 3 por alcance quirúrgico, 1 por ser una restricción de
-producto/regulación ya existente). **0 hallazgos inventados** — cada uno cita el archivo y línea
-real que lo origina.
+**8 bugs reales corregidos con evidencia de test o de código verificado. 6 hallazgos documentados y
+explícitamente diferidos** (2 por decisión del usuario, 3 por alcance quirúrgico, 1 por ser una
+restricción de producto/regulación ya existente). **0 hallazgos inventados** — cada uno cita el
+archivo y línea real que lo origina.

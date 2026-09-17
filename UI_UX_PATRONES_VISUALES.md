@@ -62,7 +62,7 @@ documentados previamente en `UX_MASTER_BASELINE.md` (misión UX previa, 2026-08-
 | Empty State | `representantes-directory-empty`/`representantes-empty-state` usan `alert alert-info` | DUPLICATE | Ninguna variante usa `sintel_empty_state` |
 | Confirm | `proveedores_form.js`, `cuentas_pagar_editor.js`, `representante_editor.js` usan `UIManager.confirm()` | SHARED_EXISTING | — |
 | Confirm | `representantes_directory.html:191` usa `confirm()` **nativo del navegador** | INCONSISTENT | Único punto de las 6 apps auditadas que no usa el helper compartido |
-| Offcanvas (apertura) | `representantes_directory.html:236`: fallback `bootstrap.Offcanvas.getOrCreateInstance().show()` | **Violación de regla no-negociable de `CLAUDE.md`** | Prohibido explícitamente — debe usarse `mostrarOffcanvasSeguro()`. Ver acción recomendada en Hallazgos. |
+| Offcanvas (apertura) | `representantes_directory.html:236`: fallback ahora usa `w.Sintel.Core.mostrarOffcanvasSeguro(offcanvasEl)` | **FIXED (2026-09-17)** | Reemplazó el `bootstrap.Offcanvas.getOrCreateInstance().show()` prohibido por `CLAUDE.md`. Ver Hallazgos. |
 
 ## Compras
 
@@ -173,13 +173,17 @@ documentados previamente en `UX_MASTER_BASELINE.md` (misión UX previa, 2026-08-
    mantienen grids Tabulator con JS embebido en el propio `.html` — en el caso de Proveedores, esto
    contradice explícitamente la convención "Zero JS in HTML" del resto de la app ya migrada.
 
-5. **Un uso confirmado del anti-patrón prohibido por `CLAUDE.md`:** `representantes_directory.html:236`
-   (Proveedores) tiene un fallback a `bootstrap.Offcanvas.getOrCreateInstance().show()`, la única
-   instancia detectada en las 6 apps auditadas. Es una violación directa de la regla no-negociable
-   ("PROHIBIDO — acumula backdrops. Usar `mostrarOffcanvasSeguro(el)`") y, a diferencia de los demás
-   hallazgos de esta fase (deuda de consistencia), este sí es candidato a fix quirúrgico inmediato: un
-   cambio de una línea, de bajo riesgo, en un archivo que el propio inventario ya identificó como
-   código legado en proceso de abandono.
+5. **`FIXED` (2026-09-17) — uso confirmado del anti-patrón prohibido por `CLAUDE.md`:**
+   `representantes_directory.html:236` (Proveedores) tenía un fallback a
+   `bootstrap.Offcanvas.getOrCreateInstance().show()`, la única instancia detectada en las 6 apps
+   auditadas — violación directa de la regla no-negociable ("PROHIBIDO — acumula backdrops. Usar
+   `mostrarOffcanvasSeguro(el)`"). A diferencia de los demás hallazgos de esta fase (deuda de
+   consistencia documentada sin corregir), este sí era candidato a fix quirúrgico inmediato y se
+   corrigió: el fallback ahora llama a `w.Sintel.Core.mostrarOffcanvasSeguro(offcanvasEl)`, el mismo
+   helper que ya usa el resto del proyecto (`apps/tenant/core/static/core/js/common/offcanvas.helper.js`).
+   Cambio de una línea, sin tests dedicados nuevos (no había ninguno cubriendo la rama de fallback;
+   el flujo principal sigue pasando por `w.UIManager?.handleOffcanvas`, que ya delega en el mismo
+   helper).
 
 6. **Confirmaciones destructivas inconsistentes dentro de la misma app:** Ventas usa el diálogo
    compartido `UIManager.confirm()` para eliminar una Resolución, pero usa `window.prompt()` nativo
