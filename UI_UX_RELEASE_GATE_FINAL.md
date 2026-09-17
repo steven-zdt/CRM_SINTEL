@@ -30,11 +30,16 @@ La Capa 1 (navegador real: login, clic, DOM, responsive, consola, network en viv
 **bloqueada** por una limitación confirmada de la herramienta de automatización de navegador
 (sandbox anti-SSRF bloquea `fetch()`/XHR hacia loopback/IPs privadas — ver Sección 6), no por un
 defecto de la aplicación. Esto bloquea en cascada 9 de las 59 fases (12, 14, 15 parcial, 17, 30, 34,
-35, 54, 56) y deja 15 fases más en `NOT_STARTED` por no haberse podido iniciar sin esa capacidad o por
-estar fuera del alcance de las sesiones ejecutadas.
+35, 54, 56) y deja 20 fases más en `NOT_STARTED` (al cierre de esta Fase 58) por no haberse podido
+iniciar sin esa capacidad o por estar fuera del alcance de las sesiones ejecutadas.
 
-**Resultado consolidado:** 13 fases `PASS`, 20 `PASS_WITH_LIMITATIONS`, 2 `PARTIAL`, 9 `BLOCKED`, 15
-`NOT_STARTED`, 0 `FAIL` (de 59).
+**Resultado consolidado (al cierre de la Fase 58, 2026-09-17):** 10 fases `PASS`, 18
+`PASS_WITH_LIMITATIONS`, 2 `PARTIAL`, 9 `BLOCKED`, 20 `NOT_STARTED`, 0 `FAIL` (de 59) — corregido
+respecto a un error aritmético heredado de la versión original de este reporte, que sumaba 59
+igualmente pero repartía mal los cubos. **Nota posterior a este reporte:** en la misma rama, después
+de esta Fase 58, se cerraron adicionalmente las Fases 8, 9, 18 y 32 (todas `PASS_WITH_LIMITATIONS`);
+el conteo vivo y actualizado está siempre en la tabla "CHECKLIST GLOBAL DE LAS 59 FASES" de
+`UI_UX_MASTER_MISSION_V2_59_FASES.md`, no en este reporte, que es una fotografía puntual.
 
 ## 2. Alcance y Metodología
 
@@ -335,9 +340,10 @@ explícitamente, no una omisión.
 5. **Contrato de API de errores silenciosos sin cambiar** (GASTOS-02-style) — el fallback `$0` se
    mantiene; solo se agregó logging. Un cliente/frontend no puede hoy distinguir programáticamente "0
    real" de "hubo un error" sin revisar logs de servidor.
-6. **17 fases nunca iniciadas** (`NOT_STARTED`): 8, 9, 10, 11, 18, 20, 21, 22, 23, 24, 25, 26, 27, 28,
-   32, 36, 37, 39, 40 — principalmente inventario de UI/patrones visuales, contrato visual formal,
-   accesibilidad, componentes de tabla/KPI/estado individuales, performance, JS y Tabulator/HTMX. No
+6. **19 fases nunca iniciadas al cierre de esta Fase 58** (`NOT_STARTED`, 20 contando la 59): 8, 9,
+   10, 11, 18, 20, 21, 22, 23, 24, 25, 26, 27, 28, 32, 36, 37, 39, 40 — principalmente inventario de
+   UI/patrones visuales, contrato visual formal, accesibilidad, componentes de tabla/KPI/estado
+   individuales, performance, JS y Tabulator/HTMX. No
    requieren Capa 1 en todos los casos (algunas son auditoría estática), pero no se ejecutaron en el
    alcance de las sesiones realizadas.
 

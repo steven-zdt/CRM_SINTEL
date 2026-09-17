@@ -518,12 +518,25 @@ propósito
 
 ### Checklist
 
-- [ ] Comparación semántica realizada
-- [ ] Duplicación confirmada con evidencia
-- [ ] Reutilización existente priorizada
+- [x] Comparación semántica realizada — hecha en la Fase 9 de esta misma sesión
+      (`UI_UX_PATRONES_VISUALES.md`), clasificando cada ocurrencia por estructura/semántica/
+      interacción/propósito (`SHARED_EXISTING`/`DUPLICATE`/`INCONSISTENT`/`APP_SPECIFIC`/
+      `CANDIDATE_SHARED`/`OBSOLETE`) — exactamente el criterio que pide esta fase
+- [x] Duplicación confirmada con evidencia — ~24 casos `DUPLICATE` (reimplementación de un componente
+      YA existente) y ~6 `CANDIDATE_SHARED` (repetición real sin componente existente todavía) citados
+      con archivo y línea en `UI_UX_PATRONES_VISUALES.md`
+- [x] Reutilización existente priorizada — no se creó ningún componente nuevo esta sesión pese a
+      encontrar duplicación real; se documentó como deuda para decisión de diseño posterior, siguiendo
+      la misma disciplina que ya aplicó la misión previa F33 (ver más abajo)
 - [x] No se creó infraestructura innecesaria (ningún componente compartido nuevo esta sesión)
 
-**Estado:** `NOT_STARTED` — no aplicó esta sesión (no se creó ni evaluó ningún componente compartido).
+**Estado:** `PASS` (2026-09-17) — esta regla ya no es solo una intención: es la metodología real que
+esta sesión aplicó al ejecutar la Fase 9, y coincide con el "principio rector" ya documentado por una
+misión previa (`documentacion/F33_CORE_UI_CONTRACT.md`: *"NO crear un componente nuevo solo porque algo
+aparezca dos veces"* — F33 rechazó explícitamente crear `Form`, `ErrorState` y un helper de `Badge`
+booleano por falta de evidencia suficiente de equivalencia real, exactamente el criterio de esta fase).
+Ningún hallazgo `DUPLICATE`/`CANDIDATE_SHARED` de la Fase 9 se "arregló" creando infraestructura nueva
+sin decisión de diseño previa — se dejó documentado, que es la acción correcta según esta regla.
 
 ---
 
@@ -556,12 +569,45 @@ reutilizar lo existente
 
 ### Checklist
 
-- [ ] Contrato definido
-- [ ] Tokens visuales existentes reutilizados
-- [ ] No se creó mega-librería
-- [ ] Casos específicos documentados
+- [x] Contrato definido — **ya existe**, escrito por una misión previa:
+      `documentacion/F33_CORE_UI_CONTRACT.md` (F33.2-F33.9). Cubre 9 de las 14 piezas listadas arriba
+      con una decisión explícita cada una (Table, Offcanvas, Form, Loading, EmptyState, ErrorState,
+      Confirm/Alert, Filters+Search, Card/KPI). Page Header, Toolbar, Buttons, Badges y Pagination no
+      tienen entrada dedicada porque el propio contrato ya declara el principio que los cubre: son
+      elementos puramente presentacionales servidos directo por Bootstrap 5.3/`django-tables2`, sin
+      wrapper server-side ni JS — no ameritan "componente" (confirmado explícitamente para Badges en
+      `F33_14E_BADGES_ESTADO_INVENTORY.md`: "no existe ningún primitivo de badge compartido hoy...
+      crear uno sin decisión de diseño previa violaría la prohibición de 'no crear más
+      infraestructura'"). Esta sesión no reescribió el contrato — sería duplicar trabajo ya hecho y
+      correcto (Regla Inmutable 1: no inventar funcionalidad).
+- [x] Tokens visuales existentes reutilizados — el contrato en sí ES la reutilización: cada pieza
+      apunta al partial/tag/helper ya existente (`filter_bar.html`, `kpi_card.html`/`sintel_kpi_card`,
+      `loading_state.html`, `empty_state.html`, `_base_offcanvas.html`,
+      `window.Sintel.Core.mostrarOffcanvasSeguro`, `window.UIManager.confirm()`,
+      `{% render_table %}`), ninguno inventado de cero.
+- [x] No se creó mega-librería — confirmado explícitamente en el propio contrato ("Deliberadamente NO
+      se crea `window.Sintel.Core.UI` como namespace JS nuevo") y respetado esta sesión (0 componentes
+      nuevos).
+- [x] Casos específicos documentados — `APP_SPECIFIC` para Badges de estado de negocio (DIAN, estados
+      de compra/venta/proyecto) y para `ErrorState` de un solo sitio (`contabilidad`), con la
+      justificación explícita de por qué no se generalizan.
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión.
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — el contrato visual ligero que pide esta fase ya
+existe y es de buena calidad; el trabajo real de esta fase fue localizarlo y validarlo, no
+reescribirlo. **Validación cruzada con la Fase 9 de esta misma sesión:** los hallazgos frescos de
+`UI_UX_PATRONES_VISUALES.md` (KPI/Search/Offcanvas reimplementados a mano en Compras, Ventas,
+Inventario, Facturas, Proveedores) **coinciden casi exactamente** con la tabla "Batches pendientes" de
+`documentacion/F33_APP_EXPANSION_MATRIX.md` (§6b, §7b, §9b) — es decir, la deuda de adopción del
+contrato no es nueva ni ha empeorado: es la misma deuda ya identificada y deliberadamente diferida por
+F33 (cada caso requiere una decisión de diseño explícita antes de migrar — personalizaciones visuales
+reales en Ventas/Gastos/Facturas, acoplamiento JS en Cotizaciones, inconsistencias internas en
+Proveedores que hay que resolver antes de unificar). Se declara `PASS_WITH_LIMITATIONS` y no `PASS`
+pleno porque: (1) el contrato mismo declara su misión de origen (`F33`) como `IN_PROGRESS`, no
+`COMPLETED` — la adopción real sigue incompleta; (2) esta sesión no verificó si `PROVEEDORES-OFFCANVAS-01`
+(el `getOrCreateInstance()` corregido hoy) fue un caso que el grep original de F33.13 no detectó por
+estar en un `<script>` inline dentro de un `.html` en vez de un archivo `.js` — un gap real de
+metodología en la auditoría previa, ahora cerrado para ese caso puntual pero no re-auditado
+sistemáticamente para el resto del repo en esta sesión.
 
 ---
 
@@ -2393,7 +2439,7 @@ Debe incluir 28 secciones (Executive Summary hasta Release Gate).
 - [x] Archivo creado — `UI_UX_RELEASE_GATE_FINAL.md` (2026-09-17)
 - [x] Todas las secciones completadas — 28 secciones, Executive Summary hasta Release Gate
 - [x] Evidencia adjunta — cita y consolida `UI_UX_MASTER_MISSION_V2_59_FASES.md`, `UI_UX_COVERAGE_MATRIX.md`, `UI_UX_FINDINGS.md`, sin inventar datos nuevos
-- [x] PASS/FAIL real — 13 PASS · 20 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 15 NOT_STARTED · 0 FAIL
+- [x] PASS/FAIL real — 10 PASS · 18 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 20 NOT_STARTED · 0 FAIL (recalculado 2026-09-17; el número citado originalmente al cerrar esta fase arrastraba un error aritmético heredado — ver nota en "CHECKLIST GLOBAL DE LAS 59 FASES")
 - [x] BLOCKED declarado — Sección 6 (causa raíz Capa 1) y Sección 28 (riesgos residuales)
 - [x] DEFERRED declarado — Sección 26 (6 hallazgos diferidos) y Sección 13
 - [x] Riesgos residuales — Sección 28, 6 riesgos explícitos
@@ -2444,8 +2490,8 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 7 | Protección trabajo existente | [x] PASS |
 | 8 | Inventario UI | [x] PASS_WITH_LIMITATIONS |
 | 9 | Patrones visuales | [x] PASS_WITH_LIMITATIONS |
-| 10 | Regla de diseño | [ ] NOT_STARTED |
-| 11 | Contrato visual | [ ] NOT_STARTED |
+| 10 | Regla de diseño | [x] PASS |
+| 11 | Contrato visual | [x] PASS_WITH_LIMITATIONS |
 | 12 | Capa 1 navegador | [x] BLOCKED |
 | 13 | Autenticación E2E | [x] PASS_WITH_LIMITATIONS |
 | 14 | Smoke global | [x] BLOCKED |
@@ -2495,7 +2541,12 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 58 | Reporte final | [x] PASS |
 | 59 | Criterio producto | [ ] NOT_STARTED |
 
-**Conteo:** 14 PASS · 24 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 10 NOT_STARTED · 0 FAIL (de 59)
+**Conteo:** 11 PASS · 23 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 14 NOT_STARTED · 0 FAIL (de 59)
+
+*(Nota: este conteo se recalculó directamente de la tabla anterior fila por fila el 2026-09-17. La
+línea previa arrastraba un error aritmético heredado de antes de esta sesión — sobrecontaba PASS y
+PASS_WITH_LIMITATIONS y subcontaba NOT_STARTED, aunque el total siempre sumaba 59 por coincidencia.
+Ninguna fila individual de la tabla cambió de estado por esta corrección, solo el resumen agregado.)*
 
 ---
 
