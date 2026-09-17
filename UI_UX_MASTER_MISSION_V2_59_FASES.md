@@ -2092,17 +2092,23 @@ STATUS
 
 ### Checklist
 
-- [ ] Archivo creado
-- [ ] ID único por hallazgo
-- [ ] Reproducción
-- [ ] Actual
-- [ ] Esperado
-- [ ] Causa
-- [ ] Corrección
-- [ ] Test
-- [ ] Estado
+- [x] Archivo creado — [`UI_UX_FINDINGS.md`](UI_UX_FINDINGS.md)
+- [x] ID único por hallazgo — 10 hallazgos con ID propio (`COMPRAS-500-01`, `VENTAS-500-01`,
+      `INVENTARIO-404-01`, `GASTOS-01`, `GASTOS-02/DASH-02/FACTURAS-SILENT-01`, `PERFIL-PK-01`,
+      `MAILINBOX-PK-01`, `EMPLEADOS-400-01/PERFIL-400-01`, `CROSSAPP-UI-01`, `EMISION-FISCAL-01`)
+- [x] Reproducción — cada hallazgo tiene el comando/request exacto para reproducirlo
+- [x] Actual — comportamiento real citado con código/línea, no inventado
+- [x] Esperado — comportamiento correcto especificado
+- [x] Causa — causa raíz identificada para los 10
+- [x] Corrección — 7 con fix aplicado y verificado; 6 con razón explícita de por qué se difirió
+      (2 por decisión del usuario, 3 por alcance quirúrgico, 1 por restricción regulatoria)
+- [x] Test — cada hallazgo `FIXED` cita el test real que lo prueba en verde
+- [x] Estado — `FIXED`/`DEFERRED` explícito en cada uno, sin ambigüedad
 
-**Estado:** `NOT_STARTED` — no creado como archivo dedicado. Los hallazgos reales de esta sesión (bloqueo Capa 1, bug 500 de Compras, GASTOS-01/02, DASH-02) están documentados dentro de este mismo documento (Fases 12, 19, 29) pero no en el formato tabular que pide esta fase.
+**Estado:** `PASS_WITH_LIMITATIONS` — reporte de hallazgos real y completo para todo lo auditado esta
+sesión (15 apps a nivel Capa 2). No cubre hallazgos que solo serían visibles con Capa 1 (navegador
+real) — ninguno de los 10 hallazgos requirió interacción de navegador para descubrirse, todos
+salieron de lectura de código + pytest, consistente con el bloqueo estructural de la Fase 12.
 
 ---
 
@@ -2376,7 +2382,7 @@ La misión se considera completa únicamente con evidencia real.
 | 49 | Evidencia | [x] PASS |
 | 50 | Backend ≠ UI | [x] PASS |
 | 51 | Coverage Matrix | [x] PASS_WITH_LIMITATIONS |
-| 52 | Findings | [ ] NOT_STARTED |
+| 52 | Findings | [x] PASS_WITH_LIMITATIONS |
 | 53 | Regression Gate | [x] PASS_WITH_LIMITATIONS |
 | 54 | Full Smoke | [x] BLOCKED |
 | 55 | Final Regression | [x] PASS_WITH_LIMITATIONS |
@@ -2385,7 +2391,7 @@ La misión se considera completa únicamente con evidencia real.
 | 58 | Reporte final | [ ] NOT_STARTED |
 | 59 | Criterio producto | [ ] NOT_STARTED |
 
-**Conteo:** 13 PASS · 19 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 16 NOT_STARTED · 0 FAIL (de 59)
+**Conteo:** 13 PASS · 20 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 15 NOT_STARTED · 0 FAIL (de 59)
 
 ---
 
