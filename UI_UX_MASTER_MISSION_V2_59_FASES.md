@@ -1675,14 +1675,33 @@ No 15 interfaces independientes.
 
 ### Checklist
 
-- [ ] Jerarquía consistente
-- [ ] Toolbar consistente
-- [ ] Tablas consistentes
-- [ ] Formularios consistentes
-- [ ] Offcanvas consistente
-- [ ] Feedback consistente
+- [ ] Jerarquía consistente — no auditado esta pasada (requiere Capa 1 para comparar navegación real entre apps; el reordenamiento del sidebar ya lo cubrió la misión UX previa, 2026-08-21, no reverificado aquí)
+- [ ] Toolbar consistente — no auditado a fondo esta pasada (fuera de alcance de tiempo; candidato para una pasada dedicada)
+- [x] Tablas consistentes — **auditado con evidencia real** (grep de `new Tabulator(` vs clases `django_tables2.Table` en las 15 apps): 13/15 apps ya migradas por completo a `django-tables2` (0 instancias reales de Tabulator). **Cotizaciones** (via `TabulatorFactory.create()`, `cotizaciones.table.js`) y **Contabilidad** (1 uso real) siguen en Tabulator — transición conocida y ya documentada en `CLAUDE.md`/`PLAN_UNICO_CORRECCIONES.md` FASE 5-BIS, no es un hallazgo nuevo ni un bug, pero sí una inconsistencia de experiencia real entre esas 2 apps y las otras 13 (paginación/filtros/ordenamiento con chrome de UI distinto).
+- [ ] Formularios consistentes — **hallazgo confirmado con evidencia fresca (no nuevo, corrobora lo ya documentado por la misión UX de 2026-08-21):** el verbo del botón principal de creación sigue sin unificar entre apps — muestreo real: "Nuevo Proveedor"/"Nueva Categoría"/"Nueva Cuenta" (Proveedores, Inventario, Bancos, Proyectos) vs "Crear Orden"/"Crear Venta"/"Crear Gasto"/"Crear Area" (Compras, Ventas, Gastos, Empresa) vs "Guardar Cotización"/"Guardar Empleado"/"Guardar Cuenta" (Cotizaciones, Empleados, Bancos) vs "Agregar Item"/"Agregar Contacto" (Clientes, Compras, Ventas, para sub-formularios). Sigue clasificado como el mismo hallazgo transversal ya diferido antes (~20+ botones en archivos estables, alto volumen/bajo riesgo-beneficio para corregir en una sola pasada) — no corregido aquí por el mismo motivo.
+- [x] Offcanvas consistente — **auditado y confirmado limpio**: 0 violaciones reales de `bootstrap.Offcanvas.getOrCreateInstance()` sin el helper canónico en las 15 apps. Los 2 hits que aparecieron en el grep inicial no son violaciones: uno es un archivo `.md` de documentación histórica (Inventario), el otro es `empleados/devengo_editor.js`, ya revisado por la misión UX previa y confirmado como workaround deliberado de un bug real de timing de Bootstrap (no una duplicación descuidada).
+- [ ] Feedback consistente — no auditado a fondo esta pasada (requiere revisar uso de `SintelFeedback`/Notyf vs `alert()` nativo entre apps; candidato para una pasada dedicada)
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión. Requiere que Fases 41-43 (piloto + batches) estén completas primero.
+**Hallazgo real nuevo, con evidencia cuantificada (el aporte principal de esta fase):** el sistema de
+componentes UI compartidos (`apps/tenant/core/templatetags/sintel_ui.py`: `sintel_kpi_card`,
+`sintel_empty_state`; más `partials/ui/filter_bar.html`/`loading_state.html` de inclusión directa) —
+documentado en `UX_MASTER_BASELINE.md` (2026-08-21) como "YA EXISTENTES, reutilizar, no duplicar" —
+tiene **adopción real de solo 5 de 15 apps (33%): Clientes, Ventas, Proyectos, Compras, Gastos**.
+Las otras 10 apps (Proveedores, Cotizaciones, Inventario, Facturas, Bancos, Contabilidad, Empleados,
+Empresa, Perfil, Dashboard) tienen **cero** uso de `{% load sintel_ui %}` ni de los partials
+compartidos — sus estados vacíos, tarjetas de KPI, barras de filtro y loaders son implementaciones
+ad-hoc por app, sin ninguna garantía de que se vean o se comporten igual entre sí. Esto es
+precisamente el problema que la Fase 59 de esta misión busca evitar ("el usuario no debería tener
+que aprender 15 interfaces diferentes"). **No se corrigió esta sesión** (retrofitear 10 apps para
+adoptar el sistema compartido es un esfuerzo de remediación considerable, fuera del alcance
+quirúrgico de esta pasada de auditoría) — queda documentado como el hallazgo de Cross-App UX más
+concreto y accionable para una futura fase dedicada.
+
+**Estado:** `PARTIAL` — 2 de 6 criterios auditados con evidencia real y cerrados (Tablas, Offcanvas),
+1 corroborado como ya conocido y sin resolver (Formularios/verbos), 1 hallazgo nuevo cuantificado y
+documentado sin corregir (adopción del sistema de componentes compartidos), 2 sin auditar por
+alcance de tiempo (Jerarquía, Toolbar, Feedback). No se puede declarar `PASS` — ver además que
+Jerarquía real de navegación depende de Capa 1 (Fase 12, `BLOCKED`) para verificarse en vivo.
 
 ---
 
@@ -2292,7 +2311,7 @@ La misión se considera completa únicamente con evidencia real.
 | 41 | Piloto | [x] PASS_WITH_LIMITATIONS |
 | 42 | Batch 2 | [x] PASS_WITH_LIMITATIONS |
 | 43 | Batch 3 | [x] PASS_WITH_LIMITATIONS |
-| 44 | Cross-app UX | [ ] NOT_STARTED |
+| 44 | Cross-app UX | [x] PARTIAL |
 | 45 | Business E2E | [ ] NOT_STARTED |
 | 46 | Deferred | [x] PASS_WITH_LIMITATIONS |
 | 47 | Django/Pytest | [x] PASS_WITH_LIMITATIONS |
@@ -2309,7 +2328,7 @@ La misión se considera completa únicamente con evidencia real.
 | 58 | Reporte final | [ ] NOT_STARTED |
 | 59 | Criterio producto | [ ] NOT_STARTED |
 
-**Conteo:** 13 PASS · 17 PASS_WITH_LIMITATIONS · 1 PARTIAL · 9 BLOCKED · 19 NOT_STARTED · 0 FAIL (de 59)
+**Conteo:** 13 PASS · 17 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 18 NOT_STARTED · 0 FAIL (de 59)
 
 ---
 
