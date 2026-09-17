@@ -2038,18 +2038,30 @@ EVIDENCE
 
 ### Checklist
 
-- [ ] Archivo creado
-- [ ] Todas las apps
-- [ ] Todos los submódulos
-- [ ] CRUD
-- [ ] Smoke
-- [ ] Responsive
-- [ ] Accessibility
-- [ ] Console
-- [ ] Network
-- [ ] Evidence
+- [x] Archivo creado — [`UI_UX_COVERAGE_MATRIX.md`](UI_UX_COVERAGE_MATRIX.md)
+- [x] Todas las apps — 15/15, con al menos una fila por entidad principal
+- [~] Todos los submódulos — **granularidad real explícita: por entidad principal (43 filas), no por
+      cada pantalla/tab individual** — ese inventario exhaustivo sigue siendo la Fase 8
+      (`NOT_STARTED`). Se documentó esta limitación en el propio archivo en vez de fingir una
+      granularidad no auditada.
+- [x] CRUD — Capa 2 (API real), 24/43 filas con CREATE+READ+UPDATE+DELETE en `PASS`/`PASS_LIM`, 12/43
+      `NOT_TESTED` (sin evidencia de fallo, sin verificación directa), 0 en `FAIL`
+- [ ] Smoke — `BLOCKED` en el 100% de las filas (Fase 12)
+- [ ] Responsive — `BLOCKED` en el 100% de las filas (Fase 12)
+- [ ] Accessibility — `BLOCKED` en el 100% de las filas (Fase 12)
+- [ ] Console — `BLOCKED` en el 100% de las filas (Fase 12)
+- [x] Network — Capa 2 (códigos de estado HTTP reales vía tests), incluye los 7 bugs reales
+      corregidos esta sesión con su código de estado antes/después documentado
+- [x] Evidence — cada fila cita el archivo de test real y, cuando se ejecutó esta sesión, el
+      resultado fresco (`X/Y passed`); se distingue explícitamente evidencia fresca vs preexistente
+      no re-ejecutada
 
-**Estado:** `NOT_STARTED` — no creado. Prematuro mientras la Fase 8 (inventario real) tampoco se ha hecho.
+**Estado:** `PASS_WITH_LIMITATIONS` — matriz de cobertura real creada con evidencia trazable, no
+inventada, para las 15 apps a nivel Capa 2. Las 5 columnas de Capa 1 (Smoke/Responsive/A11y/Console/
+Network-viewport) quedan `BLOCKED` en el 100% de las filas, y la granularidad es por entidad
+principal, no por pantalla — ambas limitaciones declaradas explícitamente en el archivo, no
+ocultadas. No se puede declarar `PASS` pleno por el mismo motivo estructural que el resto de la
+misión (Fase 12).
 
 ---
 
@@ -2363,7 +2375,7 @@ La misión se considera completa únicamente con evidencia real.
 | 48 | Estrategia testing | [x] PASS_WITH_LIMITATIONS |
 | 49 | Evidencia | [x] PASS |
 | 50 | Backend ≠ UI | [x] PASS |
-| 51 | Coverage Matrix | [ ] NOT_STARTED |
+| 51 | Coverage Matrix | [x] PASS_WITH_LIMITATIONS |
 | 52 | Findings | [ ] NOT_STARTED |
 | 53 | Regression Gate | [x] PASS_WITH_LIMITATIONS |
 | 54 | Full Smoke | [x] BLOCKED |
@@ -2373,7 +2385,7 @@ La misión se considera completa únicamente con evidencia real.
 | 58 | Reporte final | [ ] NOT_STARTED |
 | 59 | Criterio producto | [ ] NOT_STARTED |
 
-**Conteo:** 13 PASS · 18 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 17 NOT_STARTED · 0 FAIL (de 59)
+**Conteo:** 13 PASS · 19 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 16 NOT_STARTED · 0 FAIL (de 59)
 
 ---
 
