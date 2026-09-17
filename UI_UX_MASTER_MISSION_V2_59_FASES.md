@@ -813,12 +813,35 @@ No crear helpers JS para resolver problemas que Django/Bootstrap/HTMX ya resuelv
 
 ### Checklist
 
-- [ ] Formularios actuales auditados
-- [ ] Rendering centralizado evaluado
-- [ ] Widgets reutilizados
-- [ ] No se duplicó lógica de validación
+- [x] Formularios actuales auditados — **0 de 15 apps de negocio usan Django Forms/`ModelForm` para
+      sus formularios CRUD.** Único `forms.py` en todo `apps/tenant/`:
+      `apps/tenant/landing/forms.py` (`TenantAuthenticationForm`, login — no es un formulario CRUD de
+      negocio). Ningún template de las 15 apps usa `{{ form. }}`, `form.as_p`/`as_ul` ni `{% crispy %}`
+      (verificado por grep sobre todo `apps/tenant/*/templates/`). Los offcanvas de crear/editar
+      (Fase 8/9) son HTML manual poblado/enviado por `fetch()`, validado por los serializers DRF de
+      cada `ViewSet` (Service Layer), no por Django Forms.
+- [x] Rendering centralizado evaluado — no hay `FORM_RENDERER` custom en `config/settings.py` (usa el
+      default de Django), ni `django-crispy-forms` ni `django-widget-tweaks` instalados. El "rendering
+      centralizado" real del proyecto para listados es `django-tables2` (Fase 5-BIS), no el sistema de
+      formularios de Django — decisión arquitectónica coherente con FSD (DRF + JS, no Django Forms),
+      no un descuido: no aplica "aprovechar FORM_RENDERER" a una capa que el proyecto no usa.
+- [x] Widgets reutilizados — N/A: no existe `widgets.py` en ningún app tenant; no hay widgets de
+      Django Forms que evaluar.
+- [x] No se duplicó lógica de validación — confirmado por muestreo (`compras_editor.js`,
+      `clientes.editor.js`): la validación de cliente se apoya en atributos HTML5 nativos
+      (`required`, `min`, `step`) del navegador, no en JS que reimplemente reglas de negocio; la
+      validación autoritativa vive en los serializers DRF / `business_service.py` (DSV), sin
+      duplicación de lógica entre capas.
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión.
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — auditoría estática de solo lectura (no requiere
+Capa 1). Conclusión: Django Forms/`FORM_RENDERER` no son parte del stack de UI de este proyecto por
+decisión arquitectónica ya tomada (DRF + Vanilla JS + offcanvas, ver `CLAUDE.md` "Frontend"), no por
+omisión — la Fase 18 tal como está redactada asume implícitamente que debería evaluarse una migración
+hacia Django Forms, lo cual excede el alcance quirúrgico de esta sesión y no fue solicitado por el
+usuario. Se declara `PASS_WITH_LIMITATIONS` en vez de `PASS` pleno porque no se auditó explícitamente
+cada uno de los ~40+ formularios offcanvas uno por uno (solo una muestra representativa), y porque no
+se verificó accesibilidad de esos formularios (eso es la Fase 20, `NOT_STARTED`, requiere Capa 1 para
+verificación real en DOM).
 
 ---
 
@@ -1281,13 +1304,42 @@ B no ve A
 
 ### Checklist
 
-- [ ] Tenant A probado — no se agregó verificación nueva esta sesión (existe cobertura previa extensa, ej. `test_organizational_isolation_empresa_a.py` en Compras, no re-ejecutada como parte de esta fase específicamente)
-- [ ] Tenant B probado
-- [ ] Recursos aislados
-- [ ] Acciones aisladas
-- [ ] UUID de otro tenant bloqueado
+- [x] Tenant A probado — evidencia fresca de esta sesión (ver corrida abajo)
+- [x] Tenant B probado — los 17 archivos ejercitan explícitamente el par Tenant A / Tenant B (crear
+      recurso en A, autenticar como B, verificar 403/404/lista vacía)
+- [x] Recursos aislados — confirmado a nivel API/pytest en 11 apps (ver detalle)
+- [x] Acciones aisladas — incluye intentos de `update`/`delete`/acciones especiales sobre recursos de
+      otro tenant, no solo lectura (ej. `test_organizational_isolation_empresa_a.py` en Compras)
+- [x] UUID de otro tenant bloqueado — confirmado (los tests usan UUIDs reales de un tenant y verifican
+      que el otro tenant recibe 403/404, nunca el recurso)
 
-**Estado:** `NOT_STARTED` esta sesión (como fase dedicada) — aislamiento multi-tenant preexistente se seguía respetando en los tests de regresión ejecutados (52/52 Compras incluye varios tests de aislamiento organizacional/tenant), pero no se ejecutó como verificación dedicada de esta fase.
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — se ejecutó **fresco, dentro del contenedor** (no
+reciclado de sesiones anteriores, Regla Inmutable 18) el conjunto completo de tests de aislamiento
+multi-tenant preexistentes localizados en el repo: 17 archivos en 11 apps (Bancos ×2, Compras ×2,
+Contabilidad, Cotizaciones, Empleados ×2, Facturas ×2, Gastos ×2, Inventario ×2, Proveedores,
+Proyectos, Ventas). **Resultado: 51/51 tests passed** (`docker compose exec web pytest`, 4565s ≈ 76
+min, 21 warnings no relacionados — deprecaciones de Django/DRF, no fallos). Cada test sigue el patrón
+Tenant A → crea/posee recurso → Tenant B autenticado intenta leer/escribir/accionar sobre ese recurso
+→ se verifica bloqueo (403/404) o exclusión de listados, exactamente el patrón que pide esta fase.
+
+**Hallazgo incidental (no un bug, higiene de repo):** el intento inicial de correr
+`apps/tenant/api/tests/test_cross_tenant_isolation.py` falló con `file or directory not found` — el
+archivo `.py` no existe y **tampoco tiene historial en `git log`** (nunca se commiteó), pero su
+`.pyc` seguía en `apps/tenant/api/tests/__pycache__/`. No representa cobertura perdida; es un
+artefacto de bytecode local obsoleto, documentado aquí por transparencia, no corregido (no es código
+fuente, no requiere acción).
+
+**Limitación declarada (por eso no es `PASS` pleno):** de las 15 apps de negocio tenant, **Clientes,
+Perfil y Dashboard no tienen ningún test de aislamiento multi-tenant dedicado** localizado en esta
+sesión (`grep` sobre sus carpetas `tests/` por patrones `otra_empresa`/`otro_tenant`/`cross_tenant`/
+`aislamiento` no encontró nada). Dashboard es de solo lectura y agrega datos ya aislados por sus
+extractores (que sí delegan en selectors con `empresa_id` de las apps fuente, auditados en Fase 29),
+por lo que su riesgo residual es menor; Clientes y Perfil sí manejan escritura/datos sensibles
+(cartera, roles/permisos) y no tener un test explícito de aislamiento es un hueco de cobertura real,
+no solo de nomenclatura — no se escribieron tests nuevos esta sesión por estar fuera del alcance
+pedido ("continúa con la Fase 32"), se documenta el hueco en vez de asumir cobertura inexistente.
+También sigue sin resolverse el bloqueo de Capa 1 (Fase 12): esta verificación es 100% a nivel
+API/pytest, no navegador real con dos sesiones de tenant distintas en paralelo.
 
 ---
 
@@ -2400,7 +2452,7 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 15 | CRUD UI | [x] BLOCKED |
 | 16 | CRUD negativo | [x] PARTIAL |
 | 17 | Validación visual CRUD | [x] BLOCKED |
-| 18 | Formularios Django | [ ] NOT_STARTED |
+| 18 | Formularios Django | [x] PASS_WITH_LIMITATIONS |
 | 19 | Validación/errores | [x] PASS_WITH_LIMITATIONS |
 | 20 | Accesibilidad formularios | [ ] NOT_STARTED |
 | 21 | Tablas | [ ] NOT_STARTED |
@@ -2414,7 +2466,7 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 29 | Errores silenciosos | [x] PASS_WITH_LIMITATIONS |
 | 30 | Console | [x] BLOCKED |
 | 31 | Network | [x] PASS_WITH_LIMITATIONS |
-| 32 | Multi-tenant | [ ] NOT_STARTED |
+| 32 | Multi-tenant | [x] PASS_WITH_LIMITATIONS |
 | 33 | Seguridad | [x] PASS |
 | 34 | Responsive | [x] BLOCKED |
 | 35 | Mobile UX | [x] BLOCKED |
@@ -2443,7 +2495,7 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 58 | Reporte final | [x] PASS |
 | 59 | Criterio producto | [ ] NOT_STARTED |
 
-**Conteo:** 14 PASS · 22 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 12 NOT_STARTED · 0 FAIL (de 59)
+**Conteo:** 14 PASS · 24 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 10 NOT_STARTED · 0 FAIL (de 59)
 
 ---
 
