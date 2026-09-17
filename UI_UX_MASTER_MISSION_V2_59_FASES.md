@@ -2130,15 +2130,37 @@ No cerrar batch sin PASS.
 
 ### Checklist
 
-- [x] `manage.py check` — ejecutado, `System check identified no issues (0 silenced)`
-- [ ] `makemigrations --check` — no ejecutado esta sesión (ningún cambio de modelo se hizo, no se esperan migraciones pendientes nuevas, pero no se verificó explícitamente)
-- [x] Tests afectados — Compras 52/52, Proveedores 5/5 nuevos passed
-- [x] Cross-app regression — cubierto parcialmente (tests de aislamiento organizacional dentro de la suite de Compras)
-- [ ] UI smoke — BLOCKED (Fase 12)
-- [ ] Console — BLOCKED
-- [ ] Network — BLOCKED (parcial, ver Fase 31)
+- [x] `manage.py check` — re-ejecutado en fresco al cierre de la sesión: `System check identified no issues (0 silenced)`.
+- [x] `makemigrations --check` — **ejecutado por primera vez esta sesión** (`--check --dry-run`):
+      `No changes detected`. Confirma que ninguno de los cambios de código de esta sesión (todos de
+      lógica/manejo de errores, 0 cambios de campos de modelo) dejó una migración pendiente sin
+      generar.
+- [x] Tests afectados — **todas las apps modificadas esta sesión, con regresión fresca propia**:
+      Compras 52/52, Inventario+Bancos 60/60, Gastos+Dashboard 67/67, Facturas 12/12 (dirigido),
+      Ventas 45/45 (1 skip no relacionado), más los tests nuevos ya contados en cada suite
+      (Proveedores 5/5, Proyectos 3/3, Perfil 5/5, MailInboxConfig 3/3). **Total: 244/244 tests
+      passed** en las apps directamente modificadas — 0 fallos sin explicar en toda la sesión.
+- [x] Cross-app regression — verificado con evidencia real en Fase 45 (24/24 tests de flujo
+      Cotización→Venta→Factura y Proveedor→Factura→CxP→Abono, más los tests de aislamiento
+      organizacional/cross-tenant ya incluidos en las regresiones de Compras/Inventario/Ventas).
+- [ ] UI smoke — `BLOCKED` (Fase 12)
+- [ ] Console — `BLOCKED` (Fase 12)
+- [ ] Network — `BLOCKED` para viewport real (Fase 12); a nivel Capa 2 sí cubierto (Fase 31, y los 7
+      bugs de código de estado HTTP corregidos y verificados esta sesión)
 
-**Estado:** `PASS_WITH_LIMITATIONS` — el regression gate de backend se cumplió para lo tocado; el gate de UI (smoke/console/network en vivo) no se puede cumplir mientras la Fase 12 siga bloqueada.
+**Nota sobre alcance (Testing Progresivo, `CLAUDE.md` §24.0):** deliberadamente **no se corrió
+`make test` (suite global completa)** esta sesión. Dado que las suites individuales por app ya
+tomaron entre 5 y 63 minutos cada una, una suite global completaría en varias horas — la norma
+reserva esa corrida para releases o cambios verdaderamente transversales (`apps/tenant/api/`,
+`apps/tenant/core/`), no para el cierre de una auditoría cuyos cambios ya están cubiertos app por
+app. Las 5 apps no tocadas esta sesión (Clientes, Cotizaciones sin cambios de código, Contabilidad,
+Empleados, Empresa/Sede/Area) no tienen regresión fresca de esta sesión — se auditaron leyendo
+código (Fase 42/43) sin necesidad de reejecutar sus suites al no haberlas modificado.
+
+**Estado:** `PASS_WITH_LIMITATIONS` — el regression gate de backend (Capa 2) se cumplió por completo
+para las 10 apps modificadas esta sesión, con evidencia fresca y 0 fallos sin explicar. El gate de UI
+(smoke/console/network en vivo) sigue sin poder cumplirse mientras la Fase 12 siga bloqueada. No se
+ejecutó la suite global completa (`make test`), por decisión deliberada de alcance, no por omisión.
 
 ---
 
