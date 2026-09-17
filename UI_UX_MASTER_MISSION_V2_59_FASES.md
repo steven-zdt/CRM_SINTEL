@@ -1603,12 +1603,36 @@ No migrar solamente por estética.
 
 ### Checklist
 
-- [ ] Tabulator inventariado
-- [ ] Dependencias identificadas
-- [ ] Motivo para mantener/migrar
-- [x] No se creó Tabulator nuevo injustificado (ningún Tabulator tocado esta sesión)
+- [x] Tabulator inventariado — **ya existe un inventario exhaustivo previo**:
+      `documentacion/PLAN_UNICO_CORRECCIONES.md` §"FASE 5-BIS" (56 archivos JS en ~20 apps en el
+      alcance original). Migrados a `django-tables2`+HTMX y confirmados: Gastos, Facturas, Compras,
+      Contabilidad (5/8 grillas), Ventas (1/1 grilla real), Bancos (2/2 grillas reales), Empleados
+      (5/5 grillas, incluidas 2 Master-Detail). **Validado con evidencia fresca e independiente esta
+      sesión** (Fase 8/9, `UI_UX_INVENTARIO_UI.md`/`UI_UX_PATRONES_VISUALES.md`): quedan en Tabulator
+      legado `Representante` (Proveedores, con JS embebido en el propio `.html` — contradice "Zero JS
+      in HTML"), `ResolucionFacturacion` (Ventas), `MovimientoInventario`/Kardex (Inventario, dejado
+      fuera de alcance de Fase 5-BIS a propósito según comentario en su propio `urls.py`), y
+      `Cotizacion` completo (listado vía `cotizaciones.table.js`, nunca migrado).
+- [x] Dependencias identificadas — CDN Tabulator sigue cargado solo donde estos grids legados lo usan;
+      no se auditó esta sesión si se puede retirar el `<script>` CDN de las apps ya 100% migradas
+      (posible candidato a limpieza futura, no verificado).
+- [x] Motivo para mantener/migrar — documentado app por app en los reportes de Fase 5-BIS
+      (`REPORTE_FASE_5_BIS_*.md`) y en `F33_APP_EXPANSION_MATRIX.md` §"Batches pendientes" 6b: cada
+      caso pendiente requiere una decisión de diseño explícita (acoplamiento JS en Cotizaciones,
+      inconsistencias internas en Proveedores) antes de migrar — no es una migración mecánica.
+- [x] No se creó Tabulator nuevo injustificado — ningún Tabulator nuevo esta sesión; el único cambio
+      sobre código Tabulator legado fue el fix de `PROVEEDORES-OFFCANVAS-01` (reemplazo de un
+      anti-patrón de apertura de offcanvas, no relacionado con el grid en sí).
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión.
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — el inventario y la decisión de mantener/migrar ya
+existían con buen detalle (Fase 5-BIS); el aporte real de esta sesión fue **confirmar con lectura de
+código fresca e independiente** que el estado documentado sigue vigente (ni regresó ni avanzó desde la
+última vez que se reportó), y ampliar la lista con casos que el inventario original no mencionaba
+explícitamente por nombre (`Representante` en Proveedores). No se declara `PASS` pleno porque la
+migración de las ~10 apps restantes sigue genuinamente pendiente (no una omisión de esta fase, sino el
+estado real del proyecto) y porque `CLAUDE.md` mismo advierte "check
+`documentacion/PLAN_UNICO_CORRECCIONES.md` §FASE 5-BIS para saber cuáles apps migraron antes de asumir
+un patrón" — es decir, el estado es y seguirá siendo mixto hasta que se decida.
 
 ---
 
@@ -1627,12 +1651,34 @@ No reimplementar manualmente en JS lo que HTMX ya resuelve correctamente.
 
 ### Checklist
 
-- [ ] HTMX aprovechado donde corresponde
-- [ ] No duplicación innecesaria
-- [ ] Fragmentos funcionan
-- [ ] Recargas parciales funcionan
+- [x] HTMX aprovechado donde corresponde — confirmado en las 6 apps de la Fase 9 (Clientes,
+      Proveedores, Compras, Ventas, Inventario, Facturas): el buscador de listados usa `hx-get` +
+      `hx-trigger="keyup changed delay:400ms"` + `hx-target` de forma consistente en las pantallas
+      migradas a django-tables2 (Compras, Gastos, Facturas, Bancos, Contabilidad, Empleados);
+      confirmado también por la propia misión previa F33.8 (`F33_14D_FILTER_BAR_INVENTORY.md`): "el
+      comportamiento HTMX ya está unificado (debounce, `hx-trigger`, `name=q` idénticos en todos los
+      sitios encontrados); solo el markup wrapper diverge" — es decir, el problema real es de
+      consistencia visual (ver Fase 9), no de uso incorrecto de HTMX.
+- [x] No duplicación innecesaria — no se encontró ningún caso de JS reimplementando manualmente algo
+      que HTMX ya resuelve (debounce, fetch de fragmento, swap de DOM). La única "reimplementación en
+      JS" real detectada (Fase 9) es en pantallas que corren sobre **Tabulator legado** (Fase 39), no
+      HTMX-driven por diseño — no es una regla de HTMX violada, es la consecuencia de un stack de
+      grillas distinto en esa pantalla puntual.
+- [x] Fragmentos funcionan — verificado a nivel Capa 2/código: los offcanvas de crear/editar cargados
+      vía `hx-get` disparan `htmx:afterSettle` de forma consistente para activar el Bootstrap Offcanvas
+      resultante (patrón confirmado en Proveedores, Contabilidad, Perfil, Empleados durante los
+      inventarios de Fase 8/9) — no verificado en navegador real (Capa 1, `BLOCKED`).
+- [x] Recargas parciales funcionan — los listados django-tables2+HTMX recargan solo el `<table>`/panel
+      objetivo vía `hx-target`, sin recargar la página completa, consistente en las apps migradas
+      (Fase 5-BIS). No verificado en navegador real (Capa 1).
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión (ningún HTML/HTMX tocado).
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — auditoría estática de solo lectura sobre evidencia
+ya reunida en las Fases 8, 9 y 39, más el hallazgo previo de F33.8. Conclusión: HTMX se usa de forma
+correcta y consistente donde el stack de grilla ya es django-tables2; el gap real de "no aprovechar
+HTMX" está acoplado 1:1 al gap de Tabulator legado (Fase 39), no es un problema independiente. Se
+declara `PASS_WITH_LIMITATIONS` y no `PASS` pleno porque "Fragmentos funcionan"/"Recargas parciales
+funcionan" solo se verificaron por lectura de código (atributos `hx-*` presentes y coherentes), no por
+observación real de la recarga en un DOM vivo — eso requiere Capa 1 (`BLOCKED`, Fase 12).
 
 ---
 
@@ -2519,8 +2565,8 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 36 | Performance UI | [ ] NOT_STARTED |
 | 37 | JavaScript | [ ] NOT_STARTED |
 | 38 | Código muerto | [x] PASS_WITH_LIMITATIONS |
-| 39 | Tabulator | [ ] NOT_STARTED |
-| 40 | HTMX | [ ] NOT_STARTED |
+| 39 | Tabulator | [x] PASS_WITH_LIMITATIONS |
+| 40 | HTMX | [x] PASS_WITH_LIMITATIONS |
 | 41 | Piloto | [x] PASS_WITH_LIMITATIONS |
 | 42 | Batch 2 | [x] PASS_WITH_LIMITATIONS |
 | 43 | Batch 3 | [x] PASS_WITH_LIMITATIONS |
@@ -2541,7 +2587,7 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 58 | Reporte final | [x] PASS |
 | 59 | Criterio producto | [ ] NOT_STARTED |
 
-**Conteo:** 11 PASS · 23 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 14 NOT_STARTED · 0 FAIL (de 59)
+**Conteo:** 11 PASS · 25 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 12 NOT_STARTED · 0 FAIL (de 59)
 
 *(Nota: este conteo se recalculó directamente de la tabla anterior fila por fila el 2026-09-17. La
 línea previa arrastraba un error aritmético heredado de antes de esta sesión — sobrecontaba PASS y
