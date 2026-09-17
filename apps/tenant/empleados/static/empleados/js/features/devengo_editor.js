@@ -147,19 +147,13 @@
     }
 
     function _mostrarOffcanvasSeguro(el) {
-        if (!el || !w.bootstrap?.Offcanvas) return;
-        d.querySelectorAll('.offcanvas-backdrop').forEach(b => b.remove());
-        d.body.classList.remove('overflow-hidden', 'modal-open', 'offcanvas-open');
-        d.body.style.overflow = '';
-        d.body.style.paddingRight = '';
-        const prev = bootstrap.Offcanvas.getInstance(el);
-        if (prev) { try { prev.dispose(); } catch (_) {} }
+        if (!el) return;
         // Tick minimo para que Bootstrap complete cualquier ciclo interno pendiente
         // antes de crear la nueva instancia (evita null.scroll en offcanvas.js)
         setTimeout(() => {
             if (!el.isConnected) return;
             try {
-                bootstrap.Offcanvas.getOrCreateInstance(el).show();
+                w.Sintel?.Core?.mostrarOffcanvasSeguro?.(el);
             } catch (e) {
                 console.warn(`${MOD} Error mostrando offcanvas:`, e);
             }

@@ -304,6 +304,37 @@ no afecta integridad de datos) · `P3` (hallazgo menor / deuda documentada).
 
 ---
 
+## EMPLEADOS-OFFCANVAS-01 — segunda instancia de `getOrCreateInstance().show()` prohibido, en Devengo
+
+- **App / Screen:** Empleados / Devengo (Nómina), editor de creación.
+- **Type:** Violación de regla arquitectónica no-negociable (`CLAUDE.md`: "`getOrCreateInstance().show()`
+  en Offcanvas — PROHIBIDO"), encontrada al verificar la Fase 26 (Offcanvas) de la misión — un grep más
+  amplio que el de la Fase 9 (que solo cubrió 6 apps) sobre todo `apps/tenant/**` (incluyendo `<script>`
+  inline en `.html`, no solo archivos `.js`).
+- **Severity:** P3 (mismo riesgo que `PROVEEDORES-OFFCANVAS-01`: acumulación de backdrops/listeners
+  huérfanos en aperturas repetidas — mitigado en la práctica por la lógica de limpieza que ya rodeaba
+  a la llamada prohibida, ver abajo).
+- **Reproduction:** abrir repetidamente el offcanvas de creación de Devengo.
+- **Current (antes):** `apps/tenant/empleados/static/empleados/js/features/devengo_editor.js:149-167`
+  tenía una función local `_mostrarOffcanvasSeguro(el)` que **reimplementaba a mano** la misma lógica
+  que ya existe en `window.Sintel.Core.mostrarOffcanvasSeguro` (limpiar backdrops, `dispose()` de la
+  instancia previa, `setTimeout` para esperar un tick de Bootstrap) pero en la línea final llamaba
+  `bootstrap.Offcanvas.getOrCreateInstance(el).show()` en vez de crear una instancia nueva.
+- **Expected:** delegar en el helper SSoT compartido, como el resto del proyecto.
+- **Root cause:** duplicación — se reimplementó localmente una versión "segura" en vez de usar (o
+  extender) la ya existente, probablemente para resolver un bug de timing puntual (`null.scroll` en
+  `offcanvas.js` de Bootstrap) sin saber que el helper compartido ya lo resuelve.
+- **Fix:** `devengo_editor.js` — se simplificó `_mostrarOffcanvasSeguro` para conservar el `setTimeout`
+  (preserva el workaround de timing) pero delegar en
+  `w.Sintel?.Core?.mostrarOffcanvasSeguro?.(el)` en vez de reimplementar dispose/backdrop/instancia a
+  mano. Verificado con grep final: 0 instancias de `Offcanvas.getOrCreateInstance` en código ejecutable
+  en todo `apps/tenant/**`.
+- **Test:** ninguno nuevo — cambio de comportamiento equivalente (incluso más seguro, al delegar en el
+  helper canónico), sin test de UI en vivo disponible (Capa 1 `BLOCKED`).
+- **Status:** `FIXED`.
+
+---
+
 ## Resumen
 
 | ID | App | Severidad | Status |
@@ -320,8 +351,9 @@ no afecta integridad de datos) · `P3` (hallazgo menor / deuda documentada).
 | EMISION-FISCAL-01 | Ventas, Cotizaciones | N/A | `DEFERRED` (por diseño/regulación) |
 | PROVEEDORES-OFFCANVAS-01 | Proveedores | P3 | `FIXED` |
 | COTIZACIONES-SSOT-01 | Cotizaciones | P3 | `FIXED` |
+| EMPLEADOS-OFFCANVAS-01 | Empleados | P3 | `FIXED` |
 
-**9 bugs reales corregidos con evidencia de test o de código verificado. 6 hallazgos documentados y
+**10 bugs reales corregidos con evidencia de test o de código verificado. 6 hallazgos documentados y
 explícitamente diferidos** (2 por decisión del usuario, 3 por alcance quirúrgico, 1 por ser una
 restricción de producto/regulación ya existente). **0 hallazgos inventados** — cada uno cita el
 archivo y línea real que lo origina.

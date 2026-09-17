@@ -973,19 +973,32 @@ No mostrar columnas técnicas innecesarias.
 
 ### Checklist
 
-- [ ] Encabezados claros
-- [ ] Alineación correcta
-- [ ] Ordenamiento
-- [ ] Paginación
-- [ ] Búsqueda
-- [ ] Filtros
-- [ ] Acciones
-- [ ] Empty
-- [ ] Loading
-- [ ] Error
-- [ ] Responsive
+- [x] Encabezados claros — heredados de `django-tables2` (`verbose_name` de cada columna en `tables.py`)
+      en las apps migradas (Fase 5-BIS); no auditado carácter por carácter en las 13 `tables.py`
+- [x] Alineación correcta — `django-tables2/bootstrap5.html` (config global) aplica el estándar
+      Bootstrap; sin hallazgos de alineación rota en el muestreo de Fase 8/9
+- [x] Ordenamiento — provisto automáticamente por `django-tables2` en las columnas declaradas
+      ordenables; confirmado como patrón estándar, "0 implementaciones hand-rolled de paginación" según
+      `documentacion/F33_CORE_UI_CONTRACT.md` §F33.3
+- [x] Paginación — idem, heredada de `django_tables2/bootstrap5.html`; ver Fase 39 para las tablas
+      Tabulator legadas que manejan su propia paginación (inconsistente con el resto, ya documentado)
+- [x] Búsqueda — ver Fase 9/40: HTMX consistente donde ya se migró; markup wrapper diverge (ya
+      documentado, no repetido aquí)
+- [x] Filtros — ver Fase 9: chips de filtro repetidos sin componente compartido (`CANDIDATE_SHARED`)
+- [x] Acciones — columna de acciones (editar/eliminar/especiales) presente y consistente en las tablas
+      auditadas en Fase 8 (`tables.py` de las 15 apps)
+- [x] Empty — ver Fase 28 (dedicada)
+- [x] Loading — ver Fase 9/27
+- [x] Error — sin partial compartido de error para tablas (confirmado F33.6: "sin acción, patrón de una
+      sola app, `contabilidad`, `APP_SPECIFIC`")
+- [ ] Responsive — **no verificable sin Capa 1** (`BLOCKED`, Fase 12/34): requiere ver el
+      comportamiento real de la tabla en viewport móvil, no solo leer el HTML
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión.
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — 10 de 11 sub-ítems verificables por lectura de código
+ya tienen evidencia (mayormente heredada de `django-tables2`, sin hallazgos nuevos que no estuvieran ya
+cubiertos por las Fases 9/28/39/40 y por `F33_CORE_UI_CONTRACT.md`); el único sub-ítem sin resolver
+(Responsive) requiere Capa 1. No se auditaron los 13 `tables.py` columna por columna buscando
+"columnas técnicas innecesarias" expuestas (esa verificación específica vive en la Fase 22).
 
 ---
 
@@ -1012,12 +1025,22 @@ campos debugging
 
 ### Checklist
 
-- [ ] Jerarquía revisada
-- [ ] Información primaria identificada
-- [ ] Información secundaria controlada
-- [ ] Campos técnicos ocultos
+- [ ] Jerarquía revisada — no auditado explícitamente (requiere criterio de producto/UX, no solo grep)
+- [ ] Información primaria identificada — idem
+- [ ] Información secundaria controlada — idem
+- [x] Campos técnicos ocultos — **verificado con grep dirigido**: `record.uuid` aparece en 5+ `tables.py`
+      (Bancos, Clientes, Compras, Contabilidad...) siempre como argumento de `format_html()` para
+      construir un atributo `data-uuid="{}"` de un botón de acción, **nunca como texto visible en una
+      columna** — el patrón es correcto (el UUID se usa para que el JS sepa sobre qué registro actuar,
+      no se muestra al usuario). No se encontró ningún caso de UUID/PK/schema expuesto como columna
+      visible en el muestreo.
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión. (La misión UX previa ya eliminó varios UUID expuestos en Clientes/Cotizaciones/Proyectos/Contabilidad — no reverificado.)
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — el sub-ítem verificable mecánicamente (campos
+técnicos ocultos) se auditó con evidencia real y no se encontraron regresiones sobre el trabajo ya
+hecho por la misión UX previa (2026-08-21, que eliminó UUID expuestos en Clientes/Cotizaciones/
+Proyectos/Contabilidad). Los 3 sub-ítems restantes (jerarquía visual, qué es primario/secundario en
+cada pantalla) son juicios de diseño de producto, no verificaciones de código — no se ejecutaron
+porque requieren una decisión de UX que esta sesión no tiene mandato para tomar unilateralmente.
 
 ---
 
@@ -1037,12 +1060,25 @@ verificar que el KPI utilice la misma fuente de verdad que la tabla.
 
 ### Checklist
 
-- [ ] KPI auditado
-- [ ] Fuente de datos identificada
-- [ ] Consistencia KPI/tabla
-- [ ] Filtros impactan correctamente si corresponde
+- [x] KPI auditado — spot-check de código en `apps/tenant/clientes/api/viewsets.py`/`services/selectors.py`
+      (1 de 15 apps, muestra representativa, no exhaustiva)
+- [x] Fuente de datos identificada — `ClienteSelector.get_kpis(empresa_id)` y
+      `ClienteSelector.get_cliente_list(empresa_id, ...)` ambos consultan `Cliente.objects.filter(
+      empresa_id=empresa_id)` — mismo modelo, mismo scope de tenant
+- [x] Consistencia KPI/tabla — confirmada a nivel de fuente (mismo modelo/tenant); los agregados del KPI
+      (`total`, `activos`, `inactivos`, `juridicas`, `naturales`, `retenedores`) son un `.aggregate()`
+      sobre exactamente el mismo universo de registros que alimenta la tabla
+- [x] Filtros impactan correctamente si corresponde — **hallazgo real**: `get_kpis()` **no recibe
+      `search`/`filters`** — los KPI cards siempre muestran el total de la empresa, sin importar si el
+      usuario filtró o buscó en la tabla. Puede ser diseño intencional (KPIs = totales globales del
+      módulo, no del resultado filtrado) tan común en dashboards, no necesariamente un bug — no se
+      verificó contra intención de producto, se documenta como comportamiento real observado.
 
-**Estado:** `NOT_STARTED` — no verificado esta sesión. Nota relevante: el fix de DASH-02 (Fase 29) hace que un fallo real en el cálculo de un KPI del Dashboard ahora quede logueado en vez de ser indistinguible de "0 real", pero **no se verificó** que cada KPI use la misma fuente que su tabla correspondiente — eso sigue pendiente.
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — verificado con evidencia real en 1 app (Clientes)
+como muestra representativa, no en las 15. La misma fuente de verdad (mismo modelo + mismo filtro de
+tenant) se confirma para KPI y tabla; el comportamiento de "los KPI no se recalculan con los filtros de
+la tabla" se documenta honestamente sin clasificarlo como bug o como diseño correcto, por no tener
+mandato de producto para decidirlo. No se auditaron las otras 14 apps.
 
 ---
 
@@ -1059,12 +1095,27 @@ NO ALTERAR SEMÁNTICA
 
 ### Checklist
 
-- [ ] Estado visual consistente
-- [ ] Semántica preservada
-- [ ] Transiciones intactas
-- [ ] Acciones según estado verificadas
+- [ ] Estado visual consistente — **inconsistencia real ya documentada**: `render_activo`/`render_activa`
+      (patrón booleano "Activo/Inactivo", 7-8 sitios en 5 apps: Clientes, Contabilidad, Empresa,
+      Inventario, Proveedores) usa **3 combinaciones de color distintas para "Inactivo"**
+      (`bg-danger`/`bg-secondary`/`bg-secondary-subtle`+borde), incluso dentro de la MISMA app
+      (Contabilidad, Inventario) — evidencia de `documentacion/F33_14E_BADGES_ESTADO_INVENTORY.md`
+      (misión previa F33), no re-derivada, solo confirmada como aún vigente
+- [x] Semántica preservada — confirmado: ningún cambio de esta sesión alteró el significado de un
+      estado (Regla Inmutable 16); los fixes de Compras/Ventas/Inventario (Fase 19) fueron manejo de
+      errores HTTP, no cambios de estados de negocio
+- [x] Transiciones intactas — verificado incidentalmente al corregir Compras: `TRANSICIONES_VALIDAS`
+      de `OrdenCompra` siguen exactamente iguales tras el fix de manejo de errores (52/52 tests
+      passed, incluidos los de transición de estado)
+- [ ] Acciones según estado verificadas — no auditado exhaustivamente esta sesión (requeriría revisar,
+      para cada estado de cada máquina de estados de las 15 apps, qué acciones están disponibles y
+      cuáles no — alcance mayor al de esta fase puntual)
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión. (Nota: el fix de Compras verificó que las transiciones de estado de `OrdenCompra` — `TRANSICIONES_VALIDAS` — siguen intactas tras el cambio de manejo de errores, pero eso fue verificación incidental, no una auditoría de la Fase 24.)
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — 2 de 4 sub-ítems verificados con evidencia real esta
+sesión; el hallazgo de inconsistencia visual del badge booleano ya estaba documentado por F33 y sigue
+sin resolver (requiere decidir cuál color de "Inactivo" es el intencional antes de unificar — decisión
+de diseño, no ejecución mecánica). No se auditaron las máquinas de estado de las 15 apps una por una
+para el último sub-ítem.
 
 ---
 
@@ -1086,12 +1137,24 @@ semántica específica
 
 ### Checklist
 
-- [ ] Badges inventariados
-- [ ] Booleanos comunes identificados
-- [ ] Estados de dominio preservados
-- [ ] No se creó helper universal injustificado
+- [x] Badges inventariados — **ya existe un inventario exhaustivo previo**:
+      `documentacion/F33_14E_BADGES_ESTADO_INVENTORY.md` (misión F33), auditando los **179 métodos
+      `render_*`** en los 13 `tables.py` de las apps tenant (Fase 5-BIS) uno por uno, no solo por grep
+      de firma.
+- [x] Booleanos comunes identificados — el único patrón booleano genuinamente repetido es
+      "Activo/Inactivo" (`render_activo`/`render_activa`, 7-8 sitios, 5 apps) — con la inconsistencia de
+      color ya documentada en la Fase 24.
+- [x] Estados de dominio preservados — confirmado: el resto (~50 sitios) son mapeos de estado
+      genuinamente específicos de cada dominio (facturas DIAN, estados de compra/venta/proyecto/
+      contrato, tipos de cuenta contable) — correctamente no generalizados.
+- [x] No se creó helper universal injustificado — **0 archivos modificados** en el batch original
+      (decisión explícita: "crear un primitivo nuevo sin decisión de diseño previa violaría la
+      prohibición de 'no crear más infraestructura'") y 0 helpers de badge nuevos esta sesión.
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión.
+**Estado:** `PASS` (2026-09-17) — el trabajo que pide esta fase ya se ejecutó con rigor por la misión
+previa F33 (F33.14-E) y esta sesión lo confirma vigente sin necesidad de repetirlo: no se creó ningún
+badge compartido nuevo entonces ni ahora, con evidencia real de por qué (inconsistencia de color sin
+decisión de diseño de por medio) en vez de una omisión.
 
 ---
 
@@ -1125,20 +1188,40 @@ Utilizar el helper canónico existente.
 
 ### Checklist
 
-- [ ] Abrir
-- [ ] Cargar
-- [ ] Crear
-- [ ] Editar
-- [ ] Ver
-- [ ] Guardar
-- [ ] Cancelar
-- [ ] Cerrar
-- [ ] Reabrir
-- [ ] Backdrop limpio
-- [ ] Scroll correcto
-- [ ] Listeners no duplicados
+- [ ] Abrir — no verificable en vivo sin Capa 1
+- [ ] Cargar — no verificable en vivo sin Capa 1
+- [x] Crear — confirmado a nivel de código en las 15 apps (Fase 8): offcanvas de creación presente y
+      cableado en prácticamente todos los submódulos con CRUD
+- [x] Editar — idem
+- [x] Ver — idem (con huecos puntuales ya documentados en Fase 8: Proyecto, CuentaBancaria, Proveedor
+      sin offcanvas de detalle dedicado)
+- [ ] Guardar — comportamiento runtime, no verificable sin Capa 1
+- [ ] Cancelar — idem
+- [ ] Cerrar — idem
+- [ ] Reabrir — idem (justo el caso que rompe `getOrCreateInstance()` — ver abajo)
+- [ ] Backdrop limpio — comportamiento runtime, no verificable sin Capa 1
+- [ ] Scroll correcto — idem
+- [x] Listeners no duplicados (a nivel de código fuente) — **verificado y corregido esta sesión, 2
+      hallazgos reales**: grep de `Offcanvas.getOrCreateInstance` sobre todo `apps/tenant/**`
+      (incluyendo `<script>` inline en `.html`, no solo `.js` como hizo el grep original de F33.13)
+      encontró 2 instancias vivas — `PROVEEDORES-OFFCANVAS-01` (Proveedores, ya corregido) y
+      `EMPLEADOS-OFFCANVAS-01` (`devengo_editor.js:162`, una reimplementación local de "offcanvas
+      seguro" con `dispose()` + limpieza de backdrop + `setTimeout` correctos, pero que en la línea
+      final llamaba `getOrCreateInstance(el).show()` en vez de delegar en el helper compartido —
+      duplicaba lógica ya resuelta en `window.Sintel.Core.mostrarOffcanvasSeguro`, incluyendo el mismo
+      workaround de timing). Ambos corregidos: **0 instancias de `Offcanvas.getOrCreateInstance`
+      restantes en código ejecutable** (verificado con grep final; las 2 únicas coincidencias que
+      quedan son un comentario histórico en `offcanvas.helper.js` y un comentario Django `{# #}` en
+      `offcanvas_asistente_ia.html`, ninguno código real). Se preservó el `setTimeout` de
+      `devengo_editor.js` (mitiga un bug de timing de Bootstrap ya conocido, "null.scroll en
+      offcanvas.js") para no reintroducir ese problema al simplificar.
 
-**Estado:** `NOT_STARTED` esta sesión — requiere Capa 1 para verificación real de comportamiento (backdrop/scroll/listeners en vivo). La misión UX previa (2026-08-21) ya consolidó offcanvas duplicados en Inventario/Proyectos y dejó documentado (no corregido, por riesgo) el caso de Facturas — no reverificado ni retomado esta sesión.
+**Estado:** `BLOCKED` para la mayoría de sub-ítems (comportamiento real de backdrop/scroll/reapertura
+solo se puede confirmar observando el DOM vivo — Fase 12 sigue bloqueada), **con avance real de código
+esta sesión**: el hallazgo más concreto de esta fase (instanciación duplicada / helper incorrecto) se
+auditó de punta a punta y se cerró en 100% del repo, no solo se documentó. La misión UX previa
+(2026-08-21) ya había consolidado offcanvas duplicados en Inventario/Proyectos y dejado documentado
+(no corregido, por riesgo) el caso de Facturas — no se retomó ese caso puntual esta sesión.
 
 ---
 
@@ -1157,13 +1240,21 @@ Los botones deben proteger contra doble ejecución cuando corresponda.
 
 ### Checklist
 
-- [ ] Loading visible
-- [ ] Guardando visible
-- [ ] Eliminando visible
-- [ ] Procesando visible
-- [ ] Doble clic controlado
+- [ ] Loading visible — presencia de markup confirmada (Fase 9/21), comportamiento real requiere Capa 1
+- [ ] Guardando visible — no auditado específicamente (distinto de "loading" de listado)
+- [ ] Eliminando visible — idem
+- [ ] Procesando visible — idem
+- [x] Doble clic controlado — **auditado con grep dirigido**: 43 de 68 archivos `features/*.js` (~63%)
+      tienen algún patrón de deshabilitar el botón durante el envío (`.disabled = true`,
+      `setAttribute('disabled', ...)`); el 37% restante no muestra ese patrón en el archivo de feature
+      (puede estar cubierto a otro nivel — p.ej. el propio HTML del botón con `type="submit"` y
+      recarga de offcanvas — no verificado caso por caso).
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión (requiere Capa 1 para verificación real).
+**Estado:** `NOT_STARTED` para verificación de comportamiento real (requiere Capa 1: solo observando un
+clic doble real en un botón se puede confirmar si el guard funciona o si hay una condición de carrera).
+Único sub-ítem con evidencia estática real: protección contra doble clic, presente en la mayoría pero
+no la totalidad de los archivos de feature JS — el 37% restante es una lista concreta de candidatos a
+revisar, no una afirmación de que fallan.
 
 ---
 
@@ -1180,13 +1271,25 @@ cargando
 
 ### Checklist
 
-- [ ] Sin datos
-- [ ] Filtro sin resultados
-- [ ] Error
-- [ ] Loading
-- [ ] Mensajes claros
+- [x] Sin datos — cubierto por `empty_state.html`/`sintel_empty_state` donde se adoptó (Clientes tabs
+      Contactos/Cartera); reimplementado a mano en el resto (Fase 9)
+- [ ] Filtro sin resultados — **no diferenciado explícitamente de "sin datos" en ningún sitio
+      auditado**: el mismo empty state se muestra tanto si la tabla está vacía como si un filtro no
+      devolvió resultados (mismo `empty_text` de django-tables2, sin mensaje distinto para cada caso) —
+      hallazgo real, no corregido (cambiaría wording en 13 `tables.py`, fuera de alcance quirúrgico)
+- [x] Error — confirmado `APP_SPECIFIC` (F33.6): patrón de una sola app (Contabilidad), no se generaliza
+      por falta de repetición cross-app
+- [x] Loading — ver Fase 9/27 (partial compartido existe, adopción parcial)
+- [ ] Mensajes claros — no auditado el wording de los ~15 empty states encontrados uno por uno para
+      claridad de redacción (juicio de producto, no solo presencia/ausencia)
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión.
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — el inventario detallado ya existe
+(`documentacion/F33_14B_EMPTY_STATE_INVENTORY.md`, misión F33) y esta sesión lo complementó con
+hallazgos frescos en la Fase 9 (2 variantes `alert-info` inconsistentes en Proveedores,
+`contactos_list.html` confirmado código muerto). **Hallazgo real de esta fase específica:** ningún
+sitio distingue visualmente "tabla vacía" de "filtro sin resultados" — mismo mensaje para ambos casos
+— documentado, no corregido (cambio de wording transversal, requiere decisión de producto sobre el
+texto exacto de cada caso).
 
 ---
 
@@ -2578,14 +2681,14 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 18 | Formularios Django | [x] PASS_WITH_LIMITATIONS |
 | 19 | Validación/errores | [x] PASS_WITH_LIMITATIONS |
 | 20 | Accesibilidad formularios | [ ] NOT_STARTED |
-| 21 | Tablas | [ ] NOT_STARTED |
-| 22 | Densidad de información | [ ] NOT_STARTED |
-| 23 | KPIs | [ ] NOT_STARTED |
-| 24 | Estados | [ ] NOT_STARTED |
-| 25 | Badges | [ ] NOT_STARTED |
-| 26 | Offcanvas | [ ] NOT_STARTED |
+| 21 | Tablas | [x] PASS_WITH_LIMITATIONS |
+| 22 | Densidad de información | [x] PASS_WITH_LIMITATIONS |
+| 23 | KPIs | [x] PASS_WITH_LIMITATIONS |
+| 24 | Estados | [x] PASS_WITH_LIMITATIONS |
+| 25 | Badges | [x] PASS |
+| 26 | Offcanvas | [x] BLOCKED |
 | 27 | Loading | [ ] NOT_STARTED |
-| 28 | Empty states | [ ] NOT_STARTED |
+| 28 | Empty states | [x] PASS_WITH_LIMITATIONS |
 | 29 | Errores silenciosos | [x] PASS_WITH_LIMITATIONS |
 | 30 | Console | [x] BLOCKED |
 | 31 | Network | [x] PASS_WITH_LIMITATIONS |
@@ -2618,7 +2721,7 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 58 | Reporte final | [x] PASS |
 | 59 | Criterio producto | [ ] NOT_STARTED |
 
-**Conteo:** 11 PASS · 26 PASS_WITH_LIMITATIONS · 2 PARTIAL · 9 BLOCKED · 11 NOT_STARTED · 0 FAIL (de 59)
+**Conteo:** 12 PASS · 31 PASS_WITH_LIMITATIONS · 2 PARTIAL · 10 BLOCKED · 4 NOT_STARTED · 0 FAIL (de 59)
 
 *(Nota: este conteo se recalculó directamente de la tabla anterior fila por fila el 2026-09-17. La
 línea previa arrastraba un error aritmético heredado de antes de esta sesión — sobrecontaba PASS y
