@@ -120,13 +120,13 @@
           {# Fila 1: identificación #}
           <div class="row g-3 mb-3">
             <div class="col-md-4">
-              <label class="form-label small text-muted mb-1">Número de Factura</label>
+              <label for="factura-numero" class="form-label small text-muted mb-1">Número de Factura</label>
               <input type="text" class="form-control form-control-sm bg-light"
                      id="factura-numero" name="numero"
                      value="{% if factura %}{{ factura.numero }}{% endif %}" readonly>
             </div>
             <div class="col-md-4">
-              <label class="form-label small text-muted mb-1">Tipo</label>
+              <label for="factura-tipo" class="form-label small text-muted mb-1">Tipo</label>
               <input type="hidden" name="tipo" value="{% if factura %}{{ factura.tipo }}{% endif %}">
               <select class="form-select form-select-sm bg-light" id="factura-tipo" disabled>
                 {% for value, label in tipos_factura %}
@@ -135,7 +135,7 @@
               </select>
             </div>
             <div class="col-md-4">
-              <label class="form-label small text-muted mb-1">Fecha de Emisión</label>
+              <label for="factura-fecha-emision" class="form-label small text-muted mb-1">Fecha de Emisión</label>
               <input type="datetime-local" class="form-control form-control-sm bg-light"
                      id="factura-fecha-emision" name="fecha_emision"
                      value="{% if factura and factura.fecha_emision %}{{ factura.fecha_emision|date:'Y-m-d\TH:i' }}{% endif %}" readonly>
@@ -253,29 +253,29 @@
                 <div class="card-body py-3">
                   <div class="row g-2">
                     <div class="col-12">
-                      <label class="form-label small text-muted mb-1">NIT</label>
+                      <label for="factura-emisor-nit" class="form-label small text-muted mb-1">NIT</label>
                       <input type="text" class="form-control form-control-sm bg-light"
-                             name="emisor_nit" value="{% if factura %}{{ factura.emisor_nit }}{% endif %}" readonly>
+                             id="factura-emisor-nit" name="emisor_nit" value="{% if factura %}{{ factura.emisor_nit }}{% endif %}" readonly>
                     </div>
                     <div class="col-12">
-                      <label class="form-label small text-muted mb-1">Razón Social</label>
+                      <label for="factura-emisor-razon-social" class="form-label small text-muted mb-1">Razón Social</label>
                       <input type="text" class="form-control form-control-sm bg-light"
-                             name="emisor_razon_social" value="{% if factura %}{{ factura.emisor_razon_social }}{% endif %}" readonly>
+                             id="factura-emisor-razon-social" name="emisor_razon_social" value="{% if factura %}{{ factura.emisor_razon_social }}{% endif %}" readonly>
                     </div>
                     <div class="col-12">
-                      <label class="form-label small text-muted mb-1">Dirección</label>
+                      <label for="factura-emisor-direccion" class="form-label small text-muted mb-1">Dirección</label>
                       <input type="text" class="form-control form-control-sm bg-light"
-                             name="emisor_direccion" value="{% if factura %}{{ factura.emisor_direccion }}{% endif %}" readonly>
+                             id="factura-emisor-direccion" name="emisor_direccion" value="{% if factura %}{{ factura.emisor_direccion }}{% endif %}" readonly>
                     </div>
                     <div class="col-6">
-                      <label class="form-label small text-muted mb-1">Email</label>
+                      <label for="factura-emisor-email" class="form-label small text-muted mb-1">Email</label>
                       <input type="email" class="form-control form-control-sm bg-light"
-                             name="emisor_email" value="{% if factura %}{{ factura.emisor_email }}{% endif %}" readonly>
+                             id="factura-emisor-email" name="emisor_email" value="{% if factura %}{{ factura.emisor_email }}{% endif %}" readonly>
                     </div>
                     <div class="col-6">
-                      <label class="form-label small text-muted mb-1">Teléfono</label>
+                      <label for="factura-emisor-telefono" class="form-label small text-muted mb-1">Teléfono</label>
                       <input type="text" class="form-control form-control-sm bg-light"
-                             name="emisor_telefono" value="{% if factura %}{{ factura.emisor_telefono }}{% endif %}" readonly>
+                             id="factura-emisor-telefono" name="emisor_telefono" value="{% if factura %}{{ factura.emisor_telefono }}{% endif %}" readonly>
                     </div>
                   </div>
                 </div>
@@ -291,29 +291,29 @@
                 <div class="card-body py-3">
                   <div class="row g-2">
                     <div class="col-12">
-                      <label class="form-label small text-muted mb-1">NIT</label>
+                      <label for="factura-receptor-nit" class="form-label small text-muted mb-1">NIT</label>
                       <input type="text" class="form-control form-control-sm bg-light"
-                             name="receptor_nit" value="{% if factura %}{{ factura.receptor_nit }}{% endif %}" readonly>
+                             id="factura-receptor-nit" name="receptor_nit" value="{% if factura %}{{ factura.receptor_nit }}{% endif %}" readonly>
                     </div>
                     <div class="col-12">
-                      <label class="form-label small text-muted mb-1">Razón Social</label>
+                      <label for="factura-receptor-razon-social" class="form-label small text-muted mb-1">Razón Social</label>
                       <input type="text" class="form-control form-control-sm bg-light"
-                             name="receptor_razon_social" value="{% if factura %}{{ factura.receptor_razon_social }}{% endif %}" readonly>
+                             id="factura-receptor-razon-social" name="receptor_razon_social" value="{% if factura %}{{ factura.receptor_razon_social }}{% endif %}" readonly>
                     </div>
                     <div class="col-12">
-                      <label class="form-label small text-muted mb-1">Dirección</label>
+                      <label for="factura-receptor-direccion" class="form-label small text-muted mb-1">Dirección</label>
                       <input type="text" class="form-control form-control-sm bg-light"
-                             name="receptor_direccion" value="{% if factura %}{{ factura.receptor_direccion }}{% endif %}" readonly>
+                             id="factura-receptor-direccion" name="receptor_direccion" value="{% if factura %}{{ factura.receptor_direccion }}{% endif %}" readonly>
                     </div>
                     <div class="col-6">
-                      <label class="form-label small text-muted mb-1">Email</label>
+                      <label for="factura-receptor-email" class="form-label small text-muted mb-1">Email</label>
                       <input type="email" class="form-control form-control-sm bg-light"
-                             name="receptor_email" value="{% if factura %}{{ factura.receptor_email }}{% endif %}" readonly>
+                             id="factura-receptor-email" name="receptor_email" value="{% if factura %}{{ factura.receptor_email }}{% endif %}" readonly>
                     </div>
                     <div class="col-6">
-                      <label class="form-label small text-muted mb-1">Teléfono</label>
+                      <label for="factura-receptor-telefono" class="form-label small text-muted mb-1">Teléfono</label>
                       <input type="text" class="form-control form-control-sm bg-light"
-                             name="receptor_telefono" value="{% if factura %}{{ factura.receptor_telefono }}{% endif %}" readonly>
+                             id="factura-receptor-telefono" name="receptor_telefono" value="{% if factura %}{{ factura.receptor_telefono }}{% endif %}" readonly>
                     </div>
                   </div>
                 </div>
@@ -336,7 +336,7 @@
               </span>
             </div>
             <div class="card-body py-3">
-              <label class="form-label small fw-semibold mb-1">Buscar o crear cliente</label>
+              <label for="factura-cliente_search" class="form-label small fw-semibold mb-1">Buscar o crear cliente</label>
               <div class="position-relative mb-1">
                 <div class="input-group input-group-sm">
                   <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
@@ -417,7 +417,7 @@
               </span>
             </div>
             <div class="card-body py-3">
-              <label class="form-label small fw-semibold mb-1">Buscar o crear proveedor</label>
+              <label for="factura-proveedor_search" class="form-label small fw-semibold mb-1">Buscar o crear proveedor</label>
               <div class="position-relative mb-1">
                 <div class="input-group input-group-sm">
                   <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
@@ -662,10 +662,10 @@
                 </div>
                 {% endif %}
                 <div class="col-12">
-                  <label class="form-label small text-muted mb-1">CUFE</label>
+                  <label for="factura-cufe" class="form-label small text-muted mb-1">CUFE</label>
                   <div class="input-group input-group-sm">
                     <input type="text" class="form-control bg-light font-monospace small"
-                           value="{{ factura.cufe }}" readonly>
+                           id="factura-cufe" value="{{ factura.cufe }}" readonly>
                     <button class="btn btn-outline-secondary btn-sm" type="button"
                             onclick="navigator.clipboard.writeText('{{ factura.cufe }}');this.innerHTML='<i class=\'bi bi-check-lg\'></i>';"
                             title="Copiar CUFE">
@@ -675,9 +675,9 @@
                 </div>
                 {% if factura.qr_url %}
                 <div class="col-12">
-                  <label class="form-label small text-muted mb-1">URL QR DIAN</label>
+                  <label for="factura-qr-url" class="form-label small text-muted mb-1">URL QR DIAN</label>
                   <div class="input-group input-group-sm">
-                    <input type="text" class="form-control bg-light small" value="{{ factura.qr_url }}" readonly>
+                    <input type="text" class="form-control bg-light small" id="factura-qr-url" value="{{ factura.qr_url }}" readonly>
                     <a href="{{ factura.qr_url }}" target="_blank" class="btn btn-outline-primary btn-sm" title="Abrir en DIAN">
                       <i class="bi bi-box-arrow-up-right"></i>
                     </a>

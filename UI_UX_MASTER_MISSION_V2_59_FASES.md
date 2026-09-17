@@ -941,17 +941,34 @@ Utilizar capacidades nativas de Django cuando sean aplicables.
 
 ### Checklist
 
-- [ ] Labels asociados — **auditado con grep dirigido sobre los 73 offcanvas del repo, gap real
-      encontrado**: de los 17 offcanvas sin ningún `<label>`, 16 son legítimamente de solo lectura
-      (`detalle_*`, `historial_*`, `pendientes_*`, `list_plantillas`) o de subida de archivo por
-      drag&drop (`offcanvas_crear_factura.html`, sin campos de texto que etiquetar). En los offcanvas
-      de **crear/editar con campos reales**, la cobertura de `for=`/`id` es dispareja: completa o casi
-      completa en Clientes/Proveedores/Gastos/Inventario/Perfil (`for=` presente en 85-100% de los
-      `<label>`), pero con **huecos reales** en `offcanvas_editar_cliente.html` (11/19), `offcanvas_
-      editar_factura.html` (8/28 — el peor caso, 20 labels sin `for=`), y `offcanvas_form.html` de
-      Proyectos (22/28). No corregido — cambiar 40+ atributos `for=`/`id` en 3 apps es un fix real pero
-      de alcance mayor al de esta pasada de auditoría; queda documentado con archivo y ratio exacto
-      para que sea accionable después.
+- [x] Labels asociados — **auditado con grep dirigido sobre los 73 offcanvas del repo, gap real
+      encontrado y corregido parcialmente esta sesión (2026-09-17, continuación)**: de los 17 offcanvas
+      sin ningún `<label>`, 16 son legítimamente de solo lectura (`detalle_*`, `historial_*`,
+      `pendientes_*`, `list_plantillas`) o de subida de archivo por drag&drop
+      (`offcanvas_crear_factura.html`, sin campos de texto que etiquetar).
+      **Corregido:** `offcanvas_form.html` de Proyectos, 6/6 `<label>` sin `for=` cerrados (grupo
+      "Seguimiento de Tareas Diarias": Inicio/Fin/Título/Prioridad, ya tenían `id` estable de instancia
+      única; grupo "Contexto del Proyecto" Fase 4: Cliente/Factura-Centro-de-Costos, ídem) — ahora
+      28/28. `offcanvas_editar_factura.html`, 17/20 cerrados (Número/Tipo/Fecha Emisión ya tenían `id`;
+      bloques Emisor/Receptor ×5 cada uno y CUFE/URL QR DIAN no tenían `id` — se agregó `id` nuevo sin
+      colisión, verificado que el JS del editor referencia esos campos por `name=`/`querySelector`, no
+      por `id`, así que no hubo riesgo de romper `facturas_editor.js`; "Buscar o crear cliente/proveedor"
+      ya tenían `id`) — ahora 25/28. Los 3 restantes (Código Validación, Fecha Validación, Descripción
+      en el tab DIAN) se dejan sin `for=` deliberadamente: son `<div class="form-control">` de solo
+      lectura, no elementos de formulario "labelable" — asociarlos violaría la especificación HTML de
+      `<label for=>`, no es un gap real.
+      **No corregido (deferred, riesgo real identificado):** `offcanvas_editar_cliente.html`, los 7
+      `<label>` sin `for=` del bloque "Personas de Contacto" son parte de una plantilla repetida
+      (`{% for contacto in contactos %}`) — los inputs correspondientes deliberadamente NO tienen `id`
+      estático (usan solo clases `.contacto-nombre`/`.contacto-cargo`/etc., consumidas por
+      `clientes.editor.js`) porque un `id` fijo se duplicaría en el DOM si el cliente tiene más de un
+      contacto, lo cual es HTML inválido. Cerrarlo correctamente requiere `id`/`for` únicos por fila
+      (ej. `id="contacto-nombre-{{ contacto.id }}"`) más una revisión de si algo en el JS asume ausencia
+      de `id`. Es un cambio más amplio que un fix cosmético de atributo — queda explícitamente diferido,
+      no ocultado. El octavo caso sin `for=` de ese archivo ("Estado", línea 152) es un `<label>` usado
+      como encabezado de grupo sobre un `form-switch`, no sobre un control único — se deja igual (el
+      switch mismo ya tiene su propio `<label for="cliente-activo">Activo</label>` correctamente
+      asociado justo debajo).
 - [ ] Errores asociados — no auditado si el mensaje de error de cada campo usa `aria-describedby`
       apuntando al campo correspondiente (solo se confirmó en Fase 19 que el feedback de error EXISTE
       visualmente, `alert alert-danger`, no que esté asociado por ARIA al campo específico)
@@ -961,12 +978,16 @@ Utilizar capacidades nativas de Django cuando sean aplicables.
       atributo `aria-*`; no se verificó si cada uso es semánticamente correcto (eso requeriría revisión
       manual campo por campo, no solo grep de presencia)
 
-**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — primera auditoría real de este alcance específico
-(la misión UX previa, 2026-08-21, corrigió `for`/`id` en 2 formularios de Cotizaciones puntuales, no
-reverificado ni relacionado con los huecos nuevos encontrados aquí en Clientes/Facturas/Proyectos). Se
-declara `PASS_WITH_LIMITATIONS` y no `PASS` porque: (1) 2 de 5 sub-ítems (focus visible, navegación por
-teclado) son inherentemente de comportamiento runtime y requieren Capa 1; (2) la asociación de errores
-por ARIA no se verificó; (3) los huecos de `for=` reales encontrados no se corrigieron esta sesión.
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17, actualizado en la continuación de la misma fecha) —
+primera auditoría real de este alcance específico (la misión UX previa, 2026-08-21, corrigió `for`/`id`
+en 2 formularios de Cotizaciones puntuales, no reverificado ni relacionado con los huecos nuevos
+encontrados aquí en Clientes/Facturas/Proyectos). 23 de los 33 `<label>` sin `for=` originalmente
+encontrados en Facturas/Proyectos quedaron cerrados con evidencia (`grep` antes/después, 0 `id`
+duplicados introducidos, verificado que ningún JS depende de la ausencia de esos `id`). Se declara
+`PASS_WITH_LIMITATIONS` y no `PASS` porque: (1) 2 de 5 sub-ítems (focus visible, navegación por teclado)
+son inherentemente de comportamiento runtime y requieren Capa 1; (2) la asociación de errores por ARIA
+no se verificó; (3) el bloque de contactos repetidos de Clientes (7 labels) queda deliberadamente
+diferido — requiere `id` únicos por fila, no un fix de atributo simple, ver detalle arriba.
 
 ---
 
@@ -2014,11 +2035,61 @@ No 15 interfaces independientes.
 ### Checklist
 
 - [ ] Jerarquía consistente — no auditado esta pasada (requiere Capa 1 para comparar navegación real entre apps; el reordenamiento del sidebar ya lo cubrió la misión UX previa, 2026-08-21, no reverificado aquí)
-- [ ] Toolbar consistente — no auditado a fondo esta pasada (fuera de alcance de tiempo; candidato para una pasada dedicada)
+- [x] Toolbar consistente — **auditado con evidencia real (grep dirigido sobre las 15 apps,
+      2026-09-17, continuación)**: 12/15 apps comparten la misma convención estructural de facto —
+      una fila `d-flex ... justify-content-between align-items-center ... gap-2 flex-wrap` con el
+      botón primario `btn btn-primary btn-sm` de creación a la izquierda y un `.input-group
+      input-group-sm` de búsqueda (~260-320px) a la derecha (Clientes, Proveedores, Compras, Ventas,
+      Cotizaciones, Bancos, Facturas, Gastos, Inventario, Contabilidad/asientos, Proyectos,
+      Empleados). Dentro de ese grupo hay una micro-inconsistencia de nomenclatura sin impacto visual:
+      algunas identifican el contenedor con `id="toolbar-<app>"` (Ventas, Facturas, Proyectos,
+      Cotizaciones, Contabilidad), otras con `data-module="<app>"` (Compras, Bancos, Gastos) y otras
+      sin ningún atributo identificador (Clientes, Proveedores, Inventario) — mismo patrón visual, tres
+      convenciones de "hook" distintas para JS/tests, ya cubierto conceptualmente por el hallazgo
+      `CANDIDATE_SHARED` de la Fase 9 (no se crea componente nuevo por esto, ver Fase 10).
+      **2 outliers reales confirmados:** (1) **Empresa** no tiene una fila de toolbar dedicada — el
+      botón "+" de cada subsección (Sedes, Áreas, MailInboxConfig) vive dentro de su propio
+      `card-header d-flex justify-content-between align-items-center bg-light`, mezclando la acción de
+      creación con el encabezado de sección en vez de una barra de herramientas separada como las otras
+      14 apps. (2) **Perfil** (`list_tenantprofile.html`) es un stub de 2 líneas
+      (`<div id="table-tenantprofile"></div>`) — toolbar y tabla completos se renderizan client-side
+      vía Tabulator, no hay ninguna estructura HTML server-side que comparar; coherente con el hallazgo
+      ya documentado de que Perfil diverge del resto (`PERFIL-PK-01`, Fase 46). Ninguno de los 2
+      outliers es un bug — son dos convenciones estructurales distintas coexistiendo sin decisión de
+      diseño explícita que las reconcilie, documentado aquí, no corregido (cambiar el layout de Empresa
+      o migrar Perfil de Tabulator es una decisión de diseño/alcance mayor, no un fix de atributo).
 - [x] Tablas consistentes — **auditado con evidencia real** (grep de `new Tabulator(` vs clases `django_tables2.Table` en las 15 apps): 13/15 apps ya migradas por completo a `django-tables2` (0 instancias reales de Tabulator). **Cotizaciones** (via `TabulatorFactory.create()`, `cotizaciones.table.js`) y **Contabilidad** (1 uso real) siguen en Tabulator — transición conocida y ya documentada en `CLAUDE.md`/`PLAN_UNICO_CORRECCIONES.md` FASE 5-BIS, no es un hallazgo nuevo ni un bug, pero sí una inconsistencia de experiencia real entre esas 2 apps y las otras 13 (paginación/filtros/ordenamiento con chrome de UI distinto).
 - [ ] Formularios consistentes — **hallazgo confirmado con evidencia fresca (no nuevo, corrobora lo ya documentado por la misión UX de 2026-08-21):** el verbo del botón principal de creación sigue sin unificar entre apps — muestreo real: "Nuevo Proveedor"/"Nueva Categoría"/"Nueva Cuenta" (Proveedores, Inventario, Bancos, Proyectos) vs "Crear Orden"/"Crear Venta"/"Crear Gasto"/"Crear Area" (Compras, Ventas, Gastos, Empresa) vs "Guardar Cotización"/"Guardar Empleado"/"Guardar Cuenta" (Cotizaciones, Empleados, Bancos) vs "Agregar Item"/"Agregar Contacto" (Clientes, Compras, Ventas, para sub-formularios). Sigue clasificado como el mismo hallazgo transversal ya diferido antes (~20+ botones en archivos estables, alto volumen/bajo riesgo-beneficio para corregir en una sola pasada) — no corregido aquí por el mismo motivo.
 - [x] Offcanvas consistente — **auditado y confirmado limpio**: 0 violaciones reales de `bootstrap.Offcanvas.getOrCreateInstance()` sin el helper canónico en las 15 apps. Los 2 hits que aparecieron en el grep inicial no son violaciones: uno es un archivo `.md` de documentación histórica (Inventario), el otro es `empleados/devengo_editor.js`, ya revisado por la misión UX previa y confirmado como workaround deliberado de un bug real de timing de Bootstrap (no una duplicación descuidada).
-- [ ] Feedback consistente — no auditado a fondo esta pasada (requiere revisar uso de `SintelFeedback`/Notyf vs `alert()` nativo entre apps; candidato para una pasada dedicada)
+- [x] Feedback consistente — **auditado con evidencia real (grep dirigido de `SintelFeedback`,
+      `notyf`, `UIManager.showError/showSuccess/showInfo/notifyError/confirm`, `alert(` y `confirm(`
+      nativos sobre las 15 apps, 2026-09-17, continuación)**. Contrato real confirmado leyendo
+      `ui-manager.js`: `window.UIManager` es la fachada única documentada — internamente prefiere
+      `SintelFeedback` (SweetAlert2, `apps/tenant/core/static/core/js/utils/feedback.js`) y hace
+      fallback a `window.notyf` (Notyf, `core/js/common/notyf.init.js`) si `SintelFeedback` no está
+      disponible; ambos sistemas conviven a propósito como cadena de fallback, no como dos sistemas en
+      competencia.
+      **Hallazgo tranquilizador (no un problema):** los ~30 usos de `alert(` nativo encontrados en
+      Facturas (18, concentrados en `facturas_main.js`), Proveedores (3), Cotizaciones (1), Perfil (1)
+      y Proyectos (1) se verificaron uno por uno y **el 100% está gateado** con el mismo patrón
+      defensivo `if (w.UIManager/w.SintelFeedback disponible) {...} else { alert(...) }` — es el mismo
+      último recurso que ya usa `error_injector.js` (cargado globalmente) si el sistema principal no
+      cargó, no una ruta que se ejecute en producción con `UIManager` presente. No es la inconsistencia
+      que parecía a primera vista por volumen de `grep`.
+      **1 hallazgo real, corregido esta sesión:** `apps/tenant/proveedores/static/proveedores/js/
+      features/cuentas_pagar_editor.js:40` usaba `confirm()` nativo (bloqueante, sin estilo) para el
+      diálogo de "¿Eliminar esta obligación...?", mientras que `UIManager.confirm()` (SweetAlert2,
+      `await`-able, usado en 33 archivos de las 15 apps, incluyendo otros 2 archivos del **mismo** app
+      Proveedores — `proveedores_form.js:441`, `representante_editor.js`) es el patrón ya adoptado como
+      norma real del proyecto. Corregido a `if (!(await w.UIManager?.confirm(...))) return;`, igualando
+      el idioma exacto ya usado en `proveedores_form.js:441` del mismo módulo — cambio de una línea,
+      sin tocar lógica de negocio, verificado que `eliminarCuentaPagar()` ya era `async`.
+      28 archivos llaman `SintelFeedback.*` directamente y 6 llaman `notyf.*`/`window.notyf.*`
+      directamente en vez de pasar por `UIManager` — no es un bug (mismo resultado visual), es una
+      capa de indirección saltada de forma inconsistente entre apps; no se corrigió por ser un cambio
+      cosmético de gran volumen (30+ archivos) sin beneficio funcional, mismo criterio de no-tocar-lo-
+      estable que ya aplicó esta misión en otros hallazgos de bajo riesgo/alto volumen (ver "Formularios
+      consistentes" arriba).
 
 **Hallazgo real nuevo, con evidencia cuantificada (el aporte principal de esta fase):** el sistema de
 componentes UI compartidos (`apps/tenant/core/templatetags/sintel_ui.py`: `sintel_kpi_card`,
@@ -2030,16 +2101,93 @@ Empresa, Perfil, Dashboard) tienen **cero** uso de `{% load sintel_ui %}` ni de 
 compartidos — sus estados vacíos, tarjetas de KPI, barras de filtro y loaders son implementaciones
 ad-hoc por app, sin ninguna garantía de que se vean o se comporten igual entre sí. Esto es
 precisamente el problema que la Fase 59 de esta misión busca evitar ("el usuario no debería tener
-que aprender 15 interfaces diferentes"). **No se corrigió esta sesión** (retrofitear 10 apps para
-adoptar el sistema compartido es un esfuerzo de remediación considerable, fuera del alcance
-quirúrgico de esta pasada de auditoría) — queda documentado como el hallazgo de Cross-App UX más
-concreto y accionable para una futura fase dedicada.
+que aprender 15 interfaces diferentes").
 
-**Estado:** `PARTIAL` — 2 de 6 criterios auditados con evidencia real y cerrados (Tablas, Offcanvas),
+**Auditoría de retrofit real intentada esta continuación (2026-09-17):** en vez de dejar el 67% de
+no-adopción como una cifra sin explorar, se inspeccionó cada bloque ad-hoc candidato en las 10 apps
+contra los 3 componentes compartidos, aplicando el mismo criterio de equivalencia de la Fase 10
+(estructura + semántica + interacción + propósito, no solo parecido superficial). **Conclusión: no
+hay ningún candidato seguro de retrofit mecánico** — cada bloque examinado falla la equivalencia por
+una razón real y distinta, no por pereza de auditoría:
+- **KPI cards** (Facturas `list_factura.html`, Cotizaciones `list.html`): NO equivalentes.
+  Facturas tiene un desglose de 3 líneas actualizado por JS en vivo (Sub/IVA) y bordes de acento por
+  color; forzar `sintel_kpi_card` (icono+valor+label, una sola línea estática) perdería esa
+  información o exigiria extender el tag — exactamente lo que la Fase 10 prohibe sin decisión de
+  diseño explicita.
+- **Empty states** (`bi-inbox`, 7 archivos con markup propio fuera de los 5 adoptantes): los 7 casos
+  se revisaron uno por uno. `bancos/offcanvas_detalle_extracto.html` vive dentro de un `{% empty %}`
+  de tabla — usar el partial compartido (que trae `style="display:none"` para toggle via JS)
+  **introduciria un bug real**: el mensaje quedaria oculto para siempre porque nada lo muestra via JS
+  en ese contexto server-side. `proveedores/partials/representantes_directory.html` usa
+  `alert alert-info` (tratamiento visual con fondo de color), no el div plano del componente — un
+  estilo deliberadamente distinto, no una copia descuidada. `clientes/offcanvas_detalle_cliente.html`
+  y `proveedores/offcanvas_form.html` comparten entre si una variante "compacta" real (`py-4`, icono
+  2rem, texto `small`) usada de forma identica en 2 apps — es un segundo patron genuino, no ruido,
+  candidato a un futuro `data_attr`/variante de tamaño en el tag, no a forzarlo en el tag actual de
+  tamaño completo. `facturas/offcanvas_editar_factura.html` esta dentro de un `<td>` de tabla, contexto
+  incompatible con un `<div>` de bloque. `clientes/contactos_list.html` ya esta marcado `OBSOLETE` por
+  esta misma mision (Fase 9) — no vale la pena retrofitear un archivo que se espera eliminar.
+- **Loading spinners** (`spinner-border`, ~19 archivos): se encontro una duplicacion real de 3 vias
+  — `contabilidad/reporte_page.html`, `ventas/reportes_ventas_container.html` y
+  `core/reportes_landing.html` tienen markup **identico entre si** (`text-center py-5` +
+  `spinner-border text-primary opacity-50` + `<p class="text-muted mt-2">Cargando X...</p>`) pero
+  **no identico** a `loading_state.html`: le agregan `text-primary opacity-50` al spinner (color y
+  opacidad visibles) y le falta el `<span class="visually-hidden">Cargando...</span>` de accesibilidad
+  que si tiene el componente compartido. Adoptar el tag cambiaria visualmente el color/opacidad del
+  spinner en las 3 paginas — un cambio real, no neutro.
+- **Filter bar** (Bancos, Proveedores, Empleados, Facturas): el caso mas cercano es **Bancos**
+  (`list_bancos.html`), que coincide exactamente en wrapper (`input-group input-group-sm w-auto`),
+  `hx-trigger="keyup changed delay:400ms, search"` y `name="q"` — pero no tiene ningun icono de
+  busqueda hoy, mientras que `filter_bar.html` agrega un boton con icono `bi-search` despues del
+  input. Proveedores y Facturas usan el patron opuesto (icono como prefijo `input-group-text` dentro
+  del input-group, no como boton sufijo) — visualmente distinto del partial compartido.
+  Retrofitear cualquiera de los 4 cambiaria visualmente el toolbar.
+
+**Decision del usuario y ejecucion (2026-09-17, misma continuacion):** se presento el tradeoff
+explicitamente (5 candidatos de bajo riesgo, cambio visual real, sin poder verificar en navegador por
+la Fase 12 `BLOCKED`) y el usuario opto por **aplicar los 5 aceptando el riesgo cosmetico sin
+verificacion visual**, decision de producto que le corresponde a el, no a esta sesion. Ejecutado:
+- `apps/tenant/bancos/templates/tenant/bancos/list_bancos.html` — las 2 barras de busqueda (Cuentas,
+  Extractos) migradas a `{% include 'tenant/core/partials/ui/filter_bar.html' %}`, usando el mismo
+  idioma `{% url ... as X %}` + `{% include ... with search_url=X %}` ya establecido en
+  `compras_list.html`/`gastos_list.html`. Cambio visual real y esperado: aparece un boton con icono
+  `bi-search` despues del input (antes no habia icono).
+- `apps/tenant/contabilidad/templates/tenant/contabilidad/reporte_page.html`,
+  `apps/tenant/ventas/templates/tenant/ventas/reportes_ventas_container.html`,
+  `apps/tenant/core/templates/tenant/core/reportes_landing.html` — los 3 loaders identicos migrados a
+  `{% include 'tenant/core/partials/ui/loading_state.html' with entity="..." %}`. Cambio visual real:
+  el spinner pierde `text-primary opacity-50` (queda con el color por defecto de Bootstrap) y gana el
+  `<span class="visually-hidden">Cargando...</span>` de accesibilidad que no tenia.
+- Se verifico, en los 4 archivos, que ningun JS depende del markup interno del spinner/input (todos
+  reemplazan el contenedor completo via `innerHTML` o leen el campo solo por `id`/HTMX, nunca por
+  estructura interna) — grep dirigido sobre `reporte.ui.js`, `reportes_landing.js` y JS de Bancos, cero
+  dependencias encontradas.
+- **Verificacion de renderizado real ejecutada** (mitigacion parcial de no tener Capa 1): los 4
+  archivos se cargaron con `django.template.loader.get_template().render()` dentro del contenedor
+  Docker, activando el urlconf de tenant (`config.urls_tenant`) via `django.urls.set_urlconf` para que
+  `{% url 'bancos:...' %}` resolviera igual que en produccion. Los 4 renderizaron sin excepcion; el
+  HTML resultante de Bancos se inspecciono directamente y confirma que `id="search-cuenta"`,
+  `name="q"`, `hx-get="/ui/bancos/cuentas/tabla/"`, `hx-trigger="keyup changed delay:400ms, search"` y
+  `hx-target="#cuentas-panel"` se preservaron exactos — la unica diferencia real es el boton de icono
+  agregado, tal como se esperaba. Esto no reemplaza una captura de pantalla real (Fase 12 sigue
+  `BLOCKED`), pero es evidencia real de que el HTML generado es sintactica y funcionalmente correcto,
+  no solo "deberia verse igual" sin comprobar.
+
+**Estado:** `PARTIAL` (actualizado 2026-09-17, continuación) — 4 de 6 criterios auditados con
+evidencia real y cerrados (Tablas, Offcanvas, Toolbar, Feedback — estos 2 últimos cerrados en esta
+continuación, con 2 fixes quirúrgicos aplicados: `getOrCreateInstance()` ya venía corregido de una
+sesión previa en Proveedores, y el `confirm()` nativo de `cuentas_pagar_editor.js` se corrigió ahora),
 1 corroborado como ya conocido y sin resolver (Formularios/verbos), 1 hallazgo nuevo cuantificado y
-documentado sin corregir (adopción del sistema de componentes compartidos), 2 sin auditar por
-alcance de tiempo (Jerarquía, Toolbar, Feedback). No se puede declarar `PASS` — ver además que
-Jerarquía real de navegación depende de Capa 1 (Fase 12, `BLOCKED`) para verificarse en vivo.
+1 hallazgo de adopción auditado a fondo y parcialmente remediado (5 retrofits reales aplicados y
+verificados por render server-side: 2 barras de búsqueda en Bancos + 3 loaders duplicados en
+Contabilidad/Ventas/Core — adopción de `filter_bar.html`/`loading_state.html` sube de 2 apps
+(Compras, Gastos) a 3-4 según el componente, sin alcanzar el 100% porque el resto de los candidatos
+examinados **no eran equivalentes de verdad**, no por falta de tiempo — ver detalle arriba). Solo
+**Jerarquía** sigue sin auditar, y solo porque depende de Capa 1 (Fase 12, `BLOCKED`) para verificar
+navegación real en vivo — no por alcance de tiempo. No se puede declarar `PASS` pleno por ese único
+criterio bloqueado más el resto de la adopción de componentes compartidos (KPI cards de Facturas/
+Cotizaciones, empty states, filter bars de Proveedores/Facturas/Empleados) que se confirmó, con
+evidencia, que NO debe forzarse sin una decisión de diseño explícita.
 
 ---
 

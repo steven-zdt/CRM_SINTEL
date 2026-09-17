@@ -34,17 +34,8 @@
         
         {# Toolbar #}
         <div class="d-flex justify-content-between align-items-center mb-3" data-module="cuentas">
-          <div class="input-group input-group-sm w-auto">
-            <input type="text"
-                   id="search-cuenta"
-                   class="form-control"
-                   placeholder="Buscar cuenta..."
-                   data-module="cuentas"
-                   hx-get="{% url 'bancos:cuenta-tabla' %}"
-                   hx-trigger="keyup changed delay:400ms, search"
-                   hx-target="#cuentas-panel"
-                   name="q">
-          </div>
+          {% url 'bancos:cuenta-tabla' as cuentas_search_url %}
+          {% include 'tenant/core/partials/ui/filter_bar.html' with search_id="search-cuenta" placeholder="Buscar cuenta..." module="cuentas" search_url=cuentas_search_url target="#cuentas-panel" %}
           <button class="btn btn-primary btn-sm"
                   hx-get="/api/v1/bancos/cuentas/render-offcanvas/crear/"
                   hx-target="#offcanvas-container-bancos"
@@ -71,17 +62,8 @@
         
         {# Toolbar #}
         <div class="d-flex justify-content-between align-items-center mb-3" data-module="extractos">
-          <div class="input-group input-group-sm w-auto">
-            <input type="text"
-                   id="search-extracto"
-                   class="form-control"
-                   placeholder="Buscar extracto..."
-                   data-module="extractos"
-                   hx-get="{% url 'bancos:extracto-tabla' %}"
-                   hx-trigger="keyup changed delay:400ms, search"
-                   hx-target="#extractos-panel"
-                   name="q">
-          </div>
+          {% url 'bancos:extracto-tabla' as extractos_search_url %}
+          {% include 'tenant/core/partials/ui/filter_bar.html' with search_id="search-extracto" placeholder="Buscar extracto..." module="extractos" search_url=extractos_search_url target="#extractos-panel" %}
           <button class="btn btn-primary btn-sm"
                   hx-get="/api/v1/bancos/extractos/render-offcanvas/crear/"
                   hx-target="#offcanvas-container-bancos"

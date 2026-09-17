@@ -56,10 +56,7 @@
   </form>
 
   <div id="reportes-ventas-panel">
-    <div class="text-center py-5">
-      <div class="spinner-border text-primary opacity-50" role="status"></div>
-      <p class="text-muted mt-2">Cargando reporte...</p>
-    </div>
+    {% include 'tenant/core/partials/ui/loading_state.html' with entity="reporte" %}
   </div>
 </div>
 

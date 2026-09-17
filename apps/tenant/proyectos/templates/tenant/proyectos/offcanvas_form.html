@@ -659,19 +659,19 @@
               <!-- Formulario para crear tarea -->
               <div class="row g-2 mb-3 p-3 bg-light rounded">
                 <div class="col-md-2">
-                  <label class="form-label form-label-sm fw-bold">Inicio</label>
+                  <label for="tareas-fecha-inicio" class="form-label form-label-sm fw-bold">Inicio</label>
                   <input type="date" id="tareas-fecha-inicio" class="form-control form-control-sm">
                 </div>
                 <div class="col-md-2">
-                  <label class="form-label form-label-sm fw-bold">Fin</label>
+                  <label for="tareas-fecha-fin" class="form-label form-label-sm fw-bold">Fin</label>
                   <input type="date" id="tareas-fecha-fin" class="form-control form-control-sm">
                 </div>
                 <div class="col-md-3">
-                  <label class="form-label form-label-sm fw-bold">Título</label>
+                  <label for="tareas-titulo" class="form-label form-label-sm fw-bold">Título</label>
                   <input type="text" id="tareas-titulo" class="form-control form-control-sm" placeholder="Ej: Cableado">
                 </div>
                 <div class="col-md-2">
-                  <label class="form-label form-label-sm fw-bold">Prioridad</label>
+                  <label for="tareas-prioridad" class="form-label form-label-sm fw-bold">Prioridad</label>
                   <select id="tareas-prioridad" class="form-select form-select-sm">
                     <option value="NORMAL">Normal</option>
                     <option value="BAJA">Baja</option>
@@ -754,11 +754,11 @@
           <div class="row g-3 mb-4 pb-3 border-bottom">
             <h6 class="col-12 text-dark fw-bold"><i class="bi bi-info-circle me-2 text-secondary"></i>Contexto del Proyecto</h6>
             <div class="col-md-6">
-              <label class="form-label small text-muted">Cliente</label>
+              <label for="contexto-cliente-nombre" class="form-label small text-muted">Cliente</label>
               <input type="text" class="form-control bg-light" id="contexto-cliente-nombre" readonly>
             </div>
             <div class="col-md-6">
-              <label class="form-label small text-muted">Factura / Centro de Costos</label>
+              <label for="contexto-factura-costo-numero" class="form-label small text-muted">Factura / Centro de Costos</label>
               <input type="text" class="form-control bg-light" id="contexto-factura-costo-numero" readonly>
             </div>
           </div>

@@ -80,10 +80,7 @@
     <div class="tab-pane fade" id="panel-resultados" role="tabpanel">
       <div id="container-estado-resultados">
          <!-- El JS inyectará el contenido aquí -->
-         <div class="text-center py-5">
-            <div class="spinner-border text-primary opacity-50" role="status"></div>
-            <p class="text-muted mt-2">Cargando estado de resultados...</p>
-         </div>
+         {% include 'tenant/core/partials/ui/loading_state.html' with entity="estado de resultados" %}
       </div>
     </div>
 
