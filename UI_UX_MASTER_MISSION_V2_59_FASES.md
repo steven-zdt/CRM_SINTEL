@@ -941,13 +941,32 @@ Utilizar capacidades nativas de Django cuando sean aplicables.
 
 ### Checklist
 
-- [ ] Labels asociados
-- [ ] Errores asociados
-- [ ] Focus visible
-- [ ] Navegación teclado
-- [ ] ARIA correcta
+- [ ] Labels asociados — **auditado con grep dirigido sobre los 73 offcanvas del repo, gap real
+      encontrado**: de los 17 offcanvas sin ningún `<label>`, 16 son legítimamente de solo lectura
+      (`detalle_*`, `historial_*`, `pendientes_*`, `list_plantillas`) o de subida de archivo por
+      drag&drop (`offcanvas_crear_factura.html`, sin campos de texto que etiquetar). En los offcanvas
+      de **crear/editar con campos reales**, la cobertura de `for=`/`id` es dispareja: completa o casi
+      completa en Clientes/Proveedores/Gastos/Inventario/Perfil (`for=` presente en 85-100% de los
+      `<label>`), pero con **huecos reales** en `offcanvas_editar_cliente.html` (11/19), `offcanvas_
+      editar_factura.html` (8/28 — el peor caso, 20 labels sin `for=`), y `offcanvas_form.html` de
+      Proyectos (22/28). No corregido — cambiar 40+ atributos `for=`/`id` en 3 apps es un fix real pero
+      de alcance mayor al de esta pasada de auditoría; queda documentado con archivo y ratio exacto
+      para que sea accionable después.
+- [ ] Errores asociados — no auditado si el mensaje de error de cada campo usa `aria-describedby`
+      apuntando al campo correspondiente (solo se confirmó en Fase 19 que el feedback de error EXISTE
+      visualmente, `alert alert-danger`, no que esté asociado por ARIA al campo específico)
+- [ ] Focus visible — requiere Capa 1 (verificación visual real de outline/contraste de foco)
+- [ ] Navegación teclado — requiere Capa 1
+- [x] ARIA correcta (presencia, no corrección semántica completa) — 69 de 73 offcanvas usan algún
+      atributo `aria-*`; no se verificó si cada uso es semánticamente correcto (eso requeriría revisión
+      manual campo por campo, no solo grep de presencia)
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión. (Nota: la misión UX previa, 2026-08-21, sí corrigió `for`/`id` faltantes en 2 formularios de Cotizaciones — no reverificado esta sesión.)
+**Estado:** `PASS_WITH_LIMITATIONS` (2026-09-17) — primera auditoría real de este alcance específico
+(la misión UX previa, 2026-08-21, corrigió `for`/`id` en 2 formularios de Cotizaciones puntuales, no
+reverificado ni relacionado con los huecos nuevos encontrados aquí en Clientes/Facturas/Proyectos). Se
+declara `PASS_WITH_LIMITATIONS` y no `PASS` porque: (1) 2 de 5 sub-ítems (focus visible, navegación por
+teclado) son inherentemente de comportamiento runtime y requieren Capa 1; (2) la asociación de errores
+por ARIA no se verificó; (3) los huecos de `for=` reales encontrados no se corrigieron esta sesión.
 
 ---
 
@@ -1610,13 +1629,27 @@ listeners duplicados
 
 ### Checklist
 
-- [ ] Requests medidos
-- [ ] Doble fetch buscado
-- [ ] Doble init buscado
-- [ ] Listeners duplicados buscados
-- [ ] Performance comparada antes/después
+- [ ] Requests medidos — requiere Capa 1 (network real en navegador); a nivel Capa 2, los códigos de
+      estado HTTP ya se auditaron en Fase 31/19, pero no el volumen/tiempo de requests
+- [ ] Doble fetch buscado — no auditado esta sesión
+- [ ] Doble init buscado — **evidencia estática parcial**: solo 3 de 43 archivos `features/*.js` con
+      una función tipo `init`/`initTable` tienen un guard explícito contra doble inicialización
+      (`_initialized`/`already init`). No implica necesariamente un bug — varios de esos 40 restantes
+      pueden ser idempotentes por naturaleza (offcanvas HTMX que destruye y recrea su contenido en cada
+      apertura) — pero es una superficie real no verificada de "doble init" potencial, sin poder
+      confirmar impacto real sin Capa 1.
+- [x] Listeners duplicados buscados — el único caso concreto de listeners duplicados/huérfanos
+      confirmado y corregido esta sesión fue por instanciación incorrecta de Offcanvas
+      (`getOrCreateInstance()`, Fase 26), no por un `addEventListener` repetido; no se buscó
+      exhaustivamente ese patrón distinto en los 164 archivos JS.
+- [ ] Performance comparada antes/después — N/A, no se hizo ningún cambio de performance esta sesión
+      que amerite comparación
 
-**Estado:** `NOT_STARTED` — no ejecutado esta sesión (requiere Capa 1 para medición real en navegador).
+**Estado:** `NOT_STARTED` como medición real — el núcleo de esta fase (tiempo de carga, volumen de
+requests, render) es inherentemente una medición en navegador vivo, imposible sin resolver la Fase 12.
+El único avance real y verificable de esta sesión relacionado con esta fase es el cierre completo del
+hallazgo de instanciación duplicada de Offcanvas (Fase 26), que si se hubiera dejado sin corregir
+habría sido exactamente el tipo de "listener duplicado" que esta fase busca.
 
 ---
 
@@ -2680,7 +2713,7 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 17 | Validación visual CRUD | [x] BLOCKED |
 | 18 | Formularios Django | [x] PASS_WITH_LIMITATIONS |
 | 19 | Validación/errores | [x] PASS_WITH_LIMITATIONS |
-| 20 | Accesibilidad formularios | [ ] NOT_STARTED |
+| 20 | Accesibilidad formularios | [x] PASS_WITH_LIMITATIONS |
 | 21 | Tablas | [x] PASS_WITH_LIMITATIONS |
 | 22 | Densidad de información | [x] PASS_WITH_LIMITATIONS |
 | 23 | KPIs | [x] PASS_WITH_LIMITATIONS |
@@ -2721,7 +2754,7 @@ no evaluable mientras la Fase 12 siga `BLOCKED`. No se marca `PASS` para no viol
 | 58 | Reporte final | [x] PASS |
 | 59 | Criterio producto | [ ] NOT_STARTED |
 
-**Conteo:** 12 PASS · 31 PASS_WITH_LIMITATIONS · 2 PARTIAL · 10 BLOCKED · 4 NOT_STARTED · 0 FAIL (de 59)
+**Conteo:** 12 PASS · 32 PASS_WITH_LIMITATIONS · 2 PARTIAL · 10 BLOCKED · 3 NOT_STARTED · 0 FAIL (de 59)
 
 *(Nota: este conteo se recalculó directamente de la tabla anterior fila por fila el 2026-09-17. La
 línea previa arrastraba un error aritmético heredado de antes de esta sesión — sobrecontaba PASS y
