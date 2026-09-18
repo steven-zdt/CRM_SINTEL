@@ -86,10 +86,10 @@
         if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
         return callHttp('DELETE', `${API_BASE}/extractos/${uuid}/`);
       },
-      procesar: async (uuid) => {
-        console.log(`[${MOD}] extractos.procesar(${uuid})`);
+      procesar: async (uuid, forzar = false) => {
+        console.log(`[${MOD}] extractos.procesar(${uuid}, forzar=${forzar})`);
         if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
-        return callHttp('POST', `${API_BASE}/extractos/${uuid}/procesar/`);
+        return callHttp('POST', `${API_BASE}/extractos/${uuid}/procesar/`, { forzar: !!forzar });
       },
     },
 

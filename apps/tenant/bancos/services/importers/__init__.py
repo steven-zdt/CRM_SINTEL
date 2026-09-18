@@ -17,6 +17,7 @@ from apps.tenant.bancos.services.importers.base import (
     UnsupportedFormatError,
 )
 from apps.tenant.bancos.services.importers.csv_importer import CSVBankStatementImporter
+from apps.tenant.bancos.services.importers.pdf_importer import PDFBankStatementImporter
 from apps.tenant.bancos.services.importers.xlsx_importer import XLSXBankStatementImporter
 from apps.tenant.bancos.services.importers.xml_importer import XMLBankStatementImporter
 
@@ -24,6 +25,7 @@ from apps.tenant.bancos.services.importers.xml_importer import XMLBankStatementI
 _IMPORTERS = [
     XLSXBankStatementImporter(),
     CSVBankStatementImporter(),
+    PDFBankStatementImporter(),
     XMLBankStatementImporter(),
 ]
 
@@ -40,7 +42,7 @@ def get_importer_for(nombre_archivo: str) -> BankStatementImporter:
             return importer
     raise UnsupportedFormatError(
         f"Formato de archivo no soportado: '{nombre_archivo}'. "
-        f"Formatos soportados: XLSX, CSV. XML disponible solo para bancos con "
+        f"Formatos soportados: XLSX, CSV, PDF. XML disponible solo para bancos con "
         f"adapter configurado."
     )
 
@@ -50,6 +52,7 @@ __all__ = [
     "UnsupportedFormatError",
     "XLSXBankStatementImporter",
     "CSVBankStatementImporter",
+    "PDFBankStatementImporter",
     "XMLBankStatementImporter",
     "get_importer_for",
 ]

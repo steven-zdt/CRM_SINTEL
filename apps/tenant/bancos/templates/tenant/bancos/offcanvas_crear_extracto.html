@@ -75,10 +75,11 @@
             <input type="number" class="form-control" id="anio" name="anio" min="2020" max="2035" value="2026" required>
           </div>
           <div class="col-12">
-            <label for="archivo" class="form-label">Archivo de Extracto (.xls, .xlsx) *</label>
-            <input type="file" class="form-control" id="archivo" name="archivo" accept=".xls,.xlsx" required>
+            <label for="archivo" class="form-label">Archivo de Extracto (.xls, .xlsx, .csv, .pdf) *</label>
+            <input type="file" class="form-control" id="archivo" name="archivo" accept=".xls,.xlsx,.csv,.pdf" required>
             <div class="form-text text-muted small">
-              Sube el archivo Excel con las transacciones bancarias.
+              Formatos soportados: Excel (.xlsx), CSV y PDF (con texto extraible -- no escaneado).
+              Tamaño máximo: 20 MB.
             </div>
           </div>
         </div>

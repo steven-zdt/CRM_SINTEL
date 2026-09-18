@@ -59,6 +59,18 @@
     }
   });
 
+  // ── Helpers de error (POST procesar con forzar=true) ──────────────────
+  function _mensajeError(res) {
+    const detail = res?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) return detail.join(', ');
+    return 'No se pudo procesar el extracto.';
+  }
+
+  function _requiereForzar(res) {
+    return res?.status === 422 && /forzar=true/i.test(_mensajeError(res));
+  }
+
   // ── Configurar eventos del formulario crear ───────────────────────────
   function _bindCrear(container) {
     const form = container.querySelector('#extracto-form');
@@ -84,7 +96,13 @@
         if (!uuid) return;
         btnProcesar.disabled = true;
         btnProcesar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Procesando...';
-        const res = await w.Sintel.Bancos.API?.extractos?.procesar(uuid);
+        let res = await w.Sintel.Bancos.API?.extractos?.procesar(uuid);
+        // Fase 24 (importacion no destructiva): el backend rechaza reprocesar
+        // un extracto con conciliaciones/aplicaciones salvo forzar=true --
+        // se ofrece confirmar y reintentar en vez de dejar al usuario sin salida.
+        if (!res?.ok && _requiereForzar(res) && w.confirm(_mensajeError(res))) {
+          res = await w.Sintel.Bancos.API?.extractos?.procesar(uuid, true);
+        }
         if (!res?.ok) {
           btnProcesar.disabled = false;
           btnProcesar.innerHTML = '<i class="bi bi-cpu me-1"></i>Procesar';

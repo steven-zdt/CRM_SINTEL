@@ -196,20 +196,17 @@ class TransaccionBancariaCRUDService:
             transaccion.conciliado,
         )
 
-        # Disparador cross-app: recalcular estado_pago de la factura.
-        # Pull Model: Bancos notifica a Facturas sin FK directa.
-        # Solo se dispara si hay factura_uuid vinculada.
+        # Reestructuracion arquitectonica v4.0.0 F2 (Facturas = document
+        # store): se removio el disparo cross-app hacia
+        # FacturaInterAppAPI.recalcular_estado_pago_automatico() -- ese
+        # metodo (y las properties total_pagado_bancos/saldo_pendiente de
+        # las que dependia) se eliminaron de Facturas en la misma pasada.
+        # Bancos ya no escribe estado_pago en Factura; la conciliacion
+        # vive enteramente en Bancos (campo `conciliado` + aplicaciones,
+        # ver MovimientoBancarioAplicacion). El unico efecto lateral que
+        # sigue vivo es el abono en Cartera (abajo), que es una
+        # integracion Bancos->Clientes independiente, no Bancos->Facturas.
         if transaccion.factura_uuid:
-            try:
-                from apps.tenant.facturas.services.business_service import FacturaInterAppAPI
-                FacturaInterAppAPI.recalcular_estado_pago_automatico(transaccion.factura_uuid)
-            except Exception as exc:
-                # No bloquear la conciliacion por fallo en el recalculo
-                logger.warning(
-                    "[TransaccionBancariaCRUD] recalcular_estado_pago fallido para factura_uuid=%s: %s",
-                    transaccion.factura_uuid, exc
-                )
-
             # DEUDA-C03 "Clientes + Cartera" (decision del usuario,
             # 2026-09-11): Cartera es la UNICA SSoT real de pagos -- al
             # conciliar una transaccion contra una Factura de VENTA, Bancos
@@ -244,13 +241,26 @@ class TransaccionBancariaCRUDService:
 
 
 class MovimientoBancarioAplicacionCRUDService:
-    """Fase 5-7 (mision Bancos v3.0): CRUD de aplicaciones multiples por
-    movimiento. Deliberadamente NO dispara ningun efecto lateral cross-app
-    (Cartera, estado_pago) -- ese automatismo sigue siendo exclusivo del
-    vinculo legado 1:1 (TransaccionBancariaCRUDService.conciliar_transaccion),
-    documentado en AUDITORIA_FLUJO_COMPLETO.md v3.0 §5. Esta capa solo
-    clasifica/aplica y sincroniza el flag `conciliado` hacia arriba (nunca
-    lo revierte a False -- evita pisar un vinculo legado ya completo)."""
+    """Fase 5-7 (mision Bancos v3.0) + BANCOS_PDF_APLICACIONES_01 Fase 07/12:
+    CRUD de aplicaciones multiples por movimiento.
+
+    Cuando tipo_referencia=FACTURA_VENTA con referencia_uuid resuelto, SI
+    sincroniza un abono en Cartera (unica SSoT real de pagos de cliente) via
+    CarteraBusinessService.registrar_abono()/registrar_abono_desde_conciliacion_bancaria()
+    (ver _sincronizar_cartera(), best-effort, nunca bloquea la aplicacion
+    bancaria si Cartera falla).
+    Antes de aplicar, valida `monto_aplicado <= saldo_disponible_factura`
+    leyendo el saldo real de Cartera -- Bancos NO reimplementa esa formula
+    (Cartera.saldo ya la calcula). Si no existe una Cartera para esa
+    factura (soft-reference sin resolver, ej. nunca sincronizada), no se
+    bloquea -- mismo criterio de soft-references ya usado en todo el
+    proyecto (Kardex, Retenciones, conciliar_transaccion).
+
+    Igual que el vinculo legado: editar/eliminar una aplicacion NO revierte
+    un abono ya sincronizado (Cartera no tiene hoy un mecanismo de reverso,
+    limitacion conocida y documentada, no resuelta aqui). Editar SI
+    sincroniza el incremento cuando el monto_aplicado sube para la MISMA
+    factura (nunca decrementos, nunca al cambiar de referencia)."""
 
     @staticmethod
     def _validar_no_sobreaplicar(transaccion: TransaccionBancaria, monto_nuevo: Decimal, excluir_uuid=None):
@@ -271,6 +281,68 @@ class MovimientoBancarioAplicacionCRUDService:
                 )
             })
         return monto_existente
+
+    @staticmethod
+    def _validar_saldo_factura(tipo_referencia: str, referencia_uuid, empresa_id: int, monto: Decimal):
+        """BANCOS_PDF_APLICACIONES_01 Fase 12: monto_aplicado <= saldo Cartera.
+
+        Lee el saldo real desde Cartera (SSoT ya existente) -- no reimplementa
+        la formula. Si no existe una Cartera para esa factura todavia, no
+        bloquea (soft-reference sin resolver, mismo criterio del resto del
+        proyecto)."""
+        if tipo_referencia != "FACTURA_VENTA" or not referencia_uuid:
+            return
+        from apps.tenant.clientes.models import Cartera
+
+        cartera = Cartera.objects.filter(
+            empresa_id=empresa_id, factura_uuid=referencia_uuid
+        ).only("saldo", "numero_factura").first()
+        if cartera is None:
+            return
+        if monto - cartera.saldo > TOLERANCIA_APLICACION:
+            raise ValidationError({
+                "monto_aplicado": (
+                    f"El monto aplicado ({monto}) excede el saldo pendiente de la "
+                    f"factura {cartera.numero_factura} en Cartera ({cartera.saldo})."
+                )
+            })
+
+    @staticmethod
+    def _sincronizar_cartera(tipo_referencia: str, referencia_uuid, empresa_id: int, monto: Decimal, fecha):
+        """Registra el abono en Cartera para FACTURA_VENTA (best-effort,
+        nunca bloquea la aplicacion bancaria -- ver docstring de clase).
+
+        Si la Cartera ya existe, abona directamente sobre ella
+        (CarteraBusinessService.registrar_abono(), que NO exige una Factura
+        real -- solo la Cartera). Si todavia no existe, intenta el camino
+        legado (registrar_abono_desde_conciliacion_bancaria(), que SI
+        requiere una Factura real de naturaleza VENTA para poder crearla) --
+        si tampoco hay Factura, no hace nada (soft-reference sin resolver)."""
+        if tipo_referencia != "FACTURA_VENTA" or not referencia_uuid or monto <= 0:
+            return
+        try:
+            from apps.tenant.clientes.models import Cartera
+            from apps.tenant.clientes.services.business_service import CarteraBusinessService
+
+            cartera = Cartera.objects.filter(
+                empresa_id=empresa_id, factura_uuid=referencia_uuid
+            ).only("uuid", "estado_pago").first()
+
+            if cartera is not None:
+                if cartera.estado_pago == "PAGADA":
+                    return
+                CarteraBusinessService.registrar_abono(
+                    empresa_id=empresa_id, cartera_uuid=cartera.uuid, monto=monto,
+                )
+            else:
+                CarteraBusinessService.registrar_abono_desde_conciliacion_bancaria(
+                    empresa_id=empresa_id, factura_uuid=referencia_uuid, monto=monto, fecha=fecha,
+                )
+        except Exception as exc:
+            logger.warning(
+                "[MovimientoBancarioAplicacionCRUD] No se pudo sincronizar abono en Cartera "
+                "para factura_uuid=%s: %s", referencia_uuid, exc,
+            )
 
     @staticmethod
     def _sincronizar_conciliado(transaccion: TransaccionBancaria):
@@ -298,17 +370,24 @@ class MovimientoBancarioAplicacionCRUDService:
         transaccion = TransaccionBancaria.objects.select_for_update().get(pk=transaccion.pk)
 
         monto_aplicado = data["monto_aplicado"]
+        tipo_referencia = data["tipo_referencia"]
+        referencia_uuid = data.get("referencia_uuid")
+        fecha_aplicacion = data.get("fecha_aplicacion") or timezone.localdate()
+
         MovimientoBancarioAplicacionCRUDService._validar_no_sobreaplicar(transaccion, monto_aplicado)
+        MovimientoBancarioAplicacionCRUDService._validar_saldo_factura(
+            tipo_referencia, referencia_uuid, empresa.id, monto_aplicado
+        )
 
         aplicacion = MovimientoBancarioAplicacion(
             empresa=empresa,
             transaccion=transaccion,
-            tipo_referencia=data["tipo_referencia"],
-            referencia_uuid=data.get("referencia_uuid"),
+            tipo_referencia=tipo_referencia,
+            referencia_uuid=referencia_uuid,
             tercero_tipo=data.get("tercero_tipo"),
             tercero_uuid=data.get("tercero_uuid"),
             monto_aplicado=monto_aplicado,
-            fecha_aplicacion=data.get("fecha_aplicacion") or timezone.localdate(),
+            fecha_aplicacion=fecha_aplicacion,
             notas=data.get("notas"),
             origen_matching=data.get("origen_matching", "MANUAL"),
             confianza=data.get("confianza"),
@@ -317,6 +396,9 @@ class MovimientoBancarioAplicacionCRUDService:
         aplicacion.save()
 
         MovimientoBancarioAplicacionCRUDService._sincronizar_conciliado(transaccion)
+        MovimientoBancarioAplicacionCRUDService._sincronizar_cartera(
+            tipo_referencia, referencia_uuid, empresa.id, monto_aplicado, fecha_aplicacion
+        )
 
         logger.info(
             "[MovimientoBancarioAplicacionCRUD] Creada aplicacion uuid=%s tipo=%s monto=%s tx=%s",
@@ -329,9 +411,28 @@ class MovimientoBancarioAplicacionCRUDService:
     def editar_aplicacion(aplicacion: MovimientoBancarioAplicacion, data: dict) -> MovimientoBancarioAplicacion:
         transaccion = TransaccionBancaria.objects.select_for_update().get(pk=aplicacion.transaccion_id)
 
+        tipo_referencia_previo = aplicacion.tipo_referencia
+        referencia_uuid_previa = aplicacion.referencia_uuid
+        monto_previo = aplicacion.monto_aplicado
+
+        monto_nuevo = data.get("monto_aplicado", monto_previo)
         if "monto_aplicado" in data:
             MovimientoBancarioAplicacionCRUDService._validar_no_sobreaplicar(
-                transaccion, data["monto_aplicado"], excluir_uuid=aplicacion.uuid
+                transaccion, monto_nuevo, excluir_uuid=aplicacion.uuid
+            )
+        tipo_referencia_final = data.get("tipo_referencia", tipo_referencia_previo)
+        referencia_uuid_final = data.get("referencia_uuid", referencia_uuid_previa)
+        # El saldo de Cartera YA descuenta el monto previamente aplicado por
+        # esta misma aplicacion -- solo el INCREMENTO (delta) compite por el
+        # saldo restante, nunca el monto_nuevo completo.
+        if (
+            tipo_referencia_final == "FACTURA_VENTA"
+            and referencia_uuid_final == referencia_uuid_previa
+            and monto_nuevo > monto_previo
+        ):
+            MovimientoBancarioAplicacionCRUDService._validar_saldo_factura(
+                tipo_referencia_final, referencia_uuid_final,
+                aplicacion.empresa_id, monto_nuevo - monto_previo,
             )
 
         for field in ("tipo_referencia", "referencia_uuid", "tercero_tipo", "tercero_uuid",
@@ -342,6 +443,20 @@ class MovimientoBancarioAplicacionCRUDService:
         aplicacion.save()
 
         MovimientoBancarioAplicacionCRUDService._sincronizar_conciliado(transaccion)
+
+        # Solo sincroniza el INCREMENTO cuando la aplicacion sigue apuntando
+        # a la misma factura (nunca decrementos, nunca al reasignar la
+        # referencia -- ver docstring de clase, Cartera no revierte abonos).
+        if (
+            tipo_referencia_previo == "FACTURA_VENTA"
+            and tipo_referencia_final == "FACTURA_VENTA"
+            and referencia_uuid_final == referencia_uuid_previa
+            and monto_nuevo > monto_previo
+        ):
+            MovimientoBancarioAplicacionCRUDService._sincronizar_cartera(
+                tipo_referencia_final, referencia_uuid_final, aplicacion.empresa_id,
+                monto_nuevo - monto_previo, aplicacion.fecha_aplicacion,
+            )
         return aplicacion
 
     @staticmethod

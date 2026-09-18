@@ -117,6 +117,45 @@ Balance interno (inicial + creditos - debitos = final) -- OK, cuadra exacto
 ```
 Ver `apps/tenant/bancos/tests/test_import_xlsx_real_fixture.py`.
 
+### v3.0.1 (2026-09-14) — Confirmacion: ya consume el contrato nuevo de Facturas (Fase 12/13 "PROMPT MAESTRO")
+
+La mision de reestructuracion de `facturas` (v4.0.0) elimino `BancosBridge` y
+`FacturaInterAppAPI.recalcular_estado_pago_automatico()` del lado de Facturas
+(Bancos->Facturas de escritura). Se audito el codigo real de Bancos para
+confirmar si requeria un rediseño -- **no lo requiere**: el unico punto de
+contacto de Bancos con Facturas ya era, desde que se escribio v3.0 en esta
+misma sesion, una lectura pura via `FacturaInterAppAPI.get_by_id()`
+(`services/crud_service.py::conciliar_transaccion()`, solo para validar que
+la fecha del pago no sea anterior a la fecha de emision del documento -- REM
+P1-04). Bancos nunca escribio en `Factura`; el estado de conciliacion vive
+enteramente en el dominio de Bancos (`TransaccionBancaria.conciliado` +
+`MovimientoBancarioAplicacion`). Se removio unicamente la llamada al metodo
+de escritura eliminado en Facturas (el disparo del abono en Cartera, una
+integracion Bancos->Clientes independiente, se mantuvo intacto). Verificado
+con `pytest apps/tenant/bancos/tests/` completo tras el cambio: **58 passed,
+0 failed** -- mismo resultado que antes, sin regresion. Fase 12/13 del
+"PROMPT MAESTRO" ("rediseñar/migrar Bancos al nuevo contrato de Facturas")
+se da por **satisfecha sin cambios adicionales**, ya que el contrato ya
+cumplido era el correcto desde el diseño original de v3.0.
+
+### Fix de alineacion frontend<->backend (2026-09-14, hallazgo real de esta pasada)
+
+Sincronizando el frontend contra el backend tras Fase 2/3 de la mision de
+Facturas se encontro un gap real, preexistente, no relacionado con esa
+mision: el endpoint `POST /extractos/{uuid}/procesar/` (Fase 24, importacion
+no destructiva) rechaza con 422 reprocesar un extracto que ya tiene
+transacciones conciliadas/aplicaciones, pidiendo reintentar con
+`{"forzar": true}` en el body -- pero `bancos.api.js::extractos.procesar()`
+nunca aceptaba ni enviaba ese parametro, y ni `extracto_editor.js` (boton
+"Procesar" del panel detalle) ni `extracto_list.js` (accion de fila) ofrecian
+al usuario una forma de reintentar: el 422 se mostraba como error terminal
+sin salida. Corregido: `procesar(uuid, forzar=false)` ahora envia
+`{forzar}`; ambos callers detectan el 422 con el mensaje "forzar=true" del
+backend, muestran `confirm()` con el mensaje real del servidor, y reintentan
+con `forzar=true` si el usuario acepta. Verificado con `node --check` sobre
+los 3 archivos (sin runtime de navegador disponible en este pase, ver nota
+de Fase 35 abajo).
+
 ### DEFERRED explicito (no fabricado, documentado para una fase posterior)
 
 | Item | Por que se deja fuera |

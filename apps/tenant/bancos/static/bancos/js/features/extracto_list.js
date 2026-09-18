@@ -17,6 +17,13 @@
     d.body.dispatchEvent(new CustomEvent('extracto-updated'));
   }
 
+  function _detalle(res) {
+    const detail = res?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) return detail.join(', ');
+    return 'No se pudo procesar el extracto.';
+  }
+
   // init()/redraw() ya no inicializan nada (el panel HTMX se auto-carga con
   // hx-trigger="load"); se conservan como no-ops porque bancos.main.js las
   // invoca al activarse el tab/sub-tab de extractos.
@@ -33,7 +40,18 @@
     const api = w.Sintel.Bancos.API;
     if (!api || !api.extractos) return;
 
-    const res = await api.extractos.procesar(uuid);
+    let res = await api.extractos.procesar(uuid);
+
+    // Fase 24 (importacion no destructiva): el backend rechaza reprocesar un
+    // extracto con conciliaciones/aplicaciones salvo forzar=true -- se ofrece
+    // confirmar y reintentar en vez de dejar al usuario sin salida.
+    if (!res.ok && res.status === 422 && /forzar=true/i.test(_detalle(res))) {
+      if (w.UIManager?.hideLoading) w.UIManager.hideLoading();
+      if (w.confirm(_detalle(res))) {
+        if (w.UIManager?.showLoading) w.UIManager.showLoading('Reprocesando extracto bancario...');
+        res = await api.extractos.procesar(uuid, true);
+      }
+    }
 
     if (w.UIManager?.hideLoading) {
       w.UIManager.hideLoading();
