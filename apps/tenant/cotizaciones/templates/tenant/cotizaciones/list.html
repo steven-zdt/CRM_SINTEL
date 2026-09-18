@@ -1,74 +1,24 @@
+{% load sintel_ui %}
 {# list.html - Listado principal de Cotizaciones v3.10 #}
 {# Assets se cargan desde workspace.html, NO incluir aqui para evitar doble carga #}
 <div class="ui-module ui-cotizaciones" role="region" aria-label="Modulo de Cotizaciones">
 
   {# === KPIs === #}
+  {% comment %}
+  CROSSAPP-UI-01: 5 de 6 KPIs migrados a sintel_kpi_card (F33.9) -- markup
+  identico. `value_id` (extension del primitivo) porque este modulo aun no
+  migro su grilla a django-tables2+HTMX (Fase 5-BIS, sigue en Tabulator) y
+  cotizaciones.table.js actualiza cada valor via getElementById() al cargar
+  la tabla, no via context server-side. "Monto Total" NO se migro: usa un
+  font-size custom para el valor (moneda larga), mismo criterio que
+  proyectos/partials/tabla_proyectos.html.
+  {% endcomment %}
   <div class="row g-3 mb-3" id="cotizaciones-kpis">
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-file-earmark-text text-primary"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cot-total" class="fs-4 fw-bold lh-1 mb-1">-</div>
-            <div class="small text-muted text-truncate">Total</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-pencil-square text-secondary"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cot-borrador" class="fs-4 fw-bold lh-1 mb-1">-</div>
-            <div class="small text-muted text-truncate">Borrador</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-send text-info"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cot-enviada" class="fs-4 fw-bold lh-1 mb-1">-</div>
-            <div class="small text-muted text-truncate">Enviadas</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-check2-circle text-success"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cot-aceptada" class="fs-4 fw-bold lh-1 mb-1">-</div>
-            <div class="small text-muted text-truncate">Aceptadas</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-danger bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-clock-history text-danger"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cot-vencidas" class="fs-4 fw-bold lh-1 mb-1">-</div>
-            <div class="small text-muted text-truncate">Vencidas</div>
-          </div>
-        </div>
-      </div>
-    </div>
+    {% sintel_kpi_card icon="file-earmark-text" color="primary" value="-" label="Total" value_id="kpi-cot-total" %}
+    {% sintel_kpi_card icon="pencil-square" color="secondary" value="-" label="Borrador" value_id="kpi-cot-borrador" %}
+    {% sintel_kpi_card icon="send" color="info" value="-" label="Enviadas" value_id="kpi-cot-enviada" %}
+    {% sintel_kpi_card icon="check2-circle" color="success" value="-" label="Aceptadas" value_id="kpi-cot-aceptada" %}
+    {% sintel_kpi_card icon="clock-history" color="danger" value="-" label="Vencidas" value_id="kpi-cot-vencidas" %}
     <div class="col-6 col-md-4 col-xl-2">
       <div class="card border-0 shadow-sm h-100">
         <div class="card-body py-3 px-3 d-flex align-items-center gap-2">

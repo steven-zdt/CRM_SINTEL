@@ -16,12 +16,17 @@ register = template.Library()
 
 
 @register.inclusion_tag('tenant/core/partials/ui/kpi_card.html')
-def sintel_kpi_card(icon, color, value, label, col_class='col-6 col-md-4 col-xl-2'):
+def sintel_kpi_card(icon, color, value, label, col_class='col-6 col-md-4 col-xl-2', value_id=None):
     """
     Card de metrica (icono en circulo + numero + label), F33.0 §1 --
     copiada verbatim en 7 archivos antes de esta consolidacion.
 
     Uso: {% sintel_kpi_card icon="people" color="primary" value=kpis.total label="Total" %}
+
+    `value_id` (opcional): id HTML en el div del valor, para modulos que aun
+    no migraron su grilla a django-tables2+HTMX (Fase 5-BIS) y actualizan el
+    KPI via JS client-side (`document.getElementById(...)`) en vez de
+    recibirlo ya resuelto en el context del render server-side.
     """
     return {
         'icon': icon,
@@ -29,6 +34,7 @@ def sintel_kpi_card(icon, color, value, label, col_class='col-6 col-md-4 col-xl-
         'value': value,
         'label': label,
         'col_class': col_class,
+        'value_id': value_id,
     }
 
 
