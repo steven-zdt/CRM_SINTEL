@@ -25,6 +25,7 @@ tests/e2e/test-results/
 # Artefactos generados localmente
 staticfiles/
 media/
+media_private/
 scratch/
 brain/
 ARTIFACTS/
