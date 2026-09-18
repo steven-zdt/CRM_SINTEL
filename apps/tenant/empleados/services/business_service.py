@@ -11,7 +11,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -425,6 +425,50 @@ class DevengoBusinessService:
         return None
 
     @staticmethod
+    def validar_no_solapamiento(
+        empleado_id: int,
+        fecha_inicio,
+        fecha_fin,
+        periodo_mes: str,
+        empresa_id: int,
+        devengo_id_excluir: int = None,
+    ) -> None:
+        """
+        Rechaza una nomina cuyo rango laborado se solape con otra nomina
+        activa del mismo empleado (mision PERIODOS-NOMINA-01, 2026-09-11).
+
+        Si la nomina entrante no trae fecha_inicio/fecha_fin (flujo legado
+        de solo periodo_mes), compara contra otras nominas del empleado que
+        tampoco tengan fechas y compartan el mismo periodo_mes -- no se
+        puede comparar rangos que no existen.
+        """
+        qs = Devengo.objects.filter(
+            empleado_id=empleado_id, empresa_id=empresa_id, anulado=False,
+        )
+        if devengo_id_excluir:
+            qs = qs.exclude(pk=devengo_id_excluir)
+
+        if fecha_inicio and fecha_fin:
+            qs = qs.filter(
+                Q(fecha_inicio__isnull=False, fecha_fin__isnull=False,
+                  fecha_inicio__lte=fecha_fin, fecha_fin__gte=fecha_inicio)
+            )
+        else:
+            qs = qs.filter(
+                Q(fecha_inicio__isnull=True) | Q(fecha_fin__isnull=True),
+                periodo_mes=periodo_mes,
+            )
+
+        conflicto = qs.only('id', 'periodo_mes', 'fecha_inicio', 'fecha_fin').first()
+        if conflicto:
+            raise ValidationError({
+                'fecha_inicio': (
+                    f'Ya existe una nomina activa (ID {conflicto.id}) que cubre dias '
+                    f'solapados para este empleado en el periodo {conflicto.periodo_mes}.'
+                )
+            })
+
+    @staticmethod
     @transaction.atomic
     def procesar_devengo(
         empleado: Empleado,
@@ -467,11 +511,20 @@ class DevengoBusinessService:
         if instance and instance.anulado:
             raise ValidationError({'anulado': 'No se puede actualizar una nomina anulada.'})
 
+        # WARNING: mision PERIODOS-NOMINA-01 (2026-09-11): lock de fila para
+        # serializar creaciones concurrentes del mismo empleado -- sin esto,
+        # dos requests simultaneos pueden pasar ambos la validacion de
+        # solapamiento/duplicado (lectura) antes de que cualquiera persista.
+        # El UniqueConstraint de DB sigue siendo la ultima linea de defensa.
+        Empleado.objects.select_for_update().get(pk=empleado.id)
+
         # Extraer datos
         dias_laborados = data.get('dias_laborados', instance.dias_laborados if instance else 30)
         otros_devengos = data.get('otros_devengos', Decimal('0'))
         prestamos = data.get('prestamos', Decimal('0'))
         periodo_mes = data.get('periodo_mes')
+        fecha_inicio = data.get('fecha_inicio', instance.fecha_inicio if instance else None)
+        fecha_fin = data.get('fecha_fin', instance.fecha_fin if instance else None)
 
         # Validar limite de dias
         if periodo_mes and dias_laborados:
@@ -482,6 +535,16 @@ class DevengoBusinessService:
                 empresa_id=empresa_id,
                 devengo_id_excluir=instance.pk if instance else None
             )
+
+        # Validar no-solapamiento de dias laborados con otra nomina activa
+        DevengoBusinessService.validar_no_solapamiento(
+            empleado_id=empleado.id,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            periodo_mes=periodo_mes,
+            empresa_id=empresa_id,
+            devengo_id_excluir=instance.pk if instance else None,
+        )
 
         # Calcular nomina
         calculo = NominaCalculationService.calcular_liquidacion(
@@ -510,7 +573,6 @@ class DevengoBusinessService:
         else:
             # FASE 1: Resolucion DIAN
             from apps.tenant.empleados.models import ResolucionDIAN, TransmisionNominaDIAN
-            import hashlib
             from django.utils.dateparse import parse_date as _parse_date
 
             fecha_pago = data.get('fecha_pago')
@@ -593,10 +655,16 @@ class DevengoBusinessService:
             data_copy.pop('empleado', None)
             devengo = DevengoCRUDService.crear_devengo(empleado, data_copy)
 
-            # Generar numero de documento y CUNE
+            # Generar numero de documento, CUNE y XML NominaIndividual firmado
+            # (DEUDA-11 -- ver apps/tenant/empleados/services/dian/, formula/
+            # estructura NO verificadas contra el Anexo Tecnico oficial, mismo
+            # criterio que DIANAdapter en apps/tenant/core/dian/adapters.py).
             numero_documento = resolucion_activa.formar_consecutivo(consecutivo_actual)
-            cune_raw = f"{numero_documento}{devengo.uuid}{fecha_pago}"
-            cune = hashlib.sha256(cune_raw.encode('utf-8')).hexdigest()
+            xml_firmado, cune = DevengoBusinessService._generar_xml_nomina_dian(
+                devengo=devengo, empleado=empleado, contrato=contrato,
+                resolucion=resolucion_activa, numero_documento=numero_documento,
+                fecha_pago=fecha_pago, empresa_id=empresa_id,
+            )
 
             TransmisionNominaDIAN.objects.create(
                 empresa_id=empresa_id,
@@ -604,7 +672,8 @@ class DevengoBusinessService:
                 resolucion=resolucion_activa,
                 numero_documento=numero_documento,
                 cune=cune,
-                estado_dian='PENDIENTE'
+                estado_dian='PENDIENTE',
+                xml_enviado=xml_firmado,
             )
 
             # Incrementar consecutivo
@@ -612,6 +681,109 @@ class DevengoBusinessService:
             resolucion_activa.save(update_fields=['consecutivo'])
 
         return devengo
+
+    @staticmethod
+    def _generar_xml_nomina_dian(
+        devengo: Devengo, empleado: Empleado, contrato: Contrato,
+        resolucion, numero_documento: str, fecha_pago, empresa_id: int,
+    ) -> tuple[str, str]:
+        """
+        Construye el DTO de Nomina Electronica, calcula el CUNE y genera el
+        XML NominaIndividual firmado (DEUDA-11). Retorna (xml_firmado_str,
+        cune). Ver apps/tenant/empleados/services/dian/ -- formula CUNE y
+        estructura XML NO verificadas contra el Anexo Tecnico oficial (mismo
+        criterio de honestidad que DIANAdapter, apps/tenant/core/dian/adapters.py).
+
+        Si `apps.tenant.core.dian.XadesSignerService` no tiene certificado
+        configurado (`settings.DIAN_CERT_P12` vacio), retorna el XML sin
+        firmar -- mismo comportamiento "modo borrador" que Factura
+        Electronica (ver apps/tenant/core/dian/xades_signer.py).
+        """
+        from apps.tenant.core.dian import XadesSignerService
+        from apps.tenant.empleados.services.dian import CuneService, NominaXMLBuilderService
+        from apps.tenant.empresa.models import Empresa
+
+        empresa = Empresa.objects.only(
+            "id", "nit", "dv", "razon_social", "direccion", "ciudad",
+        ).get(id=empresa_id)
+
+        ahora = timezone.now()
+        fec_nie = fecha_pago.isoformat() if hasattr(fecha_pago, "isoformat") else str(fecha_pago)
+        hor_nie = ahora.strftime("%H:%M:%S") + "-05:00"
+
+        total_devengado = (
+            devengo.salario_base + devengo.auxilio_transporte
+            + devengo.valor_horas_extras + devengo.otros_devengos
+        )
+        total_deducciones = (
+            devengo.salud_empleado + devengo.pension_empleado
+            + devengo.prestamos + devengo.descuentos_operativos
+        )
+
+        dto = {
+            "num_nie": numero_documento,
+            "fec_nie": fec_nie,
+            "hor_nie": hor_nie,
+            "tipo_xml": "102",
+            "tip_amb": "2",
+            "periodo": {
+                "fecha_ingreso": empleado.fecha_ingreso.isoformat() if empleado.fecha_ingreso else "",
+                "fecha_liquidacion_inicio": devengo.fecha_inicio.isoformat() if devengo.fecha_inicio else "",
+                "fecha_liquidacion_fin": devengo.fecha_fin.isoformat() if devengo.fecha_fin else "",
+                "tiempo_laborado_dias": devengo.dias_laborados,
+            },
+            "empleador": {
+                "nit": empresa.nit, "dv": empresa.dv or "0",
+                "razon_social": empresa.razon_social,
+                "direccion": empresa.direccion, "ciudad": empresa.ciudad,
+            },
+            "trabajador": {
+                "tipo_documento": empleado.tipo_documento,
+                "numero_documento": empleado.numero_documento,
+                "primer_apellido": empleado.primer_apellido,
+                "segundo_apellido": empleado.segundo_apellido,
+                "primer_nombre": empleado.primer_nombre,
+                "segundo_nombre": empleado.segundo_nombre,
+                "tipo_contrato": contrato.tipo,
+                "cargo": contrato.cargo,
+                "salario": contrato.salario_mensual,
+            },
+            "pago": {"forma": "1", "metodo": "42", "fecha_pago": fec_nie},
+            "devengados": {
+                "dias_trabajados": devengo.dias_laborados,
+                "salario_basico": devengo.salario_base,
+                "auxilio_transporte": devengo.auxilio_transporte,
+                "horas_extras": devengo.valor_horas_extras,
+                "otros": devengo.otros_devengos,
+                "total": total_devengado,
+            },
+            "deducciones": {
+                "salud": devengo.salud_empleado,
+                "pension": devengo.pension_empleado,
+                "otros": devengo.prestamos + devengo.descuentos_operativos,
+                "total": total_deducciones,
+            },
+            "total_pago": devengo.neto_pagar,
+            "resolucion": {
+                "numero_autorizacion": resolucion.numero_resolucion,
+                "prefijo": resolucion.prefijo,
+                "desde": resolucion.rango_desde,
+                "hasta": resolucion.rango_hasta,
+                "fecha_inicio": resolucion.fecha_inicio.isoformat(),
+                "fecha_fin": resolucion.fecha_fin.isoformat(),
+            },
+        }
+
+        cune = CuneService.calcular(
+            num_nie=numero_documento, fec_nie=fec_nie, hor_nie=hor_nie,
+            val_dev=total_devengado, val_ded=total_deducciones, val_pag=devengo.neto_pagar,
+            nit_empleador=empresa.nit, num_doc_trabajador=empleado.numero_documento,
+            cl_tec=resolucion.clave_tecnica, tipo_xml="102", tip_amb="2",
+        )
+
+        xml_sin_firmar = NominaXMLBuilderService.build(dto, cune)
+        xml_firmado = XadesSignerService.sign(xml_sin_firmar)
+        return xml_firmado.decode("utf-8"), cune
 
     @staticmethod
     @transaction.atomic
@@ -887,6 +1059,84 @@ class PeriodoNominaBusinessService:
 
 class NominaCalculationService:
     """Calculos de nomina segun normativa colombiana."""
+
+    # ---------------------------------------------------------------
+    # Aportes A CARGO DEL EMPLEADOR (mision "Periodos de Nomina" seccion
+    # 15-19, 2026-09-11) -- SSoT separada de las deducciones al empleado
+    # (4%+4% ya aplicadas en calcular_liquidacion()). Tarifas oficiales:
+    # EPS/pension patronal (art. 204 Ley 100/1993 y art. 20 Ley 100/1993),
+    # parafiscales (Ley 21/1982, Ley 89/1988), ARL por clase de riesgo
+    # (Decreto 1607/2002, valores minimos de tabla).
+    # ---------------------------------------------------------------
+    EPS_PATRONAL_PCT = Decimal('0.085')
+    PENSION_PATRONAL_PCT = Decimal('0.12')
+    CAJA_COMPENSACION_PCT = Decimal('0.04')
+    ICBF_PCT = Decimal('0.03')
+    SENA_PCT = Decimal('0.02')
+    ARL_PATRONAL_PCT_POR_RIESGO = {
+        'I':   Decimal('0.00522'),
+        'II':  Decimal('0.01044'),
+        'III': Decimal('0.02436'),
+        'IV':  Decimal('0.04350'),
+        'V':   Decimal('0.06960'),
+    }
+
+    @staticmethod
+    def calcular_aportes_patronales(ibc, tipo_contrato: str, nivel_riesgo_arl: str = 'I') -> dict:
+        """
+        Aportes de seguridad social y parafiscales a cargo del EMPLEADOR
+        sobre un IBC ya calculado por calcular_liquidacion() (mismo
+        salario_base persistido en Devengo -- nunca recalcula el IBC).
+
+        SUPUESTOS DOCUMENTADOS (no hay evidencia normativa que sustente algo
+        distinto en el dominio actual -- ver DEUDA-30, AUDITORIA_FLUJO_EMPLEADOS.md):
+        - PRESTACION: el "empleador" no cotiza (contrato civil, el
+          contratista cotiza como independiente) -- retorna todo en cero,
+          mismo criterio que las deducciones de empleado.
+        - ARL usa el valor MINIMO de tabla por clase de riesgo (Decreto
+          1607/2002) -- la tarifa real negociada con la ARL puede variar
+          dentro del rango min-max autorizado por clase; sin ese dato
+          contractual en el sistema se usa el minimo legal, nunca inventado.
+        - NO aplica la exoneracion de aportes ICBF/SENA (Ley 1607/2012 art.
+          25) -- depende del regimen tributario de la empresa, dato que hoy
+          no existe en el modelo Empresa. Se calcula el aporte COMPLETO
+          como cota superior conservadora del costo real, documentado como
+          deuda tecnica (DEUDA-30), no como bug.
+        """
+        ibc = _to_decimal(ibc)
+        ceros = {
+            'eps_patronal': Decimal('0.00'), 'pension_patronal': Decimal('0.00'),
+            'arl_patronal': Decimal('0.00'), 'caja_compensacion': Decimal('0.00'),
+            'icbf': Decimal('0.00'), 'sena': Decimal('0.00'),
+            'total_aportes_patronales': Decimal('0.00'),
+        }
+        if tipo_contrato == 'PRESTACION' or ibc <= Decimal('0'):
+            return ceros
+
+        tarifa_arl = NominaCalculationService.ARL_PATRONAL_PCT_POR_RIESGO.get(
+            nivel_riesgo_arl, NominaCalculationService.ARL_PATRONAL_PCT_POR_RIESGO['I']
+        )
+
+        eps_patronal = ibc * NominaCalculationService.EPS_PATRONAL_PCT
+        pension_patronal = ibc * NominaCalculationService.PENSION_PATRONAL_PCT
+        arl_patronal = ibc * tarifa_arl
+        caja_compensacion = ibc * NominaCalculationService.CAJA_COMPENSACION_PCT
+        icbf = ibc * NominaCalculationService.ICBF_PCT
+        sena = ibc * NominaCalculationService.SENA_PCT
+        total = eps_patronal + pension_patronal + arl_patronal + caja_compensacion + icbf + sena
+
+        def _q(v):
+            return v.quantize(MONEY_Q, rounding=ROUND_HALF_UP)
+
+        return {
+            'eps_patronal': _q(eps_patronal),
+            'pension_patronal': _q(pension_patronal),
+            'arl_patronal': _q(arl_patronal),
+            'caja_compensacion': _q(caja_compensacion),
+            'icbf': _q(icbf),
+            'sena': _q(sena),
+            'total_aportes_patronales': _q(total),
+        }
 
     @staticmethod
     def calcular_liquidacion(

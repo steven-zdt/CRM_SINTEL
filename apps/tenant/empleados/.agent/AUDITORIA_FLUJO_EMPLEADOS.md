@@ -1,10 +1,178 @@
 # [PORTAL] Auditoría y SSoT: Módulo Empleados
 
-**Versión:** v4.11.0 (SINTEL v3.16.x)
-**Estado:** ⚠️ PRODUCTION READY CON DEUDAS DOCUMENTADAS (ver §Deudas Técnicas — la auditoría 2026-09-10 encontró y corrigió 3 brechas críticas de negocio en 2 pasadas; quedan 2 abiertas, ver abajo)
+**Versión:** v4.13.0 (SINTEL v3.16.x)
+**Estado:** ⚠️ PRODUCTION READY CON DEUDAS DOCUMENTADAS (ver §Deudas Técnicas — quedan 5 abiertas, ver abajo. DEUDA-31 es la más grande: workflow de aprobación/pago INDIVIDUAL por empleado dentro de un período, sección 20-38 del prompt "Periodos de Nómina" — deliberadamente diferido, no implementado en esta pasada). **Re-auditado 2026-09-12** (`docs/remediation/AUDIT_BASELINE_20260912.md`) sin CRÍTICOS nuevos — ver nota abajo.
 **Ubicación:** `apps/tenant/empleados/`
-**Última Auditoría:** 2026-09-10 (v4.11.0: corrección arquitectónica — liquidación individual por período, días laborados independientes por empleado; base v4.10.0 sin cambios salvo lo indicado)
-**Auditor:** Claude Sonnet 5 (Anthropic) — v4.9.0, v4.10.0, v4.11.0. v4.8.1 y anteriores: Claude Haiku 4.5 (Anthropic)
+**Última Auditoría:** 2026-09-11 (v4.13.0: Centro de Control de Período — aportes patronales EPS/AFP/ARL/parafiscales + costo total empresa en `resumen`; base v4.12.0 sin cambios salvo lo indicado. Ver también v4.12.1 debajo: integridad PERIODOS-NOMINA-01, ya en el working tree antes de esta pasada). Re-verificación 2026-09-12.
+**Auditor:** Claude Sonnet 5 (Anthropic) — v4.9.0, v4.10.0, v4.11.0, v4.12.0, v4.12.1, v4.13.0. v4.8.1 y anteriores: Claude Haiku 4.5 (Anthropic)
+
+---
+
+## 2026-09-12 — Re-auditoría transversal (docs/remediation/AUDIT_BASELINE_20260912.md), sin fixes aplicados
+
+Auditoría independiente ("Empleados / Períodos de Nómina") como parte de
+la misión transversal de 7 apps. **Confirmó** (no re-inventó) DEUDA-31
+(sin Revisar/Aprobar/Devolver/Cancelar por Devengo individual, sin
+selección múltiple) y DEUDA-25-CERRADO ("Preliquidar" fuerza 30 días
+iguales para todos, decisión consciente ya documentada) como deuda ya
+conocida — no se re-abren como hallazgos nuevos. **1 hallazgo nuevo real,
+no CRÍTICO** (E-4, MEDIO): las acciones críticas de período (Aprobar,
+Marcar como pagado, Cerrar) no tienen diálogo de confirmación en
+`periodo_detail.js` (`ACCIONES_POR_ESTADO`) — solo `anular` lo tiene, pese
+a que `CERRADO` es un estado terminal sin transiciones de salida
+(`TRANSICIONES_VALIDAS['CERRADO'] = set()`). También: código muerto en
+`PeriodoNominaCRUDService.actualizar_estado` (`return contrato`
+inalcanzable) y un `min="0.1"` en el HTML del formulario de devengo que no
+coincide con el mínimo real del backend (0.5). **Esta fase (Fase 1, "solo
+los 5 CRÍTICO") no tocó código de esta app** — ninguno de los hallazgos de
+`empleados` fue CRÍTICO. Pendiente para una fase ALTO/MEDIO futura.
+
+---
+
+## v4.13.0 — Centro de Control de Período: Aportes Patronales + Costo Total Empresa (2026-09-11)
+
+**Contexto:** continuación de la misión "PROMPT DE EJECUCIÓN — Auditoría,
+Corrección de Lógica de Negocio y Perfeccionamiento de UI — Módulo Períodos
+de Nómina". Esa misión pide (secciones 15-19) que "Períodos de Nómina"
+evolucione a un centro de control del gasto, mostrando no solo el neto
+pagado sino también aportes patronales (ARL/EPS/AFP/parafiscales) y el
+costo total real para la empresa — nunca inventados en frontend, siempre
+calculados en Backend.
+
+**Encontrado:** `PeriodoNominaSelector.get_resumen()` (FASE 9, ya
+existente) solo agregaba devengado/deducciones/neto del **empleado** — el
+motor de nómina (`NominaCalculationService`) nunca calculaba nada a cargo
+del **empleador**. Sin ese cálculo, la UI no tenía ningún dato real que
+mostrar para "costo total empresa" (regla de la misión: "si el backend no
+expone un concepto, no simularlo en frontend").
+
+**Corregido:**
+- `NominaCalculationService.calcular_aportes_patronales(ibc, tipo_contrato,
+  nivel_riesgo_arl)` (nuevo, `business_service.py`) — EPS patronal (8.5%),
+  pensión patronal (12%), ARL por clase de riesgo I-V (Decreto 1607/2002,
+  valores mínimos de tabla), Caja de Compensación (4%), ICBF (3%), SENA
+  (2%). Contratos `PRESTACION` retornan todo en cero (mismo criterio que
+  las deducciones de empleado). Opera sobre el mismo `salario_base`
+  (IBC) ya persistido en `Devengo` — nunca recalcula el devengo.
+- `PeriodoNominaSelector.get_resumen()` ahora itera los `Devengo` no
+  anulados del período (`select_related('empleado', 'contrato')`) y agrega
+  `aportes_patronales` (desglose por concepto), `total_aportes_patronales`
+  y `costo_total_empresa` (= `total_devengado` + `total_aportes_patronales`
+  — nunca el neto, que ya tiene las deducciones del empleado restadas).
+- `periodo_detail.js` — nueva sección "Resumen Financiero" en el offcanvas
+  de detalle de período: devengado → deducciones empleado → neto, luego
+  desglose de aportes patronales, luego costo total empresa. Jerarquía
+  visual pedida por la misión (sección 38), todos los valores desde
+  `GET .../resumen/`, ninguno calculado en JS.
+- Tests nuevos: `tests/test_periodo_resumen_financiero.py` (4 casos: cálculo
+  exacto de cada aporte para un empleado INDEF clase de riesgo I, ARL varía
+  correctamente por clase de riesgo (I vs V), período sin devengos reporta
+  ceros, contrato PRESTACION no genera aportes patronales pero sí cuenta el
+  devengado).
+
+**Supuestos documentados (no inventados — ver DEUDA-30):** ARL usa el valor
+mínimo de tabla por clase (la tarifa real negociada puede variar dentro del
+rango autorizado); NO se aplica la exoneración de ICBF/SENA de la Ley
+1607/2012 art. 25 porque el régimen tributario de la empresa no es un dato
+que el modelo `Empresa` capture hoy — se calcula el aporte completo como
+cota superior conservadora, nunca subestimada.
+
+**Deliberadamente NO implementado en esta pasada (ver DEUDA-31):** el
+workflow de revisión/aprobación/devolución/cancelación **individual por
+empleado** dentro de un período (secciones 20-38 del prompt), con
+selección múltiple, aprobación masiva y autorización de pago
+individual/masiva/de período completo. Hoy la aprobación sigue siendo
+**a nivel de período completo** (`PeriodoNominaBusinessService.
+TRANSICIONES_VALIDAS`, ya existente desde v4.9.0) — un `Devengo`
+individual no tiene estado propio de revisión (`anulado` es la única
+bandera). Implementarlo correctamente requiere una máquina de estados
+nueva en `Devengo` (migración + guards + tests + UI con checkboxes) que
+es, en tamaño y riesgo, una misión separada — no se improvisó a medias
+para no dejar un estado inconsistente a mitad de camino.
+
+---
+
+## v4.12.1 — Integridad de Liquidación Individual: Duplicados, Solapamiento y Concurrencia (2026-09-11)
+
+**Contexto:** mission "PERIODOS-NOMINA-01" (secciones 1-14 del prompt
+"Periodos de Nómina") — ya estaba en el working tree al iniciar esta
+sesión de auditoría; se documenta aquí porque el archivo nunca lo
+registró como versión propia.
+
+**Corregido:**
+- **Unicidad a nivel de Base de Datos:** `models.py`, migración `0016` —
+  `UniqueConstraint(fields=['empleado', 'periodo'], condition=Q(anulado=False),
+  name='uniq_nomina_activo_per_empleado_periodo')`. Antes de esto, la única
+  regla de "un empleado no puede tener dos nóminas válidas en el mismo
+  período" vivía solo en `DevengoSerializer.validate()` (aplicación) — sin
+  respaldo de base de datos.
+- **Solapamiento de rango laborado:** `DevengoBusinessService.
+  validar_no_solapamiento()` (nuevo) — rechaza una nómina cuyo
+  `fecha_inicio`/`fecha_fin` se solape con otra nómina activa del mismo
+  empleado; si no hay fechas (flujo legado), compara por `periodo_mes`.
+- **Concurrencia:** `procesar_devengo()` ahora toma
+  `Empleado.objects.select_for_update().get(pk=empleado.id)` antes de
+  validar duplicado/solapamiento — serializa creaciones concurrentes del
+  mismo empleado; el `UniqueConstraint` de BD sigue siendo la última línea
+  de defensa si dos requests pasan la validación de lectura antes de que
+  cualquiera persista.
+- Tests: `test_liquidacion_individual_por_periodo.py` amplía cobertura
+  (duplicado rechazado, período cerrado bloquea nueva liquidación).
+
+---
+
+## v4.12.0 — Vista de Detalle de Nómina + PDF + Rename "Colaboradores" (2026-09-11)
+
+**Contexto:** segunda mitad de la sesión de auditoría de nómina iniciada el
+2026-09-10 (ver v4.11.0 y v4.10.0 arriba), retomada y cerrada el 2026-09-11.
+
+**Cambios:**
+- **Vista de detalle de nómina dedicada, solo lectura** —
+  `offcanvas_detalle_devengo.html` (nuevo): antes "Ver" en
+  `DevengoDetailTable` reutilizaba el mismo template de crear/editar
+  (`offcanvas_crear_devengo.html`) pasando `devengo` en el contexto — sin
+  garantía de UX de solo-lectura, aunque el backend ya bloqueaba
+  `update`/`partial_update` con 405 (ver DEUDA-28, ahora CERRADO). El nuevo
+  template desglosa devengados/deducciones por concepto y agrega botón
+  "Generar Desprendible PDF".
+- **Desprendible de nómina en PDF** — `devengo_pdf.html` (nuevo), mismo
+  patrón que `liquidacion_pdf.html` ya existente para
+  `LiquidacionPrestacion`. Nueva acción `pdf` en `DevengoViewSet`
+  (`GET /api/v1/empleados/devengos/<uuid>/pdf/`).
+- **Fix real encontrado auditando con datos reales (servidor vivo, no solo
+  lectura de código):** `DevengoViewSet.get_queryset()` retorna la
+  INSTANCIA (no un QuerySet) para acciones que no son `list` — un primer
+  intento de `render_offcanvas_detalle()` encadenaba
+  `.select_related().get()` sobre eso y crasheaba con 500. Corregido usando
+  `self.get_object()`, el patrón ya usado por el resto de acciones del
+  mismo ViewSet.
+- **Fix `info_empleado()`:** solo aceptaba UUID (500 si llegaba PK entero;
+  `cargarInfoEmpleado()` en `devengo_editor.js` manda PK). Ahora acepta
+  ambos, mismo criterio dual que `UUIDOrPKRelatedField` ya usa en otros
+  endpoints vía serializer.
+- **`DevengoDetailTable.render_acciones()`** (`tables.py`): botón Ver ahora
+  abre el offcanvas de detalle dedicado + botón PDF (link directo
+  `target=_blank`), además del botón Anular ya existente.
+- **`nomina_list.js`:** nuevo handler `.btn-ver-nomina` →
+  `abrirDetalleNomina()`, mismo patrón que
+  `liquidacion_list.js::abrirDetalleLiquidacion()`.
+- **Rename UI "Empleados" → "Colaboradores"** (solo texto visible: label
+  del sidebar en `workspace.js`, header h1, subtítulo, stat label,
+  sub-tab y panel master de Nóminas en `empleados_list.html`) — IDs y
+  `data-module` internos NO se tocaron.
+- **Reorden de pestañas** en `empleados_list.html`: Resoluciones DIAN,
+  Empleados, Contratos, **Períodos de Nómina** (antes al final), Nóminas,
+  Liquidaciones.
+- **Fix de bug real de plantillas Django:** un comentario `{# ... #}`
+  MULTILÍNEA se filtraba como texto literal en el HTML renderizado —
+  Django `{# #}` solo es válido en una sola línea. Corregido en
+  `empleados_list.html` y `offcanvas_crear_devengo.html`. Ver "Gotchas"
+  abajo — aplica a todo el proyecto, no solo a este módulo.
+
+**Tests:** 2 casos nuevos en `test_devengos_api_smoke.py`
+(`test_info_empleado_acepta_pk_entero_y_uuid`, `test_devengo_detalle_y_pdf`).
+7/7 tests del archivo verificados en verde (venv local,
+`pytest apps/tenant/empleados/tests/test_devengos_api_smoke.py`, 2026-09-11).
 
 ---
 
@@ -696,7 +864,7 @@ masterTable.on('rowClick', _seleccionarEmpleado);
 
 | ID | Archivo | Prioridad | Descripción | Estado |
 |---|---|---|---|---|
-| DEUDA-11 | `TransmisionNominaDIAN` | MEDIA | XML UBL 2.1 no implementado. Infraestructura lista. `estado_dian='PENDIENTE'` indefinidamente. Fase 2 pendiente. | **ABIERTO** |
+| DEUDA-11 | `TransmisionNominaDIAN` | MEDIA | XML UBL 2.1 no implementado. Infraestructura lista. `estado_dian='PENDIENTE'` indefinidamente. Fase 2 pendiente. | **AVANZADO (2026-09-18)** -- ver detalle abajo |
 | DEUDA-06-CERRADO | `api/viewsets.py` | ~~ALTA~~ | `_RESOLUCION_LIST_FIELDS` y `_LIQUIDACION_LIST_FIELDS` agregados. Ambos `get_queryset()` usan `.only()`. | CERRADO |
 | DEUDA-07-CERRADO | `business_service.py` | ~~CRÍTICA~~ | `calcular_dias_360()` corregido. Verified: año=360d, 2do sem=180d, Q1=90d. Impacto financiero ~$6.000 COP/empleado/período. | CERRADO |
 | DEUDA-21-CERRADO | `api/viewsets.py` | ~~CRÍTICA~~ | `perform_create()` → `create()` completo pre-calcula campos antes de `is_valid()`. | CERRADO |
@@ -706,8 +874,72 @@ masterTable.on('rowClick', _seleccionarEmpleado);
 | DEUDA-25-CERRADO | `api/serializers.py`, `api/viewsets.py`, frontend | ~~CRÍTICA~~ | `DevengoSerializer` no tenía campo `periodo` — imposible liquidar individualmente a un empleado dentro de un `PeriodoNomina` (la única vía, `preliquidar_periodo()`, fuerza 30 días para todos). Corregido v4.11.0: campo `periodo` + endpoints `empleados-pendientes`/`empleados-liquidados` + UI de tabs Pendientes/Liquidados. Ver sección v4.11.0 arriba. | CERRADO |
 | DEUDA-26 | `business_service.py` (`preliquidar_periodo`) | BAJA (documentada, no oculta) | El batch `preliquidar_periodo()` sigue generando una base de 30 días idéntica para todos los elegibles — sigue siendo válido como atajo rápido, pero ya no es la única vía (ver DEUDA-25-CERRADO); su docstring ahora aclara explícitamente que la liquidación individual es la vía recomendada para días reales por empleado. No se eliminó ni se modificó su comportamiento para no romper `test_periodo_nomina_state_machine.py`. | **ABIERTO (por diseño, bajo impacto)** |
 | DEUDA-27 | `tables.py` (`PeriodoNominaTable`) | BAJA | Columnas nuevas `empleados_count`/`total_neto_periodo` (FASE 23, histórico) verificadas manualmente en shell (queryset anotado + valores correctos) pero sin test automatizado dedicado a la tabla/vista HTML. | **ABIERTO** |
-| DEUDA-28 | `api/viewsets.py` (`DevengoViewSet.render_offcanvas_detalle`) | MEDIA | FASE 19 pide una vista de "revisión individual" de solo lectura para cada Devengo. Hoy `render_offcanvas_detalle` reutiliza el MISMO template que crear (`offcanvas_crear_devengo.html`) pasando `devengo` en el contexto — no es un template de detalle dedicado ni garantiza que los campos queden deshabilitados/no editables en la UI (el backend sí bloquea `update`/`partial_update` con 405, así que no hay riesgo de escritura real, pero la UX no comunica claramente "solo lectura"). | **ABIERTO** |
+| DEUDA-28-CERRADO | `api/viewsets.py` (`DevengoViewSet.render_offcanvas_detalle`), `offcanvas_detalle_devengo.html` | ~~MEDIA~~ | FASE 19 pedía una vista de "revisión individual" de solo lectura para cada Devengo; `render_offcanvas_detalle` reutilizaba el MISMO template que crear. Corregido v4.12.0: template de detalle dedicado (`offcanvas_detalle_devengo.html`) + botón PDF, `render_offcanvas_detalle()` reescrito con `self.get_object()` (fix del bug de `get_queryset()` devolviendo instancia). | CERRADO |
 | DEUDA-29 | Frontend (`static/empleados/js/`) | BAJA (arquitectura, no funcional) | FASE 30 de la misión pide un objeto `NominaStore` explícito como única fuente de verdad en el cliente. No se implementó: el patrón actual ya evita la causa raíz que ese Store buscaría prevenir (Tabulator/HTML nunca calculan pendientes ni montos — todo viene de `fetch` a los endpoints backend en cada apertura/refresco), pero el estado vive disperso en variables de módulo (`_periodoActualUuid`, `_periodoContexto`, etc.) en vez de un objeto centralizado. Refactor de arquitectura pura, alto esfuerzo/riesgo de regresión, sin beneficio funcional adicional sobre lo ya corregido — no se hizo en esta pasada. | **ABIERTO (arquitectura, bajo impacto funcional)** |
+| DEUDA-30 | `business_service.py` (`calcular_aportes_patronales`) | MEDIA (supuesto legal documentado) | ARL usa el valor MÍNIMO de tabla por clase de riesgo (Decreto 1607/2002) — la tarifa real negociada con la ARL puede ser distinta dentro del rango autorizado por clase; y NO se aplica la exoneración de ICBF/SENA (Ley 1607/2012 art. 25) porque el régimen tributario de la empresa no es un dato que el modelo `Empresa` capture hoy. El aporte patronal calculado es una cota superior conservadora (nunca subestimada), no un valor certificado contra la parametrización fiscal real de cada tenant. | **ABIERTO (supuesto documentado, no oculto)** |
+| DEUDA-31 | `business_service.py`, `api/viewsets.py`, frontend `periodo_detail.js` | ALTA (funcionalidad pedida, no implementada) | El prompt "Periodos de Nómina" secciones 20-38 pide revisión/aprobación/devolución/cancelación **individual por empleado** dentro de un período, con selección múltiple, aprobación masiva y autorización de pago individual/masiva/de período completo (con confirmación mostrando impacto económico). Hoy la aprobación sigue siendo SOLO a nivel de período completo (`PeriodoNominaBusinessService.TRANSICIONES_VALIDAS`) — `Devengo` no tiene estado de revisión propio (solo `anulado`). Requiere una máquina de estados nueva en `Devengo` (migración + guards + tests + UI con checkboxes) — misión separada por tamaño/riesgo, no improvisada a medias. | **ABIERTO (diferido explícitamente — ver v4.13.0)** |
+
+---
+
+### DEUDA-11 (2026-09-18) — XML NominaIndividual + CUNE real al procesar un Devengo
+
+**Que se hizo:** `apps/tenant/empleados/services/dian/` (nuevo paquete):
+`CuneService.calcular()` (formula CUNE propia, ya no el placeholder
+`SHA256(numero_documento+devengo.uuid+fecha_pago)` que existia antes) y
+`NominaXMLBuilderService.build()` (XML `NominaIndividual` completo:
+control DIAN, Empleador, Trabajador, Pago, Devengados, Deducciones,
+Resumen). `DevengoBusinessService._generar_xml_nomina_dian()` (nuevo,
+`business_service.py`) construye el DTO desde `Devengo`/`Empleado`/
+`Contrato`/`Empresa`/`ResolucionDIAN`, calcula el CUNE, genera el XML y lo
+firma con `apps.tenant.core.dian.XadesSignerService.sign()` (mismo
+servicio ya compartido con Factura Electronica desde NOMINA-03, ver
+`docs/nomina/NOMINA_DIAN_AUDIT.md`) -- `TransmisionNominaDIAN.xml_enviado`
+ahora queda poblado con el XML real (firmado si hay certificado DIAN
+configurado, sin firmar en modo borrador si no -- mismo comportamiento que
+Factura Electronica).
+
+**Bug real encontrado (y corregido en el codigo nuevo) durante esta
+pasada:** el patron `ET.Element(tag, attrib={"xmlns": NS[...]})` +
+`root.set("xmlns:prefix", ...)` manual, ya usado en
+`UBL21BuilderService._build_invoice()` (facturas), produce XML con
+atributos `xmlns:*` DUPLICADOS (`ElementTree.tostring()` los vuelve a
+emitir automaticamente via `register_namespace()`) -- confirmado
+reproduciendolo contra el propio `UBL21BuilderService`:
+`ET.fromstring()` sobre su salida lanza `ParseError: duplicate attribute`.
+Es decir, **el XML de Factura Electronica que ya esta en produccion segun
+`COMPLETO_FLUJO_FACTURAS.md` no es XML valido/parseable tal como se
+genera hoy** -- hallazgo nuevo, no corregido en `facturas` en esta pasada
+(fuera de alcance de DEUDA-11, requiere decision explicita antes de
+tocar el pipeline de Factura Electronica). `NominaXMLBuilderService`
+evita el bug (no declara `xmlns:*` a mano, deja que
+`register_namespace()` los genere solos).
+
+**Verificado (corrida limpia, sin contaminacion de otras corridas):**
+`pytest apps/tenant/empleados/tests/test_dian_nomina_electronica.py
+apps/tenant/empleados/tests/test_crud_smoke_v38.py` -> **28 passed**,
+incluye `test_transmision_nomina_dian_queda_con_xml_firmado` (crea un
+Devengo real via API, confirma `TransmisionNominaDIAN.xml_enviado` no
+vacio, XML parseable, CUNE de 96 hex chars presente en el XML y
+coincidente con `TransmisionNominaDIAN.cune`). No se pudo re-verificar
+`test_periodo_nomina_state_machine.py` en esta pasada por inestabilidad
+de infraestructura de la sesion (la base `test_sintel` se caia a mitad de
+creacion repetidamente, sin ningun traceback dentro del codigo tocado --
+0 excepciones de negocio, solo `OperationalError`/`SystemExit` de
+Postgres) -- pendiente de una corrida limpia en un entorno estable antes
+de dar por cerrado el regression gate completo de `empleados`.
+
+**NO VERIFICADO (bloqueador real, documentado, no oculto -- mismo
+criterio que `apps/tenant/core/dian/adapters.py`):** la formula exacta
+del CUNE (orden/nombres de campo) y la estructura exacta del XML
+`NominaIndividual` (namespaces, tags) estan reconstruidas de
+conocimiento publico general del Anexo Tecnico DSPNE v1.0, **no
+confirmadas contra el PDF oficial ni contra el ambiente de habilitacion
+DIAN**. Transmision SOAP real sigue sin existir (mismo bloqueador que
+Factura Electronica -- `DIANAdapter` no verificado, sin WSDL/certificado
+configurado en ningun entorno). No usar para transmitir a produccion sin
+antes: (1) confirmar CUNE/XML contra el Anexo Tecnico vigente, (2)
+validar contra un caso de prueba DIAN real, (3) resolver el bloqueador de
+transporte SOAP (compartido con facturas).
 
 ---
 
@@ -717,15 +949,16 @@ masterTable.on('rowClick', _seleccionarEmpleado);
 Sistema: 0 errores
 python manage.py check: 0 errores (verificado 2026-09-10)
 py_compile: OK (archivos tocados en v4.10.0)
-node --check: no disponible en este entorno (sin `node` instalado ni en host ni en contenedor `web`) -- cambio JS de v4.10.0 es un string agregado a un array literal, revisado manualmente.
+node --check: disponible en el HOST (v26.7.0, corrige nota anterior) aunque no en el contenedor `web` -- usado en v4.13.0 para validar los 17 .js modificados/nuevos de la sesion (incluye `periodo_detail.js`), 0 errores de sintaxis.
 Migraciones: 0015 aplicada en public + los 3 tenants (2026-09-10)
 ```
 
 ---
 
-**Última Actualización:** 2026-09-10 (v4.10.0)
+**Última Actualización:** 2026-09-11 (v4.13.0)
 **Auditor:** Claude Sonnet 5 (Anthropic)
-**Status:** ⚠️ PRODUCTION READY CON DEUDAS DOCUMENTADAS — ver §Deudas Técnicas (DEUDA-22, DEUDA-23 abiertas) — 23/23 AGENTS.md COMPLIANCE
-**Cambios v4.10.0:** Retiro de empleado controlado (`retirar_empleado()`) + indemnización por causal CST art. 64 (`calcular_indemnizacion_despido()`) + guard de liquidación definitiva sin retiro. Ver sección v4.10.0 arriba para el detalle completo.
-**Migraciones:** 0001–0015 (15 total, todas aplicadas)
-**Tests:** `tests/test_retiro_empleado.py` (nuevo, 8 casos) + `tests/test_empleados_delete.py` (actualizado) ejecutados via venv local 2026-09-10. `PeriodoNomina` (v4.9.0) sigue sin cobertura de tests (DEUDA-23).
+**Status:** ⚠️ PRODUCTION READY CON DEUDAS DOCUMENTADAS — ver §Deudas Técnicas (DEUDA-11, DEUDA-26, DEUDA-27, DEUDA-29, DEUDA-30, DEUDA-31 abiertas) — 23/23 AGENTS.md COMPLIANCE
+**Cambios v4.13.0:** Centro de control de período — aportes patronales EPS/AFP/ARL/parafiscales + costo total empresa en `GET periodos-nomina/{uuid}/resumen/`, sección "Resumen Financiero" en `periodo_detail.js`. Ver sección v4.13.0 arriba. **Pendiente explícitamente diferido:** workflow de aprobación/pago individual por empleado dentro de un período (DEUDA-31).
+**Cambios v4.12.1 (ya en el working tree al iniciar esta auditoría):** integridad de liquidación individual — `UniqueConstraint` de BD (migración 0016), `validar_no_solapamiento()`, `select_for_update()` en `procesar_devengo()`. Ver sección v4.12.1 arriba.
+**Migraciones:** 0001–0016 (16 total, todas aplicadas)
+**Tests:** `tests/test_periodo_resumen_financiero.py` (nuevo, 4 casos, v4.13.0) + `tests/test_liquidacion_individual_por_periodo.py` (5 casos, v4.12.1) + `tests/test_periodo_nomina_state_machine.py` (8 casos, v4.9.0) — ejecutados via `pytest apps/tenant/empleados/tests` en Docker, 2026-09-11 (ver resultado real antes de asumir vigente, no se copia aquí un conteo que no se haya verificado en esta misma pasada).
