@@ -9,6 +9,7 @@ from apps.tenant.bancos.models import (
     MovimientoBancarioAplicacion,
     TransaccionBancaria,
 )
+from apps.tenant.empresa.models import Sede
 
 TOLERANCIA_APLICACION = Decimal("0.01")
 
@@ -63,6 +64,7 @@ class ExtractoBancarioListSerializer(serializers.ModelSerializer):
     total_transacciones   = serializers.IntegerField(read_only=True, default=0)
     tx_conciliadas        = serializers.IntegerField(read_only=True, default=0)
     tx_pendientes         = serializers.SerializerMethodField()
+    sede_nombre           = serializers.CharField(source="sede.nombre", read_only=True, allow_null=True)  # BAN-11
 
     def get_tx_pendientes(self, obj):
         total = getattr(obj, 'total_transacciones', 0) or 0
@@ -87,12 +89,17 @@ class ExtractoBancarioListSerializer(serializers.ModelSerializer):
             "total_transacciones",
             "tx_conciliadas",
             "tx_pendientes",
+            "sede_nombre",  # BAN-11
         )
         read_only_fields = fields
 
 class ExtractoBancarioCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating an ExtractoBancario."""
     cuenta = UUIDOrPKRelatedField(queryset=CuentaBancaria.objects.none())
+    sede = UUIDOrPKRelatedField(
+        queryset=Sede.objects.none(), required=False, allow_null=True,
+        help_text="UUID de la sede a la que pertenece este extracto (opcional).",
+    )  # BAN-11 (DT-SEDE-01)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -101,6 +108,7 @@ class ExtractoBancarioCreateSerializer(serializers.ModelSerializer):
         )
         if empresa_id:
             self.fields["cuenta"].queryset = CuentaBancaria.objects.filter(empresa_id=empresa_id)
+            self.fields["sede"].queryset = Sede.objects.filter(empresa_id=empresa_id)
 
     class Meta:
         model = ExtractoBancario
@@ -114,6 +122,7 @@ class ExtractoBancarioCreateSerializer(serializers.ModelSerializer):
             "procesado",
             "saldo_inicial",
             "saldo_final",
+            "sede",  # BAN-11
         )
         read_only_fields = ("id", "uuid", "procesado")
 
@@ -138,6 +147,20 @@ class ExtractoBancarioCreateSerializer(serializers.ModelSerializer):
                 {"cuenta": "La cuenta seleccionada no pertenece a esta empresa."}
             )
 
+        # BAN-11: misma validacion anti-IDOR que gastos.DocumentoSoporte.sede
+        # (DT-SEDE-01) -- pertenencia a la empresa + alcance organizacional.
+        sede = attrs.get("sede")
+        if sede and empresa_id and sede.empresa_id != empresa_id:
+            raise serializers.ValidationError(
+                {"sede": "La sede seleccionada no pertenece a esta empresa."}
+            )
+        if sede:
+            from apps.tenant.core.services.organizational_scope import sede_esta_en_alcance
+            if not sede_esta_en_alcance(sede.id, self.context.get("request")):
+                raise serializers.ValidationError(
+                    {"sede": "No tiene permiso para asignar esta sede (fuera de su alcance organizacional)."}
+                )
+
         # Check for duplicates on creation
         request = self.context.get("request")
         if request and request.method == "POST":
@@ -158,6 +181,7 @@ class ExtractoBancarioDetailSerializer(serializers.ModelSerializer):
     cuenta = CuentaBancariaSerializer(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
+    sede_nombre = serializers.CharField(source="sede.nombre", read_only=True, allow_null=True)  # BAN-11
 
     class Meta:
         model = ExtractoBancario
@@ -173,6 +197,7 @@ class ExtractoBancarioDetailSerializer(serializers.ModelSerializer):
             "saldo_final",
             "created_at",
             "updated_at",
+            "sede_nombre",  # BAN-11
         )
         read_only_fields = fields
 

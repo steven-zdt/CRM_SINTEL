@@ -138,6 +138,9 @@
                   data-factura-uuid="{{ tx.factura_uuid|default:'' }}"
                   data-proveedor-uuid="{{ tx.proveedor_uuid|default:'' }}"
                   data-cliente-uuid="{{ tx.cliente_uuid|default:'' }}"
+                  data-factura-info="{{ tx.factura_display|default:'' }}"
+                  data-proveedor-info="{{ tx.proveedor_display|default:'' }}"
+                  data-cliente-info="{{ tx.cliente_display|default:'' }}"
                   data-notas="{{ tx.notas_conciliacion|default:''|truncatechars:200 }}"
                   data-valor="{{ tx.valor }}"
                   data-descripcion="{{ tx.descripcion|truncatechars:80 }}">

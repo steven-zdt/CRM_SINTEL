@@ -34,8 +34,13 @@ from apps.tenant.bancos.services.api_mixins import (
     MovimientoBancarioAplicacionServiceMixin,
     TransaccionBancariaServiceMixin,
 )
+from apps.tenant.bancos.services.export_service import ExtractoBancarioExportService
 from apps.tenant.bancos.services.matching_service import BankTransactionMatchingService
-from apps.tenant.bancos.services.selectors import MovimientoBancarioAplicacionSelector
+from apps.tenant.bancos.services.selectors import (
+    ExtractoBancarioKpiSelector,
+    MovimientoBancarioAplicacionSelector,
+    TerceroDisplaySelector,
+)
 from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 
 logger = logging.getLogger(__name__)
@@ -230,6 +235,21 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
         except Exception as e:
             return self.handle_service_error(e)
 
+    @action(detail=True, methods=["get"], url_path="exportar", renderer_classes=[JSONRenderer])
+    def exportar(self, request, uuid=None):
+        """BAN-12: exporta el reporte de conciliacion del extracto (periodo =
+        cuenta + mes/anio) a CSV -- fecha/descripcion/tipo/valor/conciliado/
+        vinculo resuelto/notas de cada transaccion."""
+        from django.http import HttpResponse
+
+        extracto = self.get_object()
+        empresa_id = self.get_empresa_id()
+        contenido = ExtractoBancarioExportService.generar_csv_conciliacion(empresa_id, extracto)
+        nombre_archivo = f"conciliacion_{extracto.cuenta.numero}_{extracto.anio}{extracto.mes:02d}.csv"
+        response = HttpResponse(contenido, content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
+        return response
+
     # --- UI / HTMX Offcanvas Actions ---
 
     @action(detail=False, methods=["get"], renderer_classes=[TemplateHTMLRenderer], url_path="render-offcanvas/crear")
@@ -281,6 +301,21 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
         )
         kpis["neto"] = kpis["ingresos"] - kpis["egresos"]
         kpis["pendientes"] = kpis["total"] - kpis["conciliadas"]
+
+        # BAN-06/07: resolver nombre/numero real de facturas/proveedores/clientes
+        # ya vinculados, en 3 queries bulk (una por tipo) en vez de mostrar el
+        # UUID truncado o pedirlo al frontend via los endpoints search-* por TX.
+        transacciones = list(transacciones)
+        display_map = TerceroDisplaySelector.resolver(
+            empresa_id,
+            factura_uuids={t.factura_uuid for t in transacciones if t.factura_uuid},
+            proveedor_uuids={t.proveedor_uuid for t in transacciones if t.proveedor_uuid},
+            cliente_uuids={t.cliente_uuid for t in transacciones if t.cliente_uuid},
+        )
+        for t in transacciones:
+            t.factura_display = display_map.get(str(t.factura_uuid)) if t.factura_uuid else None
+            t.proveedor_display = display_map.get(str(t.proveedor_uuid)) if t.proveedor_uuid else None
+            t.cliente_display = display_map.get(str(t.cliente_uuid)) if t.cliente_uuid else None
 
         context = {
             "extracto": extracto,

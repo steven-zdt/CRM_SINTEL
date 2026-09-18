@@ -224,23 +224,30 @@
         if (feedback) { feedback.className = 'd-none'; feedback.innerHTML = ''; }
 
         // Pre-cargar vínculos ya existentes si los hay
+        // BAN-06/07: el nombre/numero real ya viene resuelto server-side
+        // (render_offcanvas_detalle -> TerceroDisplaySelector); si el
+        // registro fue eliminado y no se pudo resolver, se cae al UUID
+        // truncado como antes (soft-ref sin resolver, no bloquea).
         if (row.dataset.facturaUuid) {
           _setChip(container, 'factura',
             row.dataset.facturaUuid,
-            'Factura ya vinculada',
-            'UUID: ' + row.dataset.facturaUuid.slice(-8));
+            row.dataset.facturaInfo || 'Factura ya vinculada',
+            row.dataset.facturaInfo ? 'UUID: ' + row.dataset.facturaUuid.slice(-8)
+                                     : '(no se pudo resolver el nombre)');
         }
         if (esEgreso && row.dataset.proveedorUuid) {
           _setChip(container, 'proveedor',
             row.dataset.proveedorUuid,
-            'Proveedor ya vinculado',
-            'UUID: ' + row.dataset.proveedorUuid.slice(-8));
+            row.dataset.proveedorInfo || 'Proveedor ya vinculado',
+            row.dataset.proveedorInfo ? 'UUID: ' + row.dataset.proveedorUuid.slice(-8)
+                                       : '(no se pudo resolver el nombre)');
         }
         if (!esEgreso && row.dataset.clienteUuid) {
           _setChip(container, 'cliente',
             row.dataset.clienteUuid,
-            'Cliente ya vinculado',
-            'UUID: ' + row.dataset.clienteUuid.slice(-8));
+            row.dataset.clienteInfo || 'Cliente ya vinculado',
+            row.dataset.clienteInfo ? 'UUID: ' + row.dataset.clienteUuid.slice(-8)
+                                     : '(no se pudo resolver el nombre)');
         }
 
         // Marcar paso 1 como completado

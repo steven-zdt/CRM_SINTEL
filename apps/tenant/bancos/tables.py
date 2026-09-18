@@ -156,6 +156,13 @@ class ExtractoBancarioTable(tables.Table):
                 '<i class="bi bi-cpu"></i></button>',
                 record.uuid,
             )
+        if record.procesado and total > 0:
+            # BAN-12: descarga directa (GET simple), no requiere JS.
+            btns += format_html(
+                '<a class="btn btn-outline-success" href="/api/v1/bancos/extractos/{0}/exportar/" '
+                'title="Exportar reporte de conciliacion (CSV)"><i class="bi bi-file-earmark-spreadsheet"></i></a>',
+                record.uuid,
+            )
         btns += format_html(
             '<button type="button" class="btn btn-outline-danger btn-delete-extracto" data-id="{0}" title="Eliminar">'
             '<i class="bi bi-trash"></i></button>',

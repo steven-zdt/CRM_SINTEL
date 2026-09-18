@@ -1,4 +1,4 @@
-from django.db.models import Count, DecimalField, Q, Sum, Value
+from django.db.models import Case, Count, DecimalField, F, Q, Sum, Value, When
 from django.db.models.functions import Coalesce
 
 from apps.tenant.bancos.models import (
@@ -18,12 +18,12 @@ CUENTA_DETAIL_FIELDS = (
 EXTRACTO_LIST_FIELDS = (
     "id", "uuid", "cuenta_id", "cuenta__uuid", "cuenta__nombre", "cuenta__numero",
     "mes", "anio", "archivo_s3", "procesado", "saldo_inicial", "saldo_final",
-    "empresa_id",
+    "empresa_id", "sede_id", "sede__nombre",  # BAN-11 (DT-SEDE-01)
 )
 EXTRACTO_DETAIL_FIELDS = (
     "id", "uuid", "cuenta_id", "cuenta__uuid", "cuenta__nombre", "cuenta__numero",
     "mes", "anio", "archivo_s3", "procesado", "saldo_inicial", "saldo_final",
-    "empresa_id", "created_at", "updated_at",
+    "empresa_id", "created_at", "updated_at", "sede_id", "sede__nombre",  # BAN-11
 )
 
 TRANSACCION_LIST_FIELDS = (
@@ -69,7 +69,7 @@ class ExtractoBancarioSelector:
         qs = (
             ExtractoBancario.objects
             .filter(empresa_id=empresa_id)
-            .select_related("cuenta")
+            .select_related("cuenta", "sede")
             .only(*EXTRACTO_LIST_FIELDS)
             .annotate(
                 total_transacciones=Count('transacciones'),
@@ -91,7 +91,7 @@ class ExtractoBancarioSelector:
     @staticmethod
     def get_detail(empresa_id: int, uuid=None):
         """Get optimized ExtractoBancario detail."""
-        qs = ExtractoBancario.objects.filter(empresa_id=empresa_id).select_related("cuenta").only(*EXTRACTO_DETAIL_FIELDS)
+        qs = ExtractoBancario.objects.filter(empresa_id=empresa_id).select_related("cuenta", "sede").only(*EXTRACTO_DETAIL_FIELDS)
         if uuid:
             return qs.filter(uuid=uuid)
         return qs
@@ -154,6 +154,80 @@ APLICACION_FIELDS = (
     "monto_aplicado", "fecha_aplicacion", "notas",
     "origen_matching", "confianza", "empresa_id", "created_at",
 )
+
+
+class TerceroDisplaySelector:
+    """BAN-06/07: resuelve UUIDs de terceros/documentos vinculados a un texto
+    legible (numero+nombre / razon social) en una sola query por tipo -- evita
+    N+1 llamadas a los endpoints search-* desde el frontend solo para mostrar
+    el nombre de un vinculo ya guardado (antes se mostraba el UUID truncado)."""
+
+    @staticmethod
+    def resolver(empresa_id: int, factura_uuids=None, proveedor_uuids=None, cliente_uuids=None) -> dict:
+        """Retorna {uuid_str: display_str}. Un UUID sin match (registro
+        eliminado o soft-ref sin resolver) queda ausente del dict -- el
+        llamador debe usar un fallback, mismo criterio de soft references
+        ya usado en el resto del modulo (no bloquea)."""
+        display = {}
+
+        if factura_uuids:
+            from apps.tenant.facturas.models import Factura
+
+            for f in Factura.objects.filter(empresa_id=empresa_id, uuid__in=factura_uuids).only(
+                "uuid", "numero", "prefijo", "naturaleza", "receptor_razon_social", "emisor_razon_social"
+            ):
+                nombre = f.receptor_razon_social if f.naturaleza == "VENTA" else f.emisor_razon_social
+                numero = f"{f.prefijo}-{f.numero}" if f.prefijo else (f.numero or "")
+                partes = [p for p in (numero, nombre) if p]
+                display[str(f.uuid)] = " — ".join(partes) if partes else str(f.uuid)
+
+        if proveedor_uuids:
+            from apps.tenant.proveedores.models import Proveedor
+
+            for p in Proveedor.objects.filter(empresa_id=empresa_id, uuid__in=proveedor_uuids).only(
+                "uuid", "razon_social", "nombre_comercial"
+            ):
+                display[str(p.uuid)] = p.nombre_comercial or p.razon_social
+
+        if cliente_uuids:
+            from apps.tenant.clientes.models import Cliente
+
+            for c in Cliente.objects.filter(empresa_id=empresa_id, uuid__in=cliente_uuids).only(
+                "uuid", "razon_social", "nombre_comercial"
+            ):
+                display[str(c.uuid)] = c.nombre_comercial or c.razon_social
+
+        return display
+
+
+class ExtractoBancarioKpiSelector:
+    """BAN-09: KPIs agregados de conciliacion a nivel de empresa (no por
+    extracto individual -- eso ya existe en render_offcanvas_detalle, Fase 19).
+    Se muestra en la cabecera del tab Extractos."""
+
+    @staticmethod
+    def get_kpis_empresa(empresa_id: int) -> dict:
+        qs = TransaccionBancaria.objects.filter(empresa_id=empresa_id)
+        agg = qs.aggregate(
+            total=Count("id"),
+            conciliadas=Count("id", filter=Q(conciliado=True)),
+            # Suma de valores ABSOLUTOS (no el neto -- ingresos/egresos se
+            # cancelarian entre si) de las transacciones aun sin conciliar.
+            monto_sin_conciliar=Coalesce(
+                Sum(
+                    Case(When(valor__lt=0, then=-F("valor")), default=F("valor")),
+                    filter=Q(conciliado=False),
+                    output_field=DecimalField(),
+                ),
+                Value(0),
+                output_field=DecimalField(),
+            ),
+        )
+        total = agg["total"] or 0
+        conciliadas = agg["conciliadas"] or 0
+        agg["pendientes"] = total - conciliadas
+        agg["pct_conciliado"] = round((conciliadas / total) * 100) if total else 0
+        return agg
 
 
 class MovimientoBancarioAplicacionSelector:

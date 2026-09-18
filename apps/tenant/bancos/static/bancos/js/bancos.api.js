@@ -139,8 +139,5 @@
     },
   };
 
-  // Deprecated fallback for routing
-  w.bancosAPI = w.Sintel.Bancos.API;
-
   console.log(`[${MOD}] API inicializada correctamente.`);
 })(window);

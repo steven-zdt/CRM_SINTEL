@@ -12,7 +12,11 @@ from django_tables2 import SingleTableView
 
 from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.bancos.models import CuentaBancaria, ExtractoBancario
-from apps.tenant.bancos.services.selectors import CuentaBancariaSelector, ExtractoBancarioSelector
+from apps.tenant.bancos.services.selectors import (
+    CuentaBancariaSelector,
+    ExtractoBancarioKpiSelector,
+    ExtractoBancarioSelector,
+)
 from apps.tenant.bancos.tables import CuentaBancariaTable, ExtractoBancarioTable
 
 logger = logging.getLogger(__name__)
@@ -67,3 +71,14 @@ class ExtractoBancarioTableView(_BancosTableViewBase):
             return ExtractoBancario.objects.none()
         search = (self.request.GET.get("q") or "").strip() or None
         return ExtractoBancarioSelector.get_list(empresa_id=empresa_id, search=search)
+
+    def get_context_data(self, **kwargs):
+        """BAN-09: KPI de conciliacion a nivel de empresa (todas las cuentas/
+        extractos), mostrado en la cabecera del tab Extractos."""
+        context = super().get_context_data(**kwargs)
+        empresa_id = self._resolver_empresa_id()
+        context["kpis"] = (
+            ExtractoBancarioKpiSelector.get_kpis_empresa(empresa_id) if empresa_id
+            else {"total": 0, "conciliadas": 0, "pendientes": 0, "pct_conciliado": 0, "monto_sin_conciliar": 0}
+        )
+        return context

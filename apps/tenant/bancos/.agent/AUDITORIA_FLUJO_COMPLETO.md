@@ -896,12 +896,15 @@ with schema_context('cliente'):
 
 ## 10. PROXIMOS PASOS RECOMENDADOS
 
-| ID | Prioridad | Descripcion |
-|---|---|---|
-| BAN-06 | ALTA | Mostrar nombre/numero de la Factura vinculada en el chip (actualmente solo muestra UUID truncado al pre-cargar vinculo existente). Requiere llamada extra a `search-facturas/?q={uuid}` o incluir snapshot en TX |
-| BAN-07 | MEDIA | Al abrir detalle de TX ya conciliada, resolver nombres reales via llamada a los 3 endpoints de busqueda usando los UUIDs guardados |
-| BAN-08 | MEDIA | Agregar `test_conciliacion.py` con los 3 escenarios: INGRESO→Cliente, EGRESO→Proveedor, quitar vinculo |
-| BAN-09 | MEDIA | KPI Panel en tab Extractos: % conciliado total de la empresa, monto sin conciliar |
-| BAN-10 | BAJA | Eliminar alias deprecado `w.bancosAPI = w.Sintel.Bancos.API` en bancos.api.js |
-| BAN-11 | BAJA | Campo `sede` FK en `ExtractoBancario` para KPIs por sede (patron DT-SEDE) |
-| BAN-12 | BAJA | Exportar reporte de conciliacion a CSV/Excel por periodo |
+| ID | Prioridad | Descripcion | Estado |
+|---|---|---|---|
+| BAN-06 | ALTA | Mostrar nombre/numero de la Factura vinculada en el chip (antes solo mostraba UUID truncado al pre-cargar vinculo existente). | **RESUELTO (2026-09-18).** Resuelto server-side en `render_offcanvas_detalle` via `TerceroDisplaySelector.resolver()` (3 queries bulk, una por tipo -- factura/proveedor/cliente -- en vez de N+1 por transaccion). El nombre viaja en `data-factura-info`/`data-proveedor-info`/`data-cliente-info`; `extracto_editor.js` los usa al pre-cargar el chip, con fallback al UUID truncado si el registro no resuelve (soft-ref, no bloquea). |
+| BAN-07 | MEDIA | Al abrir detalle de TX ya conciliada, resolver nombres reales via llamada a los 3 endpoints de busqueda usando los UUIDs guardados. | **RESUELTO (2026-09-18), mismo cambio que BAN-06.** Implementado como resolucion bulk server-side (arriba) en vez de 3 llamadas a los endpoints `search-*` por transaccion -- evita N+1 y es mas eficiente que lo sugerido originalmente sin cambiar el resultado visible. |
+| BAN-08 | MEDIA | Agregar `test_conciliacion.py` con los 3 escenarios: INGRESO→Cliente, EGRESO→Proveedor, quitar vinculo. | **RESUELTO (2026-09-18).** `tests/test_conciliacion.py`, 3 tests, verificados en verde. |
+| BAN-09 | MEDIA | KPI Panel en tab Extractos: % conciliado total de la empresa, monto sin conciliar. | **RESUELTO (2026-09-18).** `ExtractoBancarioKpiSelector.get_kpis_empresa()` (nuevo, `selectors.py`) + `ExtractoBancarioTableView.get_context_data()` + fila de `sintel_kpi_card` en `partials/tabla_extractos.html` (Transacciones/Conciliadas/Pendientes/%Conciliado/Monto sin conciliar). |
+| BAN-10 | BAJA | Eliminar alias deprecado `w.bancosAPI = w.Sintel.Bancos.API` en bancos.api.js. | **RESUELTO (2026-09-18).** Verificado sin usos restantes antes de eliminar. |
+| BAN-11 | BAJA | Campo `sede` FK en `ExtractoBancario` para KPIs por sede (patron DT-SEDE). | **RESUELTO (2026-09-18).** Migracion `0008_extractobancario_sede.py`, mismo patron DT-SEDE-01 que `gastos.DocumentoSoporte.sede` (opcional, `SET_NULL`, DSV + `sede_esta_en_alcance()` anti-IDOR en `ExtractoBancarioCreateSerializer`). Sin UI de seleccion todavia (mismo estado que el resto del rollout DT-SEDE-01 en el proyecto -- backend/API listo, selector de UI diferido). |
+| BAN-12 | BAJA | Exportar reporte de conciliacion a CSV/Excel por periodo. | **RESUELTO (2026-09-18) -- solo CSV.** `GET /api/v1/bancos/extractos/{uuid}/exportar/` (`ExtractoBancarioExportService.generar_csv_conciliacion()`, reutiliza `TransaccionBancariaSelector`+`TerceroDisplaySelector`). El "periodo" es el extracto (cuenta+mes/anio), consistente con el resto del modulo. Boton de descarga directa en `tables.py::render_acciones()` (solo si `procesado` y hay transacciones). Excel (XLSX) no se implemento -- CSV ya satisface el requisito y evita agregar `openpyxl` como dependencia de escritura solo para esto. |
+
+Tests nuevos de esta pasada: `test_conciliacion.py` (3), `test_extracto_sede.py` (3, incluye
+aislamiento cross-tenant real via `tenant1`/`tenant2`), `test_export_conciliacion.py` (1).

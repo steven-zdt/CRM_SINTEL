@@ -41,6 +41,21 @@ class ExtractoBancario(SintelTenantBaseModel):
     saldo_inicial = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, verbose_name=_("Saldo Inicial"))
     saldo_final = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, verbose_name=_("Saldo Final"))
 
+    # BAN-11 (DT-SEDE-01): sede para KPIs por sede. Opcional -- si no se
+    # asigna, el extracto aplica a toda la empresa (mismo criterio que
+    # gastos.DocumentoSoporte.sede).
+    sede = models.ForeignKey(
+        "empresa.Sede",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="extractos_bancarios",
+        verbose_name=_("Sede"),
+        help_text=_("Sede de la empresa a la que pertenece este extracto. "
+                    "Opcional -- si no se asigna aplica a toda la empresa."),
+        db_index=True,
+    )
+
     class Meta:
         db_table = "bancos_extracto_bancario"
         verbose_name = _("Extracto Bancario")

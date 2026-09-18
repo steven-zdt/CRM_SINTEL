@@ -1,5 +1,16 @@
 {% load django_tables2 %}
-{# Fragmento HTMX: tabla de Extractos Bancarios. Reemplaza #extractos-panel completo. #}
+{% load sintel_ui %}
+{% load currency_filters %}
+{# Fragmento HTMX: KPIs + tabla de Extractos Bancarios. Reemplaza #extractos-panel completo. #}
+{# BAN-09: % conciliado y monto sin conciliar a nivel de empresa (todas las cuentas). #}
+<div class="row g-3 mb-3" id="extractos-kpis">
+  {% sintel_kpi_card icon="bar-chart-line" color="primary" value=kpis.total label="Transacciones" %}
+  {% sintel_kpi_card icon="check2-all" color="success" value=kpis.conciliadas label="Conciliadas" %}
+  {% sintel_kpi_card icon="hourglass-split" color="warning" value=kpis.pendientes label="Pendientes" %}
+  {% sintel_kpi_card icon="percent" color="info" value=kpis.pct_conciliado|stringformat:"d" label="% Conciliado" col_class="col-6 col-md-4 col-xl-3" %}
+  {% sintel_kpi_card icon="cash-coin" color="danger" value=kpis.monto_sin_conciliar|currency_cop label="Monto sin conciliar" col_class="col-6 col-md-4 col-xl-3" %}
+</div>
+
 <div class="w-100" style="max-width:100%; overflow-x:auto;">
   {% render_table table %}
 </div>
