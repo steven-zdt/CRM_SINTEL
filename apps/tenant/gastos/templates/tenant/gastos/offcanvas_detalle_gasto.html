@@ -77,6 +77,18 @@
         </div>
         {% endif %}
 
+        {# Sección: Proyecto asociado (GASTOS_PROYECTOS_01) #}
+        <div class="mb-4">
+            <h6 class="text-primary border-bottom pb-2 mb-3">
+                <i class="bi bi-kanban me-2"></i>Proyecto Asociado
+            </h6>
+            {% if instance.proyecto_codigo %}
+                <strong>{{ instance.proyecto_codigo }}</strong> — {{ instance.proyecto_nombre }}
+            {% else %}
+                <span class="text-muted">Sin proyecto</span>
+            {% endif %}
+        </div>
+
         {# Sección: Información del Proveedor #}
         <div class="mb-4">
             <h6 class="text-primary border-bottom pb-2 mb-3">

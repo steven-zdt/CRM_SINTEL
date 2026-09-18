@@ -132,6 +132,32 @@
       }
     },
 
+    gastos: {
+      /** GET /api/v1/proyectos/{uuid}/gastos/ -- GASTOS_PROYECTOS_01 */
+      list: async (proyectoUuid) => {
+        console.log(`[${MOD}] gastos.list(${proyectoUuid})`);
+        if (!proyectoUuid) return { ok: false, status: 400, data: { detail: 'proyecto_uuid requerido' } };
+        return w.Sintel.Core.Http.request('GET', `${API_BASE}/${proyectoUuid}/gastos/`);
+      },
+
+      /** GET /api/v1/gastos/?search=<q> -- buscador para "Agregar gasto" (reutiliza el endpoint de Gastos, sin URL nueva) */
+      search: (q) => buildUrlWithParams('/api/v1/gastos/', { search: q, page_size: 10 }),
+
+      /** PATCH /api/v1/gastos/{gastoUuid}/ { proyecto_uuid } -- vincula/mueve un gasto existente (reutiliza el editor de Gasto) */
+      agregar: async (gastoUuid, proyectoUuid) => {
+        console.log(`[${MOD}] gastos.agregar(${gastoUuid}, ${proyectoUuid})`);
+        if (!gastoUuid || !proyectoUuid) return { ok: false, status: 400, data: { detail: 'gasto y proyecto requeridos' } };
+        return w.Sintel.Core.Http.request('PATCH', `/api/v1/gastos/${gastoUuid}/`, { proyecto_uuid: proyectoUuid });
+      },
+
+      /** PATCH /api/v1/gastos/{gastoUuid}/ { proyecto_uuid: null } -- desvincula un gasto del proyecto */
+      desvincular: async (gastoUuid) => {
+        console.log(`[${MOD}] gastos.desvincular(${gastoUuid})`);
+        if (!gastoUuid) return { ok: false, status: 400, data: { detail: 'gasto requerido' } };
+        return w.Sintel.Core.Http.request('PATCH', `/api/v1/gastos/${gastoUuid}/`, { proyecto_uuid: null });
+      }
+    },
+
     tareasDiarias: {
       /** GET /api/v1/proyectos/tareas-diarias/?proyecto_uuid=<uuid> */
       list: async (proyectoUuid, fechaInicio, fechaFin) => {
@@ -227,6 +253,10 @@
       if (value === null || value === undefined || value === '') return '$ 0,00';
       const num = parseFloat(value);
       if (isNaN(num)) return '$ 0,00';
+      // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+      if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
+        return w.DOMUtils.formatCurrency(num, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+      }
       return new Intl.NumberFormat('es-CO', {
         style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 2
       }).format(num);

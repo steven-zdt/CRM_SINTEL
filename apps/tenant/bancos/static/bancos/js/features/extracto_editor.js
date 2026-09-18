@@ -396,7 +396,8 @@
         btnGuardar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
 
         try {
-          const res = await w.Sintel.Core.Http.request('PATCH', `${API_TX_BASE}${uuid}/conciliar/`, payload);
+          // T-9: delega a la SSoT de endpoints (bancos.api.js).
+          const res = await w.Sintel.Bancos.API.transacciones.conciliar(uuid, payload);
           if (res?.ok) {
             _mostrarFeedback(feedback, 'success', '<i class="bi bi-check-circle me-1"></i>Vínculo guardado correctamente.');
             _actualizarFilaBadge(container, uuid, payload, true);
@@ -422,7 +423,8 @@
         btnQuitar.disabled = true;
         try {
           const payload = { factura_uuid: null, proveedor_uuid: null, cliente_uuid: null, conciliado: false };
-          const res = await w.Sintel.Core.Http.request('PATCH', `${API_TX_BASE}${uuid}/conciliar/`, payload);
+          // T-9: delega a la SSoT de endpoints (bancos.api.js).
+          const res = await w.Sintel.Bancos.API.transacciones.conciliar(uuid, payload);
           if (res?.ok) {
             _limpiarChip(container, 'factura');
             _limpiarChip(container, 'proveedor');
@@ -747,7 +749,15 @@
   }
 
   function _fmt(val) {
-    return new Intl.NumberFormat('es-CO', { minimumFractionDigits: 0 }).format(parseFloat(val) || 0);
+    // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js) en vez
+    // de reimplementar Intl.NumberFormat localmente. Se preserva el
+    // parseFloat(val)||0 previo para no cambiar el comportamiento visual
+    // con valores invalidos/nulos (formatCurrency por si solo devolveria '-').
+    const num = parseFloat(val) || 0;
+    if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
+      return w.DOMUtils.formatCurrency(num, { minimumFractionDigits: 0, maximumFractionDigits: 0, showSymbol: false });
+    }
+    return new Intl.NumberFormat('es-CO', { minimumFractionDigits: 0 }).format(num);
   }
 
   // ── Guardar extracto ─────────────────────────────────────────────────
@@ -771,7 +781,7 @@
     const res = await api.extractos.save(formData);
 
     if (!res?.ok) {
-      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>Importar y Procesar'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i>Importar'; }
       return w.UIManager?.handleError(res, MOD, { errorContainerSelector: '#form-extracto-feedback' });
     }
 

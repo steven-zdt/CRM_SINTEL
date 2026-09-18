@@ -93,6 +93,28 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
         out = VentaDetailSerializer(result, context=self.get_serializer_context())
         return Response(out.data, status=status.HTTP_201_CREATED)
 
+    def partial_update(self, request, *args, **kwargs):
+        """
+        REGRESION (2026-09-12, hallazgo V-2): VentaDetailSerializer marcaba
+        todos sus campos read-only, asi que el UpdateModelMixin por defecto
+        de ModelViewSet respondia 200 sin persistir ningun cambio. Se
+        orquesta explicitamente igual que ResolucionFacturacionViewSet
+        (mismo patron: ViewSet -> ServiceMixin -> BusinessService -> CRUD).
+        """
+        venta = self.get_object()
+        empresa_id = self._get_empresa_id_seguro()
+        payload = request.data if isinstance(request.data, dict) else dict(request.data)
+        ok, result, status_code = self.service_actualizar_venta(
+            str(venta.uuid), empresa_id, payload,
+        )
+        if not ok:
+            return Response(result, status=status_code)
+        out = VentaDetailSerializer(result, context=self.get_serializer_context())
+        return Response(out.data, status=status.HTTP_200_OK)
+
+    def update(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
     def destroy(self, request, *args, **kwargs):
         venta = self.get_object()
         empresa_id = self._get_empresa_id_seguro()
@@ -154,6 +176,45 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
         out = VentaDetailSerializer(result, context=self.get_serializer_context())
         return Response(out.data, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=["post"], url_path="vincular-factura")
+    def vincular_factura(self, request, uuid=None):
+        """FACTURAS-UI-CRONO-01: el usuario elige manualmente una Factura
+        ya existente (modulo Facturas, naturaleza VENTA) y la asocia a
+        esta Venta -- nunca crea/emite una Factura nueva (la barrera
+        fiscal de VENTAS-COMPRAS-FACTURAS-01 sigue intacta)."""
+        venta = self.get_object()
+        empresa_id = self._get_empresa_id_seguro()
+        factura_uuid = request.data.get("factura_uuid")
+        ok, result, status_code = self.service_vincular_factura_existente(
+            venta, factura_uuid, empresa_id,
+        )
+        if not ok:
+            return Response(result, status=status_code)
+        out = VentaDetailSerializer(result, context=self.get_serializer_context())
+        return Response(out.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get", "patch"], url_path="gestion-pago")
+    def gestion_pago(self, request, uuid=None):
+        """Integracion Facturas<->Ventas: lectura/edicion de Gestion Manual
+        de Pago (estado_pago, forma_pago, medio_pago_codigo, payment_due_date,
+        fecha_pago) de la Factura vinculada a esta Venta. Factura sigue
+        siendo el SSoT -- este endpoint es un pass-through delgado, nunca
+        crea ni modifica datos fiscales."""
+        venta = self.get_object()
+        empresa_id = self._get_empresa_id_seguro()
+
+        if request.method == "GET":
+            out = VentaDetailSerializer(venta, context=self.get_serializer_context())
+            return Response(out.data, status=status.HTTP_200_OK)
+
+        ok, result, status_code = self.service_actualizar_gestion_pago(
+            venta, request.data, empresa_id,
+        )
+        if not ok:
+            return Response(result, status=status_code)
+        out = VentaDetailSerializer(result, context=self.get_serializer_context())
+        return Response(out.data, status=status.HTTP_200_OK)
+
     # ------------------------------------------------------------------
     # HTMX offcanvas renders
     # ------------------------------------------------------------------
@@ -181,6 +242,46 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
                 "clientes": clientes_qs,
                 "resoluciones": resoluciones_qs,
                 "fecha_default": datetime.date.today().isoformat(),
+            },
+            template_name="tenant/ventas/offcanvas_crear_venta.html",
+        )
+
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/editar",
+    )
+    def render_offcanvas_editar(self, request):
+        """
+        V-2 (2026-09-12): reutiliza el mismo template de "Crear" -- cliente
+        y resolucion se bloquean en modo edicion (ver
+        VentaBusinessService.actualizar_venta_borrador, que no los toca) y
+        los items existentes se precargan via items_json (json_script) para
+        que venta_editor.js los pinte en vez de arrancar con una fila vacia.
+        """
+        venta_uuid = request.query_params.get("uuid")
+        empresa_id = self._get_empresa_id_seguro()
+        venta = (
+            Venta.objects.filter(uuid=venta_uuid, empresa_id=empresa_id)
+            .select_related("cliente", "resolucion")
+            .prefetch_related("items")
+            .first()
+        )
+        items_json = [
+            {
+                "descripcion": item.descripcion,
+                "cantidad": str(item.cantidad),
+                "precio_unitario": str(item.precio_unitario),
+                "porcentaje_iva": str(item.porcentaje_iva),
+            }
+            for item in (venta.items.all() if venta else [])
+        ]
+        return Response(
+            {
+                "venta": venta,
+                "items_json": items_json,
+                "fecha_default": str(venta.fecha_emision) if venta else datetime.date.today().isoformat(),
             },
             template_name="tenant/ventas/offcanvas_crear_venta.html",
         )

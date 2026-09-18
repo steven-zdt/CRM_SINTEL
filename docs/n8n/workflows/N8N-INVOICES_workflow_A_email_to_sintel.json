@@ -1,0 +1,330 @@
+{
+  "name": "N8N-INVOICES -- Email a SINTEL Facturas (Workflow A)",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "has:attachment newer_than:1d",
+          "readStatus": "unread"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "id": "gmail-trigger-1",
+      "name": "Gmail Trigger (buzon facturas)",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [-40, 260],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PENDIENTE",
+          "name": "Gmail -- buzon facturas SINTEL (cargar credencial real)"
+        }
+      },
+      "notes": "REVISAR: ajustar 'q' al remitente/asunto real del buzon de facturas cuando se conozca la regla de negocio -- hoy solo filtra 'tiene adjunto, ultimo dia'."
+    },
+    {
+      "parameters": {
+        "jsCode": "// N8N-SINTEL-02 FASE 5/6: extrae SOLO los adjuntos .xml de cada correo.\n// Un correo puede traer 0, 1 o varios XML (y PDFs que se descartan aqui,\n// nunca se interpretan como factura). No parsea el XML -- SINTEL es el\n// unico que hace eso (upload-document -> pipeline oficial).\nconst out = [];\nfor (const item of $input.all()) {\n  const binaryKeys = Object.keys(item.binary || {});\n  const xmlKeys = binaryKeys.filter((k) => {\n    const bin = item.binary[k];\n    const name = (bin.fileName || '').toLowerCase();\n    return name.endsWith('.xml') || (bin.mimeType || '').includes('xml');\n  });\n\n  if (xmlKeys.length === 0) {\n    // Correo sin XML -- FASE 5 exige soportarlo sin romper: se descarta\n    // silenciosamente aqui, no llega ningun item a los nodos siguientes.\n    continue;\n  }\n\n  for (const key of xmlKeys) {\n    out.push({\n      json: {\n        gmail_message_id: item.json.id,\n        gmail_subject: item.json.subject,\n        gmail_from: item.json.from ? item.json.from.value?.[0]?.address : undefined,\n        attachment_filename: item.binary[key].fileName,\n        // correlation_id propio de n8n (namespace distinto al event_id de\n        // SINTEL, Fase 11 de la mision -- nunca se reusan entre si).\n        correlation_id: `${item.json.id}-${item.binary[key].fileName}`,\n      },\n      binary: { file: item.binary[key] },\n    });\n  }\n}\nreturn out;"
+      },
+      "id": "code-extraer-xml-1",
+      "name": "Extraer adjuntos XML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [180, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://nginx/api/token/refresh/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Host",
+              "value": "home.sintel.net.co"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"refresh\": $env.SINTEL_N8N_REFRESH_TOKEN } }}",
+        "options": {}
+      },
+      "id": "http-refresh-token-1",
+      "name": "Refrescar token SINTEL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 260],
+      "notes": "REVISAR: 'nginx' es el nombre del servicio Docker real (docker-compose.yaml) -- funciona porque n8n y nginx estan en la misma red de Docker Compose por defecto (verificado, sin 'networks:' custom). El header Host suple la resolucion DNS publica real. SINTEL_N8N_REFRESH_TOKEN se define en el .env del contenedor n8n (el usuario lo carga, nunca en este JSON) -- ver manage.py crear_identidad_tecnica_n8n --schema home."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://nginx/api/v1/core/_apps/facturas/upload-document/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Host",
+              "value": "home.sintel.net.co"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $node[\"Refrescar token SINTEL\"].json.access }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "file"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        },
+        "retryOnFail": true,
+        "maxTries": 5,
+        "waitBetweenTries": 3000
+      },
+      "id": "http-upload-document-1",
+      "name": "Subir a SINTEL (upload-document)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 260],
+      "notes": "neverError=true + fullResponse=true: el status code real (200/201/400/401/403/409/415/422) llega a $json.statusCode para el Switch de abajo, en vez de que n8n trate cualquier 4xx como fallo duro del nodo. retryOnFail cubre 5xx/timeouts (Fase 12)."
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "or",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.statusCode }}",
+                    "rightValue": 200,
+                    "operator": { "type": "number", "operation": "equals" }
+                  },
+                  {
+                    "leftValue": "={{ $json.statusCode }}",
+                    "rightValue": 201,
+                    "operator": { "type": "number", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "OK"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.statusCode }}",
+                    "rightValue": 409,
+                    "operator": { "type": "number", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "DUPLICADO"
+            },
+            {
+              "conditions": {
+                "combinator": "or",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.statusCode }}",
+                    "rightValue": 400,
+                    "operator": { "type": "number", "operation": "equals" }
+                  },
+                  {
+                    "leftValue": "={{ $json.statusCode }}",
+                    "rightValue": 415,
+                    "operator": { "type": "number", "operation": "equals" }
+                  },
+                  {
+                    "leftValue": "={{ $json.statusCode }}",
+                    "rightValue": 422,
+                    "operator": { "type": "number", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "RECHAZADO"
+            },
+            {
+              "conditions": {
+                "combinator": "or",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.statusCode }}",
+                    "rightValue": 401,
+                    "operator": { "type": "number", "operation": "equals" }
+                  },
+                  {
+                    "leftValue": "={{ $json.statusCode }}",
+                    "rightValue": 403,
+                    "operator": { "type": "number", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "IDENTIDAD_INVALIDA"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "OTRO" }
+      },
+      "id": "switch-status-1",
+      "name": "Switch por status code",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [840, 260]
+    },
+    {
+      "parameters": {},
+      "id": "noop-ok-1",
+      "name": "Log: procesado OK",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1060, 60]
+    },
+    {
+      "parameters": {},
+      "id": "noop-duplicado-1",
+      "name": "Log: duplicado (no es error)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1060, 220]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.SINTEL_DEPT_ADMINISTRACION_EMAIL }}",
+        "subject": "=SINTEL: documento rechazado -- {{ $('Extraer adjuntos XML').item.json.attachment_filename }}",
+        "message": "=El documento adjunto en el correo \"{{ $('Extraer adjuntos XML').item.json.gmail_subject }}\" (de {{ $('Extraer adjuntos XML').item.json.gmail_from }}) fue RECHAZADO por SINTEL.\n\nStatus HTTP: {{ $json.statusCode }}\nRespuesta: {{ JSON.stringify($json.body) }}\ncorrelation_id: {{ $('Extraer adjuntos XML').item.json.correlation_id }}\n\nRevisar manualmente el documento -- SINTEL no lo persistio.",
+        "options": {}
+      },
+      "id": "gmail-send-rechazado-1",
+      "name": "Notificar: documento rechazado",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1060, 380],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PENDIENTE",
+          "name": "Gmail -- buzon facturas SINTEL (cargar credencial real)"
+        }
+      },
+      "notes": "REVISAR: SINTEL_DEPT_ADMINISTRACION_EMAIL se define como variable de entorno en el contenedor n8n (FASE 10, matriz de departamentos -- el usuario la carga, no hardcodeada aqui)."
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "={{ $env.SINTEL_WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $env.SINTEL_DEPT_ADMINISTRACION_WHATSAPP }}",
+        "textBody": "=SINTEL: documento rechazado ({{ $('Extraer adjuntos XML').item.json.attachment_filename }}, status {{ $json.statusCode }}). Ver correo para el detalle."
+      },
+      "id": "whatsapp-rechazado-1",
+      "name": "Notificar WhatsApp: documento rechazado",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [1060, 520],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "PENDIENTE",
+          "name": "WhatsApp Business Cloud API SINTEL (cargar credencial real)"
+        }
+      },
+      "notes": "REVISAR OBLIGATORIO antes de activar: WhatsApp Cloud API exige que el PRIMER mensaje de una conversacion use una plantilla pre-aprobada por Meta (texto libre solo funciona dentro de una ventana de 24h con respuesta previa del destinatario) -- este nodo con 'textBody' libre fallara si no hay una conversacion abierta. Cambiar a la operacion de plantilla ('Send Template') con el nombre real de la plantilla aprobada antes de usar en produccion."
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.SINTEL_DEPT_TI_EMAIL }}",
+        "subject": "=SINTEL/n8n: identidad tecnica invalida o expirada ({{ $json.statusCode }})",
+        "message": "=El workflow N8N-INVOICES recibio {{ $json.statusCode }} al llamar a SINTEL -- el token tecnico probablemente expiro (7 dias) o fue revocado.\n\nEjecutar de nuevo: docker compose exec web python manage.py crear_identidad_tecnica_n8n --schema home\ny actualizar SINTEL_N8N_REFRESH_TOKEN en el .env del contenedor n8n.",
+        "options": {}
+      },
+      "id": "gmail-send-identidad-1",
+      "name": "Alerta TI: identidad invalida",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1060, 660],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PENDIENTE",
+          "name": "Gmail -- buzon facturas SINTEL (cargar credencial real)"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "noop-otro-1",
+      "name": "Log: status inesperado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1060, 800]
+    }
+  ],
+  "connections": {
+    "Gmail Trigger (buzon facturas)": {
+      "main": [[{ "node": "Extraer adjuntos XML", "type": "main", "index": 0 }]]
+    },
+    "Extraer adjuntos XML": {
+      "main": [[{ "node": "Refrescar token SINTEL", "type": "main", "index": 0 }]]
+    },
+    "Refrescar token SINTEL": {
+      "main": [[{ "node": "Subir a SINTEL (upload-document)", "type": "main", "index": 0 }]]
+    },
+    "Subir a SINTEL (upload-document)": {
+      "main": [[{ "node": "Switch por status code", "type": "main", "index": 0 }]]
+    },
+    "Switch por status code": {
+      "main": [
+        [{ "node": "Log: procesado OK", "type": "main", "index": 0 }],
+        [{ "node": "Log: duplicado (no es error)", "type": "main", "index": 0 }],
+        [
+          { "node": "Notificar: documento rechazado", "type": "main", "index": 0 },
+          { "node": "Notificar WhatsApp: documento rechazado", "type": "main", "index": 0 }
+        ],
+        [{ "node": "Alerta TI: identidad invalida", "type": "main", "index": 0 }],
+        [{ "node": "Log: status inesperado", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": ""
+  },
+  "meta": {
+    "sintel_mission": "N8N-SINTEL-02 FASE 5/6/10/12",
+    "sintel_note": "Workflow generado por Claude Code sin acceso a la UI de n8n (no hay login). Importar via 'Import from File' y REVISAR cada nodo con nota 'REVISAR' antes de activar. Ninguna credencial ni token real esta embebido en este archivo."
+  },
+  "id": "n8n-invoices-workflow-a"
+}

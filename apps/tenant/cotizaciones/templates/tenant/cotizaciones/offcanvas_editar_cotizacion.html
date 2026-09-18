@@ -1,0 +1,41 @@
+{# offcanvas_editar_cotizacion.html - Formulario editar cotización #}
+<form id="form-cotizacion-editar" data-endpoint="/api/v1/cotizaciones/{{ cotizacion.uuid }}/" data-method="PATCH">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title">Editar Cotización</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div class="mb-3">
+      <label for="cliente" class="form-label">Cliente</label>
+      <select id="cliente_select" class="form-select" required onchange="document.getElementById('cliente').value = this.value">
+        <option value="">Seleccione un cliente</option>
+        {% for cliente in clientes %}
+        <option value="{{ cliente.uuid }}" {% if cotizacion.cliente.uuid == cliente.uuid %}selected{% endif %}>{{ cliente.razon_social }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" id="cliente" name="cliente" value="{{ cotizacion.cliente.uuid }}">
+    </div>
+    <div class="mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <label for="configuracion" class="form-label mb-0">Configuración</label>
+        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none"
+                hx-get="/cotizaciones/partials/configuracion/crear/"
+                hx-target="#offcanvas-container">
+          <i class="bi bi-plus-circle"></i> Nueva Plantilla
+        </button>
+      </div>
+      <select id="configuracion_select" class="form-select" required onchange="document.getElementById('configuracion').value = this.value">
+        <option value="">Seleccione una configuración</option>
+        {% for configuracion in configuraciones %}
+        <option value="{{ configuracion.uuid }}" {% if cotizacion.configuracion.uuid == configuracion.uuid %}selected{% endif %}>{{ configuracion.nombre_configuracion }}</option>
+        {% endfor %}
+      </select>
+      <input type="hidden" id="configuracion" name="configuracion" value="{{ cotizacion.configuracion.uuid }}">
+    </div>
+    <div class="mb-3">
+      <label for="fecha_emision" class="form-label">Fecha de emisión</label>
+      <input type="date" id="fecha_emision" name="fecha_emision" class="form-control" value="{{ cotizacion.fecha_emision|date:'Y-m-d' }}">
+    </div>
+    <button type="submit" id="btn-cotizacion-editar-submit" class="btn btn-success w-100">Actualizar Cotización</button>
+  </div>
+</form>

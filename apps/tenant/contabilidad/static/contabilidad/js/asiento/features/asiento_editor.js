@@ -185,18 +185,22 @@
     const btnGuardar = d.querySelector('#btn-guardar-asiento-crear, #btn-guardar-asiento-editar');
 
     const diferencia = Math.abs(totalDebe - totalHaber);
+    // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
     const formatter = new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: 'COP',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
+    const fmtMoney = (v) => (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+      ? w.DOMUtils.formatCurrency(v, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : formatter.format(v);
 
-    if (totalDebeDisplay) totalDebeDisplay.textContent = formatter.format(totalDebe);
-    if (totalHaberDisplay) totalHaberDisplay.textContent = formatter.format(totalHaber);
-    if (resumenTotalDebe) resumenTotalDebe.textContent = formatter.format(totalDebe);
-    if (resumenTotalHaber) resumenTotalHaber.textContent = formatter.format(totalHaber);
-    if (resumenDiferencia) resumenDiferencia.textContent = formatter.format(diferencia);
+    if (totalDebeDisplay) totalDebeDisplay.textContent = fmtMoney(totalDebe);
+    if (totalHaberDisplay) totalHaberDisplay.textContent = fmtMoney(totalHaber);
+    if (resumenTotalDebe) resumenTotalDebe.textContent = fmtMoney(totalDebe);
+    if (resumenTotalHaber) resumenTotalHaber.textContent = fmtMoney(totalHaber);
+    if (resumenDiferencia) resumenDiferencia.textContent = fmtMoney(diferencia);
     
     if (diferencia < 0.01) {
       // Cuadrado

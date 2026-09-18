@@ -219,7 +219,8 @@
             return;
         }
         if (!(await w.UIManager?.confirm('¿Eliminar este cliente de forma permanente?'))) return;
-        const res = await w.Sintel.Core.Http.request('DELETE', `/api/v1/clientes/${uuid}/`);
+        // T-9: delega a la SSoT de endpoints (clientes.api.js).
+        const res = await w.clientesAPI.delete(uuid);
         if (res.ok || res.status === 204) {
             showSuccess('Cliente eliminado');
             d.dispatchEvent(new CustomEvent('clienteEliminado'));
@@ -242,7 +243,8 @@
 
     async function deleteContacto(uuid) {
         if (!(await w.UIManager?.confirm('¿Eliminar este contacto?'))) return;
-        const res = await w.Sintel.Core.Http.request('DELETE', `/api/v1/clientes/contactos/${uuid}/`);
+        // T-9: delega a la SSoT de endpoints (clientes.api.js).
+        const res = await w.contactosAPI.delete(uuid);
         if (res.ok || res.status === 204) {
             showSuccess('Contacto eliminado');
             d.dispatchEvent(new CustomEvent('contactoEliminado'));
@@ -256,9 +258,12 @@
     let _historialTable = null;
     let _historialUUID = null;
 
-    const COP = (v) => new Intl.NumberFormat('es-CO', {
-        style: 'currency', currency: 'COP', minimumFractionDigits: 0
-    }).format(parseFloat(v) || 0);
+    // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+    const COP = (v) => (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+        ? w.DOMUtils.formatCurrency(parseFloat(v) || 0, { minimumFractionDigits: 0 })
+        : new Intl.NumberFormat('es-CO', {
+            style: 'currency', currency: 'COP', minimumFractionDigits: 0
+        }).format(parseFloat(v) || 0);
 
     const HISTORIAL_COLUMNS = [
         {

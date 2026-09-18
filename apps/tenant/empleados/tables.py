@@ -409,12 +409,22 @@ class DevengoDetailTable(tables.Table):
         return format_html('<span class="badge bg-success">Activo</span>')
 
     def render_acciones(self, record):
-        if record.anulado:
-            return format_html('<span class="text-muted">—</span>')
-        return format_html(
-            '<button type="button" class="btn btn-sm btn-outline-danger btn-anular-nomina" data-uuid="{0}" title="Anular nómina">'
-            '<i class="bi bi-slash-circle"></i></button>',
+        # feature 2026-09-10: "Ver" (detalle solo lectura) + "PDF" (desprendible
+        # para enviar al empleado) -- antes esta columna solo tenia "Anular".
+        botones = format_html(
+            '<button type="button" class="btn btn-sm btn-outline-info btn-ver-nomina" data-uuid="{0}" title="Ver detalle">'
+            '<i class="bi bi-eye"></i></button>'
+            '<a href="/api/v1/empleados/devengos/{0}/pdf/" target="_blank" class="btn btn-sm btn-outline-danger" title="Generar desprendible PDF">'
+            '<i class="bi bi-file-earmark-pdf"></i></a>',
             record.uuid,
+        )
+        if record.anulado:
+            return format_html('<div class="btn-group btn-group-sm">{}</div>', botones)
+        return format_html(
+            '<div class="btn-group btn-group-sm">{0}'
+            '<button type="button" class="btn btn-outline-danger btn-anular-nomina" data-uuid="{1}" title="Anular nómina">'
+            '<i class="bi bi-slash-circle"></i></button></div>',
+            botones, record.uuid,
         )
 
 

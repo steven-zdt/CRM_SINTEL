@@ -481,3 +481,112 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
     assert len(data2) == 1
     assert data2[0]["numero_documento"] == "3333333333"  # Solo Carlos de Tenant 2, no Juan de Tenant 1
 
+
+@pytest.mark.django_db
+def test_info_empleado_acepta_pk_entero_y_uuid(client, admin_user, tenant):
+    """
+    Regresion (2026-09-10): GET .../devengos/info-empleado/ devolvia 500
+    (no 404) cuando 'empleado' llegaba como PK entero -- Postgres no puede
+    castear un entero a uuid en el filtro .filter(uuid=empleado_param).
+    Esto rompia "crear nomina" para cualquier empleado elegido desde el
+    dropdown clasico (cargarInfoEmpleado() en devengo_editor.js manda
+    selectEmp.value = emp.id, un PK entero) -- solo el flujo preseleccionado
+    (Master-Detail / periodo, que manda UUID) funcionaba. El contrato del
+    empleado existia y nunca llegaba a verificarse porque la busqueda del
+    empleado ya fallaba antes.
+    """
+    with schema_context(tenant.schema_name):
+        from apps.tenant.empresa.models import Empresa
+        from apps.tenant.empleados.models import Contrato
+        empresa = Empresa.objects.first()
+        emp = Empleado.objects.create(
+            tipo_documento="CC", numero_documento="900111222",
+            primer_nombre="Con", primer_apellido="Contrato",
+            email="con.contrato@example.com", fecha_ingreso="2024-01-01",
+            empresa=empresa, estado="ACTIVO", eps="EPS004", afp="AFP001", arl="ARL002",
+        )
+        Contrato.objects.create(
+            empresa=empresa, empleado=emp, tipo="INDEF", fecha_inicio="2024-01-01",
+            salario_mensual=Decimal("3000000.00"), cargo="Auditor",
+        )
+        emp_id, emp_uuid = emp.id, str(emp.uuid)
+        client.force_login(admin_user)
+
+    # PK entero (flujo dropdown clasico) -- antes del fix, 500.
+    resp_pk = client.get(
+        f"/api/v1/empleados/devengos/info-empleado/?empleado={emp_id}",
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
+    assert resp_pk.status_code == 200, resp_pk.content
+    assert resp_pk.json()["contrato"]["salario_mensual"] == "3000000.00"
+
+    # UUID (flujo preseleccionado / periodo) -- ya funcionaba, no debe romperse.
+    resp_uuid = client.get(
+        f"/api/v1/empleados/devengos/info-empleado/?empleado={emp_uuid}",
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
+    assert resp_uuid.status_code == 200, resp_uuid.content
+    assert resp_uuid.json()["empleado"]["numero_documento"] == "900111222"
+
+    # PK inexistente -> 404, no 500.
+    resp_404 = client.get(
+        "/api/v1/empleados/devengos/info-empleado/?empleado=999999",
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
+    assert resp_404.status_code == 404
+
+
+@pytest.mark.django_db
+def test_devengo_detalle_y_pdf(client, admin_user, tenant):
+    """
+    Feature (2026-09-10): "Ver" detalle de una nomina (solo lectura) y
+    generar el desprendible en PDF para enviar al empleado. Antes "Ver"
+    reutilizaba el formulario de CREAR (editable) solo para mostrar datos,
+    y no existia ninguna via para generar un PDF de una nomina individual
+    (solo LiquidacionPrestacion lo tenia).
+    """
+    with schema_context(tenant.schema_name):
+        from apps.tenant.empresa.models import Empresa
+        from apps.tenant.empleados.models import Contrato
+        empresa = Empresa.objects.first()
+        emp = Empleado.objects.create(
+            tipo_documento="CC", numero_documento="900222333",
+            primer_nombre="Pdf", primer_apellido="Test",
+            email="pdf.test@example.com", fecha_ingreso="2024-01-01",
+            empresa=empresa, estado="ACTIVO", eps="EPS004", afp="AFP001", arl="ARL002",
+        )
+        contrato = Contrato.objects.create(
+            empresa=empresa, empleado=emp, tipo="INDEF", fecha_inicio="2024-01-01",
+            salario_mensual=Decimal("2000000.00"), cargo="Tester",
+        )
+        devengo = Devengo.objects.create(
+            empresa=empresa, empleado=emp, contrato=contrato,
+            periodo_mes="2026-01", fecha_pago="2026-01-31",
+            salario_base=Decimal("2000000.00"), salud_empleado=Decimal("80000.00"),
+            pension_empleado=Decimal("80000.00"), neto_pagar=Decimal("1840000.00"),
+        )
+        devengo_uuid = devengo.uuid
+        client.force_login(admin_user)
+
+    # Detalle: 200, contenido real del empleado, sin fuga de comentarios Django,
+    # y con el link al PDF (antes: 500 porque get_queryset() en accion no-list
+    # ya devuelve la instancia, no un QuerySet -- .select_related() fallaba).
+    resp_detalle = client.get(
+        f"/api/v1/empleados/devengos/{devengo_uuid}/render-offcanvas/detalle/",
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
+    assert resp_detalle.status_code == 200, resp_detalle.content
+    assert b"{#" not in resp_detalle.content
+    assert b"Pdf Test" in resp_detalle.content
+    assert b"Generar Desprendible PDF" in resp_detalle.content
+
+    # PDF: 200, documento HTML imprimible con el neto correcto.
+    resp_pdf = client.get(
+        f"/api/v1/empleados/devengos/{devengo_uuid}/pdf/",
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
+    assert resp_pdf.status_code == 200, resp_pdf.content
+    assert b"{#" not in resp_pdf.content
+    assert "Desprendible de Pago de Nómina".encode() in resp_pdf.content
+    assert "1.840.000".encode() in resp_pdf.content
+

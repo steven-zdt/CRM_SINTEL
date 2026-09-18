@@ -31,12 +31,27 @@
                 <label class="form-label text-muted small">Fecha de Emisión:</label>
                 <p id="view_fecha_emision" class="form-control-plaintext border-bottom mb-0">-</p>
             </div>
-            
+
             <div class="col-md-6">
+                <label class="form-label text-muted small">Fecha de Vencimiento:</label>
+                <p id="view_fecha_vencimiento" class="form-control-plaintext border-bottom mb-0">-</p>
+            </div>
+
+            <div class="col-md-4">
                 <label class="form-label text-muted small">Moneda:</label>
                 <p id="view_moneda" class="form-control-plaintext border-bottom mb-0">-</p>
             </div>
-            
+
+            <div class="col-md-4">
+                <label class="form-label text-muted small">Forma de Pago:</label>
+                <p id="view_forma_pago" class="form-control-plaintext border-bottom mb-0">-</p>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label text-muted small">Medio de Pago:</label>
+                <p id="view_medio_pago" class="form-control-plaintext border-bottom mb-0">-</p>
+            </div>
+
             {# Emisor #}
             <div class="col-12 mt-3">
                 <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">
@@ -92,11 +107,42 @@
                 <label class="form-label text-muted small">Total:</label>
                 <p id="view_total" class="form-control-plaintext border-bottom mb-0 text-end fw-bold text-primary">-</p>
             </div>
-            
+
+            <div class="col-12" id="view_valor_en_letras_container" style="display: none;">
+                <label class="form-label text-muted small">Valor en Letras:</label>
+                <p id="view_valor_en_letras" class="form-control-plaintext border-bottom mb-0 fst-italic">-</p>
+            </div>
+
             {# CUFE #}
             <div class="col-12 mt-3" id="view_cufe_container" style="display: none;">
                 <label class="form-label text-muted small">CUFE:</label>
                 <p id="view_cufe" class="form-control-plaintext border-bottom mb-0 font-monospace small text-break">-</p>
+            </div>
+
+            {# Informacion Fiscal / Autorizacion DIAN (FST-375 secc. 11/31) --
+               solo lectura, oculto si la factura no tiene datos de
+               autorizacion (ej. facturas de compra recibidas de un tercero
+               cuya autorizacion no siempre se persiste igual). #}
+            <div class="col-12 mt-3" id="view_autorizacion_container" style="display: none;">
+                <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">
+                    <i class="bi bi-patch-check me-2"></i>Autorización DIAN
+                </h6>
+            </div>
+            <div class="col-md-6" id="view_autorizacion_numero_wrap" style="display: none;">
+                <label class="form-label text-muted small">Número de Autorización:</label>
+                <p id="view_autorizacion_numero" class="form-control-plaintext border-bottom mb-0 font-monospace small">-</p>
+            </div>
+            <div class="col-md-6" id="view_autorizacion_rango_wrap" style="display: none;">
+                <label class="form-label text-muted small">Prefijo / Rango Autorizado:</label>
+                <p id="view_autorizacion_rango" class="form-control-plaintext border-bottom mb-0">-</p>
+            </div>
+            <div class="col-md-6" id="view_autorizacion_vigencia_wrap" style="display: none;">
+                <label class="form-label text-muted small">Vigencia:</label>
+                <p id="view_autorizacion_vigencia" class="form-control-plaintext border-bottom mb-0">-</p>
+            </div>
+            <div class="col-12" id="view_qr_container" style="display: none;">
+                <label class="form-label text-muted small">Código QR (texto crudo del documento fiscal):</label>
+                <p id="view_qr_code" class="form-control-plaintext border-bottom mb-0 font-monospace small text-break" style="max-height: 80px; overflow-y: auto;">-</p>
             </div>
 
             {# Desglose de Impuestos #}
@@ -123,29 +169,25 @@
                 </div>
             </div>
 
-            {# Cotizacion vinculada #}
+            {% comment %}
+            Cotizacion vinculada -- referencia documental de solo lectura
+            (mision "Facturas = document store" §13: vincular/desvincular
+            ya no es una accion de Facturas).
+            {% endcomment %}
             <div class="col-12 mt-3">
                 <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">
                     <i class="bi bi-link-45deg me-2"></i>Cotización vinculada
                 </h6>
                 <div id="view_cotizacion_vinculada_container" data-factura-uuid="">
                     <div id="view_cotizacion_vinculada_empty" class="d-flex gap-2 align-items-center">
-                        <select id="view_cotizacion_vinculada_select" class="form-select form-select-sm">
-                            <option value="">Vincular Cotización (Opcional)</option>
-                        </select>
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="btn_vincular_cotizacion_factura">
-                            <i class="bi bi-link-45deg me-1"></i>Vincular
-                        </button>
+                        <span class="text-muted small">Sin cotización vinculada.</span>
                     </div>
-                    <div id="view_cotizacion_vinculada_card" class="d-none align-items-center justify-content-between border rounded p-2">
+                    <div id="view_cotizacion_vinculada_card" class="d-none align-items-center border rounded p-2">
                         <span class="badge text-bg-light border" id="view_cotizacion_vinculada_label">-</span>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn_desvincular_cotizacion_factura" title="Desvincular cotización">
-                            <i class="bi bi-x-lg"></i>
-                        </button>
                     </div>
                 </div>
             </div>
-            
+
             {# Items de la Factura #}
             <div class="col-12 mt-3">
                 <h6 class="text-primary fw-bold border-bottom pb-2 mb-3">

@@ -224,8 +224,15 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
     movimiento_inventario_uuid = serializers.UUIDField(required=False, allow_null=True)
     movimiento_referencia = serializers.DictField(read_only=True, allow_null=True)
 
+    # GASTOS_PROYECTOS_01: proyecto asociado (opcional, Pull Model via UUID)
+    proyecto_uuid = serializers.UUIDField(required=False, allow_null=True)
+    proyecto_codigo = serializers.SerializerMethodField()
+
     # DT-SEDE-01
     sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+
+    def get_proyecto_codigo(self, obj):
+        return obj.proyecto_codigo
 
     def get_ds_prefijo(self, obj):
         try:
@@ -259,6 +266,8 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
             'ds_numero_documento_proveedor',
             'movimiento_inventario_uuid',
             'movimiento_referencia',
+            'proyecto_uuid',      # GASTOS_PROYECTOS_01
+            'proyecto_codigo',    # GASTOS_PROYECTOS_01
             'sede_nombre',  # DT-SEDE-01
         )
         read_only_fields = fields
@@ -292,6 +301,15 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
     )
     sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
 
+    # GASTOS_PROYECTOS_01: proyecto asociado (opcional, Pull Model via UUID).
+    # El PATCH de Gasto NO pasa por business_service (DRF UpdateModelMixin
+    # directo) -- la DSV vive aqui, mismo patron que `sede` en este serializer.
+    proyecto_uuid = serializers.UUIDField(required=False, allow_null=True)
+    proyecto_codigo = serializers.SerializerMethodField()
+
+    def get_proyecto_codigo(self, obj):
+        return obj.proyecto_codigo
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         empresa_id = self.context.get('empresa_id') or self.context.get('request') and getattr(
@@ -318,6 +336,17 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'sede': 'No tiene permiso para asignar esta sede (fuera de su alcance organizacional).'}
                 )
+
+        # DSV: Proyecto (opcional). 'proyecto_uuid' in attrs distingue "no
+        # se envio" (no tocar) de "se envio null" (desvincular).
+        if 'proyecto_uuid' in attrs:
+            proyecto_uuid = attrs.get('proyecto_uuid')
+            if proyecto_uuid:
+                from apps.tenant.proyectos.models import Proyecto
+                if not Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa_id).exists():
+                    raise serializers.ValidationError(
+                        {'proyecto_uuid': 'El proyecto no existe o no pertenece a esta empresa.'}
+                    )
         return attrs
 
     class Meta:
@@ -352,6 +381,8 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             'fecha_anulacion',
             'movimiento_inventario_uuid',
             'movimiento_referencia',
+            'proyecto_uuid',      # GASTOS_PROYECTOS_01 (writable)
+            'proyecto_codigo',    # GASTOS_PROYECTOS_01 (read-only)
             'sede',
             'sede_nombre',
             'created_at',
@@ -361,7 +392,7 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             'id', 'uuid', 'empresa', 'resolucion_dian', 'prefijo', 'consecutivo',
             'vendedor_nit', 'vendedor_nombre', 'vendedor_direccion', 'vendedor_telefono',
             'subtotal', 'total_retefuente', 'total_reteica', 'total_reteiva', 'total',
-            'activo', 'anulado', 'fecha_anulacion', 'sede_nombre', 'created_at', 'updated_at',
+            'activo', 'anulado', 'fecha_anulacion', 'proyecto_codigo', 'sede_nombre', 'created_at', 'updated_at',
         )
 
 

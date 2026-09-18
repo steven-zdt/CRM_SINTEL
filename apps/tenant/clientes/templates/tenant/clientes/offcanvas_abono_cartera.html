@@ -21,7 +21,10 @@
           </div>
           <div class="col-6">
             <span class="text-muted">Fecha Vto:</span>
-            <div class="text-dark">{{ cartera.fecha_vencimiento|date:"Y-m-d" }}</div>
+            <div class="text-dark">
+              {{ cartera.fecha_vencimiento|date:"Y-m-d" }}
+              {% if dias_vencida %}<span class="badge bg-danger ms-1">{{ dias_vencida }} días vencida</span>{% endif %}
+            </div>
           </div>
           <div class="col-12">
             <span class="text-muted">Cliente:</span>
@@ -66,5 +69,40 @@
         </button>
       </div>
     </form>
+
+    {% comment %}
+    Notas de seguimiento (mision "Clientes + Cartera" seccion 29-30) --
+    historial append-only, independiente del abono de arriba.
+    {% endcomment %}
+    <hr class="my-4">
+    <h6 class="mb-2"><i class="bi bi-chat-left-text me-1"></i>Notas de Seguimiento</h6>
+    <form id="form-nota-cartera" data-cartera-uuid="{{ cartera.uuid }}" class="mb-3">
+      <div class="input-group input-group-sm">
+        <select class="form-select" id="nota-tipo" name="tipo" style="max-width:150px;">
+          <option value="SEGUIMIENTO">Seguimiento</option>
+          <option value="PROMESA_PAGO">Promesa de pago</option>
+          <option value="DISPUTA">Disputa/Reclamo</option>
+          <option value="OTRO">Otro</option>
+        </select>
+        <input type="text" class="form-control" id="nota-texto" name="texto" maxlength="4000"
+               placeholder="Ej: Cliente informa que paga el viernes" required>
+        <button type="submit" class="btn btn-outline-primary">
+          <i class="bi bi-plus-lg"></i>
+        </button>
+      </div>
+    </form>
+    <div id="cartera-notas-lista" class="small">
+      {% for nota in notas %}
+        <div class="border-bottom pb-2 mb-2">
+          <div class="d-flex justify-content-between text-muted">
+            <span class="badge bg-light text-dark border">{{ nota.get_tipo_display }}</span>
+            <span>{{ nota.created_at|date:"Y-m-d H:i" }}{% if nota.usuario %} · {{ nota.usuario.user.first_name }} {{ nota.usuario.user.last_name }}{% endif %}</span>
+          </div>
+          <div>{{ nota.texto }}</div>
+        </div>
+      {% empty %}
+        <p class="text-muted">Sin notas registradas.</p>
+      {% endfor %}
+    </div>
   </div>
 </div>

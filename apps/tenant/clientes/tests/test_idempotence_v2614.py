@@ -137,8 +137,15 @@ class TestHTTPStatusCodes:
                 "email": "cliente@example.com",
                 "telefono": "3000000000",
                 "activo": True,
+                # DEUDA-C01 (mision "Clientes + Cartera", 2026-09-11): JURIDICA
+                # via ViewSet (validar_representante=True) exige representante legal.
+                "contactos": [{
+                    "nombre_completo": "Representante Legal Test",
+                    "email": "representante@example.com",
+                    "es_representante_legal": True,
+                }],
             }
-            
+
             # # WARNING: PRIMER POST
             response1 = api_client.post(
                 '/api/v1/clientes/',
@@ -184,8 +191,15 @@ class TestHTTPStatusCodes:
                 "email": "cliente@example.com",
                 "telefono": "3000000000",
                 "activo": True,
+                # DEUDA-C01 (mision "Clientes + Cartera", 2026-09-11): JURIDICA
+                # via ViewSet (validar_representante=True) exige representante legal.
+                "contactos": [{
+                    "nombre_completo": "Representante Legal Test",
+                    "email": "representante@example.com",
+                    "es_representante_legal": True,
+                }],
             }
-            
+
             # # WARNING: PRIMER POST: Create
             response1 = api_client.post(
                 '/api/v1/clientes/',

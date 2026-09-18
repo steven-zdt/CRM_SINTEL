@@ -19,6 +19,11 @@ class CuentaBancaria(SintelTenantBaseModel):
     banco = models.CharField(max_length=100, verbose_name=_("Banco"))
     tipo = models.CharField(max_length=50, verbose_name=_("Tipo de Cuenta"))
     numero = models.CharField(max_length=50, verbose_name=_("Numero de Cuenta"))
+    # B-4 (docs/remediation/AUDIT_BASELINE_20260912.md): antes solo existia
+    # hard-delete (bloqueado si tenia extractos). Mismo patron que
+    # Proveedor.activo/Cliente.activo -- permite ocultar una cuenta con
+    # historial sin borrarla.
+    activo = models.BooleanField(default=True, verbose_name=_("Activo"))
 
     class Meta:
         db_table = "bancos_cuenta_bancaria"
@@ -26,6 +31,7 @@ class CuentaBancaria(SintelTenantBaseModel):
         verbose_name_plural = _("Cuentas Bancarias")
         indexes = [
             models.Index(fields=["empresa", "numero"]),
+            models.Index(fields=["empresa", "activo"]),
         ]
 
     def __str__(self):

@@ -14,11 +14,20 @@
     w.Sintel.Compras = w.Sintel.Compras || {};
 
     // Helper de Formateo de Moneda
+    // BUG (2026-09-12, hallazgo T-5): sin guard, un valor null/undefined/NaN
+    // renderizaba el string literal "NaN" -- no se manifestaba hoy porque
+    // los call-sites actuales ya filtran con parseFloat(...)||0, pero era
+    // una trampa abierta para el proximo consumidor.
     function formatCurrency(val) {
+        const value = (val === null || val === undefined || val === '' || isNaN(val)) ? 0 : val;
+        // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+        if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
+            return w.DOMUtils.formatCurrency(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        }
         return new Intl.NumberFormat('es-CO', {
             style: 'currency', currency: 'COP',
             minimumFractionDigits: 0, maximumFractionDigits: 0
-        }).format(val);
+        }).format(value);
     }
 
     // ─── Calculos de Totales ──────────────────────────────────────────────────

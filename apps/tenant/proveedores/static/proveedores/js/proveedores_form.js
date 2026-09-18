@@ -42,9 +42,12 @@
   }
 
   /**
-   * Abrir Offcanvas en modo detalle (con tabs Información + Facturas de Compra).
+   * Abrir Offcanvas en modo detalle (con tabs Información + Facturas de
+   * Compra + Representantes). `tab` opcional ('representantes') activa esa
+   * pestaña automáticamente tras la carga -- usado por el botón
+   * "Representantes" de la tabla del Directorio.
    */
-  async function openDetalle(id) {
+  async function openDetalle(id, tab) {
     let container = d.querySelector(CONTAINER_ID);
     if (!container) {
       container = d.createElement('div');
@@ -53,7 +56,16 @@
     }
     const url = `${API_URL}render-offcanvas/detalle/?id=${id}`;
     console.log(`${MOD} Cargando detalle desde: ${url}`);
-    return htmx.ajax('GET', url, { target: CONTAINER_ID, swap: 'innerHTML' });
+    const result = await htmx.ajax('GET', url, { target: CONTAINER_ID, swap: 'innerHTML' });
+    if (tab === 'representantes') {
+      const tabBtn = container.querySelector('#tab-representantes-btn');
+      if (tabBtn && w.bootstrap?.Tab) {
+        w.bootstrap.Tab.getOrCreateInstance(tabBtn).show();
+      } else {
+        tabBtn?.click();
+      }
+    }
+    return result;
   }
 
   /**
@@ -161,7 +173,11 @@
         title: 'Total', field: 'total', width: 140, hozAlign: 'right',
         formatter: (cell) => {
           const v = parseFloat(cell.getValue()) || 0;
-          return `<span class="fw-semibold text-success small">${v.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}</span>`;
+          // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+          const fmtV = (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+            ? w.DOMUtils.formatCurrency(v, { maximumFractionDigits: 0 })
+            : v.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+          return `<span class="fw-semibold text-success small">${fmtV}</span>`;
         },
       },
     ];
@@ -188,7 +204,10 @@
       .filter(r => r.estado === 'ENVIADA' || r.estado === 'BORRADOR')
       .reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
 
-    const fmt = (v) => v.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+    // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+    const fmt = (v) => (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+      ? w.DOMUtils.formatCurrency(v, { maximumFractionDigits: 0 })
+      : v.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
     const el = (id) => d.getElementById(id);
     if (el('ckpi-total'))    el('ckpi-total').textContent    = total;
     if (el('ckpi-monto'))    el('ckpi-monto').textContent    = fmt(monto);
@@ -325,6 +344,50 @@
       toggleRetenciones();
     }
 
+    // Representante (solo en creación -- ver offcanvas_form.html §1.5).
+    // Alterna el panel NATURAL/JURIDICA segun tipo_persona; ambos ocultos
+    // si tipo_persona aun no se ha elegido.
+    const selectTipoPersona = form.querySelector('#proveedor-tipo_persona');
+    const panelNatural = container.querySelector('#representante-natural-panel');
+    const panelJuridica = container.querySelector('#representante-juridica-panel');
+    if (selectTipoPersona && (panelNatural || panelJuridica)) {
+      const toggleRepresentante = () => {
+        const esNatural = selectTipoPersona.value === 'NATURAL';
+        const esJuridica = selectTipoPersona.value === 'JURIDICA';
+        panelNatural?.classList.toggle('d-none', !esNatural);
+        panelJuridica?.classList.toggle('d-none', !esJuridica);
+      };
+      selectTipoPersona.addEventListener('change', toggleRepresentante);
+      toggleRepresentante(); // Inicial (JURIDICA es el default del <select>)
+    }
+
+  }
+
+  /**
+   * Arma el payload del Representante principal a partir del panel visible
+   * (NATURAL o JURIDICA) segun tipo_persona -- ver offcanvas_form.html §1.5
+   * y ProveedorBusinessService.crear_proveedor(). Solo aplica en creación.
+   */
+  function buildRepresentantePayload(container, tipoPersona) {
+    const val = (id) => container.querySelector(id)?.value?.trim() || '';
+
+    if (tipoPersona === 'NATURAL') {
+      return {
+        tipo_documento: val('#representante-natural-tipo_documento') || 'CC',
+        numero_documento: val('#representante-natural-numero_documento'),
+      };
+    }
+    if (tipoPersona === 'JURIDICA') {
+      return {
+        tipo_documento: val('#representante-juridica-tipo_documento') || 'CC',
+        numero_documento: val('#representante-juridica-numero_documento'),
+        nombre_completo: val('#representante-juridica-nombre_completo'),
+        email_contacto: val('#representante-juridica-email_contacto'),
+        telefono_contacto: val('#representante-juridica-telefono_contacto'),
+        cargo: val('#representante-juridica-cargo') || 'Representante Legal',
+      };
+    }
+    return null;
   }
 
   /**
@@ -340,6 +403,13 @@
     if (!api) {
         console.error(`${MOD} Sintel.Proveedores.API no disponible`);
         return;
+    }
+
+    // Representante principal: solo en creación (nunca en edición -- el
+    // proveedor ya tiene sus representantes gestionables en su propio tab).
+    if (!id) {
+      const representante = buildRepresentantePayload(form, payload.tipo_persona);
+      if (representante) payload.representante = representante;
     }
 
     const res = id ? await api.update(id, payload) : await api.create(payload);

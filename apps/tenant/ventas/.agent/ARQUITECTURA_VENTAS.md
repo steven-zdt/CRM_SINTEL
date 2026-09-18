@@ -1,13 +1,82 @@
 # Auditoria Flujo Completo — Modulo Ventas
 
-**Version auditada:** v3.17.0
-**Fecha:** 2026-06-18
-**Estado:** PRODUCTION READY (0 criticos)
+**Version auditada:** v3.17.0 → Fase 1/2 remediación 2026-09-12
+**Fecha:** 2026-06-18 (actualizado 2026-09-12)
+**Estado:** PRODUCTION READY (0 criticos) — auditoría 2026-06-18, ya desactualizada en varios puntos (ver §DOCUMENTATION DRIFT abajo). Re-auditado 2026-09-12: 1 CRÍTICO (V-1) y 1 ALTO (V-2) encontrados y corregidos, ver sección nueva abajo.
 **Ubicacion:** `apps/tenant/ventas/`
 **App Label:** `tenant_ventas`
-**Auditor:** Claude Sonnet 4.6
+**Auditor:** Claude Sonnet 4.6. Fase 1/2 remediación 2026-09-12: Claude Sonnet 5 (Anthropic).
 
 ---
+
+## 2026-09-12 — Fase 1/2 de remediación: V-1 (CRÍTICO), V-2 (ALTO) — `docs/remediation/AUDIT_BASELINE_20260912.md`
+
+**V-1 — "Ver" devolvía 500 silencioso en el 100% de los casos (CRÍTICO, Fase 1, verificado PASS).**
+`offcanvas_detalle_venta.html` hacía `{% load humanize %}`/`\|intcomma`
+(único template de todo el repo que usaba `humanize`), pero
+`django.contrib.humanize` nunca fue registrado en `INSTALLED_APPS`
+(`config/settings.py`). `TemplateSyntaxError` → 500 → HTMX no hace swap en
+respuestas no-2xx → el usuario hacía clic en "Ver" y no pasaba nada, sin
+ningún error visible. Todo lo demás en la cadena (JS, endpoint, IDs,
+`mostrarOffcanvasSeguro()`, contenido del serializer) era correcto — solo
+este eslabón estaba roto. **Fix**: reemplazado por `currency_cop`/
+`format_cop` (`core/templatetags/currency_filters.py`), ya usado en el
+resto del repo. Test nuevo: `tests/test_detalle_venta_offcanvas.py` — 1 passed.
+
+**V-2 — "Editar Venta" era un 200 engañoso que no persistía nada, sin
+ningún botón/UI de edición (ALTO, Fase 2, en verificación).**
+`VentaDetailSerializer.read_only_fields = fields` — cualquier
+`PATCH`/`PUT` respondía 200 OK sin cambiar nada en BD.
+`VentaCRUDService.actualizar_venta()` ya existía completo (con guarda de
+estado BORRADOR y reemplazo de items) pero ningún ViewSet action ni UI lo
+invocaba. **Fix**: `VentaViewSet.partial_update()`/`update()` orquestan
+explícitamente vía `VentaBusinessService.actualizar_venta_borrador()`
+(nuevo, mismo patrón que `ResolucionFacturacionBusinessService.actualizar_resolucion()`).
+UI: se reutiliza el offcanvas de "Crear" en modo edición
+(`render-offcanvas/editar`, cliente y resolución bloqueados —
+`actualizar_venta()` no los toca, items precargados vía `json_script`),
+con un botón "Editar" nuevo en el detalle (visible solo en BORRADOR, junto
+a Anular). Test nuevo: `tests/test_editar_venta.py` (3 casos) +
+`test_detalle_venta_offcanvas.py` — **4/4 passed**. Dos problemas
+encontrados y corregidos en el camino de verificación, ninguno en la
+lógica de negocio: (1) faltaba `TenantProfile` con rol ADMIN en el test
+(`SintelTenantTestCase` solo crea `TenantMembership` en el esquema public,
+`IsTenantAdminOrReadOnly` exige `TenantProfile.rol` en el esquema tenant);
+(2) los comentarios `{# ... #}` multilínea agregados en
+`offcanvas_crear_venta.html`/`offcanvas_detalle_venta.html` se renderizaban
+como texto literal — Django's `{# #}` corto no admite saltos de línea,
+reemplazados por `{% comment %}...{% endcomment %}` (mismo bug encontrado y
+corregido en `offcanvas_detalle_compras.html`, ver hallazgo T-13 del
+baseline).
+
+---
+
+## DOCUMENTATION DRIFT confirmado 2026-09-12 (tabla §1 abajo, ya no vigente en 2 filas)
+
+La fila 3 ("Máquina de Estados — `BORRADOR → FACTURADA_DIAN → ANULADA` con
+transiciones controladas") describe la emisión fiscal como activa —
+**bloqueada deliberadamente desde VENTAS-COMPRAS-FACTURAS-01 (2026-09-09)**:
+`EMISION_FISCAL_VENTA_AUTORIZADA = False` (constante de código,
+`business_service.py`), `procesar_y_facturar_venta()` rechaza con 403
+antes de escribir nada, y los botones "Guardar y Facturar DIAN"/"Facturar
+DIAN" fueron removidos de ambos templates (con comentario explícito).
+Confirmado intacto en la re-auditoría 2026-09-12 — no reactivar, no hay
+ningún elemento de UI que lo reexponga. La fila 9 ("Anti-Zombie
+Tabulator") tampoco es cierta: `venta_list.js` es 100% server-rendered
+(django-tables2 + HTMX, Fase 5-BIS) desde antes de esta sesión — no usa
+Tabulator.
+
+**V-3 (`docs/remediation/AUDIT_BASELINE_20260912.md`) — MEDIO, cerrado
+2026-09-18:** el drift no se limita a las filas 3/9 de la tabla §1 — las
+secciones §5 en adelante (endpoints, `VentaListSerializer`, columnas de
+grid, `TabulatorFactory`/`ajaxParams`, el botón `facturar-dian`) siguen
+describiendo la arquitectura pre-Fase-5-BIS/pre-VENTAS-COMPRAS-FACTURAS-01
+(anterior a 2026-09-09) tal como quedó escrita en la auditoría original de
+2026-06-18. **Todo eso es histórico, no vigente.** No reintroducir Tabulator
+ni el botón de emisión fiscal basándose en esas secciones — la fuente de
+verdad actual es el código: `venta_list.js` (server-rendered, HTMX),
+`business_service.py` (`EMISION_FISCAL_VENTA_AUTORIZADA = False`) y
+`api/viewsets.py`/`api/serializers.py` tal como existen hoy.
 
 ## 1. Responsabilidades del Modulo
 
@@ -15,15 +84,17 @@
 |---|----------------|--------|
 | 1 | **Registro Comercial** — `Venta` como master record antes y despues de la emision DIAN | OK |
 | 2 | **Resolucion DIAN** — `ResolucionFacturacion` gestiona rangos autorizados; asignacion atomica de consecutivos via `select_for_update()` | OK |
-| 3 | **Maquina de Estados** — `BORRADOR → FACTURADA_DIAN → ANULADA` con transiciones controladas | OK |
-| 4 | **Integracion DIAN UBL 2.1** — `procesar_y_facturar_venta()` genera DTO canonico, CUFE, XML, firma XAdES y delega creacion de `Factura` a `FacturaBusinessService` | OK |
+| 3 | **Maquina de Estados** — `BORRADOR → FACTURADA_DIAN → ANULADA` con transiciones controladas | ⚠️ DESACTUALIZADO — emisión fiscal bloqueada desde 2026-09-09, ver DOCUMENTATION DRIFT arriba. Transición real hoy: `BORRADOR → ANULADA` o `BORRADOR → FACTURADA_DIAN` solo vía asociación MANUAL de una Factura ya existente (`vincular_factura_existente()`), nunca por emisión nueva |
+| 4 | **Integracion DIAN UBL 2.1** — `procesar_y_facturar_venta()` genera DTO canonico, CUFE, XML, firma XAdES y delega creacion de `Factura` a `FacturaBusinessService` | ⚠️ Código existe pero bloqueado (`EMISION_FISCAL_VENTA_AUTORIZADA = False`), ver DOCUMENTATION DRIFT arriba |
 | 5 | **Desacoplamiento Contable** — Ventas nunca toca `AsientoContable` ni `MovimientoContable`; Contabilidad extrae via Pull Model desde `Factura` | OK |
 | 6 | **Double Semantic Verification (DSV)** — Cada FK a `Cliente`, `Proyecto`, `Producto`, `Servicio`, `ResolucionFacturacion` verificada contra `empresa_id` antes de persistir | OK |
 | 7 | **Items dinamicos** — `ItemVenta` con subtotales calculados en tiempo real (JS) y al persistir (`ItemVenta.save()`) | OK |
 | 8 | **UUID Lookup** — `lookup_field = 'uuid'` en `VentaViewSet` y `ResolucionFacturacionViewSet`; nunca se exponen PKs enteros en URLs | OK |
-| 9 | **Anti-Zombie Tabulator** — `venta_list.js` destruye instancia previa al re-montar via HTMX | OK |
+| 9 | **Anti-Zombie Tabulator** — `venta_list.js` destruye instancia previa al re-montar via HTMX | ⚠️ DESACTUALIZADO — `venta_list.js` es server-rendered (django-tables2+HTMX, Fase 5-BIS), no usa Tabulator |
 | 10 | **Anti-Backdrop Bootstrap** — `mostrarOffcanvasSeguro()` elimina backdrops huerfanos antes de abrir offcanvas | OK |
 | 11 | **Zero parseInt() sobre UUIDs** — `capturarClienteUUID()` usa `getAttribute('data-uuid')` del `<option>` | OK |
+| 12 | **CRUD — Ver** | ✅ Corregido 2026-09-12 (V-1) — ver sección arriba |
+| 13 | **CRUD — Editar** | ✅ Implementado 2026-09-12 (V-2) — ver sección arriba, en verificación |
 
 ---
 
@@ -986,3 +1057,84 @@ Antes de cualquier cambio en este modulo verificar:
 | DT-VENTAS-01 | `ResolucionFacturacion.clean()` sin `CheckConstraint` DB para `rango_hasta >= rango_desde` | MEDIUM |
 | DT-VENTAS-02 | `_dsv_y_asignar_resolucion()` usa `+= 1` en lugar de `F('consecutivo_actual') + 1` (safe con `select_for_update` pero no canonico) | LOW |
 | DT-VENTAS-03 | No existe `UniqueConstraint(empresa, tipo)` en `ResolucionFacturacion` para garantizar una sola resolucion vigente por tipo | MEDIUM |
+
+---
+
+## 14. Integracion Facturas<->Ventas (Buscar/Vincular + Gestion Manual de Pago)
+
+Mision "Integracion Facturas <-> Ventas + Gestion Manual de Pago" (2026-09-17),
+construida sobre el mecanismo de vinculacion manual ya existente de
+`VENTAS-COMPRAS-FACTURAS-01`/`FACTURAS-VENTAS-COMPRAS-01` (2026-09-09/10).
+**Antes de tocar este contrato, verificar en codigo real** (no en este
+documento) — la Fase 0 de la mision original ya encontro que gran parte de
+lo pedido en el prompt maestro ya estaba construido; solo se agrego lo
+genuinamente faltante.
+
+### 14.1 SSoT por campo
+
+| Campo | Dueño real (SSoT) | Donde vive | Editable desde Ventas via |
+|---|---|---|---|
+| `factura_asociada` (Venta) | Ventas (el vinculo en si) | `Venta.factura_asociada` (`OneToOneField`, ya existia) | `POST /api/v1/ventas/{uuid}/vincular-factura/` |
+| numero, CUFE, XML, totales fiscales, fecha_emision | **Factura** (fiscal) | `apps/tenant/facturas/models.py` | Nunca — `XML_IMMUTABLE_FIELDS` los protege incluso desde el pass-through de Ventas |
+| `estado_pago`, `forma_pago`, `medio_pago_codigo`, `payment_due_date`, `fecha_pago` | **Factura** (gestion manual) | `apps/tenant/facturas/models.py`, whitelist `MANUAL_EDITABLE_FIELDS` | `PATCH /api/v1/ventas/{uuid}/gestion-pago/` (pass-through, ver 14.3) |
+| `Venta.estado` (BORRADOR/FACTURADA_DIAN/ANULADA) | Ventas (documental) | `Venta.estado` | Flujo normal de Ventas — nunca se confunde con `estado_pago` |
+
+**No existe ningun campo de gestion manual duplicado en `Venta`** — `fecha_pago`
+se agrego a `Factura` (junto a sus 4 campos hermanos que ya vivian ahi),
+nunca a `Venta`, para no crear un segundo SSoT del mismo dato.
+
+### 14.2 Buscar / Vincular Factura
+
+- Widget `#venta-factura-widget` (`venta_editor.js::bindFacturaWidget()`)
+  reutilizado en **ambos** offcanvas: `offcanvas_detalle_venta.html` (uso
+  original) y `offcanvas_crear_venta.html` (Nueva Venta y Editar Venta,
+  agregado en esta mision).
+- En **Nueva Venta** (sin `venta.uuid` todavia), la seleccion de factura se
+  **difiere**: se guarda en `widget.dataset.facturaPendienteUuid` y la
+  vinculacion real (`API.vincularFactura()`) ocurre recien despues de que
+  `guardarVenta()` cree la Venta y obtenga su `uuid`. Si la vinculacion
+  diferida falla, la Venta igual queda creada (el error solo se loguea) —
+  nunca se pierde el trabajo del usuario por un fallo de vinculacion.
+- En **Editar Venta** (con `venta.uuid` ya existente), la vinculacion es
+  inmediata (mismo comportamiento que siempre tuvo el widget en Detalle),
+  pero **no cierra el formulario completo** — solo refresca el estado del
+  widget, para no descartar otros campos que el usuario este editando.
+- Buscador reutilizado: `GET /api/v1/facturas/buscar-para-movimiento/?naturaleza=VENTA`
+  (no se creo un segundo endpoint de busqueda).
+
+### 14.3 Gestion Manual de Pago — pass-through
+
+`VentaBusinessService.actualizar_gestion_pago(venta, data, empresa_id)`
+(`services/business_service.py`) es un pass-through delgado:
+
+1. Exige que `venta.factura_asociada_id` ya exista (404 `sin_factura_vinculada` si no).
+2. Re-resuelve la Factura por `empresa_id` via `FacturaSelectors.qs_detail()`
+   (nunca confia en el objeto cacheado en `venta.factura_asociada` — DSV real).
+3. Filtra el payload a `GESTION_PAGO_FIELDS` (5 campos, whitelist MAS
+   estrecha que `MANUAL_EDITABLE_FIELDS` de Facturas — nunca deja pasar
+   `estado`/`categoria`/`sede`/etc. por este camino).
+4. Delega en `FacturaBusinessService.actualizar_factura_limitado()` — el
+   MISMO servicio que ya usa el editor propio de Facturas. Las validaciones
+   de negocio (PAGADA requiere `fecha_pago`; `fecha_pago` no puede ser
+   anterior a `fecha_emision` ni futura) viven ahi, no duplicadas en Ventas,
+   para que apliquen igual sin importar por cual UI se edite.
+
+Expuesto en UI dentro del offcanvas `offcanvas_detalle_venta.html`, seccion
+"Gestion Manual de Pago" (junto a "Factura de venta", mismo offcanvas — no
+se creo un offcanvas separado ni una accion nueva en el listado).
+
+### 14.4 XML no destruye Gestion Manual — garantia verificada
+
+`FacturaBusinessService.guardar_desde_dto()` retorna temprano por CUFE
+duplicado (`"created": False`) **sin tocar ningun campo** salvo, si estaban
+vacios, `cliente_uuid`/`proveedor_uuid`. Fijado con test real:
+`apps/tenant/facturas/tests/test_xml_reimport_preserva_gestion_manual.py`
+(reimporta el mismo XML/CUFE despues de editar los 6 campos de gestion
+manual y confirma que ninguno cambia).
+
+### 14.5 Tests de esta mision
+
+- `apps/tenant/ventas/tests/test_gestion_pago_manual.py` (8 tests)
+- `apps/tenant/facturas/tests/test_xml_reimport_preserva_gestion_manual.py` (2 tests)
+- Regresion confirmada en verde: `test_vincular_factura_manual.py`
+  (ventas + compras, 11 tests) y `test_resolver_naturaleza_matrix.py`.

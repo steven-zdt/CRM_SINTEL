@@ -76,7 +76,8 @@
 
     async function eliminarLiquidacion(uuid) {
         try {
-            const res = await w.Sintel.Core.Http.request('DELETE', `${API_BASE}${uuid}/`);
+            // T-9: delega a la SSoT de endpoints (empleados.api.js).
+            const res = await w.Sintel.Core.Http.request('DELETE', w.Sintel.Empleados.API.liquidaciones.detail(uuid));
             if (res.ok) {
                 w.UIManager?.notifySuccess('Liquidacion eliminada');
                 reload();

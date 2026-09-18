@@ -113,13 +113,10 @@
         }
 
         try {
-            const url = contactoId
-                ? `/api/v1/clientes/contactos/${contactoId}/`
-                : '/api/v1/clientes/contactos/';
-            
-            const method = contactoId ? 'PATCH' : 'POST';
-            
-            const response = await w.Sintel.Core.Http.request(method, url, payload);
+            // T-9: delega a la SSoT de endpoints (clientes.api.js).
+            const response = contactoId
+                ? await w.contactosAPI.update(contactoId, payload)
+                : await w.contactosAPI.create(payload);
 
             if (response.ok) {
                 if (w.UIManager?.success) {

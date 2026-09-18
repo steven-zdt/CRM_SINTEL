@@ -27,7 +27,8 @@ from ..models import Proyecto, TareaDiariaProyecto
 TAREA_FIELDS = [
     'id', 'uuid', 'proyecto_id', 'empresa_id', 'fecha_inicio', 'fecha_fin',
     'titulo', 'descripcion', 'estado', 'prioridad',
-    'asignado_a', 'notas_progreso', 'created_at', 'updated_at'
+    'asignado_a', 'notas_progreso', 'avance', 'bloqueos', 'incidencias',
+    'created_at', 'updated_at'
 ]
 
 
@@ -125,7 +126,10 @@ class TareasDiariasBusinessService:
         descripcion='',
         prioridad='NORMAL',
         asignado_a='',
-        fecha=None
+        fecha=None,
+        avance=None,
+        bloqueos='',
+        incidencias=''
     ):
         """
         Crea una nueva TareaDiariaProyecto.
@@ -174,6 +178,9 @@ class TareasDiariasBusinessService:
             descripcion=descripcion,
             prioridad=prioridad,
             asignado_a=asignado_a,
+            avance=avance,
+            bloqueos=bloqueos,
+            incidencias=incidencias,
             estado='PENDIENTE'
         )
 
@@ -229,7 +236,10 @@ class TareasDiariasBusinessService:
         TareasDiariasBusinessService._validar_proyecto_no_cerrado(tarea.proyecto)
 
         # Campos permitidos
-        permitidos = ['fecha_inicio', 'fecha_fin', 'descripcion', 'prioridad', 'notas_progreso', 'asignado_a']
+        permitidos = [
+            'fecha_inicio', 'fecha_fin', 'descripcion', 'prioridad', 'notas_progreso', 'asignado_a',
+            'avance', 'bloqueos', 'incidencias',
+        ]
         for key, value in data.items():
             if key in permitidos:
                 setattr(tarea, key, value)

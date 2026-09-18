@@ -1,20 +1,58 @@
 # AUDITORIA_FLUJO_COMPLETO.md — Proyectos
 
-## Fecha: 2026-08-05
+## Fecha: 2026-08-05 (actualizado 2026-09-12)
 ## Modulo: tenant/proyectos
-## Version: v3.10.5 (fix dependencies migracion 0020) | Base: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2
+## Version: v3.10.5 (fix dependencies migracion 0020) | Base: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2 | Fix P-1 2026-09-12
 
 ---
 
 ## RESUMEN DE ESTADO
 
 ```
-Score Global:     10/10
-Status:           PRODUCTION READY ✅
-Hallazgos:        0 criticos | 0 importantes | 0 menores
+Score Global:     10/10 (auditoria 2026-08-05) -- 1 CRITICO real encontrado y
+                   corregido el 2026-09-12 (P-1), ver seccion nueva abajo.
+Status:           PRODUCTION READY ✅ (con el fix P-1 aplicado)
+Hallazgos:        0 criticos | 0 importantes | 0 menores  <- NO seguia siendo cierto
+                   desde el commit "FIX-3" (2026-05-11): avanzar-fase dejo de
+                   persistir fase_actual en BD. Corregido 2026-09-12.
 Completados:      M4 + Presupuesto Manual v3.5.2 + 8 Critical Fixes
 ```
 
+## 2026-09-12 — Fase 1 de remediación: P-1, `avanzar-fase` no persistía `fase_actual` (CRÍTICO)
+
+Auditoría "Proyectos — sincronización de estado" (parte de
+`docs/remediation/AUDIT_BASELINE_20260912.md`) encontró que el propio
+"FIX-3" documentado abajo (2026-05-11, "Eliminado `save_proyecto()`
+redundante antes de `calcular_indicadores_financieros()`. -50% writes")
+era en realidad una **regresión**: ese `save_proyecto()` "redundante" era
+el ÚNICO guardado que persistía `fase_actual` en BD. Desde ese commit,
+`POST .../avanzar-fase/` devolvía 200 con la fase nueva (serializaba el
+objeto Python ya mutado en memoria), pero la fila real en Postgres nunca
+cambiaba — cualquier relectura (`refresh_from_db()`, otra sesión, el
+siguiente refresh HTMX de la grilla) mostraba la fase vieja. La causa
+técnica exacta: `cambiar_fase_proyecto()` solo muta `fase_actual` (y los
+campos de responsable) en memoria; el único `.save()` posterior era el de
+`calcular_indicadores_financieros()`, con `update_fields` limitado a los 4
+campos financieros — Django genera un `UPDATE` que solo toca esas columnas.
+
+**Fix**: `ProyectoViewSet.avanzar_fase` (`api/viewsets.py`) ahora hace un
+`save_proyecto(proyecto)` completo (sin `update_fields`) inmediatamente
+después de `cambiar_fase_proyecto()`, antes de
+`calcular_indicadores_financieros()` — mismo patrón que ya usaba
+(correctamente, nunca tuvo este bug) `orchestrate_update_proyecto()`. La
+sección "4. Avance de Fase" más abajo describe el flujo ya corregido.
+
+**Test nuevo**: `tests/test_avanzar_fase_persistencia.py` — 2 casos:
+persistencia de `fase_actual` (vía `refresh_from_db()`, no reusando el
+objeto de la request) y persistencia del snapshot de responsable. Ambos
+pasan contra el endpoint HTTP real (`APIClient`), no solo a nivel de
+servicio. **Resultado: 2 passed.**
+
+Confirmado en la misma auditoría, sin cambios necesarios: sin doble fuente
+de verdad en frontend (`proyectos_editor.js` lee del backend, no
+optimista), sin `location.reload()` en ningún flujo, mapeo de badges
+completo, y la ruta genérica `PATCH`/`PUT` (`orchestrate_update_proyecto`)
+nunca tuvo este bug — era puntual a la acción dedicada `avanzar-fase`.
 
 ---
 
@@ -191,8 +229,13 @@ Formato: `PRJ-{YYYY}-{seq:04d}`. Secuenciador deterministico con `UniqueConstrai
 ### FIX-2: DSV en asignar_snapshot_cliente y asignar_snapshot_proveedor
 Agregado `empresa_id=proyecto.empresa_id` al filtro. IDOR eliminado.
 
-### FIX-3: Doble save en avanzar_fase
-Eliminado `save_proyecto()` redundante antes de `calcular_indicadores_financieros()`. -50% writes.
+### FIX-3: Doble save en avanzar_fase — REVERTIDO 2026-09-12 (era una regresión, ver hallazgo P-1 arriba)
+~~Eliminado `save_proyecto()` redundante antes de `calcular_indicadores_financieros()`. -50% writes.~~
+**Ese `save_proyecto()` "redundante" era el único que persistía `fase_actual` en BD** —
+sin él, `avanzar-fase` dejaba de escribir el cambio de fase, aunque la respuesta HTTP
+parecía correcta. Restaurado el 2026-09-12 (ver sección "Fase 1 de remediación" arriba).
+El ahorro de writes no vale la pena frente a silenciar la persistencia del dato principal
+de la acción.
 
 ### FIX-4: DETAIL_FIELDS separado de LIST_FIELDS
 `DETAIL_FIELDS` extiende `LIST_FIELDS` con 10 campos adicionales (responsables historicos + archivos).
@@ -259,12 +302,14 @@ POST /api/v1/proyectos/{uuid}/avanzar-fase/    [M3: uuid en URL]
   -> cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id, nombre)
        -> Valida fase en ['BORRADOR','INICIO','PLANEACION','EJECUCION','CIERRE']
        -> asignar_snapshot_responsable() por fase
+  -> save_proyecto(proyecto)          [save() completo, restaurado 2026-09-12 -- hallazgo P-1,
+                                        persiste fase_actual + responsable_*]
   -> calcular_indicadores_financieros(proyecto)
        -> calcular_costo_mano_obra()   [AsignacionPersonal activas]
        -> calcular_costo_materiales()  [ItemPedido APROBADO]
        -> P&L: utilidad = contrato - (MO + materiales)
        -> margen = utilidad / contrato * 100
-       -> save_proyecto()              [update_fields=4 campos]
+       -> save_proyecto()              [update_fields=4 campos financieros]
   <- 200 OK
 ```
 

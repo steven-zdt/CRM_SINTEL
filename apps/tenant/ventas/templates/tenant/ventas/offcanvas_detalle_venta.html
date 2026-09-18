@@ -1,5 +1,5 @@
 {# offcanvas_detalle_venta.html — Detalle de Venta v3.16.x #}
-{% load humanize %}
+{% load currency_filters %}
 
 <div class="offcanvas offcanvas-end" tabindex="-1"
      id="offcanvas-venta-detalle"
@@ -72,17 +72,92 @@
       </div>
       {% endif %}
 
-      {# ── Factura asociada ─────────────────────────────────────────── #}
-      {% if venta.factura_asociada %}
-      <div class="alert alert-success p-2 small mb-4">
-        <i class="bi bi-receipt-cutoff me-1"></i>
-        <strong>Factura DIAN:</strong>
-        {{ venta.factura_asociada.numero }}
-        {% if venta.factura_asociada.cufe %}
-          <div class="text-muted mt-1" style="font-size:0.72rem; word-break:break-all;">
-            CUFE: {{ venta.factura_asociada.cufe }}
+      {# ── Factura de venta asociada (FACTURAS-VENTAS-COMPRAS-01) ─────── #}
+      {# Asociacion MANUAL de una Factura ya persistida en el modulo      #}
+      {# Facturas -- nunca crea ni emite una Factura nueva (la barrera    #}
+      {# fiscal de VENTAS-COMPRAS-FACTURAS-01 sigue intacta, arriba).     #}
+      <div class="mb-4" id="venta-factura-widget" data-venta-uuid="{{ venta.uuid }}">
+        <p class="small fw-bold text-uppercase text-muted mb-2">Factura de venta</p>
+
+        <div id="venta-factura-asociada" class="{% if not venta.factura_asociada %}d-none{% endif %}">
+          {% if venta.factura_asociada %}
+          <div class="alert alert-success p-2 small mb-2">
+            <i class="bi bi-receipt-cutoff me-1"></i>
+            <strong>{{ venta.factura_asociada.numero }}</strong>
+            {% if venta.factura_asociada.cufe %}
+              <div class="text-muted mt-1" style="font-size:0.72rem; word-break:break-all;">
+                CUFE: {{ venta.factura_asociada.cufe }}
+              </div>
+            {% endif %}
           </div>
+          {% if venta.estado != 'ANULADA' %}
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  data-venta-factura-action="cambiar">
+            <i class="bi bi-arrow-repeat me-1"></i>Cambiar factura
+          </button>
+          {% endif %}
+          {% endif %}
+        </div>
+
+        {% if venta.estado != 'ANULADA' %}
+        <div id="venta-factura-buscador" class="{% if venta.factura_asociada %}d-none{% endif %}">
+          <button type="button" class="btn btn-outline-primary btn-sm mb-2"
+                  id="venta-factura-buscar-toggle"
+                  data-venta-factura-action="mostrar-buscador">
+            <i class="bi bi-search me-1"></i>Vincular factura existente
+          </button>
+          <div id="venta-factura-buscador-panel" class="d-none border rounded p-2 bg-light">
+            <input type="text" class="form-control form-control-sm mb-2"
+                   id="venta-factura-buscar-input"
+                   placeholder="Buscar por numero, CUFE o cliente...">
+            <div id="venta-factura-buscar-resultados" class="small"></div>
+          </div>
+        </div>
         {% endif %}
+      </div>
+
+      {# ── Gestion Manual de Pago (integracion Facturas<->Ventas) ──────── #}
+      {# SSoT sigue siendo Factura -- este bloque es un pass-through hacia  #}
+      {# PATCH /api/v1/ventas/{uuid}/gestion-pago/, que a su vez delega en  #}
+      {# FacturaBusinessService.actualizar_factura_limitado(). Solo tiene  #}
+      {# sentido si ya hay una Factura vinculada.                          #}
+      {% if venta.factura_asociada %}
+      <div class="mb-4" id="venta-gestion-pago-widget" data-venta-uuid="{{ venta.uuid }}">
+        <p class="small fw-bold text-uppercase text-muted mb-2">Gestion Manual de Pago</p>
+        <div id="venta-gestion-pago-feedback" class="alert d-none p-2 small mb-2" role="alert"></div>
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label small mb-1" for="gp-estado-pago">Estado de Pago</label>
+            <select class="form-select form-select-sm" id="gp-estado-pago">
+              <option value="NO_PAGADA" {% if venta.factura_asociada.estado_pago == 'NO_PAGADA' %}selected{% endif %}>No Pagada</option>
+              <option value="PAGO_PARCIAL" {% if venta.factura_asociada.estado_pago == 'PAGO_PARCIAL' %}selected{% endif %}>Pago Parcial</option>
+              <option value="PAGADA" {% if venta.factura_asociada.estado_pago == 'PAGADA' %}selected{% endif %}>Pagada</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label small mb-1" for="gp-fecha-pago">Fecha de Pago</label>
+            <input type="date" class="form-control form-control-sm" id="gp-fecha-pago"
+                   value="{% if venta.factura_asociada.fecha_pago %}{{ venta.factura_asociada.fecha_pago|date:'Y-m-d' }}{% endif %}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small mb-1" for="gp-fecha-limite">Fecha Limite de Pago</label>
+            <input type="date" class="form-control form-control-sm" id="gp-fecha-limite"
+                   value="{% if venta.factura_asociada.payment_due_date %}{{ venta.factura_asociada.payment_due_date|date:'Y-m-d' }}{% endif %}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small mb-1" for="gp-forma-pago">Forma de Pago</label>
+            <input type="text" class="form-control form-control-sm" id="gp-forma-pago"
+                   placeholder="Ej: Credito, Contado" value="{{ venta.factura_asociada.forma_pago|default:'' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label small mb-1" for="gp-medio-pago">Codigo Medio de Pago</label>
+            <input type="text" class="form-control form-control-sm" id="gp-medio-pago"
+                   placeholder="Ej: 10, 01" value="{{ venta.factura_asociada.medio_pago_codigo|default:'' }}">
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="btn-guardar-gestion-pago">
+          <i class="bi bi-save me-1"></i>Guardar Gestion de Pago
+        </button>
       </div>
       {% endif %}
 
@@ -104,9 +179,9 @@
             <tr>
               <td>{{ item.descripcion }}</td>
               <td class="text-end">{{ item.cantidad }}</td>
-              <td class="text-end">${{ item.precio_unitario|floatformat:0|intcomma }}</td>
+              <td class="text-end">${{ item.precio_unitario|format_cop }}</td>
               <td class="text-end">{{ item.porcentaje_iva }}%</td>
-              <td class="text-end">${{ item.subtotal|floatformat:0|intcomma }}</td>
+              <td class="text-end">${{ item.subtotal|format_cop }}</td>
             </tr>
             {% empty %}
             <tr><td colspan="5" class="text-muted text-center">Sin items</td></tr>
@@ -115,15 +190,15 @@
           <tfoot class="fw-semibold">
             <tr>
               <td colspan="4" class="text-end text-muted">Subtotal:</td>
-              <td class="text-end">${{ venta.subtotal|floatformat:0|intcomma }}</td>
+              <td class="text-end">${{ venta.subtotal|format_cop }}</td>
             </tr>
             <tr>
               <td colspan="4" class="text-end text-muted">IVA:</td>
-              <td class="text-end">${{ venta.impuestos|floatformat:0|intcomma }}</td>
+              <td class="text-end">${{ venta.impuestos|format_cop }}</td>
             </tr>
             <tr class="table-primary">
               <td colspan="4" class="text-end fw-bold">Total Neto:</td>
-              <td class="text-end fw-bold">${{ venta.total_neto|floatformat:0|intcomma }}</td>
+              <td class="text-end fw-bold">${{ venta.total_neto|format_cop }}</td>
             </tr>
           </tfoot>
         </table>
@@ -140,16 +215,23 @@
       <button type="button" class="btn btn-secondary btn-sm"
               data-bs-dismiss="offcanvas">Cerrar</button>
       {% if venta.estado == 'BORRADOR' %}
+        {% comment %}V-2 (2026-09-12): "Editar" no existia -- abre el mismo offcanvas de Crear, en modo edicion (ver render-offcanvas/editar).{% endcomment %}
+        <button type="button" class="btn btn-outline-primary btn-sm"
+                data-venta-action="editar"
+                data-venta-uuid="{{ venta.uuid }}">
+          <i class="bi bi-pencil-square me-1"></i>Editar
+        </button>
         <button type="button" class="btn btn-danger btn-sm"
                 data-venta-action="anular"
                 data-venta-uuid="{{ venta.uuid }}">
           <i class="bi bi-x-circle me-1"></i>Anular
         </button>
-        <button type="button" class="btn btn-success btn-sm"
-                data-venta-action="facturar-dian"
-                data-venta-uuid="{{ venta.uuid }}">
-          <i class="bi bi-send-check me-1"></i>Facturar DIAN
-        </button>
+        {# VENTAS-COMPRAS-FACTURAS-01 (2026-09-09): boton "Facturar DIAN" #}
+        {# removido -- SINTEL no esta autorizada por la DIAN para emitir  #}
+        {# Facturas electronicas (Fase 12, backend bloqueado en Fase 8). #}
+        {# La Factura de esta Venta debe cargarse como XML externo en el  #}
+        {# modulo Facturas cuando ese flujo de consumo se implemente     #}
+        {# (DEFERRED, ver docs/comercial/VENTAS_COMPRAS_FACTURAS_FLOW.md). #}
       {% endif %}
     </div>
   </div>

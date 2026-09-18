@@ -98,10 +98,12 @@
 
     const uuid    = form.dataset.uuid || '';
     const payload = buildPayload(form);
-    const method  = uuid ? 'PUT' : 'POST';
-    const url     = uuid ? `${API_URL}${uuid}/` : API_URL;
 
-    const res = await w.Sintel.Core.Http.request(method, url, payload);
+    // T-9: delega a la SSoT de endpoints (bancos.api.js) en vez de construir
+    // la URL localmente -- mismo metodo HTTP y mismo cliente (Sintel.Core.Http).
+    const res = uuid
+      ? await w.Sintel.Bancos.API.cuentas.update(uuid, payload)
+      : await w.Sintel.Bancos.API.cuentas.save(payload);
 
     if (!res.ok) {
       return w.UIManager?.handleError(res, MOD, {

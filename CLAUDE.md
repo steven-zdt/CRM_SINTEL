@@ -19,6 +19,10 @@ make logs        # Tail web container logs
 make shell       # Shell into web container
 ```
 
+**502 Bad Gateway right after `up`/`restart`?** `collectstatic --clear` runs on every `web`
+boot and `nginx` 502s until `web` finishes and `runserver` starts. If a boot is taking
+unusually long, **wait, don't restart again** — restarting resets the clock.
+
 ### Database migrations (multi-tenant)
 ```bash
 make migrate-shared    # Public schema

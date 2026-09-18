@@ -1,59 +1,124 @@
-{# compras_list.html - Compras Module v3.10.5 #}
+{# compras_list.html - Compras Module v3.11 (vista dinamica por menu) #}
 {# Zero JS in HTML - All logic in compras_list.js #}
 {# F33.14-C: loading state migrado a loading_state.html (F33.6) -- markup identico. #}
 {# F33.14-D: search bar migrada a filter_bar.html (F33.8) -- markup identico. #}
+{# RELEASE-CLOSE/COMPRAS -- vista dinamica: "Ordenes de Compra" y "Plantillas #}
+{# de Numeracion" pasan de 2 cards siempre visibles y apiladas a un menu de #}
+{# tabs (nav-pills) que muestra una u otra al hacer click -- mismo patron ya #}
+{# establecido en Clientes/Proveedores (nav-pills + panel HTMX lazy por tab). #}
 
-<div class="card shadow-sm" data-module="compras">
-  <div class="card-header bg-white py-3">
-    <div class="d-flex justify-content-between align-items-center">
-      <h5 class="mb-0 fw-bold text-dark">
-        <i class="bi bi-truck me-2 text-primary"></i>Órdenes de Compra
-      </h5>
-      <span data-module="compras" data-loading-icon class="ms-2 d-none">
-        <i class="bi bi-hourglass-split text-primary"></i>
-      </span>
-    </div>
-  </div>
+<div class="card border-0 shadow-none bg-transparent" data-module="compras">
+  <ul class="nav nav-pills mb-3 bg-light p-1 rounded-3 d-inline-flex" id="compras-subnav" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active py-2 px-3 fw-semibold border-0"
+              id="subtab-ordenes-btn"
+              data-bs-toggle="tab"
+              data-bs-target="#subtab-ordenes"
+              type="button"
+              role="tab"
+              aria-controls="subtab-ordenes"
+              aria-selected="true">
+        <i class="bi bi-truck me-2"></i>Órdenes de Compra
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link py-2 px-3 fw-semibold border-0"
+              id="subtab-plantillas-btn"
+              data-bs-toggle="tab"
+              data-bs-target="#subtab-plantillas"
+              type="button"
+              role="tab"
+              aria-controls="subtab-plantillas"
+              aria-selected="false">
+        <i class="bi bi-journals me-2"></i>Plantillas de Numeración
+      </button>
+    </li>
+  </ul>
 
-  <div class="card-body">
-    {# Toolbar #}
-    <div class="d-flex justify-content-between align-items-center mb-3" data-module="compras">
-      {% url 'compras:tabla' as compras_search_url %}
-      {% include 'tenant/core/partials/ui/filter_bar.html' with search_id="search-compra" placeholder="Buscar orden..." module="compras" search_url=compras_search_url target="#compras-panel" %}
-      <div class="d-flex gap-2">
-        <button class="btn btn-outline-secondary btn-sm"
-                hx-get="/api/v1/compras/plantillas/render-offcanvas/crear/"
-                hx-target="#offcanvas-container-plantillas"
-                hx-swap="innerHTML"
-                data-module="compras"
-                title="Crear plantilla de numeración">
-          <i class="bi bi-journals me-1"></i>Nueva Plantilla
-        </button>
-        <button class="btn btn-primary btn-sm"
-                hx-get="/api/v1/compras/render-offcanvas/crear/"
-                hx-target="#offcanvas-container-compras"
-                hx-swap="innerHTML"
-                data-module="compras"
-                data-create-button>
-          <i class="bi bi-plus-lg me-1"></i>Nueva Orden
-        </button>
+  <div class="tab-content" id="compras-tab-content">
+
+    {# ── TAB 1: Órdenes de Compra ─────────────────────────────────────── #}
+    <div class="tab-pane fade show active" id="subtab-ordenes" role="tabpanel" aria-labelledby="subtab-ordenes-btn">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold text-dark">
+              <i class="bi bi-truck me-2 text-primary"></i>Órdenes de Compra
+            </h6>
+            <span data-module="compras" data-loading-icon class="ms-2 d-none">
+              <i class="bi bi-hourglass-split text-primary"></i>
+            </span>
+          </div>
+        </div>
+
+        <div class="card-body">
+          {# Toolbar #}
+          <div class="d-flex justify-content-between align-items-center mb-3" data-module="compras">
+            {% url 'compras:tabla' as compras_search_url %}
+            {% include 'tenant/core/partials/ui/filter_bar.html' with search_id="search-compra" placeholder="Buscar orden..." module="compras" search_url=compras_search_url target="#compras-panel" %}
+            <button class="btn btn-primary btn-sm"
+                    hx-get="/api/v1/compras/render-offcanvas/crear/"
+                    hx-target="#offcanvas-container-compras"
+                    hx-swap="innerHTML"
+                    data-module="compras"
+                    data-create-button>
+              <i class="bi bi-plus-lg me-1"></i>Nueva Orden
+            </button>
+          </div>
+
+          {% comment %}
+          Panel HTMX: KPIs + tabla server-rendered (django-tables2). Reemplaza el
+          antiguo #compras-summary + spinner + #grid-ordenes-compra Tabulator
+          (ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS).
+          {% endcomment %}
+          <div id="compras-panel"
+               data-grid="ordenes-compra"
+               hx-get="{% url 'compras:tabla' %}"
+               hx-trigger="load, compra-created from:body, compra-updated from:body"
+               hx-target="this"
+               hx-swap="innerHTML"
+               hx-boost="true">
+            {% include 'tenant/core/partials/ui/loading_state.html' with entity="órdenes de compra" %}
+          </div>
+        </div>
       </div>
     </div>
-    
-    {% comment %}
-    Panel HTMX: KPIs + tabla server-rendered (django-tables2). Reemplaza el
-    antiguo #compras-summary + spinner + #grid-ordenes-compra Tabulator
-    (ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS).
-    {% endcomment %}
-    <div id="compras-panel"
-         data-grid="ordenes-compra"
-         hx-get="{% url 'compras:tabla' %}"
-         hx-trigger="load, compra-created from:body, compra-updated from:body"
-         hx-target="this"
-         hx-swap="innerHTML"
-         hx-boost="true">
-      {% include 'tenant/core/partials/ui/loading_state.html' with entity="órdenes de compra" %}
+
+    {# ── TAB 2: Plantillas de Numeración ──────────────────────────────── #}
+    {# CO-1 (2026-09-12): pantalla de gestion de plantillas -- antes solo #}
+    {# existia el formulario de creacion, sin ningun lugar para VER las ya #}
+    {# creadas (una plantilla desactivada era invisible en todas partes). #}
+    <div class="tab-pane fade" id="subtab-plantillas" role="tabpanel" aria-labelledby="subtab-plantillas-btn">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold text-dark">
+              <i class="bi bi-journals me-2 text-secondary"></i>Plantillas de Numeración
+            </h6>
+            <button class="btn btn-primary btn-sm"
+                    hx-get="/api/v1/compras/plantillas/render-offcanvas/crear/"
+                    hx-target="#offcanvas-container-plantillas"
+                    hx-swap="innerHTML"
+                    data-module="compras"
+                    title="Crear plantilla de numeración">
+              <i class="bi bi-plus-lg me-1"></i>Nueva Plantilla
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="plantillas-panel"
+               data-grid="plantillas-compra"
+               hx-get="{% url 'compras:plantillas-tabla' %}"
+               hx-trigger="load, plantilla-changed from:body"
+               hx-target="this"
+               hx-swap="innerHTML"
+               hx-boost="true">
+            {% include 'tenant/core/partials/ui/loading_state.html' with entity="plantillas" %}
+          </div>
+        </div>
+      </div>
     </div>
+
   </div>
 </div>
 

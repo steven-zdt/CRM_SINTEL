@@ -144,6 +144,37 @@
             });
         }
 
+        // CO-1 (2026-09-12): activar/desactivar plantilla desde la fila --
+        // el edit (hx-get declarativo, ver tables.py) no necesita JS.
+        const panelPlantillas = d.querySelector('#plantillas-panel');
+        if (panelPlantillas) {
+            panelPlantillas.addEventListener('click', async (e) => {
+                const btnToggle = e.target.closest('.btn-toggle-plantilla');
+                if (!btnToggle) return;
+                e.preventDefault();
+                e.stopPropagation();
+
+                const uuid = btnToggle.getAttribute('data-uuid');
+                const vigenteActual = btnToggle.getAttribute('data-vigente') === 'true';
+                const nuevoVigente = !vigenteActual;
+                const accionLabel = nuevoVigente ? 'activar' : 'desactivar';
+                if (!uuid) return;
+
+                const confirmed = await w.UIManager?.confirm(`¿Está seguro de ${accionLabel} esta plantilla?`);
+                if (!confirmed) return;
+
+                btnToggle.disabled = true;
+                try {
+                    await w.Sintel.Compras.API.plantillas.update(uuid, { vigente: nuevoVigente });
+                    w.UIManager?.notifySuccess(`Plantilla ${nuevoVigente ? 'activada' : 'desactivada'} correctamente`);
+                    d.body.dispatchEvent(new CustomEvent('plantilla-changed'));
+                } catch (error) {
+                    btnToggle.disabled = false;
+                    w.UIManager?.handleError(error);
+                }
+            });
+        }
+
         // Delegacion para los botones de cambiar de estado en el Offcanvas de Detalle
         const container = d.querySelector('#offcanvas-container-compras');
         if (container) {
@@ -177,9 +208,123 @@
                     } catch (error) {
                         w.UIManager?.handleError(error);
                     }
+                    return;
+                }
+
+                // ── Vincular Factura existente (FACTURAS-VENTAS-COMPRAS-01) ──
+                // Busqueda + seleccion EXPLICITA (nunca auto-match/auto-assign).
+                const widget = e.target.closest('#compra-factura-widget');
+                if (!widget) return;
+
+                if (e.target.closest('[data-compra-factura-action="mostrar-buscador"]') ||
+                    e.target.closest('[data-compra-factura-action="cambiar"]')) {
+                    const asociadaDiv = widget.querySelector('#compra-factura-asociada');
+                    const buscadorDiv = widget.querySelector('#compra-factura-buscador');
+                    const panel = widget.querySelector('#compra-factura-buscador-panel');
+                    if (asociadaDiv) asociadaDiv.classList.add('d-none');
+                    if (buscadorDiv) buscadorDiv.classList.remove('d-none');
+                    if (panel) panel.classList.remove('d-none');
+                    const input = widget.querySelector('#compra-factura-buscar-input');
+                    if (input) input.focus();
+                    return;
+                }
+
+                const btnSeleccionar = e.target.closest('[data-factura-uuid]');
+                if (btnSeleccionar) {
+                    seleccionarFacturaCompra(
+                        widget,
+                        btnSeleccionar.getAttribute('data-factura-uuid'),
+                        btnSeleccionar.getAttribute('data-factura-numero'),
+                    );
+                    return;
+                }
+
+                if (e.target.closest('#compra-factura-cancelar-confirm')) {
+                    buscarFacturasCompra(widget, widget.querySelector('#compra-factura-buscar-input')?.value || '');
+                    return;
+                }
+
+                if (e.target.closest('#compra-factura-confirmar')) {
+                    guardarAsociacionCompra(widget, container);
                 }
             });
+
+            let debounceIdCompraFactura = null;
+            container.addEventListener('input', (e) => {
+                const input = e.target.closest('#compra-factura-buscar-input');
+                if (!input) return;
+                const widget = input.closest('#compra-factura-widget');
+                clearTimeout(debounceIdCompraFactura);
+                debounceIdCompraFactura = setTimeout(() => buscarFacturasCompra(widget, input.value), 350);
+            });
         }
+    }
+
+    function buscarFacturasCompra(widget, q) {
+        const resultados = widget.querySelector('#compra-factura-buscar-resultados');
+        if (!resultados) return;
+        q = (q || '').trim();
+        if (q.length < 2) {
+            resultados.innerHTML = '<div class="text-muted p-2">Escribe al menos 2 caracteres...</div>';
+            return;
+        }
+        resultados.innerHTML = '<div class="text-muted p-2"><i class="bi bi-arrow-repeat"></i> Buscando...</div>';
+        w.Sintel.Compras.API.buscarFacturasCompra(q).then((items) => {
+            if (!items || !items.length) {
+                resultados.innerHTML = '<div class="text-muted p-2">Sin resultados.</div>';
+                return;
+            }
+            resultados.innerHTML = items.map((f) => `
+                <div class="d-flex align-items-center justify-content-between border-bottom py-2 px-1">
+                  <div>
+                    <div class="fw-semibold">${f.numero}</div>
+                    <div class="text-muted" style="font-size:0.78rem;">${f.fecha} &middot; ${f.tercero || f.cliente || 'N/A'} &middot; $${f.total}</div>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-primary flex-shrink-0"
+                          data-factura-uuid="${f.uuid}" data-factura-numero="${f.numero}">
+                    Seleccionar
+                  </button>
+                </div>
+            `).join('');
+        }).catch(() => {
+            resultados.innerHTML = '<div class="text-danger p-2">Error al buscar facturas.</div>';
+        });
+    }
+
+    function seleccionarFacturaCompra(widget, facturaUuid, facturaNumero) {
+        const resultados = widget.querySelector('#compra-factura-buscar-resultados');
+        if (!resultados) return;
+        resultados.innerHTML = `
+            <div class="alert alert-warning p-2 small mb-0">
+              Asociar la factura <strong>${facturaNumero}</strong> a esta Orden de Compra?
+              <div class="mt-2 d-flex gap-2">
+                <button type="button" class="btn btn-success btn-sm" id="compra-factura-confirmar"
+                        data-factura-uuid-confirm="${facturaUuid}">Guardar asociacion</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="compra-factura-cancelar-confirm">Cancelar</button>
+              </div>
+            </div>
+        `;
+    }
+
+    function guardarAsociacionCompra(widget, container) {
+        const btn = widget.querySelector('#compra-factura-confirmar');
+        if (!btn) return;
+        const facturaUuid = btn.getAttribute('data-factura-uuid-confirm');
+        const compraUuid = widget.getAttribute('data-compra-uuid');
+        btn.disabled = true;
+        w.Sintel.Compras.API.vincularFactura(compraUuid, facturaUuid).then(() => {
+            w.UIManager?.notifySuccess('Factura asociada correctamente.');
+            const offcanvasEl = container.querySelector('.offcanvas');
+            if (offcanvasEl && w.bootstrap?.Offcanvas) {
+                const instance = w.bootstrap.Offcanvas.getInstance(offcanvasEl);
+                if (instance) instance.hide();
+            }
+            ComprasList.refresh();
+        }).catch((err) => {
+            btn.disabled = false;
+            const msg = (err.data && (err.data.message || err.data.detail)) || 'Error al asociar la factura.';
+            w.UIManager?.notifyError(msg);
+        });
     }
 
     // ─── Plantilla Form ───────────────────────────────────────────────────────
@@ -192,6 +337,8 @@
         }
 
         const form = offcanvasEl.querySelector('#plantilla-crear-form');
+        const modo = form ? form.getAttribute('data-mode') : 'create';
+        const plantillaUuid = form ? form.getAttribute('data-plantilla-uuid') : null;
         const feedbackEl = offcanvasEl.querySelector('#form-plantilla-crear-feedback');
         const previewNum = offcanvasEl.querySelector('#plt-preview-num');
         const previewRango = offcanvasEl.querySelector('#plt-preview-rango');
@@ -244,26 +391,39 @@
             if (!desde || !hasta) { showError('Ingrese un rango valido.'); return; }
             if (hasta < desde) { showError('El rango hasta debe ser mayor o igual al rango desde.'); return; }
 
-            if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.textContent = 'Creando...'; }
+            const esEdicion = (modo === 'edit');
+            if (btnGuardar) { btnGuardar.disabled = true; btnGuardar.textContent = esEdicion ? 'Guardando...' : 'Creando...'; }
 
             try {
                 const payload = { nombre, rango_desde: desde, rango_hasta: hasta, vigente: esVigente };
                 if (prefijo) payload.prefijo = prefijo;
 
-                await API.plantillas.create(payload);
+                if (esEdicion) {
+                    await API.plantillas.update(plantillaUuid, payload);
+                } else {
+                    await API.plantillas.create(payload);
+                }
 
                 const bsInstance = w.bootstrap?.Offcanvas?.getInstance(offcanvasEl);
                 if (bsInstance) bsInstance.hide();
 
-                d.body.dispatchEvent(new CustomEvent('plantilla-created', { detail: payload }));
-                w.UIManager?.showNotification?.('Plantilla creada correctamente', 'success');
+                // CO-1/CO-8 (2026-09-12): evento unico para crear/editar --
+                // refresca el panel de gestion de plantillas (antes
+                // 'plantilla-created' no tenia ningun listener real).
+                d.body.dispatchEvent(new CustomEvent('plantilla-changed', { detail: payload }));
+                w.UIManager?.showNotification?.(
+                    esEdicion ? 'Plantilla actualizada correctamente' : 'Plantilla creada correctamente', 'success'
+                );
             } catch (err) {
                 const data = err.data || {};
                 const msgs = Object.values(data).flat().join(' ') || `Error ${err.status || ''}`;
                 showError(msgs);
-                console.error('[ComprasList] Error creando plantilla:', err);
+                console.error('[ComprasList] Error guardando plantilla:', err);
             } finally {
-                if (btnGuardar) { btnGuardar.disabled = false; btnGuardar.textContent = 'Crear Plantilla'; }
+                if (btnGuardar) {
+                    btnGuardar.disabled = false;
+                    btnGuardar.textContent = esEdicion ? 'Guardar Cambios' : 'Crear Plantilla';
+                }
             }
         });
     }

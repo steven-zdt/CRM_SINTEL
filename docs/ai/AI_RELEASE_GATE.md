@@ -12,7 +12,7 @@ están `VERIFIED`).
 [x] AI-03 READ/SUGGEST Tools     = VERIFIED (2026-09-01) -- 10 dominios con tool real (clientes, inventario, proveedores, ventas, compras, cotizaciones, gastos, proyectos, facturas, empleados, bancos, contabilidad = 12; impuestos/reporting DEFERRED formalmente, no deuda). Ver AI_TOOL_REGISTRY.md "Cierre formal de AI-03".
 [~] AI-04 Validation Engine       = PARCIAL -- 6 tools reales (clientes, proveedores, inventario, compras, cotizaciones, gastos); ventas investigado y descartado por falta de validate() real (no wrap-a-ciegas); facturas/empleados/bancos/contabilidad no aplican (READ-only/import-only/ya valida internamente); impuestos/reporting DEFERRED
 [ ] AI-05 Suggestion Engine        = BLOQUEADO POR DISEÑO (investigado 2026-09-01) -- no hay logica de negocio real que envolver, ver seccion abajo
-[~] AI-06 Form Assistant             = PARCIAL (2026-09-01) -- orquestador real (apps/services/ai/orchestrator/), primer caller real de AIProvider, CON endpoint HTTP real (POST /api/v1/ai/ask/); parcial porque falta integracion en el frontend/UI, no porque falte backend
+[~] AI-06 Form Assistant             = PARCIAL (actualizado 2026-09-09, mision SINTEL-AI-UI-01) -- orquestador real (apps/services/ai/orchestrator/), primer caller real de AIProvider, endpoint HTTP real (POST /api/v1/ai/ask/) Y AHORA UI REAL (offcanvas global + window.Sintel.AI, ver AI_UI_01_EXECUTION.md); sigue PARCIAL porque el flujo E2E con respuesta real del LLM nunca se ejecuto en un entorno con AI_ENABLED/ANTHROPIC_API_KEY reales (este entorno de desarrollo no los tiene) -- backend+UI completos, falta esa unica verificacion con credenciales reales
 [ ] AI-07 MCP Read Controlado         = BLOQUEADO POR DEFECTO DE TERCEROS (investigado 2026-09-01) -- django-rest-framework-mcp==0.1.0a4 nunca asigna request.method, rompe IsTenantAdminOrReadOnly; revertido, MCP sigue inerte, 0 ViewSets decorados. Ver AI_MCP_POLICY.md
 [ ] AI-08 Session/Memory               = no iniciado
 [ ] AI-09 Tracing/Observability         = parcial -- logging basico ya existia, sin trace_id/persistencia
@@ -280,3 +280,29 @@ bloqueante. Con AI-05 y AI-07 ambos bloqueados por razones reales
 (diseño y defecto de terceros respectivamente), el trabajo con avance
 real disponible sin bloqueo hoy es: el widget de frontend de AI-06, o
 AI-08/AI-09 (Memory/Tracing) si el usuario prefiere seguir en backend.
+
+---
+
+## Misión SINTEL-AI-UI-01 (2026-09-09) — primera superficie de UI del Asistente IA
+
+```
+AI_UI_01 = COMPLETED_WITH_DEFERRED
+```
+
+Ver `AI_UI_01_AUDIT.md` (Fase 0, auditoría real previa) y
+`AI_UI_01_EXECUTION.md` (bitácora completa, fase por fase, con la corrida
+de tests). Resumen: esta misión era exactamente "el widget de frontend de
+AI-06" identificado arriba como el siguiente paso real. Se construyó
+reutilizando el endpoint/orquestador/tools/retrieval ya existentes (cero
+backend nuevo, cero segundo motor de IA/RBAC/Tool Registry/provider de
+embeddings — mandato explícito de la misión cumplido) más un panel
+offcanvas global (`window.Sintel.AI`) y tests focalizados nuevos
+(seguridad backend vía HTTP real con 2 tenants + Playwright frontend).
+
+No se declara `PASS` porque 3 puntos del release gate de la misión
+requieren algo que esta sesión no puede resolver por sí sola: credenciales
+reales de LLM para un flujo interactivo end-to-end, un navegador sin las
+restricciones del sandbox de esta sesión para verificación manual, y
+Node.js instalado en esta máquina para correr Playwright. Ninguno es un
+defecto del código entregado — ver `AI_UI_01_EXECUTION.md` "Limitaciones"
+para el detalle exacto y cómo cerrarlos.

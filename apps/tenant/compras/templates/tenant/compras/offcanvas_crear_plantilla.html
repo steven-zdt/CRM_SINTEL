@@ -29,7 +29,11 @@
 
   <div class="offcanvas-header border-bottom py-3 px-4">
     <h5 class="offcanvas-title fw-semibold" id="offcanvas-plantilla-crear-label">
-      <i class="bi bi-journals text-secondary me-2"></i>Nueva Plantilla de Numeración
+      {% if plantilla %}
+        <i class="bi bi-pencil-square text-secondary me-2"></i>Editar Plantilla de Numeración
+      {% else %}
+        <i class="bi bi-journals text-secondary me-2"></i>Nueva Plantilla de Numeración
+      {% endif %}
     </h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
@@ -37,7 +41,9 @@
   <div class="offcanvas-body px-4 py-3">
     <div id="form-plantilla-crear-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
 
-    <form id="plantilla-crear-form" data-mode="create">
+    <form id="plantilla-crear-form"
+          data-mode="{% if plantilla %}edit{% else %}create{% endif %}"
+          {% if plantilla %}data-plantilla-uuid="{{ plantilla.uuid }}"{% endif %}>
       {% csrf_token %}
 
       <p class="section-title"><i class="bi bi-info-circle me-1"></i>Identificacion</p>
@@ -45,17 +51,20 @@
         <div class="col-12">
           <label for="plt-nombre" class="form-label">Nombre *</label>
           <input type="text" class="form-control" id="plt-nombre"
-                 placeholder="Ej: Ordenes de Compra 2026" required maxlength="100">
+                 placeholder="Ej: Ordenes de Compra 2026" required maxlength="100"
+                 value="{% if plantilla %}{{ plantilla.nombre }}{% endif %}">
         </div>
         <div class="col-6">
           <label for="plt-prefijo" class="form-label">Prefijo</label>
           <input type="text" class="form-control" id="plt-prefijo"
-                 placeholder="Ej: OC" maxlength="10">
+                 placeholder="Ej: OC" maxlength="10"
+                 value="{% if plantilla %}{{ plantilla.prefijo }}{% endif %}">
           <div class="form-text">Opcional. Ej: OC-001</div>
         </div>
         <div class="col-6 d-flex align-items-center pt-4">
           <div class="form-check form-switch ms-2">
-            <input class="form-check-input" type="checkbox" id="plt-vigente" checked>
+            <input class="form-check-input" type="checkbox" id="plt-vigente"
+                   {% if plantilla %}{% if plantilla.vigente %}checked{% endif %}{% else %}checked{% endif %}>
             <label class="form-check-label fw-semibold" for="plt-vigente">Vigente (activa)</label>
           </div>
         </div>
@@ -66,12 +75,12 @@
         <div class="col-6">
           <label for="plt-rango-desde" class="form-label">Desde *</label>
           <input type="number" class="form-control" id="plt-rango-desde"
-                 value="1" min="1" required>
+                 value="{% if plantilla %}{{ plantilla.rango_desde }}{% else %}1{% endif %}" min="1" required>
         </div>
         <div class="col-6">
           <label for="plt-rango-hasta" class="form-label">Hasta *</label>
           <input type="number" class="form-control" id="plt-rango-hasta"
-                 value="9999" min="1" required>
+                 value="{% if plantilla %}{{ plantilla.rango_hasta }}{% else %}9999{% endif %}" min="1" required>
         </div>
       </div>
 
@@ -89,7 +98,11 @@
               data-bs-dismiss="offcanvas">Cancelar</button>
       <button type="submit" form="plantilla-crear-form"
               class="btn btn-primary btn-sm px-4" id="btn-guardar-plantilla">
-        <i class="bi bi-save me-1"></i>Crear Plantilla
+        {% if plantilla %}
+          <i class="bi bi-save me-1"></i>Guardar Cambios
+        {% else %}
+          <i class="bi bi-save me-1"></i>Crear Plantilla
+        {% endif %}
       </button>
     </div>
   </div>

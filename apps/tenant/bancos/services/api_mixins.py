@@ -40,6 +40,12 @@ class CuentaBancariaServiceMixin(BaseServiceMixin):
     def service_eliminar_cuenta(self, cuenta):
         return self.crud_service_class.eliminar_cuenta(cuenta)
 
+    def service_desactivar_cuenta(self, cuenta):
+        return self.crud_service_class.desactivar_cuenta(cuenta)
+
+    def service_activar_cuenta(self, cuenta):
+        return self.crud_service_class.activar_cuenta(cuenta)
+
 class ExtractoBancarioServiceMixin(BaseServiceMixin):
     """Bridge service methods for ExtractoBancario ViewSet."""
     selector_class = ExtractoBancarioSelector

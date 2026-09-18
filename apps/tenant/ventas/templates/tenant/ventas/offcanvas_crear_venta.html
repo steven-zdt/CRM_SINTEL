@@ -25,7 +25,11 @@
 
   <div class="offcanvas-header border-bottom py-3 px-4">
     <h5 class="offcanvas-title fw-semibold" id="offcanvas-venta-crear-label">
-      <i class="bi bi-bag-plus text-primary me-2"></i>Nueva Venta
+      {% if venta %}
+        <i class="bi bi-pencil-square text-primary me-2"></i>Editar Venta
+      {% else %}
+        <i class="bi bi-bag-plus text-primary me-2"></i>Nueva Venta
+      {% endif %}
     </h5>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
@@ -33,7 +37,9 @@
   <div class="offcanvas-body px-4 py-3">
     <div id="form-venta-crear-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
 
-    <form id="venta-crear-form" data-mode="create">
+    <form id="venta-crear-form"
+          data-mode="{% if venta %}edit{% else %}create{% endif %}"
+          {% if venta %}data-venta-uuid="{{ venta.uuid }}"{% endif %}>
       {% csrf_token %}
 
       {# ── Datos Generales ─────────────────────────────────────────────── #}
@@ -43,18 +49,31 @@
 
           <div class="col-md-12">
             <label for="venta-cliente" class="form-label">Cliente <span class="text-danger">*</span></label>
-            <select id="venta-cliente" name="cliente" class="form-select" required>
-              <option value="">-- Seleccione un cliente --</option>
-              {% for c in clientes %}
-                <option value="{{ c.id }}"
-                        data-uuid="{{ c.uuid }}"
-                        data-doc="{{ c.numero_documento }}">
-                  {{ c.razon_social }}
-                  {% if c.numero_documento %} — {{ c.numero_documento }}{% endif %}
-                </option>
-              {% endfor %}
-            </select>
-            <input type="hidden" id="venta-cliente-uuid" name="_cliente_uuid" value="">
+            {% if venta %}
+              {% comment %}
+                V-2 (2026-09-12): el cliente no se puede reasignar al editar --
+                VentaCRUDService.actualizar_venta() no lo toca (mismo criterio
+                que Compras/Cotizaciones: para cambiar cliente, anular y crear
+                una Venta nueva). Se muestra bloqueado, no como select.
+              {% endcomment %}
+              <input type="text" class="form-control" disabled
+                     value="{{ venta.cliente.razon_social }}{% if venta.cliente.numero_documento %} — {{ venta.cliente.numero_documento }}{% endif %}">
+              <div class="form-text text-muted">El cliente no se puede modificar. Anule esta venta y cree una nueva si es necesario.</div>
+              <input type="hidden" id="venta-cliente-uuid" name="_cliente_uuid" value="{{ venta.cliente.uuid }}">
+            {% else %}
+              <select id="venta-cliente" name="cliente" class="form-select" required>
+                <option value="">-- Seleccione un cliente --</option>
+                {% for c in clientes %}
+                  <option value="{{ c.id }}"
+                          data-uuid="{{ c.uuid }}"
+                          data-doc="{{ c.numero_documento }}">
+                    {{ c.razon_social }}
+                    {% if c.numero_documento %} — {{ c.numero_documento }}{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+              <input type="hidden" id="venta-cliente-uuid" name="_cliente_uuid" value="">
+            {% endif %}
           </div>
 
           <div class="col-md-6">
@@ -66,13 +85,13 @@
           <div class="col-md-6">
             <label for="venta-fecha-vencimiento" class="form-label">Fecha de Vencimiento</label>
             <input type="date" class="form-control" id="venta-fecha-vencimiento"
-                   name="fecha_vencimiento">
+                   name="fecha_vencimiento" value="{% if venta.fecha_vencimiento %}{{ venta.fecha_vencimiento|date:'Y-m-d' }}{% endif %}">
           </div>
 
           <div class="col-12">
             <label for="venta-observaciones" class="form-label">Observaciones</label>
             <textarea class="form-control" id="venta-observaciones"
-                      name="observaciones" rows="2" placeholder="Observaciones adicionales..."></textarea>
+                      name="observaciones" rows="2" placeholder="Observaciones adicionales...">{% if venta %}{{ venta.observaciones }}{% endif %}</textarea>
           </div>
 
           <div class="col-12">
@@ -80,27 +99,80 @@
               <i class="bi bi-card-checklist text-success me-1"></i>Resolucion DIAN
               <span class="text-muted fw-normal">(requerida para facturar)</span>
             </label>
-            <select id="venta-resolucion" class="form-select" name="resolucion">
-              <option value="" data-uuid="">-- Sin resolucion (solo borrador) --</option>
-              {% for r in resoluciones %}
-                <option value="{{ r.id }}"
-                        data-uuid="{{ r.uuid }}"
-                        data-prefijo="{{ r.prefijo }}"
-                        data-consecutivo="{{ r.consecutivo_actual }}">
-                  {% if r.prefijo %}{{ r.prefijo }} — {% endif %}
-                  Res. {{ r.numero_resolucion }}
-                  | Rango {{ r.rango_desde }}–{{ r.rango_hasta }}
-                  | Siguiente: {{ r.consecutivo_actual }}
-                </option>
-              {% empty %}
-                <option disabled>No hay resoluciones vigentes. Cree una primero.</option>
-              {% endfor %}
-            </select>
-            <div class="form-text text-muted" id="venta-resolucion-info"></div>
+            {% if venta %}
+              {# V-2: resolucion tampoco es editable aqui (mismo motivo que cliente). #}
+              <input type="text" class="form-control" disabled
+                     value="{% if venta.resolucion %}{% if venta.resolucion.prefijo %}{{ venta.resolucion.prefijo }} — {% endif %}Res. {{ venta.resolucion.numero_resolucion }}{% else %}Sin resolucion asignada{% endif %}">
+            {% else %}
+              <select id="venta-resolucion" class="form-select" name="resolucion">
+                <option value="" data-uuid="">-- Sin resolucion (solo borrador) --</option>
+                {% for r in resoluciones %}
+                  <option value="{{ r.id }}"
+                          data-uuid="{{ r.uuid }}"
+                          data-prefijo="{{ r.prefijo }}"
+                          data-consecutivo="{{ r.consecutivo_actual }}">
+                    {% if r.prefijo %}{{ r.prefijo }} — {% endif %}
+                    Res. {{ r.numero_resolucion }}
+                    | Rango {{ r.rango_desde }}–{{ r.rango_hasta }}
+                    | Siguiente: {{ r.consecutivo_actual }}
+                  </option>
+                {% empty %}
+                  <option disabled>No hay resoluciones vigentes. Cree una primero.</option>
+                {% endfor %}
+              </select>
+              <div class="form-text text-muted" id="venta-resolucion-info"></div>
+            {% endif %}
           </div>
 
         </div>
       </div>
+
+      {# ── Factura de venta asociada (Integracion Facturas<->Ventas) ──── #}
+      {# Mismo widget/JS que offcanvas_detalle_venta.html               #}
+      {# (bindFacturaWidget en venta_editor.js). En modo creacion (sin   #}
+      {# venta.uuid todavia) la vinculacion real se DIFIERE hasta que    #}
+      {# guardarVenta() cree la Venta -- nunca se llama vincular-factura #}
+      {# con un uuid inexistente.                                       #}
+      {% if not venta or venta.estado != 'ANULADA' %}
+      <div class="mb-4" id="venta-factura-widget" data-venta-uuid="{% if venta %}{{ venta.uuid }}{% endif %}">
+        <p class="section-title"><i class="bi bi-receipt me-1"></i>Factura de venta</p>
+
+        <div id="venta-factura-asociada" class="{% if not venta.factura_asociada %}d-none{% endif %}">
+          {% if venta.factura_asociada %}
+          <div class="alert alert-success p-2 small mb-2">
+            <i class="bi bi-receipt-cutoff me-1"></i>
+            <strong>{{ venta.factura_asociada.numero }}</strong>
+            {% if venta.factura_asociada.cufe %}
+              <div class="text-muted mt-1" style="font-size:0.72rem; word-break:break-all;">
+                CUFE: {{ venta.factura_asociada.cufe }}
+              </div>
+            {% endif %}
+          </div>
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  data-venta-factura-action="cambiar">
+            <i class="bi bi-arrow-repeat me-1"></i>Cambiar factura
+          </button>
+          {% endif %}
+        </div>
+
+        <div id="venta-factura-buscador" class="{% if venta.factura_asociada %}d-none{% endif %}">
+          <button type="button" class="btn btn-outline-primary btn-sm mb-2"
+                  id="venta-factura-buscar-toggle"
+                  data-venta-factura-action="mostrar-buscador">
+            <i class="bi bi-search me-1"></i>Buscar / Vincular Factura
+          </button>
+          <div id="venta-factura-buscador-panel" class="d-none border rounded p-2 bg-light">
+            <input type="text" class="form-control form-control-sm mb-2"
+                   id="venta-factura-buscar-input"
+                   placeholder="Buscar por numero, CUFE o cliente...">
+            <div id="venta-factura-buscar-resultados" class="small"></div>
+          </div>
+          {% if not venta %}
+          <div class="form-text text-muted">Opcional. Si seleccionas una factura, se vinculara al guardar esta venta.</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
 
       {# ── Items de la Venta ─────────────────────────────────────────────── #}
       <div class="mb-4">
@@ -123,6 +195,7 @@
             </tbody>
           </table>
         </div>
+        {% if venta %}{{ items_json|json_script:"venta-items-data" }}{% endif %}
 
         <button type="button" class="btn btn-outline-secondary btn-sm mt-2"
                 id="btn-agregar-item-venta">
@@ -162,10 +235,11 @@
               id="btn-guardar-borrador">
         <i class="bi bi-floppy me-1"></i>Guardar Borrador
       </button>
-      <button type="button" class="btn btn-success btn-sm"
-              id="btn-facturar-dian">
-        <i class="bi bi-send-check me-1"></i>Guardar y Facturar DIAN
-      </button>
+      {# VENTAS-COMPRAS-FACTURAS-01 (2026-09-09): boton "Guardar y Facturar #}
+      {# DIAN" removido -- SINTEL no esta autorizada por la DIAN para emitir #}
+      {# Facturas electronicas (Fase 12, backend bloqueado en Fase 8). El JS  #}
+      {# (venta_editor.js) ya usa "if (btnDian)" en ambos puntos donde lo     #}
+      {# referencia -- remover el boton no rompe nada, verificado.           #}
     </div>
   </div>
 

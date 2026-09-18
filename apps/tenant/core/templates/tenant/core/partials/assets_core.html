@@ -67,6 +67,16 @@
 <!-- Hub (mision Reporting Hub Frontend). Requiere Sintel.Core.Http. -->
 <script src="{% static 'core/js/common/reporting.api.js' %}"></script>
 
+<!-- ========================================== -->
+<!-- 3.7) ASISTENTE IA CLIENT - Global         -->
+<!-- ========================================== -->
+<!-- SSoT: window.Sintel.AI -- cliente del panel global del Asistente IA -->
+<!-- (mision SINTEL-AI-UI-01). Llama unicamente a POST /api/v1/ai/ask/ -->
+<!-- (AI-06, ya existente) -- no agrega backend nuevo. Requiere -->
+<!-- Sintel.Core.Http y Sintel.Core.mostrarOffcanvasSeguro (arriba) y el -->
+<!-- markup de tenant/core/partials/offcanvas_asistente_ia.html en el DOM. -->
+<script src="{% static 'core/js/common/ai.assistant.js' %}"></script>
+
 <!-- ====================== -->
 <!-- 4) SHIM __DEBUG__      -->
 <!-- ====================== -->

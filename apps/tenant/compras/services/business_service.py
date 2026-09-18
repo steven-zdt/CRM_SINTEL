@@ -455,6 +455,60 @@ class OrdenCompraBusinessService:
             logger.error(f"Error en eliminar_orden_compra: {e}", exc_info=True)
             return False, {"detail": f"Error interno del servidor: {str(e)}"}, 500
 
+    @staticmethod
+    @transaction.atomic
+    def vincular_factura_existente(orden_uuid: str, factura_uuid: str, empresa_id: int) -> Tuple[bool, Any, int]:
+        """
+        FACTURAS-UI-CRONO-01: vincula manualmente una Factura YA PERSISTIDA
+        (naturaleza COMPRA) a esta Orden de Compra -- nunca crea ni emite
+        ninguna Factura. Mismo patron de DSV que el resto de esta clase
+        (uuid+empresa_id, `compras` no importa el modelo Factura a nivel
+        de modulo -- import local, regla del Bridge).
+        """
+        try:
+            orden = OrdenCompra.objects.filter(uuid=orden_uuid, empresa_id=empresa_id).first()
+            if not orden:
+                return False, {"error": "orden_no_encontrada", "message": "La orden de compra no existe."}, 404
+
+            if not factura_uuid:
+                return False, {"error": "missing_factura_uuid", "message": "factura_uuid es requerido."}, 400
+
+            if orden.factura_asociada_id:
+                return False, {
+                    "error": "orden_ya_vinculada",
+                    "message": "Esta Orden de Compra ya tiene una Factura vinculada.",
+                }, 409
+
+            from apps.tenant.facturas.models import Factura
+            from apps.tenant.facturas.services.selectors import FacturaSelectors
+
+            factura = FacturaSelectors.qs_detail(empresa_id=empresa_id).filter(uuid=factura_uuid).first()
+            if not factura:
+                return False, {
+                    "error": "factura_not_found",
+                    "message": "La Factura no existe o no pertenece a esta empresa.",
+                }, 404
+
+            if factura.naturaleza != Factura.Naturaleza.COMPRA:
+                return False, {
+                    "error": "naturaleza_incorrecta",
+                    "message": "Solo se puede vincular una Factura de naturaleza COMPRA a una Orden de Compra.",
+                }, 422
+
+            if hasattr(factura, "orden_compra_origen") and factura.orden_compra_origen.id != orden.id:
+                return False, {
+                    "error": "factura_ya_vinculada",
+                    "message": "Esta Factura ya esta vinculada a otra Orden de Compra.",
+                }, 409
+
+            orden = OrdenCompraCRUDService.vincular_factura(orden, factura)
+            return True, orden, 200
+        except ValidationError as e:
+            return False, e.detail, 400
+        except Exception as e:
+            logger.error(f"Error en vincular_factura_existente: {e}", exc_info=True)
+            return False, {"detail": f"Error interno del servidor: {str(e)}"}, 500
+
 
 class RecepcionCompraBusinessService:
     """

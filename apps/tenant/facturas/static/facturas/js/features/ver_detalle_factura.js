@@ -24,6 +24,12 @@
         if (value === null || value === undefined || value === '') return '$ 0,00';
         const num = parseFloat(value);
         if (isNaN(num)) return '$ 0,00';
+        // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js) solo
+        // para COP -- DOMUtils.formatCurrency no acepta moneda dinamica, y
+        // aqui `currency` viene de `data.moneda`, en teoria no siempre COP.
+        if (currency === 'COP' && w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
+            return w.DOMUtils.formatCurrency(num, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        }
         return new Intl.NumberFormat('es-CO', {
             style: 'currency',
             currency: currency,
@@ -54,6 +60,22 @@
     }
 
     /**
+     * Formatear solo fecha (sin hora) -- usado para fecha_vencimiento,
+     * payment_due_date, autorizacion_vigencia_* (DateField, no DateTimeField).
+     * @param {string} value - Fecha en formato ISO (YYYY-MM-DD)
+     * @returns {string} Fecha formateada
+     */
+    function formatearSoloFecha(value) {
+        if (!value) return '-';
+        try {
+            const date = new Date(value.length === 10 ? value + 'T00:00:00' : value);
+            return date.toLocaleDateString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        } catch (error) {
+            return value;
+        }
+    }
+
+    /**
      * Obtener badge de estado
      * @param {string} estado - Estado de la factura
      * @returns {string} HTML del badge
@@ -70,12 +92,19 @@
         return `<span class="badge ${estadoInfo.clase}">${estadoInfo.texto}</span>`;
     }
 
+    /**
+     * Reestructuracion arquitectonica (Facturas = document store): la
+     * cotizacion vinculada se muestra como referencia documental de solo
+     * lectura -- ya no ofrece vincular/desvincular desde Facturas (accion
+     * de negocio ajena, mision §13). cotizacion_uuid/cotizacion_numero
+     * siguen siendo campos validos en el DTO, solo se retiro la UI/endpoint
+     * de escritura.
+     */
     function renderCotizacionVinculada(data) {
         const container = d.getElementById('view_cotizacion_vinculada_container');
         const emptyState = d.getElementById('view_cotizacion_vinculada_empty');
         const card = d.getElementById('view_cotizacion_vinculada_card');
         const label = d.getElementById('view_cotizacion_vinculada_label');
-        const select = d.getElementById('view_cotizacion_vinculada_select');
 
         if (!container || !emptyState || !card || !label) return;
 
@@ -87,7 +116,6 @@
             card.classList.remove('d-none');
             card.classList.add('d-flex');
             label.textContent = info.label || info.codigo_unico || info.numero_cotizacion || info.uuid;
-            if (select) select.value = '';
             return;
         }
 
@@ -95,62 +123,6 @@
         card.classList.remove('d-flex');
         emptyState.classList.remove('d-none');
         emptyState.classList.add('d-flex');
-        cargarCotizacionesDisponibles();
-    }
-
-    async function cargarCotizacionesDisponibles() {
-        const select = d.getElementById('view_cotizacion_vinculada_select');
-        if (!select || select.dataset.loaded === 'true') return;
-
-        try {
-            const response = (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http)
-                ? await w.Sintel.Core.Http.request('GET', '/api/v1/cotizaciones/?page_size=50')
-                : await fetch('/api/v1/cotizaciones/?page_size=50', { headers: { 'Accept': 'application/json' } })
-                    .then(async res => ({ ok: res.ok, data: await res.json() }));
-
-            if (!response.ok) return;
-
-            const rows = response.data?.results || response.data || [];
-            rows.forEach((cotizacion) => {
-                if (!cotizacion.uuid) return;
-                const option = d.createElement('option');
-                option.value = cotizacion.uuid;
-                option.textContent = cotizacion.codigo_unico || cotizacion.numero_cotizacion || cotizacion.uuid;
-                select.appendChild(option);
-            });
-            select.dataset.loaded = 'true';
-        } catch (error) {
-            console.warn(`${MOD} Error cargando cotizaciones:`, error);
-        }
-    }
-
-    async function actualizarCotizacionVinculada(cotizacionUuid) {
-        const container = d.getElementById('view_cotizacion_vinculada_container');
-        const facturaUuid = container?.dataset.facturaUuid || '';
-        if (!facturaUuid) return;
-
-        try {
-            const response = w.facturasAPI && typeof w.facturasAPI.vincularCotizacion === 'function'
-                ? await w.facturasAPI.vincularCotizacion(facturaUuid, cotizacionUuid)
-                : await w.Sintel.Core.Http.request('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-cotizacion/`, {
-                    cotizacion_uuid: cotizacionUuid || null
-                });
-
-            if (!response.ok) {
-                if (w.UIManager && typeof w.UIManager.handleError === 'function') {
-                    w.UIManager.handleError(response, MOD);
-                }
-                return;
-            }
-
-            renderCotizacionVinculada(Object.freeze(response.data || {}));
-            if (w.UIManager && typeof w.UIManager.notifySuccess === 'function') {
-                w.UIManager.notifySuccess(cotizacionUuid ? 'Cotización vinculada.' : 'Cotización desvinculada.');
-            }
-            d.dispatchEvent(new CustomEvent('facturaCotizacionChanged', { detail: response.data || {} }));
-        } catch (error) {
-            console.error(`${MOD} Error actualizando cotización vinculada:`, error);
-        }
     }
 
     /**
@@ -168,11 +140,12 @@
             // ⚠️ API-First: Usar Core API facade
             const url = `${FACTURAS_API_BASE}/${facturaId}/`;
             let response;
-            
-            if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
-                response = await w.Sintel.Core.Http.request('GET', url);
-            } else if (w.facturasAPI && typeof w.facturasAPI.getFactura === 'function') {
+
+            // T-9: delega a la SSoT de endpoints (facturas.api.js) primero.
+            if (w.facturasAPI && typeof w.facturasAPI.getFactura === 'function') {
                 response = await w.facturasAPI.getFactura(facturaId);
+            } else if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+                response = await w.Sintel.Core.Http.request('GET', url);
             } else {
                 // Fallback a fetch nativo
                 const fetchRes = await fetch(url, {
@@ -228,7 +201,10 @@
             setElement('view_numero_factura', data.numero);
             setElement('view_estado', data.estado, (estado) => getBadgeEstado(estado));
             setElement('view_fecha_emision', data.fecha_emision, formatearFecha);
+            setElement('view_fecha_vencimiento', data.fecha_vencimiento, formatearSoloFecha);
             setElement('view_moneda', data.moneda || 'COP');
+            setElement('view_forma_pago', data.forma_pago);
+            setElement('view_medio_pago', data.medio_pago_codigo);
 
             // Emisor
             setElement('view_emisor_razon_social', data.emisor_razon_social);
@@ -243,6 +219,15 @@
             setElement('view_impuestos', data.impuestos, (val) => formatearMoneda(val, data.moneda || 'COP'));
             setElement('view_total', data.total, (val) => formatearMoneda(val, data.moneda || 'COP'));
 
+            // Valor en Letras (FST-375 secc. 7/27) -- SIEMPRE generado por
+            // backend (FacturaDetailSerializer.get_valor_en_letras), el
+            // frontend solo lo muestra, nunca lo calcula.
+            if (data.valor_en_letras) {
+                const letrasContainer = d.getElementById('view_valor_en_letras_container');
+                if (letrasContainer) letrasContainer.style.display = 'block';
+                setElement('view_valor_en_letras', data.valor_en_letras);
+            }
+
             // CUFE
             if (data.cufe) {
                 const cufeContainer = d.getElementById('view_cufe_container');
@@ -250,6 +235,44 @@
                     cufeContainer.style.display = 'block';
                 }
                 setElement('view_cufe', data.cufe);
+            }
+
+            // Autorizacion DIAN (FST-375 secc. 11/31) -- solo lectura, oculto
+            // si la factura no tiene ningun dato de autorizacion.
+            const tieneAutorizacion = data.autorizacion_numero || data.autorizacion_prefijo
+                || data.autorizacion_rango_desde || data.autorizacion_vigencia_inicio;
+            if (tieneAutorizacion) {
+                const autContainer = d.getElementById('view_autorizacion_container');
+                if (autContainer) autContainer.style.display = 'block';
+
+                if (data.autorizacion_numero) {
+                    const wrap = d.getElementById('view_autorizacion_numero_wrap');
+                    if (wrap) wrap.style.display = 'block';
+                    setElement('view_autorizacion_numero', data.autorizacion_numero);
+                }
+                if (data.autorizacion_prefijo || data.autorizacion_rango_desde || data.autorizacion_rango_hasta) {
+                    const wrap = d.getElementById('view_autorizacion_rango_wrap');
+                    if (wrap) wrap.style.display = 'block';
+                    const prefijo = data.autorizacion_prefijo || '-';
+                    const desde = data.autorizacion_rango_desde ?? '-';
+                    const hasta = data.autorizacion_rango_hasta ?? '-';
+                    setElement('view_autorizacion_rango', null, () => `${prefijo} (desde ${desde} hasta ${hasta})`);
+                }
+                if (data.autorizacion_vigencia_inicio || data.autorizacion_vigencia_fin) {
+                    const wrap = d.getElementById('view_autorizacion_vigencia_wrap');
+                    if (wrap) wrap.style.display = 'block';
+                    const inicio = formatearSoloFecha(data.autorizacion_vigencia_inicio);
+                    const fin = formatearSoloFecha(data.autorizacion_vigencia_fin);
+                    setElement('view_autorizacion_vigencia', null, () => `${inicio} - ${fin}`);
+                }
+            }
+
+            // QR (FST-375 secc. 13): solo se muestra el texto crudo ya
+            // persistido en la factura -- nunca se genera un QR ficticio.
+            if (data.qr_code) {
+                const qrContainer = d.getElementById('view_qr_container');
+                if (qrContainer) qrContainer.style.display = 'block';
+                setElement('view_qr_code', data.qr_code);
             }
 
             renderCotizacionVinculada(Object.freeze(data));
@@ -288,7 +311,13 @@
                 // Si no hay items en la respuesta, cargarlos desde el endpoint de items
                 if (!items || !Array.isArray(items) || items.length === 0) {
                     try {
-                        const itemsUrl = `${FACTURAS_API_BASE.replace('/facturas', '/items-factura')}/?factura=${facturaId}`;
+                        // BUG preexistente corregido: .replace('/facturas', '/items-factura')
+                        // producia '/api/v1/items-factura' (ruta inexistente,
+                        // 404 silencioso capturado abajo) -- la ruta real,
+                        // segun apps/tenant/facturas/api/urls.py, esta ANIDADA
+                        // bajo /facturas/ (router.register(r'items-factura', ...)
+                        // dentro del mismo router de FacturaViewSet).
+                        const itemsUrl = `${FACTURAS_API_BASE}/items-factura/?factura=${facturaId}`;
                         let itemsResponse;
                         
                         if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
@@ -362,20 +391,5 @@
     if (typeof window.verDetalleFactura === 'undefined') {
         window.verDetalleFactura = verDetalleFactura;
     }
-
-    d.addEventListener('click', function(event) {
-        const vincularBtn = event.target.closest('#btn_vincular_cotizacion_factura');
-        if (vincularBtn) {
-            const select = d.getElementById('view_cotizacion_vinculada_select');
-            const cotizacionUuid = select?.value || null;
-            if (cotizacionUuid) actualizarCotizacionVinculada(cotizacionUuid);
-            return;
-        }
-
-        const desvincularBtn = event.target.closest('#btn_desvincular_cotizacion_factura');
-        if (desvincularBtn) {
-            actualizarCotizacionVinculada(null);
-        }
-    });
 
 })(window, document);

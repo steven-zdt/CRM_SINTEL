@@ -7,9 +7,17 @@ anular_venta() rechaza estructuralmente una venta ya facturada (por lo que
 no existe un escenario real de reverso de inventario por anulacion).
 
 Una sola clase con setUp compartido (costo de schema aprendido en F21/F22).
+
+VENTAS-COMPRAS-FACTURAS-01 (2026-09-09): `procesar_y_facturar_venta()`
+ahora rechaza por defecto (Fase 8, `EMISION_FISCAL_VENTA_AUTORIZADA =
+False`). Toda esta clase mockea el flag a True a nivel de clase -- prueba
+que el pipeline DIAN + salida de inventario sigue funcionando
+correctamente internamente, no el comportamiento de produccion actual
+(ver `test_bloqueo_emision_fiscal.py` para ese).
 """
 from datetime import date
 from decimal import Decimal
+from unittest import mock
 
 from django.utils import timezone
 
@@ -24,6 +32,7 @@ from apps.tenant.ventas.services.business_service import VentaBusinessService
 from tests.tenant.base_test import SintelTenantTestCase
 
 
+@mock.patch("apps.tenant.ventas.services.business_service.EMISION_FISCAL_VENTA_AUTORIZADA", True)
 class VentaInventarioF23Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()

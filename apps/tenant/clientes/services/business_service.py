@@ -90,10 +90,24 @@ class ClienteBusinessService:
         return cliente, True
 
     @transaction.atomic
-    def registrar_cliente_completo(self, empresa_id: int, data: dict, contactos_raw: list = None, cliente_instance: Cliente = None) -> tuple:
+    def registrar_cliente_completo(
+        self, empresa_id: int, data: dict, contactos_raw: list = None,
+        cliente_instance: Cliente = None, validar_representante: bool = False,
+    ) -> tuple:
         """
         Orchestrates creation or update of a client and their contacts.
         If cliente_instance is provided, updates directly without upsert logic.
+
+        `validar_representante` (default False, opt-in explicito): la
+        regla de representante legal (seccion 7-10 de la mision) solo debe
+        exigirse en el formulario de captura manual (ClienteViewSet, que
+        pasa True). Los flujos de resolucion automatica desde documentos
+        externos -- `resolver_o_crear_desde_factura_venta()` (XML de
+        factura de venta) y el wrapper legacy `services.crear_cliente()`
+        usado solo por tests de idempotencia -- crean un Cliente JURIDICA
+        de snapshot sin datos de representante disponibles en ese momento;
+        exigirla ahi habria roto ambos flujos reales sin beneficio (la
+        info de representante no viene en el XML de la factura).
         """
         data = self._sanitize_retenciones(data)
         
@@ -121,8 +135,40 @@ class ClienteBusinessService:
         # 2. Sync contacts if provided
         if contactos_raw is not None:
             self.sincronizar_contactos(empresa_id, cliente.id, contactos_raw)
-            
+
+        # 3. Representante legal -- solo si el caller opta explicitamente
+        # (ver docstring), y solo al crear o cuando esta peticion toco los
+        # contactos explicitamente (un PATCH que no envia 'contactos', ej.
+        # solo cambia telefono, no debe romper clientes JURIDICA
+        # historicos que nunca tuvieron esta regla). Se valida contra el
+        # estado REAL en BD (post-sincronizacion, misma transaccion
+        # atomica): si falla, transaction.atomic() revierte Cliente +
+        # ContactoCliente juntos (nunca cliente incompleto).
+        if validar_representante and (created or contactos_raw is not None):
+            ClienteBusinessService.validar_representante_legal(cliente, empresa_id)
+
         return cliente, created
+
+    @staticmethod
+    def validar_representante_legal(cliente: Cliente, empresa_id: int) -> None:
+        """
+        Regla central (mision "Clientes + Cartera" seccion 9): NATURAL es
+        valido sin representante; JURIDICA exige al menos un
+        ContactoCliente activo marcado es_representante_legal=True.
+        """
+        if cliente.tipo_persona != 'JURIDICA':
+            return
+        tiene_representante = ContactoCliente.objects.filter(
+            cliente_id=cliente.id, empresa_id=empresa_id,
+            es_representante_legal=True, activo=True,
+        ).only('id').exists()
+        if not tiene_representante:
+            raise ValidationError({
+                'representante_legal': (
+                    'Un cliente de tipo Persona Juridica debe tener al menos un '
+                    'contacto marcado como Representante Legal.'
+                )
+            })
 
     def sincronizar_contactos(self, empresa_id: int, cliente_id: int, contactos_raw: list):
         """
@@ -279,3 +325,103 @@ class CarteraBusinessService:
         cartera.save()
 
         return cartera, monto
+
+    @staticmethod
+    def agregar_nota(empresa_id: int, cartera_uuid, texto: str, usuario=None, tipo: str = "SEGUIMIENTO"):
+        """
+        Registra una anotacion de seguimiento sobre una obligacion de
+        Cartera (mision "Clientes + Cartera" seccion 29-30). Append-only --
+        nunca actualiza/borra notas existentes, ni el campo `observaciones`
+        legado de `Cartera` (siguen siendo dos cosas distintas).
+        """
+        from ..models import Cartera, CarteraNota
+
+        texto = str(texto or "").strip()
+        if not texto:
+            raise ValidationError({"texto": ["El texto de la nota es requerido."]})
+
+        cartera = Cartera.objects.filter(empresa_id=empresa_id, uuid=cartera_uuid).only("id").first()
+        if not cartera:
+            raise ValidationError({"detail": "La obligacion de cartera no existe o no pertenece a esta empresa."})
+
+        return CarteraNota.objects.create(
+            empresa_id=empresa_id, cartera=cartera, usuario=usuario, tipo=tipo, texto=texto,
+        )
+
+    @staticmethod
+    @transaction.atomic
+    def registrar_abono_desde_conciliacion_bancaria(empresa_id: int, factura_uuid, monto, fecha=None):
+        """
+        DEUDA-C03 "Clientes + Cartera" (decision del usuario, 2026-09-11):
+        Bancos es la unica fuente que dispara este metodo, al conciliar una
+        TransaccionBancaria contra una Factura de VENTA (ver
+        apps/tenant/bancos/services/crud_service.py::conciliar_transaccion()).
+        Cartera queda como la UNICA SSoT real de pagos -- nunca se vuelve a
+        inferir el pago solo del enum Factura.estado_pago.
+
+        Resuelve o crea la Cartera asociada (mismo patron get_or_create ya
+        usado en CarteraViewSet.render_offcanvas_abono_factura()) y aplica
+        el abono via registrar_abono() -- reutiliza sus guards existentes
+        (select_for_update, no-sobrepago, no-doble-pago), nunca los duplica.
+
+        Disenado para NUNCA propagar una excepcion al caller (Bancos): una
+        discrepancia de Cartera no debe bloquear ni revertir una
+        conciliacion bancaria ya validada por su propio dominio. Por eso el
+        monto se acota al saldo disponible en vez de fallar por sobrepago
+        -- una diferencia de centavos entre el monto bancario real y el
+        saldo de Cartera (por redondeos u otros movimientos) no debe
+        impedir la sincronizacion del grueso del pago.
+
+        Retorna None si la factura no es de naturaleza VENTA (Cartera es
+        CxC, no CxP -- las compras se gestionan en `proveedores`), no tiene
+        cliente vinculado, o el monto es <= 0. Nunca lanza ValidationError
+        hacia el caller.
+        """
+        from decimal import Decimal
+        from django.utils import timezone as tz
+        from ..models import Cartera
+        from apps.tenant.facturas.models import Factura
+
+        try:
+            monto = Decimal(str(monto or '0'))
+        except Exception:
+            return None
+        if monto <= Decimal('0'):
+            return None
+
+        factura = Factura.objects.filter(
+            uuid=factura_uuid, empresa_id=empresa_id, naturaleza='VENTA',
+        ).only(
+            'id', 'uuid', 'numero', 'total', 'payment_due_date', 'fecha_emision', 'cliente_uuid',
+        ).first()
+        if not factura or not factura.cliente_uuid:
+            return None
+
+        cartera = Cartera.objects.filter(empresa_id=empresa_id, factura_uuid=factura.uuid).first()
+        if not cartera:
+            cliente = Cliente.objects.filter(uuid=factura.cliente_uuid, empresa_id=empresa_id).only('id').first()
+            if not cliente:
+                return None
+            hoy = fecha or tz.now().date()
+            fecha_emision = factura.fecha_emision
+            if hasattr(fecha_emision, 'date'):
+                fecha_emision = fecha_emision.date()
+            cartera = Cartera.objects.create(
+                empresa_id=empresa_id, cliente=cliente, numero_factura=factura.numero[:50],
+                factura_uuid=factura.uuid,
+                fecha_emision=fecha_emision or hoy,
+                fecha_vencimiento=factura.payment_due_date or hoy,
+                valor_total=factura.total or Decimal('0'),
+            )
+
+        if cartera.estado_pago == 'PAGADA':
+            return cartera
+
+        monto_aplicable = min(monto, cartera.saldo)
+        if monto_aplicable <= Decimal('0'):
+            return cartera
+
+        cartera, _ = CarteraBusinessService.registrar_abono(
+            empresa_id=empresa_id, cartera_uuid=cartera.uuid, monto=monto_aplicable,
+        )
+        return cartera

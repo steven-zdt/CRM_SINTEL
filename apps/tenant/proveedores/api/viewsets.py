@@ -1,4 +1,5 @@
 import logging
+from types import SimpleNamespace
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
@@ -136,13 +137,27 @@ class ProveedorViewSet(OrganizationalContextMixin, ProveedorServiceMixin, BaseTe
         return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
-        """Crea un proveedor delegando al Business Service."""
+        """
+        Crea un proveedor delegando al Business Service.
+
+        `representante` (dict opcional en el body): datos del Representante
+        principal a crear en la MISMA transaccion -- ver
+        ProveedorBusinessService.crear_proveedor(). No es un campo del
+        modelo Proveedor, se extrae de request.data antes de validar contra
+        ProveedorDetailSerializer (que la ignoraria de todas formas al no
+        estar declarado, pero se extrae explicito para pasarlo al service).
+        """
         empresa = self.get_empresa()
+        representante_data = request.data.get('representante') or None
         serializer = ProveedorDetailSerializer(data=request.data, context=self.get_serializer_context())
         if serializer.is_valid():
-            proveedor = self.proveedor_service.crear_proveedor(empresa.id, serializer.validated_data)
+            usuario = getattr(request.user, 'tenant_profile', None)
+            proveedor = self.proveedor_service.crear_proveedor(
+                empresa.id, serializer.validated_data,
+                representante_data=representante_data, usuario=usuario,
+            )
             return Response(
-                ProveedorDetailSerializer(proveedor, context=self.get_serializer_context()).data, 
+                ProveedorDetailSerializer(proveedor, context=self.get_serializer_context()).data,
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -202,9 +217,26 @@ class ProveedorViewSet(OrganizationalContextMixin, ProveedorServiceMixin, BaseTe
                 # Fallback por PK para compatibilidad
                 proveedor = self.proveedor_selector.get_by_id(empresa.id, id_instancia)
         
+        # Datos reales del usuario actual -- solo para precargar el
+        # Representante principal cuando tipo_persona=NATURAL (ver
+        # ProveedorBusinessService.crear_proveedor()/_construir_payload_
+        # representante()). numero_documento/tipo_documento NUNCA se
+        # precargan aqui: ni User ni TenantProfile los tienen.
+        tenant_profile = getattr(request.user, 'tenant_profile', None)
+        usuario_actual = None
+        if tenant_profile is not None and not proveedor:
+            nombre = f"{getattr(request.user, 'first_name', '') or ''} {getattr(request.user, 'last_name', '') or ''}".strip()
+            usuario_actual = {
+                'nombre_completo': nombre or getattr(request.user, 'email', '') or '',
+                'email_contacto': getattr(request.user, 'email', '') or '',
+                'telefono_contacto': getattr(tenant_profile, 'telefono_corporativo', '') or '',
+                'cargo': getattr(tenant_profile, 'cargo', '') or 'Representante Legal',
+            }
+
         context = {
             'proveedor': proveedor,
             'empresa': empresa,
+            'usuario_actual': usuario_actual,
             'tipo_persona_choices': Proveedor.TIPO_PERSONA,
             'tipo_documento_choices': Proveedor.TIPO_DOCUMENTO,
             'regimen_choices': Proveedor.REGIMEN,
@@ -291,14 +323,24 @@ class CuentasPagarViewSet(OrganizationalContextMixin, CuentasPagarServiceMixin, 
         return Response(serializer.data)
 
     def retrieve(self, request, *args, **kwargs):
-        """Detalle de una factura especifica en Cuentas por Pagar."""
+        """
+        Detalle ("Ver") de una fila de Cuentas por Pagar -- acepta los 2
+        origenes del listado unificado (ver CuentasPagarSelector.
+        qs_list_unificado): una CuentasPagar real (usa el ModelSerializer
+        completo), o una Factura(COMPRA) que aun no tiene CuentasPagar
+        vinculada (solo lectura, sin materializar -- ver
+        CuentasPagarSelector.resolver_fila_por_uuid, GET nunca escribe).
+        """
         empresa = self.get_empresa()
         uuid_val = self.kwargs.get("uuid")
         cuenta_pagar_obj = self.cuentas_pagar_selector.get_by_uuid(empresa_id=empresa.id, uuid_val=uuid_val)
-        
-        if not cuenta_pagar_obj:
+        if cuenta_pagar_obj:
+            return Response(CuentasPagarDetailSerializer(cuenta_pagar_obj).data)
+
+        fila = self.cuentas_pagar_selector.resolver_fila_por_uuid(empresa_id=empresa.id, uuid_val=uuid_val)
+        if not fila:
             raise NotFound("Registro de Cuentas por Pagar no encontrado en esta empresa.")
-        return Response(CuentasPagarDetailSerializer(cuenta_pagar_obj).data)
+        return Response(FacturaCxPListSerializer(fila).data)
 
     def create(self, request, *args, **kwargs):
         """
@@ -365,23 +407,65 @@ class CuentasPagarViewSet(OrganizationalContextMixin, CuentasPagarServiceMixin, 
         except Exception as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
+    def destroy(self, request, *args, **kwargs):
+        """
+        Elimina una Cuenta por Pagar (solo registros SIN Factura asociada y
+        sin pagos -- ver CuentasPagarBusinessService.eliminar_cuenta_pagar).
+        """
+        empresa = self.get_empresa()
+        uuid_val = self.kwargs.get("uuid")
+        try:
+            self.cuentas_pagar_service.eliminar_cuenta_pagar(
+                cuenta_pagar_uuid=uuid_val, empresa_id=empresa.id,
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
     @action(
         detail=False, methods=["get"],
         renderer_classes=[TemplateHTMLRenderer],
         url_path="render-offcanvas",
     )
     def render_offcanvas(self, request):
-        """Renderiza offcanvas de gestion de Cuentas por Pagar (HTMX FSD Compliant)."""
+        """
+        Renderiza offcanvas de gestion de Cuentas por Pagar (HTMX FSD Compliant).
+
+        `?modo=ver` fuerza el panel de solo lectura aunque la obligacion no
+        este PAGADA todavia (accion "Ver" de la columna Acciones); sin ese
+        parametro (accion "Abonar") se muestra el formulario si aplica.
+
+        [RELEASE-CLOSE / PROVEEDORES-02] Antes usaba directamente el modelo
+        CuentasPagar como contexto -- `cuentas_pagar.proveedor_nombre` no
+        existe en ese modelo (es `proveedor.razon_social`), asi que el
+        nombre del proveedor salia siempre vacio en este panel. Ademas fallaba
+        con 404/vacio para filas originadas en una Factura sin CuentasPagar
+        aun. Fix: resolver_fila_por_uuid() ya normaliza ambos origenes a la
+        misma forma, GET nunca escribe (no materializa).
+        """
         empresa = self.get_empresa()
         uuid_val = request.query_params.get("uuid")
-        cuenta_pagar_obj = None
-        
+        modo = (request.query_params.get("modo") or "").strip().lower()
+        cuentas_pagar_ctx = None
+
         if uuid_val:
-            cuenta_pagar_obj = self.cuentas_pagar_selector.get_by_uuid(empresa_id=empresa.id, uuid_val=uuid_val)
-            
+            fila = self.cuentas_pagar_selector.resolver_fila_por_uuid(empresa_id=empresa.id, uuid_val=uuid_val)
+            if fila:
+                mapa_a_cxp = {"NO_PAGADA": "SIN_PAGO", "PAGO_PARCIAL": "PARCIAL", "PAGADA": "PAGADA"}
+                cuentas_pagar_ctx = SimpleNamespace(
+                    uuid=fila.uuid,
+                    proveedor_nombre=fila.emisor_razon_social,
+                    numero_factura=fila.numero,
+                    fecha_vencimiento=fila.payment_due_date,
+                    valor_total=fila.total,
+                    saldo=fila.saldo,
+                    estado_pago=mapa_a_cxp.get(fila.estado_pago, "SIN_PAGO"),
+                )
+
         context = {
-            "cuentas_pagar": cuenta_pagar_obj,
+            "cuentas_pagar": cuentas_pagar_ctx,
             "empresa": empresa,
+            "modo": modo,
         }
         return render_template_safe(
             context,

@@ -3,6 +3,7 @@ import logging
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import connection
 from rest_framework import status
 from rest_framework.decorators import action
@@ -14,7 +15,6 @@ from apps.services.document_ingest.ingest_service import ingest_document
 from apps.services.document_ingest.tasks import batch_upload_facturas_task, get_task_status
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
-from apps.tenant.facturas.api.serializers import ImportUBLSerializer, FacturaDetailSerializer
 from apps.tenant.facturas.utils.ubl_parser import fast_get_cufe
 
 # Logger normalizado para facturas (upload, import, etc.)
@@ -48,51 +48,6 @@ class FacturaUBLMixin:
     """
     Mixin especializado para endpoints de carga, pre-validación y procesamiento de UBL XML.
     """
-
-    @action(detail=False, methods=["post"], url_path="importar-ubl")
-    def importar_ubl(self, request: Request) -> Response:
-        """
-        # WARNING: DEPRECATED: Este endpoint está deprecado.
-        Use POST /api/v1/core/documentos/upload/ en su lugar.
-        Este endpoint será removido en v2.40.
-        
-        Importa una factura desde XML UBL 2.1 (texto pegado).
-        Delega al endpoint universal de documentos.
-        
-        Body:
-        {
-            "xml": "<Invoice xmlns=\"urn:oasis:names:specification:ubl:schema:xsd:Invoice-2\">...</Invoice>"
-        }
-        
-        Returns:
-            201 Created con FacturaDetailSerializer
-        """
-        serializer = ImportUBLSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        # Convertir XML string a bytes y crear un archivo temporal
-        xml_content = serializer.validated_data["xml"]
-        xml_bytes = xml_content.encode("utf-8") if isinstance(xml_content, str) else xml_content
-        
-        # Usar el servicio universal
-        result, status_code = ingest_document(
-            content=xml_bytes,
-            filename="imported.xml",
-            preview=False,
-            async_mode=False
-        )
-        
-        # Si se persistió, obtener la factura
-        if result.get("persisted") and result.get("id"):
-            try:
-                factura = Factura.objects.get(pk=result.get("id"))
-                output_serializer = FacturaDetailSerializer(factura, context={'request': request})
-                return Response(output_serializer.data, status=status.HTTP_201_CREATED)
-            except Factura.DoesNotExist:
-                pass
-        
-        # Si no se pudo obtener la factura, retornar el resultado del pipeline
-        return Response(result, status=status_code)
 
     @action(detail=False, methods=["post"], url_path="upload-ubl", parser_classes=[MultiPartParser, FormParser])
     def upload_ubl(self, request: Request) -> Response:
@@ -242,6 +197,28 @@ class FacturaUBLMixin:
             if not preview_mode and code in (200, 201):
                 resp["HX-Trigger"] = "listaFacturasChanged"
             return resp
+        except DjangoValidationError as e:
+            # FACTURAS-UI-CRONO-01: hallazgo real durante pruebas de humo --
+            # guardar_desde_dto() rechaza con una excepcion (ej. "el NIT de
+            # la empresa no coincide con el emisor ni el receptor") cuando
+            # el XML subido genuinamente no pertenece a este tenant. Antes
+            # caia al `except Exception` generico de abajo y devolvia 500
+            # (Internal Server Error) para lo que en realidad es un error
+            # de validacion del usuario (documento equivocado), no un bug
+            # del servidor -- mismo criterio que ya usa el endpoint
+            # hermano upload_document() (ver mas abajo en este archivo).
+            mensaje = "; ".join(e.messages) if hasattr(e, "messages") else str(e)
+            log_up.warning(
+                "upload_ubl rejected (validacion de negocio, no es un error interno)",
+                extra={
+                    "request_id": rid,
+                    "schema_name": schema,
+                    "size": size,
+                    "async": use_async,
+                    "detail": mensaje,
+                }
+            )
+            return Response({"error": "validation_error", "message": mensaje}, status=422)
         except Exception as e:
             log_up.exception(
                 "upload_ubl error (universal pipeline)",
@@ -574,7 +551,38 @@ class FacturaUBLMixin:
                     "persisted": payload.get("persisted", False) if isinstance(payload, dict) else False,
                 })
             )
-            
+
+            # N8N-SINTEL-01 (Fase 8): publica el evento de dominio SOLO si el
+            # documento se persistio de verdad (no en preview) y trae un
+            # identificador real. "Best effort" deliberado -- publicar un
+            # evento NUNCA debe romper la respuesta HTTP de este endpoint;
+            # ver apps/services/integration_events/publisher.py (no hace
+            # nada si N8N_WEBHOOK_URL no esta configurada).
+            if not preview and code in (200, 201) and isinstance(payload, dict) and payload.get("id"):
+                try:
+                    from apps.services.integration_events import publish_event
+
+                    publish_event(
+                        event_type="invoice.processed" if code == 201 else "invoice.duplicate",
+                        tenant=getattr(connection, "schema_name", "-"),
+                        aggregate_type="Factura",
+                        aggregate_uuid=payload.get("uuid") or str(payload.get("id")),
+                        payload={
+                            "numero": payload.get("numero"),
+                            "naturaleza": payload.get("naturaleza"),
+                            "cufe": payload.get("cufe"),
+                            "created": payload.get("created", code == 201),
+                        },
+                    )
+                except Exception:
+                    log_up.exception(
+                        "upload_document publish_event_error",
+                        extra=safe_extra({
+                            "request_id": request.META.get("REQUEST_ID", "-"),
+                            "schema_name": getattr(connection, "schema_name", "-"),
+                        })
+                    )
+
             return Response(payload, status=code)
             
         except Exception:
@@ -712,39 +720,3 @@ class FacturaUBLMixin:
             resp["HX-Trigger"] = "listaFacturasChanged"
         return resp
 
-    @action(detail=False, methods=["post"], url_path="materialize")
-    def materialize(self, request: Request) -> Response:
-        """
-        # WARNING: DEPRECATED: Usar create_from_dto en su lugar.
-        Mantenido por compatibilidad temporal.
-        """
-        """
-        Materializa una factura desde el DTO resultante de la ingesta XML.
-        
-        # WARNING: FASE 2: Endpoint para materializar después de que la tarea Celery termine.
-        
-        Body (application/json):
-        {
-            "dto": <DocumentoXML-serializado>,  # Resultado de ingest_status cuando state=SUCCESS
-            "persist_anexos": true|false  # Opcional, default: true
-        }
-        
-        Returns:
-            - 201 Created: Factura creada {"id": int, "numero": str, "naturaleza": str, "created": true}
-            - 200 OK: Factura actualizada {"id": int, "numero": str, "naturaleza": str, "created": false}
-            - 400 Bad Request: Falta 'dto' en el cuerpo
-            - 422 Unprocessable Entity: Falta SSoT empresa o DTO inválido
-            - 409 Conflict: Duplicado o restricción violada
-            - 413 Payload Too Large: XML/anexo excede tamaño permitido
-        """
-        dto = request.data.get("dto")
-        
-        if not dto:
-            return Response({"error": "missing_dto", "message": "Falta 'dto' en el cuerpo."}, status=400)
-        
-        payload, code = self.service_materializar(dto, empresa_id=getattr(getattr(self.request.user, 'tenant_profile', None), 'empresa_id', None) or Empresa.objects.only('id').values_list('id', flat=True).first())
-        log_up.info("materialize", extra=safe_extra({
-            "status_code": code,
-            "numero": payload.get("numero") if "error" not in payload else None,
-        }))
-        return Response(payload, status=code)

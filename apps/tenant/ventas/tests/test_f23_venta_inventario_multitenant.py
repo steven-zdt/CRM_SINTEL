@@ -3,8 +3,13 @@ F23.18: aislamiento multi-tenant real de la salida de inventario por venta
 (2 schemas, fixtures tenant1/tenant2 -- mismo patron ya establecido en F21/F22
 y en apps/tenant/ventas/tests/test_multitenant_isolation.py). Empresa es
 singleton por schema, "Empresa A/B" se modela como 2 tenants reales.
+
+VENTAS-COMPRAS-FACTURAS-01 (2026-09-09): `procesar_y_facturar_venta()`
+rechaza por defecto (Fase 8). Este test mockea el flag a True -- prueba el
+aislamiento de datos del pipeline interno, no el bloqueo de produccion.
 """
 from decimal import Decimal
+from unittest import mock
 
 import pytest
 from django_tenants.utils import schema_context
@@ -47,9 +52,12 @@ def test_venta_de_un_tenant_no_afecta_stock_ni_movimientos_de_otro_tenant(tenant
                 "porcentaje_iva": "19", "producto_id": str(producto1.uuid),
             }],
         }
-        ok, venta1, code = VentaBusinessService.procesar_y_facturar_venta(
-            empresa=emp1, payload=payload1, sede_id=None,
-        )
+        with mock.patch(
+            "apps.tenant.ventas.services.business_service.EMISION_FISCAL_VENTA_AUTORIZADA", True,
+        ):
+            ok, venta1, code = VentaBusinessService.procesar_y_facturar_venta(
+                empresa=emp1, payload=payload1, sede_id=None,
+            )
         assert ok, venta1
         producto1.refresh_from_db()
         assert producto1.stock_actual == Decimal("40.000")

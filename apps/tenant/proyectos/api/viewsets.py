@@ -9,6 +9,7 @@ WARNING: SINTEL v3.5: API-First & Zero-Coupling
 import logging
 
 from django.db.models import Q
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -21,7 +22,11 @@ from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.empresa.models import Empresa
-from .serializers import ProyectoDetailSerializer, ProyectoListSerializer, ItemPresupuestoSerializer, TareaDiariaSerializer, TareaCortaSerializer
+from .serializers import (
+    ProyectoDetailSerializer, ProyectoListSerializer, ItemPresupuestoSerializer,
+    TareaDiariaSerializer, TareaCortaSerializer,
+    DocumentoProyectoSerializer, HistorialFaseProyectoSerializer,
+)
 from .mixins import ProyectoServiceMixin
 from ..models import Proyecto, ItemPresupuestoProyecto, TareaDiariaProyecto, TareaCorta
 from ..services import (
@@ -239,23 +244,154 @@ class ProyectoViewSet(
         nueva_fase = request.data.get('fase')
         responsable_id = request.data.get('responsable_id', None)
         responsable_nombre = request.data.get('responsable_nombre', None)
-        
+        motivo = request.data.get('motivo', '')
+        usuario = getattr(request.user, 'tenant_profile', None)
+
         if not nueva_fase:
             return Response({'detail': 'El campo "fase" es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         try:
-            self.proyecto_business_service.cambiar_fase_proyecto(
-                proyecto, nueva_fase, responsable_id, responsable_nombre
+            # cambiar_fase_proyecto() ya valida la transicion (maquina de
+            # estados estricta), resuelve el gate documental, y PERSISTE
+            # fase_actual + responsable + HistorialFaseProyecto todo dentro
+            # de su propia transaccion atomica (Fase 4) -- no hace falta un
+            # save_proyecto() adicional aqui solo para la fase.
+            proyecto = self.proyecto_business_service.cambiar_fase_proyecto(
+                proyecto, nueva_fase, responsable_id, responsable_nombre,
+                usuario=usuario, motivo=motivo,
             )
-            # calcular_indicadores_financieros guarda internamente via crud_service
             self.proyecto_business_service.calcular_indicadores_financieros(proyecto)
-            
+
             response_serializer = ProyectoDetailSerializer(proyecto)
             return Response(response_serializer.data)
-            
+
         except ValidationError as e:
-            return Response({'detail': str(e.detail) if hasattr(e, 'detail') else str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
+            detail = e.detail if hasattr(e, 'detail') else {'detail': str(e)}
+            return Response(detail, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get', 'post'], url_path='documentos')
+    def documentos(self, request, uuid=None):
+        """
+        GET  /api/v1/proyectos/{uuid}/documentos/  -- lista el expediente documental activo.
+        POST /api/v1/proyectos/{uuid}/documentos/  -- sube un documento nuevo (multipart).
+        """
+        proyecto = self.get_object()
+
+        if request.method == 'GET':
+            tipo_documento = request.query_params.get('tipo_documento')
+            qs = self.proyecto_documentos_service.DocumentosBusinessService.listar_documentos(
+                proyecto, tipo_documento=tipo_documento
+            )
+            serializer = DocumentoProyectoSerializer(qs, many=True, context={'request': request})
+            return Response(serializer.data)
+
+        archivo = request.FILES.get('archivo')
+        tipo_documento = request.data.get('tipo_documento')
+        if not archivo or not tipo_documento:
+            return Response(
+                {'detail': 'Los campos "archivo" y "tipo_documento" son requeridos.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        usuario = getattr(request.user, 'tenant_profile', None)
+        try:
+            documento = self.proyecto_documentos_service.DocumentosBusinessService.crear_documento(
+                proyecto,
+                tipo_documento=tipo_documento,
+                archivo=archivo,
+                fase=request.data.get('fase') or None,
+                fecha_documento=request.data.get('fecha_documento') or None,
+                observaciones=request.data.get('observaciones', ''),
+                subido_por=usuario,
+                nombre=request.data.get('nombre', ''),
+            )
+        except ValidationError as e:
+            detail = e.detail if hasattr(e, 'detail') else {'detail': str(e)}
+            return Response(detail, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = DocumentoProyectoSerializer(documento, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path='documentos/(?P<documento_uuid>[0-9a-f-]{36})')
+    def documento_detalle(self, request, uuid=None, documento_uuid=None):
+        """DELETE /api/v1/proyectos/{uuid}/documentos/{documento_uuid}/ -- desactiva (soft-delete)."""
+        proyecto = self.get_object()
+        documento = self.proyecto_documentos_service.DocumentosBusinessService.obtener_documento(
+            proyecto, documento_uuid
+        )
+        if not documento:
+            raise NotFound('Documento no encontrado para este proyecto.')
+
+        self.proyecto_documentos_service.DocumentosBusinessService.desactivar_documento(documento)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get'],
+            url_path='documentos/(?P<documento_uuid>[0-9a-f-]{36})/descargar')
+    def documento_descargar(self, request, uuid=None, documento_uuid=None):
+        """
+        GET /api/v1/proyectos/{uuid}/documentos/{documento_uuid}/descargar/
+
+        Descarga autenticada -- el archivo vive en storage privado (nunca en
+        MEDIA_ROOT/nginx publico). Doble verificacion: el documento debe
+        pertenecer EXACTAMENTE a este proyecto (no solo a este tenant), asi
+        que un UUID valido de otro proyecto/tenant siempre da 404, nunca el
+        archivo. Ver Fase 7 (seguridad de archivos).
+        """
+        proyecto = self.get_object()
+        documento = self.proyecto_documentos_service.DocumentosBusinessService.obtener_documento(
+            proyecto, documento_uuid
+        )
+        if not documento or not documento.archivo:
+            raise NotFound('Documento no encontrado para este proyecto.')
+
+        response = FileResponse(
+            documento.archivo.open('rb'),
+            as_attachment=True,
+            filename=documento.nombre or documento.archivo.name.rsplit('/', 1)[-1],
+        )
+        return response
+
+    @action(detail=True, methods=['get'], url_path='historial-fases')
+    def historial_fases(self, request, uuid=None):
+        """GET /api/v1/proyectos/{uuid}/historial-fases/ -- solo lectura, append-only."""
+        proyecto = self.get_object()
+        historial = proyecto.historial_fases.select_related('usuario__user').all()
+        serializer = HistorialFaseProyectoSerializer(historial, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='gastos')
+    def gastos(self, request, uuid=None):
+        """
+        GET /api/v1/proyectos/{uuid}/gastos/ -- lista de DocumentoSoporte
+        (Gastos) asociados a este proyecto (GASTOS_PROYECTOS_01, Pull Model
+        via UUID opaco). Solo lectura -- la asociacion/desvinculacion se hace
+        editando el Gasto directamente (PATCH /api/v1/gastos/{uuid}/ con
+        proyecto_uuid), no hay endpoint duplicado aqui.
+        """
+        proyecto = self.get_object()
+        from apps.tenant.gastos.services.selectors import DocumentoSelector
+
+        gastos_qs = DocumentoSelector.get_by_proyecto(proyecto.empresa_id, proyecto.uuid)
+        items = [
+            {
+                'uuid': str(g.uuid),
+                'fecha': g.fecha.isoformat() if g.fecha else None,
+                'numero_documento': f"{g.resolucion_dian.prefijo} {g.consecutivo}" if g.resolucion_dian_id else str(g.consecutivo),
+                'proveedor_nombre': g.proveedor.razon_social if g.proveedor_id else None,
+                'descripcion': g.descripcion,
+                'subtotal': str(g.subtotal),
+                'total': str(g.total),
+                'activo': g.activo,
+                'anulado': g.anulado,
+            }
+            for g in gastos_qs
+        ]
+        return Response({
+            'count': len(items),
+            'costo_gastos_real': str(proyecto.costo_gastos_real),
+            'results': items,
+        })
+
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
     def gestor_offcanvas(self, request):
         """
@@ -623,7 +759,10 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
             titulo=serializer.validated_data['titulo'],
             descripcion=serializer.validated_data.get('descripcion', ''),
             prioridad=serializer.validated_data.get('prioridad', 'NORMAL'),
-            asignado_a=serializer.validated_data.get('asignado_a', '')
+            asignado_a=serializer.validated_data.get('asignado_a', ''),
+            avance=serializer.validated_data.get('avance'),
+            bloqueos=serializer.validated_data.get('bloqueos', ''),
+            incidencias=serializer.validated_data.get('incidencias', ''),
         )
 
     def perform_update(self, serializer):

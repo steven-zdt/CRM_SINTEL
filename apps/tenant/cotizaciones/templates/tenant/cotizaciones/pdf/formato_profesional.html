@@ -1,3 +1,4 @@
+{% load currency_filters %}
 <!DOCTYPE html>
 <html lang="es">
 
@@ -309,7 +310,11 @@
             <!-- Fila 1: Marca y Razón Social -->
             <tr>
                 <td width="60%" style="vertical-align: middle;">
-                    <div class="brand-name">SINTEL</div>
+                    {% if logo_data_uri %}
+                        <img src="{{ logo_data_uri }}" style="max-height: 40px; max-width: 100%;" alt="{{ empresa.razon_social }}">
+                    {% else %}
+                        <div class="brand-name">{{ empresa.razon_social }}</div>
+                    {% endif %}
                 </td>
                 <td width="40%" class="company-info" style="vertical-align: middle;">
                     <div class="company-name" style="font-size: 10pt;">{{ empresa.razon_social }}</div>
@@ -369,8 +374,8 @@
                     {{ item.marca|default:"" }}<br>{{ item.referencia|default:"" }}
                 </td>
                 <td class="text-center">{{ item.cantidad|floatformat:0 }}</td>
-                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0 }}</td>
-                <td class="text-right fw-bold">${{ item.subtotal_linea|floatformat:0 }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|format_cop }}</td>
+                <td class="text-right fw-bold">${{ item.subtotal_linea|format_cop }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -400,8 +405,8 @@
                     {{ item.marca|default:"" }}<br>{{ item.referencia|default:"" }}
                 </td>
                 <td class="text-center">{{ item.cantidad|floatformat:0 }}</td>
-                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0 }}</td>
-                <td class="text-right fw-bold">${{ item.subtotal_linea|floatformat:0 }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|format_cop }}</td>
+                <td class="text-right fw-bold">${{ item.subtotal_linea|format_cop }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -427,8 +432,8 @@
                 <td class="text-center accent fw-bold">{{ forloop.counter }}</td>
                 <td>{{ item.descripcion|default:"-" }}</td>
                 <td class="text-center">{{ item.cantidad|floatformat:0 }}</td>
-                <td class="text-right">${{ item.precio_unitario_venta|floatformat:0 }}</td>
-                <td class="text-right fw-bold">${{ item.subtotal_linea|floatformat:0 }}</td>
+                <td class="text-right">${{ item.precio_unitario_venta|format_cop }}</td>
+                <td class="text-right fw-bold">${{ item.subtotal_linea|format_cop }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -475,41 +480,41 @@
         <table class="totals-table">
             <tr class="subtotal">
                 <td class="label">SUBTOTAL NETO</td>
-                <td class="value">${{ subtotal_items|floatformat:0 }}</td>
+                <td class="value">${{ subtotal_items|format_cop }}</td>
             </tr>
             {% if aplicar_aiu %}
             <tr class="aiu-row">
                 <td class="label">+ ADMINISTRACIÓN ({{ aiu_admin_porcentaje|floatformat:1 }}%)</td>
-                <td class="value">${{ valor_administracion|floatformat:0 }}</td>
+                <td class="value">${{ valor_administracion|format_cop }}</td>
             </tr>
             <tr class="aiu-row">
                 <td class="label">+ IMPREVISTOS ({{ aiu_imprevistos_porcentaje|floatformat:1 }}%)</td>
-                <td class="value">${{ valor_imprevistos|floatformat:0 }}</td>
+                <td class="value">${{ valor_imprevistos|format_cop }}</td>
             </tr>
             <tr class="aiu-row">
                 <td class="label">+ UTILIDAD ({{ aiu_utilidad_porcentaje|floatformat:1 }}%)</td>
-                <td class="value">${{ valor_utilidad|floatformat:0 }}</td>
+                <td class="value">${{ valor_utilidad|format_cop }}</td>
             </tr>
             <tr class="aiu-row">
                 <td class="label">+ IVA ({{ iva_porcentaje|floatformat:1 }}%)</td>
-                <td class="value">${{ iva_valor|floatformat:0 }}</td>
+                <td class="value">${{ iva_valor|format_cop }}</td>
             </tr>
             {% else %}
             <tr class="aiu-row">
                 <td class="label">+ IVA ({{ iva_porcentaje|floatformat:1 }}%)</td>
-                <td class="value">${{ iva_valor|floatformat:0 }}</td>
+                <td class="value">${{ iva_valor|format_cop }}</td>
             </tr>
             {% endif %}
             <tr>
                 <td class="label grand-total">TOTAL PROPUESTA</td>
-                <td class="value grand-total">${{ total_neto|floatformat:0 }}</td>
+                <td class="value grand-total">${{ total_neto|format_cop }}</td>
             </tr>
         </table>
     </div>
 
     <!-- Footer Content (xhtml2pdf logic) -->
     <div id="footer_content">
-        SINTEL - Tecnología e Infraestructura IT | Propuesta generada el {{ "now"|date:"d/m/Y" }}<br>
+        {{ empresa.razon_social }} | Propuesta generada el {{ "now"|date:"d/m/Y" }}<br>
         Esta cotización tiene una validez de {{ cotizacion.configuracion.dias_validez|default:15 }} días calendario.
     </div>
 

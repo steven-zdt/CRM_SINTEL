@@ -118,6 +118,7 @@
                 telefono:        (item.querySelector('.contacto-telefono')?.value || '').trim(),
                 activo:          item.querySelector('.contacto-activo')?.checked ?? true,
                 is_principal:    item.querySelector('.contacto-principal')?.checked ?? false,
+                es_representante_legal: item.querySelector('.contacto-representante-legal')?.checked ?? false,
             });
         });
 

@@ -178,6 +178,9 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
 
     @action(detail=True, methods=['get'], url_path='exportar-pdf')
     def exportar_pdf(self, request, **kwargs):
+        """Descarga el PDF sin importar el estado (nunca cambia el estado --
+        mismo criterio que siempre tuvo este endpoint). Para la transicion
+        BORRADOR->ENVIADA gated por PDF, usar POST .../generar-pdf/."""
         instance = self.get_object()
         empresa = resolve_tenant_empresa(request, self)
         pdf_content = CotizacionPDFExportService.generar_pdf_publico(instance, empresa, request)
@@ -186,6 +189,24 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         filename = f'Cotizacion_{instance.codigo_unico or instance.numero_cotizacion}.pdf'
         response = HttpResponse(pdf_content, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=True, methods=['post'], url_path='generar-pdf')
+    def generar_pdf(self, request, **kwargs):
+        """COTIZACIONES-02 Fase 04: BORRADOR -> genera PDF -> exito: ENVIADA
+        / error: permanece BORRADOR. Si la cotizacion ya no esta en
+        BORRADOR, genera el PDF igual (compatibilidad con exportar-pdf) pero
+        no toca el estado. Devuelve el PDF como adjunto (mismo
+        Content-Disposition que exportar-pdf) para no romper consumidores
+        que ya esperan descargar el archivo en la misma llamada."""
+        instance = self.get_object()
+        empresa = resolve_tenant_empresa(request, self)
+        usuario = getattr(request.user, "tenant_profile", None)
+        cotizacion, pdf_content = CotizacionService.generar_pdf_y_enviar(instance, empresa, usuario=usuario)
+        filename = f'Cotizacion_{cotizacion.codigo_unico or cotizacion.numero_cotizacion}.pdf'
+        response = HttpResponse(pdf_content, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['X-Cotizacion-Estado'] = cotizacion.estado
         return response
 
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer],
@@ -225,37 +246,58 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         return Response(self.get_serializer(instance).data)
 
     # ------------------------------------------------------------------
-    # Maquina de estados (COTIZACIONES-01) -- accion de dominio explicita,
-    # nunca PATCH generico al campo 'estado'.
+    # Maquina de estados (COTIZACIONES-01, extendida en COTIZACIONES-02
+    # Fase 05) -- accion de dominio explicita, nunca PATCH generico al
+    # campo 'estado'. BORRADOR->ENVIADA ya no es una transicion manual --
+    # solo ocurre gated por PDF exitoso en generar_pdf() arriba.
     # ------------------------------------------------------------------
-    def _cambiar_estado_action(self, nuevo_estado):
+    def _cambiar_estado_action(self, nuevo_estado, request):
         # CotizacionService.cambiar_estado() lanza rest_framework.exceptions
         # .ValidationError -- DRF la captura automaticamente y responde 400
         # con el detalle estructurado, igual que create()/update() de esta
         # misma vista (no envuelven sus propias llamadas al service).
         instance = self.get_object()
-        cotizacion = CotizacionService.cambiar_estado(instance, nuevo_estado)
+        usuario = getattr(request.user, "tenant_profile", None)
+        motivo = request.data.get("motivo", "") if hasattr(request, "data") else ""
+        cotizacion = CotizacionService.cambiar_estado(instance, nuevo_estado, usuario=usuario, motivo=motivo)
         return Response(self.get_serializer(cotizacion).data)
-
-    @action(detail=True, methods=['post'], url_path='enviar')
-    def enviar(self, request, **kwargs):
-        return self._cambiar_estado_action(Cotizacion.Estado.ENVIADA)
 
     @action(detail=True, methods=['post'], url_path='volver-a-borrador')
     def volver_a_borrador(self, request, **kwargs):
-        return self._cambiar_estado_action(Cotizacion.Estado.BORRADOR)
+        return self._cambiar_estado_action(Cotizacion.Estado.BORRADOR, request)
 
-    @action(detail=True, methods=['post'], url_path='aceptar')
-    def aceptar(self, request, **kwargs):
-        return self._cambiar_estado_action(Cotizacion.Estado.ACEPTADA)
+    @action(detail=True, methods=['post'], url_path='aprobar')
+    def aprobar(self, request, **kwargs):
+        return self._cambiar_estado_action(Cotizacion.Estado.APROBADA, request)
 
-    @action(detail=True, methods=['post'], url_path='cancelar')
-    def cancelar(self, request, **kwargs):
-        return self._cambiar_estado_action(Cotizacion.Estado.CANCELADA)
+    @action(detail=True, methods=['post'], url_path='rechazar')
+    def rechazar(self, request, **kwargs):
+        return self._cambiar_estado_action(Cotizacion.Estado.RECHAZADA, request)
+
+    @action(detail=True, methods=['post'], url_path='archivar')
+    def archivar(self, request, **kwargs):
+        return self._cambiar_estado_action(Cotizacion.Estado.ARCHIVADA, request)
+
+    @action(detail=True, methods=['get'], url_path='historial')
+    def historial(self, request, **kwargs):
+        """COTIZACIONES-02 Fase 03: lectura del historial append-only."""
+        instance = self.get_object()
+        filas = instance.historial_estados.select_related("usuario__user").all()
+        payload = [
+            {
+                "estado_anterior": h.estado_anterior,
+                "estado_nuevo": h.estado_nuevo,
+                "usuario": str(h.usuario.user) if h.usuario_id else None,
+                "motivo": h.motivo,
+                "created_at": h.created_at.isoformat(),
+            }
+            for h in filas
+        ]
+        return Response(payload)
 
     @action(detail=True, methods=['post'], url_path='convertir-a-venta')
     def convertir_a_venta(self, request, **kwargs):
-        """Solo desde ACEPTADA (mandato §13). Idempotente (§14): un segundo
+        """Solo desde APROBADA (mandato §6). Idempotente (§14): un segundo
         POST devuelve la misma Venta ya creada, con 200 (no 201). Import
         diferido de Venta (apps externas siempre dentro del metodo, mismo
         criterio que eliminar_cotizacion() con Factura)."""
@@ -276,6 +318,39 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
             "cotizacion_uuid": str(venta.cotizacion_uuid),
         }
         return Response(payload, status=status.HTTP_200_OK if ya_existia else status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='facturar-venta')
+    def facturar_venta(self, request, **kwargs):
+        """COTIZACIONES-02 Fase 07: Venta (ya creada via convertir-a-venta)
+        -> Factura VENTA, reutilizando VentaBusinessService.
+        procesar_y_facturar_venta(). Idempotente por herencia (COMERCIAL-04):
+        un segundo POST devuelve la misma Venta/Factura, 200 en vez de 201."""
+        instance = self.get_object()
+        sede_id = request.data.get("sede_id") if hasattr(request, "data") else None
+        venta, status_code = CotizacionService.facturar_venta_de_cotizacion(instance, sede_id=sede_id)
+        payload = {
+            "uuid": str(venta.uuid),
+            "estado": venta.estado,
+            "factura_uuid": str(venta.factura_asociada.uuid) if venta.factura_asociada_id else None,
+            "cotizacion_uuid": str(venta.cotizacion_uuid),
+        }
+        return Response(payload, status=status_code)
+
+    @action(detail=True, methods=['post'], url_path='convertir-a-proyecto')
+    def convertir_a_proyecto(self, request, **kwargs):
+        """COTIZACIONES-02 Fase 11: items SERVICIO de una cotizacion APROBADA
+        -> Proyecto (reutiliza orchestrate_create_proyecto ya existente).
+        Idempotente por codigo derivado -- ver CotizacionService.
+        convertir_a_proyecto()."""
+        instance = self.get_object()
+        proyecto = CotizacionService.convertir_a_proyecto(instance)
+        payload = {
+            "uuid": str(proyecto.uuid),
+            "codigo": proyecto.codigo,
+            "nombre": proyecto.nombre,
+            "valor_contrato_proyectado": str(proyecto.valor_contrato_proyectado),
+        }
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class CotizacionItemViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionItemServiceMixin, BaseTenantViewSet):

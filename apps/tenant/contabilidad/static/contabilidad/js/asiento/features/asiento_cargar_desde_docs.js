@@ -21,8 +21,11 @@
    * Helper: Formatear dinero
    */
   function fmtMoney(v) {
-    if (w.DOMUtils && typeof w.DOMUtils.fmtMoney === 'function') {
-      return w.DOMUtils.fmtMoney(v);
+    // T-6: 'DOMUtils.fmtMoney' nunca existio -- el metodo real es
+    // 'formatCurrency' (dom-utils.js). Antes esto caia siempre al fallback
+    // local sin error visible.
+    if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
+      return w.DOMUtils.formatCurrency(v, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     const num = parseFloat(v) || 0;
     return new Intl.NumberFormat('es-CO', {

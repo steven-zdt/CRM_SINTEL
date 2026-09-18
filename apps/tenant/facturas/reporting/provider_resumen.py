@@ -8,14 +8,13 @@ dataset expone TODAS las Facturas (cualquier estado/tipo), pensado para
 visibilidad operativa del ciclo documental completo (documento/estado),
 mismo criterio que `ventas.resumen` para Venta.
 
-Deliberadamente NO incluye "saldo pendiente" -- `Factura.saldo_pendiente` es
-una property Python que llama `BancosBridge.obtener_total_conciliado()` por
-factura individual (1 query por fila, ver apps/tenant/facturas/models.py
-lineas 348-354). No existe un metodo bulk en BancosBridge
-(apps/tenant/facturas/services/selectors.py) para calcularlo en una sola
-consulta agregada; construir uno duplicaria la logica de conciliacion de
-Bancos, violando la regla de una-responsabilidad-una-fuente-de-verdad. Se
-deja como dataset futuro si Bancos expone un metodo bulk real.
+No incluye "saldo pendiente" -- desde la reestructuracion v4.0.0 (Facturas
+= document store) ese dato ya no existe en Facturas en absoluto
+(`Factura.saldo_pendiente`/`total_pagado_bancos` y `BancosBridge` fueron
+removidos, era la direccion de dependencia inversa a la deseada). Si se
+necesita un reporte de conciliacion bancaria por factura, ese dataset
+deberia vivir del lado de Bancos (que ya expone `MovimientoBancarioAplicacion`
+y `TransaccionBancaria.conciliado`), no aqui.
 """
 from __future__ import annotations
 

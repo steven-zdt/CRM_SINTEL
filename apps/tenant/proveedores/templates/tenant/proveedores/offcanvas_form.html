@@ -188,6 +188,102 @@
           </div>
         </div>
 
+        {# ── 1.5 Representante (solo al CREAR -- Regla de Oro: todo Proveedor #}
+        {#     debe tener al menos un Representante. Ver                     #}
+        {#     ProveedorBusinessService.crear_proveedor().)                  #}
+        {% if not proveedor %}
+        <div class="section-divider" id="seccion-representante">
+          <p class="section-title s-info">
+            <i class="bi bi-person-check"></i>Representante
+          </p>
+
+          {# NATURAL: representante = el usuario actual, precargado. Solo se #}
+          {# pide numero de documento -- el sistema no lo tiene registrado.  #}
+          <div id="representante-natural-panel" class="d-none">
+            <div class="alert alert-info py-2 px-3 mb-3 small">
+              <i class="bi bi-info-circle me-1"></i>
+              Se le registrará a usted como representante principal de este proveedor.
+            </div>
+            <div class="row g-3">
+              <div class="col-12">
+                <div class="p-2 bg-light rounded border">
+                  <span class="text-muted small d-block">Representante principal</span>
+                  <span class="fw-semibold" id="representante-natural-nombre-display">
+                    {% if usuario_actual %}{{ usuario_actual.nombre_completo }}{% endif %}
+                  </span>
+                </div>
+              </div>
+              <div class="col-6">
+                <label for="representante-natural-tipo_documento" class="form-label">
+                  Tipo Documento <span class="text-danger">*</span>
+                </label>
+                <select class="form-select" id="representante-natural-tipo_documento">
+                  <option value="CC" selected>Cédula de ciudadanía</option>
+                  <option value="CE">Cédula de extranjería</option>
+                  <option value="PA">Pasaporte</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label for="representante-natural-numero_documento" class="form-label">
+                  Número Documento <span class="text-danger">*</span>
+                </label>
+                <input type="text" class="form-control" id="representante-natural-numero_documento"
+                       placeholder="Su número de documento">
+              </div>
+            </div>
+          </div>
+
+          {# JURIDICA: representante legal completo, obligatorio. #}
+          <div id="representante-juridica-panel" class="d-none">
+            <div class="alert alert-warning py-2 px-3 mb-3 small">
+              <i class="bi bi-exclamation-triangle me-1"></i>
+              Obligatorio para Persona Jurídica.
+            </div>
+            <div class="row g-3">
+              <div class="col-6">
+                <label for="representante-juridica-tipo_documento" class="form-label">
+                  Tipo Documento <span class="text-danger">*</span>
+                </label>
+                <select class="form-select" id="representante-juridica-tipo_documento">
+                  <option value="CC" selected>Cédula de ciudadanía</option>
+                  <option value="CE">Cédula de extranjería</option>
+                  <option value="PA">Pasaporte</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label for="representante-juridica-numero_documento" class="form-label">
+                  Número Documento <span class="text-danger">*</span>
+                </label>
+                <input type="text" class="form-control" id="representante-juridica-numero_documento"
+                       placeholder="Número de documento">
+              </div>
+              <div class="col-12">
+                <label for="representante-juridica-nombre_completo" class="form-label">
+                  Nombre Completo <span class="text-danger">*</span>
+                </label>
+                <input type="text" class="form-control" id="representante-juridica-nombre_completo"
+                       placeholder="Nombre completo del representante legal">
+              </div>
+              <div class="col-6">
+                <label for="representante-juridica-email_contacto" class="form-label">Email</label>
+                <input type="email" class="form-control" id="representante-juridica-email_contacto"
+                       placeholder="correo@ejemplo.com">
+              </div>
+              <div class="col-6">
+                <label for="representante-juridica-telefono_contacto" class="form-label">Teléfono</label>
+                <input type="text" class="form-control" id="representante-juridica-telefono_contacto"
+                       placeholder="+57 300 000 0000">
+              </div>
+              <div class="col-12">
+                <label for="representante-juridica-cargo" class="form-label">Cargo</label>
+                <input type="text" class="form-control" id="representante-juridica-cargo"
+                       value="Representante Legal">
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
         {# ── 2. Información Tributaria ────────────────────────────────── #}
         <div class="section-divider">
           <p class="section-title s-success">

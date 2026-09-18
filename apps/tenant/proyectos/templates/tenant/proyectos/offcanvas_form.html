@@ -598,6 +598,10 @@
                     <span class="text-secondary small"><i class="bi bi-box-seam me-1 text-warning"></i>Materiales (real)</span>
                     <span class="font-monospace small" id="fin-costo-materiales">$ 0</span>
                   </div>
+                  <div class="d-flex justify-content-between py-1">
+                    <span class="text-secondary small"><i class="bi bi-receipt me-1 text-warning"></i>Gastos (real)</span>
+                    <span class="font-monospace small" id="fin-costo-gastos">$ 0</span>
+                  </div>
                 </div>
                 <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-danger bg-opacity-10 border-top border-bottom">
                   <span class="fw-semibold text-danger small"><i class="bi bi-calculator me-1"></i>Total Costos Reales</span>
@@ -638,6 +642,53 @@
                 <!-- Se poblará dinámicamente -->
                 <div class="text-center text-muted py-3 bg-light rounded border border-dashed">
                   Cargando pedidos de materiales...
+                </div>
+              </div>
+            </div>
+
+            <!-- Gastos del Proyecto (GASTOS_PROYECTOS_01) -->
+            <div class="col-md-12 mt-4">
+              <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                <h6 class="text-dark mb-0">
+                  <i class="bi bi-receipt-cutoff me-2"></i>Gastos del Proyecto
+                </h6>
+                <button type="button" id="btn-agregar-gasto-proyecto" class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-plus"></i> Agregar gasto
+                </button>
+              </div>
+
+              <!-- Buscador de gastos existentes (oculto hasta pulsar "Agregar gasto") -->
+              <div id="gasto-proyecto-buscador" class="d-none mb-3 p-2 bg-light border rounded position-relative">
+                <input type="text" id="gasto-proyecto-search" class="form-control form-control-sm"
+                       placeholder="Buscar gasto por proveedor, documento o descripción..." autocomplete="off">
+                <div id="gasto-proyecto-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050; top: 100%; left: 0;"></div>
+              </div>
+
+              <div class="table-responsive border rounded mb-2">
+                <table class="table table-sm table-striped mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Documento</th>
+                      <th>Proveedor</th>
+                      <th>Descripción</th>
+                      <th class="text-end">Valor</th>
+                      <th>Estado</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-gastos-proyecto">
+                    <tr><td colspan="7" class="text-center text-muted py-3">Cargando gastos del proyecto...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="d-flex justify-content-end">
+                <div class="card bg-danger bg-opacity-10 border-0" style="min-width: 220px;">
+                  <div class="card-body p-2 d-flex justify-content-between align-items-center">
+                    <small class="text-muted">Costo de gastos:</small>
+                    <span class="fw-bold text-danger" id="gastos-proyecto-total">$ 0</span>
+                  </div>
                 </div>
               </div>
             </div>

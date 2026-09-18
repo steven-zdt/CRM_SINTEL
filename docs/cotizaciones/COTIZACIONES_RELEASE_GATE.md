@@ -120,3 +120,145 @@ conversión a venta).
 Documentación nueva de esta pasada: `docs/cotizaciones/
 COTIZACIONES_STATE_MACHINE.md`, `COTIZACIONES_INTEGRATIONS.md`,
 `COTIZACIONES_FLOW.md`.
+
+---
+
+## Actualización 2026-09-08 — COTIZACIONES-02: ciclo comercial completo (EN PROGRESO)
+
+**Veredicto parcial (implementación ejecutada, verificación final pendiente):**
+
+```
+COTIZACIONES-02 = EN VERIFICACION (no cerrada todavia)
+```
+
+Misión disparada por el propio usuario al notar que la arquitectura ya
+tenía el tramo `Venta -> Factura` (COMERCIAL-01/03/04) pero no el origen
+`Cotización -> Venta` formalizado end-to-end, más un gap de idempotencia
+pendiente en `crear_factura_desde_venta()` (COMERCIAL-01 §6, nunca cerrado
+del todo por COMERCIAL-04 — ver `COMERCIAL_04_IDEMPOTENCIA.md` §7). Empezó
+por auditoría del código real (INSPECT), no por crear modelos directamente,
+por instrucción explícita.
+
+**Estados — 2º rename en 2 días, verificado con evidencia, no inventado:**
+COTIZACIONES-01 (2026-09-08, misma fecha) había elegido a propósito los
+nombres reales `BORRADOR/ENVIADA/ACEPTADA/CANCELADA` en vez de los
+`APROBADA/ARCHIVADA` que asumía un mission brief anterior. El brief de
+COTIZACIONES-02 volvió a pedir `APROBADA/RECHAZADA/ARCHIVADA`. Antes de
+decidir, se verificó con una query real contra las 3 bases (`home`,
+`admin`, `aipoc`): **0 filas** en `ACEPTADA`/`CANCELADA` — rename sin
+riesgo de datos. Se aplicó: `ACEPTADA -> APROBADA`, `CANCELADA ->
+RECHAZADA`, + `ARCHIVADA` nuevo (5 estados). Migración
+`tenant_cotizaciones.0010` (`RunPython` de rename + `AlterField`).
+
+**Implementado en esta pasada:**
+
+- ✅ **Historial de estados** — modelo nuevo `CotizacionHistorialEstado`
+  (append-only, sin update/delete en el Service Layer). Cada transición
+  real (no la idempotente mismo-estado→mismo-estado) escribe una fila con
+  usuario/motivo/timestamp. `CotizacionEstadoConfig` (nuevo, 1:1 por
+  empresa) para presentación (label/color/icono/orden) — decisión explícita
+  de no forzar esto dentro de `ConfiguracionCotizacion` (que es 1:N por
+  empresa, varios perfiles activos posibles).
+- ✅ **BORRADOR -> ENVIADA gateado por PDF real** —
+  `CotizacionService.generar_pdf_y_enviar()` (nuevo). A diferencia del
+  helper preexistente `_generar_pdf_sincronizado()` (usado por
+  `crear_preforma`/`actualizar_cotizacion`, que traga cualquier fallo en
+  silencio), este propaga la señal real: solo transiciona a `ENVIADA` si
+  `generar_pdf_publico()` devuelve bytes reales; fallo controlado (`None`)
+  o excepción no controlada dejan la cotización en `BORRADOR` y levantan
+  `ValidationError`.
+- ✅ **Cotización -> Venta** (extiende COTIZACIONES-01) — condición de
+  entrada actualizada a `APROBADA`.
+- ✅ **Venta -> Factura VENTA desde Cotización** —
+  `CotizacionService.facturar_venta_de_cotizacion()` (nuevo). Reutiliza el
+  flujo oficial ya existente (`VentaBusinessService.
+  procesar_y_facturar_venta(venta_existente=venta)`, COMERCIAL-04) — no
+  reimplementa DTO, cálculo de impuestos ni idempotencia DIAN.
+- ✅ **Cierre del gap de idempotencia real en `crear_factura_desde_venta()`**
+  — ver `COMERCIAL_04_IDEMPOTENCIA.md` §7 (detalle completo). Resumen:
+  `UniqueConstraint(empresa, numero)` nuevo en `Factura` (migración
+  `facturas.0041`, verificado 0 duplicados reales antes de agregarlo) +
+  `IntegrityError` capturado dentro de un `transaction.atomic()` anidado
+  (savepoint real) que recupera y devuelve la `Factura` existente en vez de
+  duplicar o propagar el error.
+- ✅ **Servicios de Cotización -> Proyecto** —
+  `CotizacionService.convertir_a_proyecto()` (nuevo). Reutiliza el
+  orquestador ya existente `orchestrate_create_proyecto()`
+  (`apps/tenant/proyectos/`) — no se creó un segundo modelo `Proyecto` ni un
+  service paralelo. Filtra por `CotizacionItem.tipo_item == 'SERVICIO'`
+  (señal confiable) en vez de `Cotizacion.tipo_cotizacion` (campo libre
+  confirmado no confiable — siempre queda en `'MIXTO'`). Idempotente por
+  `codigo_derivado = f"PRJ-COT-{codigo_unico}"`.
+- ✅ **Protección de datos por estado** — `actualizar_cotizacion()` ahora
+  exige `BORRADOR` (antes editable en cualquier estado vía PATCH genérico);
+  `eliminar_cotizacion()` bloquea `APROBADA`/`RECHAZADA`/`ARCHIVADA` además
+  del bloqueo preexistente por `Factura` vinculada.
+
+**DEFERRED (evidencia insuficiente, no se inventó la regla, por mandato
+explícito de la misión):**
+
+- ❌ **Abastecimiento (Cotización -> OrdenCompra -> Recepción ->
+  Inventario)** — `CotizacionItem` no tiene ningún soft-reference a
+  `inventario.Producto/Servicio` (catálogo duplicado, ya documentado en
+  `COTIZACIONES_INTEGRATIONS.md`). Inventar un heurístico de matching por
+  nombre/código violaría el mandato "no inventes la regla" — sin esa
+  evidencia, DEFERRED explícito, no una implementación silenciosa a medias.
+
+**Cierre formal de esta misión — 2026-09-14:**
+
+1. ~~`manage.py check` + `makemigrations --check --dry-run` limpios tras el
+   cambio de `Factura`.~~ **VERIFICADO 2026-09-11**: ambos limpios (0
+   errores, "No changes detected"). Re-verificado 2026-09-14 tras la
+   reestructuración de Facturas v4.0.0 (Fase 2/3): sigue limpio.
+2. ~~Regresión dirigida real...~~ **COMPLETADA 2026-09-14** (usando
+   `--reuse-db` per la recomendación de la propia entrada anterior):
+   `pytest apps/tenant/ventas/tests apps/tenant/facturas/tests
+   apps/tenant/cotizaciones/tests apps/tenant/compras/tests` —
+   **357 passed, 2 failed, 13 skipped (3:58:20)**. Ambos failures
+   investigados con causa raíz real, ninguno es de COTIZACIONES-02:
+   - `test_factura_total_retenciones_multiples` — preexistente, ajeno
+     (guard de idempotencia de retenciones, commit `4dbe80c`, anterior a
+     toda esta sesión). Ver `apps/tenant/facturas/.agent/COMPLETO_FLUJO_FACTURAS.md`.
+   - `test_materialize_sin_dto_retorna_400` — causado por esta misma sesión
+     (reestructuración Facturas v4.0.0, Fase 1: se eliminó el endpoint
+     `materialize`, duplicado deprecado de `create-from-dto`, 0
+     consumidores reales). El test quedó referenciando una URL inexistente.
+     **Corregido**: test removido (`test_upload_async_flow.py`), el otro
+     test que mencionaba `materialize` en código muerto (tras un
+     `skipTest` incondicional) actualizado para apuntar a
+     `create-from-dto`. Re-verificado en aislado: `pytest
+     apps/tenant/facturas/tests/test_upload_async_flow.py` — **2 passed,
+     2 skipped, 0 failed**.
+3. Veredicto final: **`COMPLETED_WITH_DEFERRED`** — implementación completa,
+   regresión de los 4 apps directamente relacionados en verde (sin
+   contar los 2 failures ajenos/corregidos arriba), abastecimiento
+   (Cotización→OrdenCompra→Inventario) sigue DEFERRED explícito por falta
+   de evidencia de matching confiable (sin cambios, ver arriba).
+
+Documentación nueva/actualizada de esta pasada: este archivo,
+`docs/comercial/COMERCIAL_04_IDEMPOTENCIA.md` §7,
+`documentacion/arquitectura_general.md` (DOC-M51).
+
+---
+
+## Re-verificación RELEASE-CLOSE-01 (2026-09-15)
+
+No se reutiliza el resultado histórico (357 passed/2 failed) como resultado de esta misión. Corrida
+fresca, HOY, contra el código actual:
+
+```
+pytest apps/tenant/ventas/tests apps/tenant/facturas/tests
+       apps/tenant/cotizaciones/tests apps/tenant/compras/tests -q --reuse-db
+→ 358 passed, 0 failed, 13 skipped (4:01:13)
+```
+
+0 failures. El único failure de retenciones (preexistente, ajeno a Facturas/Cotizaciones) fue
+reproducido, root-caused y cerrado en esta misma sesión (ver
+`apps/tenant/facturas/.agent/COMPLETO_FLUJO_FACTURAS.md` §"RELEASE-CLOSE-01") — clasificado como test
+obsoleto (A), cero cambios de producción. `manage.py check` y `makemigrations --check --dry-run`
+limpios.
+
+**Veredicto final confirmado: `COTIZACIONES-02 = COMPLETED_WITH_DEFERRED`** — sin cambios respecto al
+veredicto de 2026-09-14, ahora respaldado por una regresión 100% en verde (antes 357/2, hoy 358/0).
+El DEFERRED de Abastecimiento (Cotización→OrdenCompra→Inventario) sigue vigente, sin evidencia nueva
+que justifique cerrarlo.

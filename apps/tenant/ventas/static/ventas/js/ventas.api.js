@@ -78,10 +78,50 @@
             return _fetch('POST', API_ROOT + uuid + '/anular/', { motivo: motivo || '' });
         },
 
+        // FACTURAS-VENTAS-COMPRAS-01: asociacion MANUAL de una Factura ya
+        // persistida (naturaleza VENTA) -- nunca crea/emite una Factura.
+        vincularFactura: function (uuid, facturaUuid) {
+            return _fetch('POST', API_ROOT + uuid + '/vincular-factura/', { factura_uuid: facturaUuid });
+        },
+
+        // Reutiliza el buscador ya existente de Facturas (FASE 20/21: no
+        // se crea un segundo endpoint de busqueda) -- filtra por
+        // naturaleza=VENTA server-side.
+        buscarFacturasVenta: function (q) {
+            var url = new URL('/api/v1/facturas/buscar-para-movimiento/', w.location.origin);
+            url.searchParams.set('q', q);
+            url.searchParams.set('naturaleza', 'VENTA');
+            return _fetch('GET', url.toString());
+        },
+
+        // FST-375 secc. 21 (autorrelleno de Nueva Venta): trae el detalle
+        // completo de la Factura seleccionada (cabecera + items) para
+        // precargar el formulario de creacion ANTES de guardar -- reutiliza
+        // los endpoints ya existentes de Facturas (GET /facturas/{uuid}/ +
+        // GET /items-factura/?factura=<id>), sin crear un endpoint paralelo.
+        obtenerFacturaParaAutorrelleno: async function (facturaUuid) {
+            var factura = await _fetch('GET', '/api/v1/facturas/' + facturaUuid + '/');
+            var itemsRes = await _fetch(
+                'GET', '/api/v1/facturas/items-factura/?factura=' + factura.id
+            );
+            var items = (itemsRes && itemsRes.results) || itemsRes || [];
+            return { factura: factura, items: Array.isArray(items) ? items : [] };
+        },
+
+        // Integracion Facturas<->Ventas: pass-through de Gestion Manual de
+        // Pago hacia la Factura vinculada (SSoT sigue siendo Factura).
+        actualizarGestionPago: function (uuid, data) {
+            return _fetch('PATCH', API_ROOT + uuid + '/gestion-pago/', data);
+        },
+
         // ── Endpoints de renderizado HTMX — Venta ───────────────────────
 
         renderCrear: function () {
             return API_ROOT + 'render-offcanvas/crear/';
+        },
+
+        renderEditar: function (uuid) {
+            return API_ROOT + 'render-offcanvas/editar/?uuid=' + uuid;
         },
 
         renderDetalle: function (uuid) {

@@ -26,6 +26,12 @@
    * @returns {string}
    */
   function fmtMoney(value, currency = 'COP') {
+    // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js) solo
+    // para COP -- DOMUtils.formatCurrency no acepta moneda dinamica, y esta
+    // funcion si admite otras monedas via el parametro `currency`.
+    if (currency === 'COP' && window.DOMUtils && typeof window.DOMUtils.formatCurrency === 'function') {
+      return window.DOMUtils.formatCurrency(Number(value || 0));
+    }
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: currency,

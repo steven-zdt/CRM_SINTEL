@@ -9,6 +9,7 @@ from rest_framework import serializers
 from apps.tenant.facturas.models import DocumentProcessing, Factura, ItemFactura, ItemNotaCredito, MailIngestionRun, NotaCredito, FacturaImpuesto
 from apps.tenant.facturas.services import DETAIL_FIELDS
 from apps.tenant.empresa.models import Sede
+from apps.tenant.core.templatetags.currency_filters import currency_cop
 
 
 class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
@@ -116,14 +117,6 @@ class FacturaListSerializer(serializers.ModelSerializer):
     # DT-SEDE-02: sede para KPIs por sede
     sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
 
-    # v3.11.0 — Pull Model Bancos: conciliacion bancaria
-    total_pagado_bancos = serializers.DecimalField(
-        max_digits=15, decimal_places=2, read_only=True
-    )
-    saldo_pendiente = serializers.DecimalField(
-        max_digits=15, decimal_places=2, read_only=True
-    )
-
     # Retenciones read-only para backward compat (v3.7.1 Pull Model)
     retefuente = serializers.SerializerMethodField()
     reteica = serializers.SerializerMethodField()
@@ -167,8 +160,6 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "nota_credito_id",
             "nota_credito_numero",
             "sede_nombre",          # DT-SEDE-02
-            "total_pagado_bancos",  # v3.11.0 Pull Model Bancos
-            "saldo_pendiente",      # v3.11.0 Pull Model Bancos
             "retefuente",
             "reteica",
             "reteiva",
@@ -179,7 +170,6 @@ class FacturaListSerializer(serializers.ModelSerializer):
             "nota_credito_id", "nota_credito_numero", "has_nc", "subtotal",
             "impuestos", "total", "total_formateado", "cufe", "cotizacion_numero",
             "cliente_vinculado_info", "proveedor_vinculado_info",
-            "total_pagado_bancos", "saldo_pendiente",
             "retefuente", "reteica", "reteiva",
         )
     
@@ -191,10 +181,14 @@ class FacturaListSerializer(serializers.ModelSerializer):
             return False
     
     def get_total_formateado(self, obj):
-        """Formatea el total como moneda colombiana."""
-        if obj.total is None:
-            return "$ 0,00"
-        return f"${obj.total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        """Formatea el total como moneda colombiana.
+
+        T-3 (docs/remediation/AUDIT_BASELINE_20260912.md): antes
+        reimplementaba a mano lo que ya hace `currency_cop` (SSoT de
+        formateo COP, core/templatetags/currency_filters.py) -- coincidian
+        por casualidad, no por reuso.
+        """
+        return currency_cop(obj.total)
     
     def get_nota_credito_id(self, obj):
         """Retorna el ID de la Nota de Crédito asociada si existe."""
@@ -281,6 +275,7 @@ class FacturaDetailSerializer(serializers.ModelSerializer):
     cliente_vinculado_info = serializers.SerializerMethodField()
     proveedor_vinculado_info = serializers.SerializerMethodField()
     impuestos_desglosados = FacturaImpuestoSerializer(many=True, read_only=True)
+    valor_en_letras = serializers.SerializerMethodField()
 
     # DT-SEDE-02: sede para KPIs por sede
     sede = UUIDOrPKRelatedField(
@@ -290,14 +285,6 @@ class FacturaDetailSerializer(serializers.ModelSerializer):
         help_text='UUID de la sede donde se origina/recibe la factura (opcional)',
     )
     sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
-
-    # v3.11.0 — Pull Model Bancos: conciliacion bancaria
-    total_pagado_bancos = serializers.DecimalField(
-        max_digits=15, decimal_places=2, read_only=True
-    )
-    saldo_pendiente = serializers.DecimalField(
-        max_digits=15, decimal_places=2, read_only=True
-    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -341,18 +328,29 @@ class FacturaDetailSerializer(serializers.ModelSerializer):
             "sede",
             "sede_nombre",
             "impuestos_desglosados",
-            "total_pagado_bancos",   # v3.11.0
-            "saldo_pendiente",       # v3.11.0
+            "valor_en_letras",
         )
         read_only_fields = (
-            "id", "uuid", "created_at", "updated_at", "cufe", "qr_url",
+            "id", "uuid", "created_at", "updated_at", "cufe", "qr_url", "qr_code",
+            "autorizacion_numero", "autorizacion_prefijo", "autorizacion_rango_desde",
+            "autorizacion_rango_hasta", "autorizacion_vigencia_inicio", "autorizacion_vigencia_fin",
             "has_ubl_xml", "has_application_response_xml", "has_pdf_file", "anexos_meta",
             "cliente_uuid", "cliente_vinculado_info",
             "proveedor_uuid", "proveedor_vinculado_info",
             "cotizacion_uuid", "cotizacion_numero",
-            "sede_nombre", "impuestos_desglosados",
-            "total_pagado_bancos", "saldo_pendiente",
+            "sede_nombre", "impuestos_desglosados", "valor_en_letras",
         )
+
+    def get_valor_en_letras(self, obj):
+        """
+        FST-375 secc. 7/27: la fuente definitiva del valor en letras es
+        SIEMPRE `obj.total` (Decimal ya validado por backend) -- nunca un
+        calculo hecho en el frontend.
+        """
+        from apps.tenant.core.services.numero_a_letras import monto_a_letras
+        if obj.total is None:
+            return None
+        return monto_a_letras(obj.total, obj.moneda or 'COP')
 
     def get_cliente_vinculado_info(self, obj):
         """Retorna info de cliente resolviendo desde la app Clientes."""
@@ -477,11 +475,6 @@ class FacturaReadDTOSerializer(serializers.Serializer):
     cufe = serializers.CharField(allow_blank=True, required=False)
     qr_url = serializers.URLField(allow_blank=True, required=False)
     naturaleza = serializers.CharField(allow_blank=True, required=False)
-
-
-class ImportUBLSerializer(serializers.Serializer):
-    """Serializer para importar factura desde UBL XML."""
-    xml = serializers.CharField(allow_blank=False, help_text="Contenido XML UBL 2.1 de la factura")
 
 
 class UploadUBLFileSerializer(serializers.Serializer):

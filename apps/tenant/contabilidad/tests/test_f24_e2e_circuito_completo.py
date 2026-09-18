@@ -12,9 +12,14 @@ No reimplementa nada de F21/F22/F23: reutiliza RecepcionCompraBusinessService,
 KardexService, VentaBusinessService, ExtractorInventario y Contabilizador tal
 como quedaron. Una sola clase con setUp compartido (costo de schema aprendido
 en F21/F22/F23).
+
+VENTAS-COMPRAS-FACTURAS-01 (2026-09-09): `procesar_y_facturar_venta()`
+rechaza por defecto (Fase 8). Esta clase mockea el flag a True -- prueba
+el circuito Compra/Venta/Contabilidad, no el bloqueo de produccion.
 """
 from datetime import date
 from decimal import Decimal
+from unittest import mock
 
 from django.utils import timezone
 
@@ -43,6 +48,7 @@ _REGLAS_INVENTARIO = (
 )
 
 
+@mock.patch("apps.tenant.ventas.services.business_service.EMISION_FISCAL_VENTA_AUTORIZADA", True)
 class CircuitoE2EF24Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()

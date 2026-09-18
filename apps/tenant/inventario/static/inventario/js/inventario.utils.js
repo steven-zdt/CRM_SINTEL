@@ -36,7 +36,8 @@
       if (api && api.categorias && typeof api.categorias.list === 'function') {
         res = await api.categorias.list({ page_size: 200 });
       } else if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
-        res = await w.Sintel.Core.Http.request('GET', '/api/v1/inventario/categorias/?page_size=200');
+        // T-9: delega a la SSoT de endpoints (inventario.api.js).
+        res = await w.Sintel.Inventario.API.categorias.list({ page_size: 200 });
       } else {
         console.warn(MOD, 'Ni inventario.api ni Sintel.Core.Http disponibles');
         return [];

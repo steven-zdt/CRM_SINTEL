@@ -67,7 +67,8 @@
         if (!uuid) return;
         if (!(await w.UIManager?.confirm('¿Confirma anular esta nómina? La operación no puede revertirse.'))) return;
         try {
-            const resp = await w.Sintel.Core.Http.request('POST', `/api/v1/empleados/devengos/${uuid}/anular/`);
+            // T-9: delega a la SSoT de endpoints (empleados.api.js).
+            const resp = await w.Sintel.Core.Http.request('POST', w.Sintel.Empleados.API.devengos.anular(uuid));
             if (resp.ok) {
                 w.UIManager?.notifySuccess('Nómina anulada correctamente');
                 reload();
@@ -78,6 +79,24 @@
             console.error('[NominaList] Error anulando:', err);
             w.UIManager?.notifyError('Error al anular la nómina');
         }
+    }
+
+    // feature 2026-09-10: "Ver" detalle de una nomina (solo lectura) --
+    // mismo patron ya probado en liquidacion_list.js/abrirDetalleLiquidacion.
+    function abrirDetalleNomina(uuid) {
+        const url = `/api/v1/empleados/devengos/${uuid}/render-offcanvas/detalle/`;
+        const container = d.getElementById('offcanvas-container-nominas');
+        if (!container) {
+            console.error('[NominaList] No se encontro #offcanvas-container-nominas');
+            return;
+        }
+        w.htmx.ajax('GET', url, { target: container, swap: 'innerHTML' }).then(() => {
+            const el = container.querySelector('.offcanvas');
+            if (el) {
+                // SSoT: window.Sintel.Core.mostrarOffcanvasSeguro (AGENTS.md §26 — nunca getOrCreateInstance)
+                w.Sintel?.Core?.mostrarOffcanvasSeguro(el);
+            }
+        });
     }
 
     function attachDetailListeners() {
@@ -91,6 +110,13 @@
                 const uuid = btnNueva.dataset.empleadoUuid;
                 const nombre = btnNueva.dataset.empleadoNombre;
                 w.Sintel?.Empleados?.DevengoEditor?.openParaEmpleado?.(uuid, nombre);
+                return;
+            }
+
+            const btnVer = ev.target.closest('.btn-ver-nomina');
+            if (btnVer) {
+                ev.preventDefault();
+                abrirDetalleNomina(btnVer.dataset.uuid);
                 return;
             }
 

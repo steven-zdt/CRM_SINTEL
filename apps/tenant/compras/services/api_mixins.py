@@ -138,6 +138,14 @@ class OrdenCompraServiceMixin(BaseServiceMixin):
         empresa_id = self._get_empresa_id_seguro()
         return self.business_service_class.eliminar_orden_compra(orden_uuid, empresa_id)
 
+    def service_vincular_factura(self, orden_uuid: str, factura_uuid: str):
+        """FACTURAS-UI-CRONO-01: vinculacion manual de una Factura ya
+        persistida (naturaleza COMPRA) -- nunca crea/emite una Factura."""
+        empresa_id = self._get_empresa_id_seguro()
+        return self.business_service_class.vincular_factura_existente(
+            orden_uuid, factura_uuid, empresa_id
+        )
+
     def service_get_siguiente_consecutivo(self) -> int:
         """
         Obtiene el consecutivo siguiente para la empresa actual.

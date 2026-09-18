@@ -126,6 +126,9 @@
                 {% if contacto.is_principal %}
                   <span class="badge bg-primary ms-1">Principal</span>
                 {% endif %}
+                {% if contacto.es_representante_legal %}
+                  <span class="badge bg-info text-dark ms-1">Representante Legal</span>
+                {% endif %}
               </div>
               <div class="small text-muted">
                 {% if contacto.cargo %}{{ contacto.cargo }} &mdash; {% endif %}

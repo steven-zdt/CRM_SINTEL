@@ -208,6 +208,11 @@
                                {% if contacto.is_principal %}checked{% endif %} />
                         <label class="form-check-label small">Principal</label>
                       </div>
+                      <div class="form-check">
+                        <input class="form-check-input contacto-representante-legal" type="checkbox"
+                               {% if contacto.es_representante_legal %}checked{% endif %} />
+                        <label class="form-check-label small">Representante Legal</label>
+                      </div>
                     </div>
                     <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-contacto">
                       <i class="bi bi-trash"></i> Eliminar

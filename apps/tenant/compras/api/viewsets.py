@@ -205,6 +205,22 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
         except Exception as e:
             return self.handle_service_error(e)
 
+    @action(detail=True, methods=["post"], url_path="vincular-factura")
+    def vincular_factura(self, request, uuid=None):
+        """FACTURAS-UI-CRONO-01: el usuario elige manualmente una Factura
+        ya existente (modulo Facturas, naturaleza COMPRA) y la asocia a
+        esta Orden de Compra -- nunca crea/emite una Factura nueva."""
+        try:
+            factura_uuid = request.data.get("factura_uuid")
+            success, result, status_code = self.service_vincular_factura(uuid, factura_uuid)
+            if not success:
+                return Response(result, status=status_code)
+
+            out_serializer = OrdenCompraDetailSerializer(result)
+            return Response(out_serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return self.handle_service_error(e)
+
     @action(detail=False, methods=["get"], url_path="siguiente-consecutivo")
     def siguiente_consecutivo(self, request):
         """Obtiene el siguiente consecutivo de la empresa."""
@@ -345,6 +361,23 @@ class PlantillaOrdenCompraViewSet(OrganizationalContextMixin, PlantillaOrdenComp
     def render_offcanvas_crear(self, request):
         return Response(
             {'offcanvas_id': 'offcanvas-plantilla-crear'},
+            template_name='tenant/compras/offcanvas_crear_plantilla.html'
+        )
+
+    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
+    def render_offcanvas_editar(self, request):
+        """CO-1 (2026-09-12): reutiliza el mismo template de "Crear" en modo
+        edicion (mismo patron ya usado en Ventas para V-2)."""
+        plantilla_uuid = request.query_params.get('uuid')
+        try:
+            empresa_id = self.get_empresa_id()
+        except Exception:
+            empresa_id = None
+        plantilla = None
+        if empresa_id and plantilla_uuid:
+            plantilla = PlantillaOrdenCompra.objects.filter(uuid=plantilla_uuid, empresa_id=empresa_id).first()
+        return Response(
+            {'offcanvas_id': 'offcanvas-plantilla-crear', 'plantilla': plantilla},
             template_name='tenant/compras/offcanvas_crear_plantilla.html'
         )
 

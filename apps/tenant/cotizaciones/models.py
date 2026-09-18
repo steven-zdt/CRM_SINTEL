@@ -60,10 +60,21 @@ class Servicio(SintelTenantBaseModel):
 
 class Cotizacion(SintelTenantBaseModel):
     class Estado(models.TextChoices):
+        """COTIZACIONES-02: codigos internos estables. Antes (COTIZACIONES-01,
+        mismo dia) eran BORRADOR/ENVIADA/ACEPTADA/CANCELADA -- renombrados a
+        estos 5 (ACEPTADA->APROBADA, CANCELADA->RECHAZADA, + ARCHIVADA nuevo)
+        por decision explicita de esta mision. Verificado antes del rename:
+        0 filas reales en ACEPTADA/CANCELADA en los 3 tenants (home/admin/
+        aipoc) -- renombrado sin riesgo de datos, migracion de datos incluida
+        de todas formas por seguridad (0002_...py). El label (texto visible)
+        es configurable via CotizacionEstadoConfig; el `value` de este enum
+        (lo que se persiste en BD y lo que usa TRANSICIONES_VALIDAS) NO debe
+        cambiar nunca sin una migracion de datos explicita."""
         BORRADOR = 'BORRADOR', _('Borrador')
         ENVIADA = 'ENVIADA', _('Enviada')
-        ACEPTADA = 'ACEPTADA', _('Aceptada')
-        CANCELADA = 'CANCELADA', _('Cancelada')
+        APROBADA = 'APROBADA', _('Aprobada')
+        RECHAZADA = 'RECHAZADA', _('Rechazada')
+        ARCHIVADA = 'ARCHIVADA', _('Archivada')
 
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     numero_cotizacion = models.CharField(max_length=50) 
@@ -172,6 +183,87 @@ class CotizacionItem(SintelTenantBaseModel):
     subtotal_linea = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     orden = models.PositiveIntegerField(default=0)
 
-    class Meta: 
+    class Meta:
         db_table = 'tenant_cotizaciones_item'
         ordering = ['orden']
+
+
+class CotizacionEstadoConfig(SintelTenantBaseModel):
+    """COTIZACIONES-02 (Fase 02): presentacion configurable por estado.
+
+    El codigo (`codigo`) es uno de los 5 valores de `Cotizacion.Estado` --
+    estable, nunca editable por el usuario, es la llave real usada por
+    `TRANSICIONES_VALIDAS` y todo el codigo de negocio. Lo unico
+    configurable aqui es COMO se presenta ese estado en la UI (label/color/
+    icono/orden/activo). Las transiciones permitidas NO son configurables
+    por diseño: el mandato pide "codigos internos estables" y permitir que
+    un usuario reconfigure libremente que transiciones son validas
+    reintroduciria el mismo riesgo (estado editable sin control real) que
+    esta mision cierra. Los permisos de quien puede aprobar/rechazar/
+    archivar reutilizan el mecanismo YA EXISTENTE (IsTenantAdminOrReadOnly,
+    mismo patron que el resto del modulo) -- no se crea un RBAC nuevo.
+
+    No se extendio `ConfiguracionCotizacion` (mandato: "si existe una
+    estructura adecuada, extenderla") porque esa app es 1:N por empresa
+    (multiples perfiles de numeracion pueden estar activos a la vez,
+    ver `ConfiguracionCotizacionViewSet.activar`) mientras que la
+    presentacion de un estado es conceptualmente 1:1 por empresa -- forzarlo
+    dentro de un perfil de numeracion crearia ambiguedad real si 2 perfiles
+    activos configuraran colores/labels distintos para el mismo estado.
+    """
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+    codigo = models.CharField(max_length=20, choices=Cotizacion.Estado.choices)
+    label = models.CharField(max_length=50, blank=True)
+    color = models.CharField(max_length=20, blank=True, default="secondary")
+    icono = models.CharField(max_length=50, blank=True, default="")
+    orden = models.PositiveIntegerField(default=0)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'tenant_cotizaciones_estado_config'
+        ordering = ['orden']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['empresa', 'codigo'], name='uniq_cot_estado_config_por_empresa',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.codigo} -> {self.label or self.get_codigo_display()}"
+
+
+class CotizacionHistorialEstado(SintelTenantBaseModel):
+    """COTIZACIONES-02 (Fase 03): historial append-only de transiciones.
+
+    No existe infraestructura transversal reutilizable en el proyecto para
+    esto (auditado explicitamente: sin resultados de HistorialEstado/
+    AuditLog/django-simple-history con la forma necesaria -- el unico
+    "audit" existente es un logger de texto plano por archivo en
+    apps.public.tenants.audit, no consultable como tabla). Modelo nuevo,
+    minimo, siguiendo el mismo patron SintelTenantBaseModel del resto del
+    proyecto.
+
+    Append-only por diseño: no se expone ningun update/delete en el Service
+    Layer (solo `crear_entrada`), y no hay ninguna migracion ni endpoint que
+    permita alterar una fila ya escrita.
+    """
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+    cotizacion = models.ForeignKey(
+        Cotizacion, related_name='historial_estados', on_delete=models.CASCADE,
+    )
+    estado_anterior = models.CharField(max_length=20, blank=True, default="")
+    estado_nuevo = models.CharField(max_length=20)
+    usuario = models.ForeignKey(
+        'perfil.TenantProfile', on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    motivo = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = 'tenant_cotizaciones_historial_estado'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['empresa', 'cotizacion', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.cotizacion_id}: {self.estado_anterior} -> {self.estado_nuevo}"

@@ -49,7 +49,6 @@ router.register(r'', FacturaViewSet, basename='factura')  # # WARNING: AL FINAL 
 # - GET /api/v1/facturas/ (list facturas con paginación)
 # - GET /api/v1/facturas/{uuid}/ (retrieve factura)
 # - DELETE /api/v1/facturas/{uuid}/ (delete factura)
-# - POST /api/v1/facturas/importar-ubl/ (importar UBL desde texto)
 # - GET /api/v1/facturas/summary/ (resumen de facturación neta)
 # - POST /api/v1/facturas/upload-ubl/ (upload UBL file - single o batch)
 #   # WARNING: v2.61.2: Soporta batch processing con files[] (múltiples archivos)
@@ -57,7 +56,9 @@ router.register(r'', FacturaViewSet, basename='factura')  # # WARNING: AL FINAL 
 # - POST /api/v1/facturas/upload-document/ (upload documento universal - XML/PDF/XLS/CSV/TXT)
 # - GET /api/v1/facturas/ingest/{task_id}/status/ (estado de ingesta asíncrona)
 # - POST /api/v1/facturas/create-from-dto/ (crear factura desde DTO canónico)
-# - POST /api/v1/facturas/materialize/ (materializar factura desde resultado de pipeline)
+#   # WARNING: v4.0.0: endpoints duplicados `importar-ubl`/`materialize` (ya deprecados,
+#   delegaban al mismo pipeline que upload-ubl/create-from-dto) fueron ELIMINADOS.
+#   Usar upload-ubl/ o create-from-dto/.
 # - GET /api/v1/facturas/{uuid}/xml/ (obtener XML de factura)
 # - GET /api/v1/facturas/{uuid}/app-response/ (obtener ApplicationResponse XML)
 # - POST /api/v1/facturas/update-inbox-state/ (actualizar estado de inbox)

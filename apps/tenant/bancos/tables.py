@@ -39,12 +39,13 @@ class CuentaBancariaTable(tables.Table):
     banco = tables.Column(verbose_name="Banco")
     tipo = tables.Column(verbose_name="Tipo", orderable=False)
     numero = tables.Column(verbose_name="Número", orderable=False)
+    estado = tables.Column(accessor="activo", verbose_name="Estado", orderable=False)
     acciones = tables.Column(empty_values=(), orderable=False, verbose_name="")
 
     class Meta:
         model = CuentaBancaria
         fields = ()
-        sequence = ("nombre", "banco", "tipo", "numero", "acciones")
+        sequence = ("nombre", "banco", "tipo", "numero", "estado", "acciones")
         attrs = {"class": "table table-hover align-middle mb-0", "id": "tabla-cuentas-bancarias"}
         empty_text = "No hay cuentas bancarias registradas"
         order_by = "nombre"
@@ -55,15 +56,41 @@ class CuentaBancariaTable(tables.Table):
     def render_tipo(self, value):
         return _TIPOS_CUENTA_MAP.get(value, value or "—")
 
+    def render_estado(self, value):
+        # B-4: badge de activo/inactivo -- antes no existia ningun indicio
+        # visual de que una cuenta pudiera estar oculta/desactivada.
+        if value:
+            return format_html('<span class="badge bg-success">Activa</span>')
+        return format_html('<span class="badge bg-secondary">Inactiva</span>')
+
     def render_acciones(self, record):
+        toggle_btn = (
+            format_html(
+                '<button type="button" class="btn btn-outline-secondary btn-desactivar-cuenta" data-id="{0}" title="Desactivar">'
+                '<i class="bi bi-eye-slash"></i></button>',
+                record.uuid,
+            )
+            if record.activo
+            else format_html(
+                '<button type="button" class="btn btn-outline-success btn-activar-cuenta" data-id="{0}" title="Activar">'
+                '<i class="bi bi-eye"></i></button>',
+                record.uuid,
+            )
+        )
+        # B-4: eliminar fisico solo tiene sentido si ya esta inactiva
+        # (crud_service.eliminar_cuenta ahora lo rechaza si activo=True).
+        delete_btn = format_html(
+            '<button type="button" class="btn btn-outline-danger btn-delete-cuenta" data-id="{0}" title="Eliminar">'
+            '<i class="bi bi-trash"></i></button>',
+            record.uuid,
+        ) if not record.activo else ""
         return format_html(
             '<div class="btn-group btn-group-sm" role="group">'
             '<button type="button" class="btn btn-outline-primary btn-edit-cuenta" data-id="{0}" title="Editar">'
             '<i class="bi bi-pencil"></i></button>'
-            '<button type="button" class="btn btn-outline-danger btn-delete-cuenta" data-id="{0}" title="Eliminar">'
-            '<i class="bi bi-trash"></i></button>'
+            "{1}{2}"
             "</div>",
-            record.uuid,
+            record.uuid, toggle_btn, delete_btn,
         )
 
 

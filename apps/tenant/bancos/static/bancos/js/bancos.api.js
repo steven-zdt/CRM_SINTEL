@@ -61,6 +61,16 @@
         console.log(`[${MOD}] cuentas.delete(${uuid})`);
         if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
         return callHttp('DELETE', `${API_BASE}/cuentas/${uuid}/`);
+      },
+      desactivar: async (uuid) => {
+        console.log(`[${MOD}] cuentas.desactivar(${uuid})`);
+        if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+        return callHttp('POST', `${API_BASE}/cuentas/${uuid}/desactivar/`);
+      },
+      activar: async (uuid) => {
+        console.log(`[${MOD}] cuentas.activar(${uuid})`);
+        if (!uuid) return { ok: false, status: 400, data: { detail: 'UUID requerido' } };
+        return callHttp('POST', `${API_BASE}/cuentas/${uuid}/activar/`);
       }
     },
 

@@ -362,8 +362,8 @@
             }
             let res;
             if (modoEdicion) {
-                const patchUrl = '/api/v1/inventario/movimientos/' + movimientoUuid + '/';
-                res = await w.Sintel.Core.Http.request('PATCH', patchUrl, {
+                // T-9: delega a la SSoT de endpoints (inventario.api.js).
+                res = await w.Sintel.Inventario.API.movimientos.update(movimientoUuid, {
                     tipo: payload.tipo,
                     cantidad: payload.cantidad,
                     costo_unitario: payload.costo_unitario,

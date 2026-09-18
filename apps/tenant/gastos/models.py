@@ -212,7 +212,17 @@ class DocumentoSoporte(SintelTenantBaseModel):
         db_index=True,
         help_text="Vinculacion transaccional al Kardex de Inventario"
     )
-    
+
+    # Integration with Proyectos (Pull Model via UUID -- GASTOS_PROYECTOS_01)
+    # Opcional: un gasto puede existir sin proyecto asociado. GASTO_COST_AMOUNT_SSoT
+    # que impacta el costo del proyecto es `subtotal` (ver ExtractorGastos), nunca `total`.
+    proyecto_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Vinculacion opcional al Proyecto (Pull Model, UUID opaco)"
+    )
+
     adjunto = models.FileField(upload_to='documentos_soporte/%Y/%m/', blank=True, null=True)
     activo = models.BooleanField(default=True, db_index=True)
     anulado = models.BooleanField(default=False)
@@ -236,6 +246,7 @@ class DocumentoSoporte(SintelTenantBaseModel):
             models.Index(fields=['proveedor', 'numero_documento_proveedor']),
             models.Index(fields=['categoria_contable']),
             models.Index(fields=['fecha'], condition=models.Q(activo=True, anulado=False), name='idx_gastos_activos'),
+            models.Index(fields=['empresa', 'proyecto_uuid'], name='idx_gastos_proyecto'),
         ]
         constraints = [
             models.UniqueConstraint(fields=['resolucion_dian', 'consecutivo'], name='unique_ds_resolucion_consecutivo'),
@@ -374,6 +385,36 @@ class DocumentoSoporte(SintelTenantBaseModel):
                 'cantidad': float(mov.cantidad or 0),
             }
         except Exception:
+            return None
+
+    @property
+    def proyecto_codigo(self):
+        """Codigo del proyecto asociado (Pull Model via UUID, GASTOS_PROYECTOS_01)."""
+        if not self.proyecto_uuid:
+            return None
+        try:
+            from apps.tenant.proyectos.models import Proyecto
+            proyecto = Proyecto.objects.filter(
+                uuid=self.proyecto_uuid, empresa_id=self.empresa_id
+            ).only('codigo', 'nombre').first()
+            return proyecto.codigo if proyecto else None
+        except Exception:
+            logger.exception("proyecto_codigo: fallo leyendo Proyecto (documento_soporte_id=%s)", self.id)
+            return None
+
+    @property
+    def proyecto_nombre(self):
+        """Nombre del proyecto asociado (Pull Model via UUID, GASTOS_PROYECTOS_01)."""
+        if not self.proyecto_uuid:
+            return None
+        try:
+            from apps.tenant.proyectos.models import Proyecto
+            proyecto = Proyecto.objects.filter(
+                uuid=self.proyecto_uuid, empresa_id=self.empresa_id
+            ).only('codigo', 'nombre').first()
+            return proyecto.nombre if proyecto else None
+        except Exception:
+            logger.exception("proyecto_nombre: fallo leyendo Proyecto (documento_soporte_id=%s)", self.id)
             return None
 
     @property

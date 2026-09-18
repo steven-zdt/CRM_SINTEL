@@ -33,9 +33,11 @@
     console.log(`${MOD} Inicializando delegación de eventos global...`);
 
     d.addEventListener('click', function(e) {
-      // Acciones de Tabla (Editar/Eliminar)
+      // Acciones de Tabla (Ver/Editar/Representantes/Eliminar)
       // NOTA: Boton "Nuevo" es HTMX declarativo (hx-get en [data-create-button]) — no requiere JS.
-      const btnAction = e.target.closest('.btn-edit-proveedor, .btn-delete-proveedor');
+      const btnAction = e.target.closest(
+        '.btn-view-proveedor, .btn-edit-proveedor, .btn-representantes-proveedor, .btn-delete-proveedor'
+      );
       if (btnAction) {
         e.stopPropagation();
         if (btnAction.disabled || btnAction.classList.contains('disabled')) return;
@@ -43,8 +45,12 @@
         const id = btnAction.getAttribute('data-id');
         if (!id) return;
 
-        if (btnAction.classList.contains('btn-edit-proveedor')) {
+        if (btnAction.classList.contains('btn-view-proveedor')) {
+          w.Sintel.Proveedores.Form?.openDetalle(id);
+        } else if (btnAction.classList.contains('btn-edit-proveedor')) {
           w.Sintel.Proveedores.Form?.openOffcanvas(id);
+        } else if (btnAction.classList.contains('btn-representantes-proveedor')) {
+          w.Sintel.Proveedores.Form?.openDetalle(id, 'representantes');
         } else if (btnAction.classList.contains('btn-delete-proveedor')) {
           w.Sintel.Proveedores.Form?.eliminar(id);
         }
@@ -58,6 +64,17 @@
         if (e.target.closest('button')) return;
         const identifier = row.getAttribute('data-uuid');
         if (identifier) w.Sintel.Proveedores.Form?.openDetalle(identifier);
+      }
+
+      // Chips de filtro (Directorio / Cuentas por Pagar): marcar visualmente
+      // el chip clickeado como activo dentro de su propio grupo -- hx-get/
+      // hx-include ya disparan la recarga de la tabla via HTMX, esto solo
+      // sincroniza el estado visual del boton.
+      const chip = e.target.closest('[data-filtro-prov], [data-filtro-cxp]');
+      if (chip) {
+        const grupo = chip.closest('#filtros-tipo-proveedores, #filtros-estado-cuentas-pagar');
+        grupo?.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+        chip.classList.add('active');
       }
     });
 

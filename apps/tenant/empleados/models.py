@@ -389,7 +389,19 @@ class Devengo(SintelTenantBaseModel):
                 fields=['empleado', 'periodo_mes', 'fecha_pago'],
                 condition=Q(anulado=False),
                 name='uniq_nomina_per_empleado_periodo_fecha'
-            )
+            ),
+            # WARNING: mision PERIODOS-NOMINA-01 (2026-09-11): el constraint de
+            # arriba es sobre el STRING periodo_mes; este es sobre la FK real a
+            # PeriodoNomina (nullable por compatibilidad historica -- NULL no
+            # colisiona consigo mismo en Postgres, asi que Devengo historicos
+            # sin periodo no se ven afectados). Antes solo existia esta regla
+            # a nivel de DevengoSerializer.validate() (api/serializers.py),
+            # nunca a nivel de base de datos.
+            models.UniqueConstraint(
+                fields=['empleado', 'periodo'],
+                condition=Q(anulado=False),
+                name='uniq_nomina_activo_per_empleado_periodo',
+            ),
         ]
 
     def clean(self):

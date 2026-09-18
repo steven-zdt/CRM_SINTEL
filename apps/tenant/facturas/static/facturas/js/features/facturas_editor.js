@@ -116,6 +116,10 @@
         if (value === null || value === undefined || value === '') return '$ 0,00';
         const num = parseFloat(value);
         if (isNaN(num)) return '$ 0,00';
+        // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+        if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
+            return w.DOMUtils.formatCurrency(num, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        }
         return new Intl.NumberFormat('es-CO', {
             style: 'currency',
             currency: 'COP',
@@ -209,42 +213,6 @@
         const select = d.querySelector('#factura-proveedor_uuid');
         if (!select) return undefined;
         return select.value || null;
-    }
-
-    /**
-     * Guardar vinculaciones de inventario para cada ítem de la factura
-     * v3.9.2: Después de guardar la factura, actualiza los campos item_inventario_*
-     */
-    async function guardarVinculacionesInventario() {
-        const rows = d.querySelectorAll('tr[data-item-id]');
-        if (!rows.length) return;
-
-        for (const row of rows) {
-            const itemId = row.getAttribute('data-item-id');
-            const hiddenContainer = row.querySelector('[data-inventario-fields]');
-
-            // Solo guardar si hay vinculación
-            if (!hiddenContainer || !hiddenContainer.innerHTML.trim()) continue;
-
-            // Extraer UUIDs de los hidden inputs
-            const uuidInput = hiddenContainer.querySelector('input[name*="uuid"]');
-            const tipoInput = hiddenContainer.querySelector('input[name*="tipo"]');
-            const codigoInput = hiddenContainer.querySelector('input[name*="codigo"]');
-
-            if (!uuidInput || !tipoInput || !codigoInput) continue;
-
-            const data = {
-                item_inventario_uuid: uuidInput.value,
-                item_inventario_tipo: tipoInput.value,
-                item_inventario_codigo: codigoInput.value
-            };
-
-            // PATCH a /api/v1/items-factura/{itemId}/
-            const res = await w.Sintel.Core.Http.request('PATCH', `/api/v1/items-factura/${itemId}/`, data);
-            if (!res.ok) {
-                console.warn(`${MOD} Error al guardar vinculación del ítem ${itemId}:`, res.data);
-            }
-        }
     }
 
     /**
@@ -365,9 +333,6 @@
             }
         }
 
-        // ⚠️ v3.9.2: Guardar vinculaciones de inventario de cada ítem
-        await guardarVinculacionesInventario();
-
         // ⚠️ Éxito: Cerrar Offcanvas, mostrar feedback y disparar evento
         if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
             const offcanvasInstance = bootstrap.Offcanvas.getInstance(offcanvasEl);
@@ -426,9 +391,6 @@
         initCotizacionSelect();
         initClienteSelect();
         initProveedorSelect();
-        initResumenPagosBancos(form);
-
-
 
         // ⚠️ Listener para botón agregar ítem
         const btnAgregarItem = d.querySelector('#btn-agregar-item');
@@ -959,103 +921,12 @@
     }
     w.FacturasModule.emitirFactura = emitirFactura;
 
-    // ── v3.11.0: Resumen de Pagos Bancos + Bloqueo estado_pago ──────────────
-    function initResumenPagosBancos(form) {
-        const medioPagoEl  = form.querySelector('#factura-medio-pago-codigo');
-        const estadoPagoEl = form.querySelector('#factura-estado-pago');
-        const hidEstado    = form.querySelector('input[name="estado_pago"]');
-        const badgeMedio   = d.getElementById('badge-medio-pago');
-        const rpPagado     = d.getElementById('rp-pagado');
-        const rpSaldo      = d.getElementById('rp-saldo');
-        const rpAlerta     = d.getElementById('rp-alerta');
-
-        if (!medioPagoEl || !estadoPagoEl) return;
-
-        // Leer valores del servidor inyectados en data- del formulario
-        const totalPagadoBancos = parseFloat(form.dataset.totalPagadoBancos || '0') || 0;
-        const saldoPendiente    = parseFloat(form.dataset.saldoPendiente    || '0') || 0;
-
-        const COP = (v) => '$' + new Intl.NumberFormat('es-CO', { minimumFractionDigits: 0 }).format(v);
-
-        function _aplicarReglas() {
-            const esEfectivo = medioPagoEl.value.trim() === '10';
-
-            // Actualizar badge
-            if (badgeMedio) {
-                badgeMedio.textContent  = esEfectivo ? 'Efectivo' : 'Bancario';
-                badgeMedio.className    = 'badge ms-auto ' + (esEfectivo ? 'bg-secondary' : 'bg-primary');
-                badgeMedio.style.fontSize = '.62rem';
-            }
-
-            // Actualizar indicadores numéricos
-            if (rpPagado) {
-                rpPagado.textContent  = COP(totalPagadoBancos);
-                rpPagado.className    = 'fw-bold font-monospace ' + (totalPagadoBancos > 0 ? 'text-success' : 'text-muted');
-            }
-            if (rpSaldo) {
-                rpSaldo.textContent = COP(saldoPendiente);
-                rpSaldo.className   = 'fw-bold font-monospace ' + (saldoPendiente > 0 ? 'text-danger' : 'text-success');
-            }
-
-            if (esEfectivo) {
-                // Efectivo: sin restricciones
-                estadoPagoEl.disabled = false;
-                Array.from(estadoPagoEl.options).forEach(o => o.disabled = false);
-                if (rpAlerta) rpAlerta.classList.add('d-none');
-                return;
-            }
-
-            // No efectivo: aplicar reglas según conciliacion
-            if (totalPagadoBancos === 0) {
-                // Sin conciliacion → forzar NO_PAGADA
-                estadoPagoEl.value     = 'NO_PAGADA';
-                if (hidEstado) hidEstado.value = 'NO_PAGADA';
-                Array.from(estadoPagoEl.options).forEach(o => {
-                    o.disabled = o.value !== 'NO_PAGADA';
-                });
-                if (rpAlerta) {
-                    rpAlerta.innerHTML  = '<i class="bi bi-exclamation-circle me-1"></i>Sin conciliaciones bancarias. Solo puede ser <strong>NO_PAGADA</strong>.';
-                    rpAlerta.className  = 'mt-2 alert alert-warning py-1 px-2 small';
-                    rpAlerta.classList.remove('d-none');
-                }
-            } else if (saldoPendiente <= 0) {
-                // 100% conciliado → forzar PAGADA
-                estadoPagoEl.value     = 'PAGADA';
-                if (hidEstado) hidEstado.value = 'PAGADA';
-                Array.from(estadoPagoEl.options).forEach(o => {
-                    o.disabled = o.value !== 'PAGADA';
-                });
-                if (rpAlerta) {
-                    rpAlerta.innerHTML  = '<i class="bi bi-check-circle me-1 text-success"></i>100% conciliado. Estado forzado a <strong>PAGADA</strong>.';
-                    rpAlerta.className  = 'mt-2 alert alert-success py-1 px-2 small';
-                    rpAlerta.classList.remove('d-none');
-                }
-            } else {
-                // Pago parcial
-                estadoPagoEl.value     = 'PAGO_PARCIAL';
-                if (hidEstado) hidEstado.value = 'PAGO_PARCIAL';
-                Array.from(estadoPagoEl.options).forEach(o => {
-                    o.disabled = !['PAGO_PARCIAL', 'PAGADA'].includes(o.value);
-                });
-                if (rpAlerta) {
-                    rpAlerta.innerHTML  = `<i class="bi bi-info-circle me-1"></i>Pago parcial. Saldo pendiente: <strong>${COP(saldoPendiente)}</strong>. Marcar como PAGADA solo si hay retenciones u otros ajustes.`;
-                    rpAlerta.className  = 'mt-2 alert alert-info py-1 px-2 small';
-                    rpAlerta.classList.remove('d-none');
-                }
-            }
-        }
-
-        // Sincronizar hidden input cuando el usuario cambia estado_pago manualmente
-        estadoPagoEl.addEventListener('change', () => {
-            if (hidEstado) hidEstado.value = estadoPagoEl.value;
-        });
-
-        // Reaccionar al cambio de medio de pago
-        medioPagoEl.addEventListener('input', _aplicarReglas);
-        medioPagoEl.addEventListener('change', _aplicarReglas);
-
-        // Aplicar reglas al abrir el formulario
-        _aplicarReglas();
-    }
+    // Nota (reestructuracion arquitectonica v4.0.0 -- facturas=document
+    // store): se retiro initResumenPagosBancos() -- forzaba estado_pago en
+    // el cliente segun conciliacion bancaria. Facturas ya no decide reglas
+    // de negocio basadas en Bancos; estado_pago vuelve a ser un campo
+    // manual simple. Backend (F2): Factura.total_pagado_bancos/
+    // saldo_pendiente y BancosBridge fueron removidos por completo -- ya
+    // no existen ni como deuda pendiente.
 
 })(window, document);

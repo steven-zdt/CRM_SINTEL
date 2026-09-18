@@ -51,6 +51,47 @@ def clean_nit(nit_str):
     return re.sub(r'[^a-zA-Z0-9]', '', nit_str)
 
 
+def same_nit(nit_a, nit_b) -> bool:
+    """
+    Compara dos NIT tratando el digito de verificacion (cuando viene
+    delimitado por guion, ej. "900123456-7") como no significativo --
+    unica funcion de comparacion de identidad fiscal (FACTURAS-UI-CRONO-01
+    FASE 3, SSoT). Consolida sobre clean_nit() en vez de
+    FacturaBusinessService.normalize_document_number(): esa segunda
+    funcion CONCATENA el DV en vez de descartarlo (proposito distinto --
+    limpieza generica de "numero" de factura, no comparacion fiscal), lo
+    que daba falsos "no coincide" cuando el NIT del XML trae el DV con
+    guion y Empresa.nit esta guardado sin el (hallazgo real, ver
+    docs/facturas/FACTURAS_NATURALEZA_RULE.md). Requiere pasar los NIT
+    "crudos" (antes de normalize_document_number), nunca ya concatenados.
+    """
+    a = clean_nit(nit_a)
+    b = clean_nit(nit_b)
+    return bool(a) and bool(b) and a == b
+
+
+def normalize_business_name(name) -> str:
+    """Normaliza razon social para comparacion secundaria/informativa
+    (mayusculas, espacios repetidos, puntuacion no significativa) --
+    NUNCA usar como unica condicion de clasificacion VENTA/COMPRA
+    (FACTURAS-UI-CRONO-01, regla explicita)."""
+    if not name:
+        return ""
+    normalized = str(name).strip().upper()
+    normalized = re.sub(r'[^\w\s]', '', normalized)
+    normalized = re.sub(r'\s+', ' ', normalized)
+    return normalized.strip()
+
+
+def same_business_name(name_a, name_b) -> bool:
+    """Comprobacion COMPLEMENTARIA de razon social -- nunca decide
+    VENTA/COMPRA por si sola. Ver same_nit(), que es la unica fuente de
+    verdad de identidad fiscal."""
+    a = normalize_business_name(name_a)
+    b = normalize_business_name(name_b)
+    return bool(a) and bool(b) and a == b
+
+
 class FacturaBusinessService:
     """
     Servicio de logica de negocio para Facturas.
@@ -230,7 +271,39 @@ class FacturaBusinessService:
             "autorizacion_vigencia_fin": resol.get("fecha_fin") or None,
         }
 
-        factura = FacturaCRUDService.crear(factura_data)
+        # COTIZACIONES-02: cierre del gap de idempotencia documentado --
+        # antes, este metodo confiaba por completo en que el caller
+        # (VentaBusinessService.procesar_y_facturar_venta, COMERCIAL-04)
+        # revisara Venta.estado==FACTURADA_DIAN antes de invocar. Ahora la
+        # propia Factura tiene un UniqueConstraint(empresa, numero)
+        # (migracion facturas.0041) y esta funcion se protege a si misma:
+        # si una llamada concurrente/repetida ya inserto la misma
+        # Factura(empresa, numero) entre el calculo del consecutivo y este
+        # insert, se recupera y devuelve la existente en vez de propagar el
+        # IntegrityError. transaction.atomic() anidado crea un savepoint
+        # real (nunca un savepoint "pelado" fuera de atomic() -- ver
+        # incidente documentado de 2026-08-25) para que el rollback del
+        # INSERT fallido no envenene la transaccion exterior.
+        from django.db import IntegrityError
+
+        try:
+            with transaction.atomic():
+                factura = FacturaCRUDService.crear(factura_data)
+        except IntegrityError:
+            factura_existente = Factura.objects.filter(
+                empresa_id=empresa.id, numero=num_definitivo,
+            ).only(
+                'id', 'uuid', 'numero', 'naturaleza', 'cufe', 'empresa_id',
+                'cliente_uuid', 'proveedor_uuid',
+            ).first()
+            if not factura_existente:
+                raise
+            logger.info(
+                "[FacturaBS] Factura ya existia (idempotencia numero=%s) -- "
+                "devolviendo existente id=%s en vez de duplicar.",
+                num_definitivo, factura_existente.id,
+            )
+            return factura_existente
 
         # Crear ItemFactura por cada linea del DTO
         from apps.tenant.facturas.models import ItemFactura
@@ -266,6 +339,35 @@ class FacturaBusinessService:
         return factura
 
     @staticmethod
+    def _resolver_cliente_existente(empresa_id: int, receptor_nit_raw: str | None):
+        """
+        Reestructuracion arquitectonica (Facturas = document store, no dueño
+        de Cliente): busca un Cliente YA EXISTENTE por NIT -- solo lectura,
+        nunca crea. Usa clean_nit() (SSoT de comparacion fiscal, descarta el
+        DV) sobre el NIT crudo, no normalize_document_number() (que lo
+        concatena, formato distinto al usado para persistir numero_documento
+        en Cliente).
+        """
+        nit = clean_nit(receptor_nit_raw)
+        if not nit:
+            return None
+        from apps.tenant.clientes.services.selectors import ClienteSelector
+        return ClienteSelector.get_cliente_by_documento(
+            empresa_id=empresa_id, tipo_documento="NIT", numero_documento=nit,
+        )
+
+    @staticmethod
+    def _resolver_proveedor_existente(empresa_id: int, emisor_nit_raw: str | None):
+        """Equivalente a _resolver_cliente_existente() para Proveedor -- solo lectura."""
+        nit = clean_nit(emisor_nit_raw)
+        if not nit:
+            return None
+        from apps.tenant.proveedores.models import Proveedor
+        return Proveedor.objects.filter(
+            empresa_id=empresa_id, tipo_documento="NIT", numero_documento=nit,
+        ).only("id", "uuid").first()
+
+    @staticmethod
     def normalize_document_number(value: str | None) -> str:
         """
         Normaliza números de documento eliminando espacios y caracteres no imprimibles.
@@ -280,112 +382,51 @@ class FacturaBusinessService:
         return normalized
 
     @staticmethod
-    def _resolver_naturaleza(emisor_nit: str | None, empresa_nit: str | None) -> str:
+    def _resolver_naturaleza(
+        emisor_nit: str | None, receptor_nit: str | None, empresa_nit: str | None
+    ) -> str | None:
         """
-        Resuelve si la factura es VENTA o COMPRA (SSoT).
-        """
-        nit_dto = FacturaBusinessService.normalize_document_number(emisor_nit)
-        nit_tenant = FacturaBusinessService.normalize_document_number(empresa_nit)
+        Resuelve si la factura es VENTA, COMPRA, o ambigua (SSoT).
 
-        if nit_dto and nit_tenant and nit_dto == nit_tenant:
+        Retorna None ("Revisar" en UI, FACTURAS-UI-CRONO-01) en vez de
+        adivinar cuando: la Empresa no tiene NIT configurado; emisor Y
+        receptor son ambos la propia empresa (autofactura, caso no
+        cubierto por esta regla); o ni emisor ni receptor son
+        identificables como la empresa. Antes de esta mision, cualquier
+        caso que no fuera "emisor == empresa" caia por defecto a COMPRA
+        sin importar si el emisor estaba vacio o si el documento era en
+        realidad ambiguo -- regla explicita nueva: "no inventar
+        naturaleza". Usa same_nit() (no normalize_document_number) para
+        que el digito de verificacion con guion no cause falsos
+        negativos -- ver same_nit().
+        """
+        if not empresa_nit:
+            return None
+
+        tiene_emisor = bool(clean_nit(emisor_nit))
+        tiene_receptor = bool(clean_nit(receptor_nit))
+        emisor_es_empresa = tiene_emisor and same_nit(emisor_nit, empresa_nit)
+        receptor_es_empresa = tiene_receptor and same_nit(receptor_nit, empresa_nit)
+
+        if emisor_es_empresa and receptor_es_empresa:
+            return None
+        if emisor_es_empresa:
+            # A diferencia de COMPRA (ver rama de abajo), VENTA no exige
+            # receptor presente: ya sabemos con certeza que el emisor
+            # somos nosotros (comparacion de NIT positiva), lo cual basta
+            # -- mismo comportamiento que el wrapper de compatibilidad
+            # _determinar_naturaleza() siempre tuvo (nunca recibio
+            # receptor_nit), confirmado por su propia suite de tests
+            # (test_naturaleza_unit.py::test_venta_igual). El FASE 4 de la
+            # mision solo lista "Proveedor | Sin receptor | REVISAR" como
+            # fila explicita -- no su simetrico.
             return Factura.Naturaleza.VENTA
-        return Factura.Naturaleza.COMPRA
-
-    @staticmethod
-    def obtener_retenciones_desde_cliente(cliente_nit: str | None, empresa_id: int | None = None) -> dict[str, Any]:
-        """
-        [v3.7.1 ENDPOINT PUENTE] Extrae retenciones desde Contabilidad API (Pull Model).
-
-        Delega a GET /api/v1/contabilidad/retenciones/obtener-por-tercero/
-        para mantener SSoT en la app Contabilidad en lugar de leer directo desde Cliente.
-        """
-        if not cliente_nit:
-            return {
-                "aplica_retefuente": False,
-                "retefuente_porcentaje": Decimal('0.00'),
-                "aplica_reteica": False,
-                "reteica_porcentaje": Decimal('0.00'),
-                "aplica_reteiva": False,
-                "reteiva_porcentaje": Decimal('0.00'),
-            }
-
-        try:
-            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
-
-            cliente_nit_normalized = FacturaBusinessService.normalize_document_number(cliente_nit)
-            retenciones = RetencionesService.obtener_retenciones_desde_tercero(
-                nit=cliente_nit_normalized,
-                tipo_tercero='CLIENTE',
-                naturaleza='VENTA',
-                empresa_id=empresa_id,
-            )
-
-            return {
-                "aplica_retefuente": retenciones.get('aplica_retefuente', False),
-                "retefuente_porcentaje": retenciones.get('retefuente_porcentaje', Decimal('0.00')),
-                "aplica_reteica": retenciones.get('aplica_reteica', False),
-                "reteica_porcentaje": retenciones.get('reteica_porcentaje', Decimal('0.00')),
-                "aplica_reteiva": retenciones.get('aplica_reteiva', False),
-                "reteiva_porcentaje": retenciones.get('reteiva_porcentaje', Decimal('0.00')),
-            }
-        except Exception as e:
-            logger.warning(f"Error extrayendo retenciones de cliente {cliente_nit}: {e}")
-            return {
-                "aplica_retefuente": False,
-                "retefuente_porcentaje": Decimal('0.00'),
-                "aplica_reteica": False,
-                "reteica_porcentaje": Decimal('0.00'),
-                "aplica_reteiva": False,
-                "reteiva_porcentaje": Decimal('0.00'),
-            }
-
-    @staticmethod
-    def obtener_retenciones_desde_proveedor(proveedor_nit: str | None, empresa_id: int | None = None) -> dict[str, Any]:
-        """
-        [v3.7.1 ENDPOINT PUENTE — DEPRECATED] Extrae retenciones desde Contabilidad API.
-
-        Nota: Para facturas COMPRA, las retenciones ya están en el XML — este método
-        NO se usa. Se mantiene para compatibilidad futura si se requiere.
-        """
-        if not proveedor_nit:
-            return {
-                "aplica_retefuente": False,
-                "retefuente_porcentaje": Decimal('0.00'),
-                "aplica_reteica": False,
-                "reteica_porcentaje": Decimal('0.00'),
-                "aplica_reteiva": False,
-                "reteiva_porcentaje": Decimal('0.00'),
-            }
-
-        try:
-            from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
-
-            proveedor_nit_normalized = FacturaBusinessService.normalize_document_number(proveedor_nit)
-            retenciones = RetencionesService.obtener_retenciones_desde_tercero(
-                nit=proveedor_nit_normalized,
-                tipo_tercero='PROVEEDOR',
-                naturaleza='COMPRA',
-                empresa_id=empresa_id,
-            )
-
-            return {
-                "aplica_retefuente": retenciones.get('aplica_retefuente', False),
-                "retefuente_porcentaje": retenciones.get('retefuente_porcentaje', Decimal('0.00')),
-                "aplica_reteica": retenciones.get('aplica_reteica', False),
-                "reteica_porcentaje": retenciones.get('reteica_porcentaje', Decimal('0.00')),
-                "aplica_reteiva": retenciones.get('aplica_reteiva', False),
-                "reteiva_porcentaje": retenciones.get('reteiva_porcentaje', Decimal('0.00')),
-            }
-        except Exception as e:
-            logger.warning(f"Error extrayendo retenciones de proveedor {proveedor_nit}: {e}")
-            return {
-                "aplica_retefuente": False,
-                "retefuente_porcentaje": Decimal('0.00'),
-                "aplica_reteica": False,
-                "reteica_porcentaje": Decimal('0.00'),
-                "aplica_reteiva": False,
-                "reteiva_porcentaje": Decimal('0.00'),
-            }
+        if receptor_es_empresa:
+            # "Sin emisor | Nuestra Empresa | REVISAR" (FASE 4): que el
+            # receptor seamos nosotros no basta si no sabemos quien
+            # emitio el documento -- nunca inventar un proveedor.
+            return Factura.Naturaleza.COMPRA if tiene_emisor else None
+        return None
 
     @staticmethod
     @transaction.atomic
@@ -434,28 +475,27 @@ class FacturaBusinessService:
 
         # Extraer y normalizar
         numero = FacturaBusinessService.normalize_document_number(dto.get("numero"))
-        emisor_nit = FacturaBusinessService.normalize_document_number(
-            emisor.get("nit") or dto.get("emisor_nit", "")
-        )
-        receptor_nit = FacturaBusinessService.normalize_document_number(
-            receptor.get("nit") or dto.get("receptor_nit", "")
-        )
+        # NIT "crudos" (antes de normalize_document_number, que concatena el
+        # DV) -- same_nit()/clean_nit() son la unica fuente de verdad de
+        # comparacion fiscal (FACTURAS-UI-CRONO-01 FASE 3). emisor_nit/
+        # receptor_nit (normalizados) se conservan solo para el snapshot
+        # guardado en el modelo, nunca para decidir identidad/naturaleza.
+        emisor_nit_raw = emisor.get("nit") or dto.get("emisor_nit", "")
+        receptor_nit_raw = receptor.get("nit") or dto.get("receptor_nit", "")
+        emisor_nit = FacturaBusinessService.normalize_document_number(emisor_nit_raw)
+        receptor_nit = FacturaBusinessService.normalize_document_number(receptor_nit_raw)
 
         # Validacion de campos obligatorios
         if not numero or (not is_credit_note and (not emisor_nit or not receptor_nit)):
             return {"error": "missing_required_fields", "message": "Numero, NIT Emisor y NIT Receptor son obligatorios."}, 422
 
         # Validar pertenencia del NIT (DIAN) - Fase 1
-        nit_empresa_limpio = clean_nit(empresa_instance.nit)
-        emisor_nit_limpio = clean_nit(emisor_nit)
-        receptor_nit_limpio = clean_nit(receptor_nit)
-
-        if nit_empresa_limpio != emisor_nit_limpio and nit_empresa_limpio != receptor_nit_limpio:
+        if not same_nit(emisor_nit_raw, empresa_instance.nit) and not same_nit(receptor_nit_raw, empresa_instance.nit):
             from django.core.exceptions import ValidationError as DjangoValidationError
             raise DjangoValidationError("El NIT de la empresa actual no coincide con el emisor ni con el receptor del documento.")
 
-        # Determinar naturaleza usando empresa_instance.nit
-        naturaleza = FacturaBusinessService._resolver_naturaleza(emisor_nit, empresa_instance.nit)
+        # Determinar naturaleza usando empresa_instance.nit (None = ambiguo, "Revisar")
+        naturaleza = FacturaBusinessService._resolver_naturaleza(emisor_nit_raw, receptor_nit_raw, empresa_instance.nit)
 
         # Cascading Security
         if naturaleza == Factura.Naturaleza.COMPRA and not is_credit_note:
@@ -530,36 +570,23 @@ class FacturaBusinessService:
                 cufe=cufe, empresa=empresa_instance
             ).only('id', 'uuid', 'numero', 'naturaleza', 'cufe', 'empresa_id', 'cliente_uuid', 'proveedor_uuid').first()
             if factura_existente:
+                # Reestructuracion arquitectonica (mision "Facturas = document
+                # store"): Facturas ya NO crea Cliente/Proveedor como efecto
+                # lateral de importar un documento -- solo RESUELVE (lectura)
+                # un tercero que ya exista por NIT. Si no existe, la
+                # referencia queda sin resolver (cliente_uuid/proveedor_uuid
+                # en None); vincularlo es responsabilidad de Clientes/
+                # Proveedores o de una accion manual del usuario, nunca un
+                # side-effect automatico de la ingestion documental.
                 if factura_existente.naturaleza == Factura.Naturaleza.VENTA and not factura_existente.cliente_uuid:
-                    from apps.tenant.clientes.services.business_service import ClienteBusinessService
-                    try:
-                        cliente, _ = ClienteBusinessService.resolver_o_crear_desde_factura_venta(
-                            empresa_id=empresa_instance.id,
-                            receptor_nit=receptor_nit,
-                            receptor_razon_social=receptor_razon_social,
-                            receptor_email=receptor_email,
-                            receptor_telefono=receptor_telefono,
-                            receptor_direccion=receptor_direccion,
-                        )
-                    except DRFValidationError as exc:
-                        return {"error": "cliente_required", "message": str(exc.detail)}, 422
-                    FacturaCRUDService.actualizar(factura_existente, {"cliente_uuid": cliente.uuid})
+                    cliente = FacturaBusinessService._resolver_cliente_existente(empresa_instance.id, receptor_nit_raw)
+                    if cliente:
+                        FacturaCRUDService.actualizar(factura_existente, {"cliente_uuid": cliente.uuid})
 
                 if factura_existente.naturaleza == Factura.Naturaleza.COMPRA and not factura_existente.proveedor_uuid:
-                    from apps.tenant.proveedores.services.business_service import ProveedorBusinessService
-                    try:
-                        proveedor, _ = ProveedorBusinessService.resolver_o_crear_desde_factura_compra(
-                            empresa_id=empresa_instance.id,
-                            emisor_nit=emisor_nit,
-                            emisor_razon_social=emisor_razon_social,
-                            emisor_email=emisor_email,
-                            emisor_telefono=emisor_telefono,
-                            emisor_direccion=emisor_direccion,
-                            emisor_actividad_ciiu=emisor_actividad_ciiu,
-                        )
-                    except DRFValidationError as exc:
-                        return {"error": "proveedor_required", "message": str(exc.detail)}, 422
-                    FacturaCRUDService.actualizar(factura_existente, {"proveedor_uuid": proveedor.uuid})
+                    proveedor = FacturaBusinessService._resolver_proveedor_existente(empresa_instance.id, emisor_nit_raw)
+                    if proveedor:
+                        FacturaCRUDService.actualizar(factura_existente, {"proveedor_uuid": proveedor.uuid})
 
                 return {
                     "id": factura_existente.id,
@@ -653,35 +680,17 @@ class FacturaBusinessService:
                 logger.warning(f"[facturas:nc] Intento de duplicar NC para factura {factura_original_para_nc.numero}")
                 return {"error": "already_has_nc", "message": "La factura ya tiene nota credito."}, 422
 
+        # Reestructuracion arquitectonica (mision "Facturas = document
+        # store"): solo RESUELVE (lectura) un tercero que ya exista por NIT
+        # -- nunca lo crea. cliente_uuid/proveedor_uuid quedan en None
+        # (valor por defecto ya asignado arriba) cuando no hay match; eso NO
+        # bloquea la persistencia del documento fiscal.
         if naturaleza == Factura.Naturaleza.VENTA:
-            from apps.tenant.clientes.services.business_service import ClienteBusinessService
-            try:
-                cliente, _ = ClienteBusinessService.resolver_o_crear_desde_factura_venta(
-                    empresa_id=empresa_instance.id,
-                    receptor_nit=receptor_nit,
-                    receptor_razon_social=receptor_razon_social,
-                    receptor_email=receptor_email,
-                    receptor_telefono=receptor_telefono,
-                    receptor_direccion=receptor_direccion,
-                )
-            except DRFValidationError as exc:
-                return {"error": "cliente_required", "message": str(exc.detail)}, 422
-            cliente_uuid = cliente.uuid
+            cliente = FacturaBusinessService._resolver_cliente_existente(empresa_instance.id, receptor_nit_raw)
+            cliente_uuid = cliente.uuid if cliente else None
         elif naturaleza == Factura.Naturaleza.COMPRA:
-            from apps.tenant.proveedores.services.business_service import ProveedorBusinessService
-            try:
-                proveedor, _ = ProveedorBusinessService.resolver_o_crear_desde_factura_compra(
-                    empresa_id=empresa_instance.id,
-                    emisor_nit=emisor_nit,
-                    emisor_razon_social=emisor_razon_social,
-                    emisor_email=emisor_email,
-                    emisor_telefono=emisor_telefono,
-                    emisor_direccion=emisor_direccion,
-                    emisor_actividad_ciiu=emisor_actividad_ciiu,
-                )
-            except DRFValidationError as exc:
-                return {"error": "proveedor_required", "message": str(exc.detail)}, 422
-            proveedor_uuid = proveedor.uuid
+            proveedor = FacturaBusinessService._resolver_proveedor_existente(empresa_instance.id, emisor_nit_raw)
+            proveedor_uuid = proveedor.uuid if proveedor else None
 
         # Construir factura_data con TODOS los campos del modelo
         factura_data = {
@@ -1161,75 +1170,45 @@ class FacturaBusinessService:
         if not update_data:
             return factura
 
-        # ── Validacion de estado_pago vs conciliacion bancaria (v3.11.0) ────────
-        nuevo_estado_pago = update_data.get('estado_pago')
-        if nuevo_estado_pago:
-            medio = update_data.get('medio_pago_codigo', factura.medio_pago_codigo)
-            es_efectivo = (medio == '10')  # DIAN codigo '10' = Efectivo
+        # Validaciones de Gestion Manual (integracion Facturas<->Ventas):
+        # se evaluan sobre el estado FINAL resultante (lo ya persistido +
+        # lo que llega en este PATCH), no solo los campos de este request
+        # -- evita que un PATCH que solo manda fecha_pago se salte la
+        # consistencia con un estado_pago ya guardado antes, y viceversa.
+        estado_pago_final = update_data.get('estado_pago', factura.estado_pago)
+        fecha_pago_final = update_data.get('fecha_pago', factura.fecha_pago)
+        # 'fecha_pago' en update_data puede llegar como string "YYYY-MM-DD"
+        # (aun no paso por el DateField del ORM) -- normalizar antes de
+        # comparar con objetos date reales.
+        if isinstance(fecha_pago_final, str):
+            fecha_pago_final = parse_date(fecha_pago_final)
 
-            if not es_efectivo:
-                total_bancos  = factura.total_pagado_bancos
-                saldo_pend    = factura.saldo_pendiente
+        if estado_pago_final == Factura.EstadoPago.PAGADA and not fecha_pago_final:
+            raise ValidationError({
+                'fecha_pago': 'El estado de pago "Pagada" requiere una fecha_pago.'
+            })
 
-                if nuevo_estado_pago == 'PAGADA' and saldo_pend > 0:
-                    raise ValidationError({
-                        "estado_pago": (
-                            f"La factura no esta 100% conciliada en bancos. "
-                            f"Solo puede marcarse como PAGO_PARCIAL. "
-                            f"Diferencia pendiente: ${saldo_pend:,.2f}"
-                        )
-                    })
+        if fecha_pago_final:
+            if factura.fecha_emision and fecha_pago_final < factura.fecha_emision.date():
+                raise ValidationError({
+                    'fecha_pago': 'La fecha de pago no puede ser anterior a la fecha de emision de la factura.'
+                })
+            if fecha_pago_final > timezone.localdate():
+                raise ValidationError({
+                    'fecha_pago': 'La fecha de pago no puede ser una fecha futura.'
+                })
 
-                if nuevo_estado_pago in ('PAGADA', 'PAGO_PARCIAL') and total_bancos == 0:
-                    raise ValidationError({
-                        "estado_pago": (
-                            "No hay conciliaciones bancarias asociadas a esta factura. "
-                            "El estado debe ser NO_PAGADA."
-                        )
-                    })
-
+        # Nota (reestructuracion arquitectonica facturas=document store): se
+        # retiro la validacion de estado_pago vs conciliacion bancaria
+        # (v3.11.0, dependia 100% de Factura.total_pagado_bancos/
+        # saldo_pendiente -> BancosBridge). Facturas ya no bloquea una
+        # edicion de estado_pago basandose en datos de Bancos -- estado_pago
+        # vuelve a ser un campo manual simple (MANUAL_EDITABLE_FIELDS), sin
+        # tests que dependieran de este bloque (grep repo-wide, 0
+        # resultados). El acoplamiento Bancos<->Facturas de fondo
+        # (total_pagado_bancos/saldo_pendiente/BancosBridge en si) sigue
+        # como deuda documentada, no se toco.
         return FacturaCRUDService.actualizar(factura, update_data)
-
-    @staticmethod
-    def vincular_cliente(factura: Factura, cliente_uuid: str | None, empresa_id: int) -> Factura:
-        """Vincula un cliente existente a una factura de venta."""
-        from rest_framework.exceptions import ValidationError
-        from apps.tenant.facturas.services.selectors import ClienteBridge
-
-        if factura.empresa_id != empresa_id:
-            raise ValidationError({"detail": "La factura no pertenece a la empresa activa."})
-
-        if factura.naturaleza != Factura.Naturaleza.VENTA:
-            raise ValidationError({"cliente_uuid": "Solo las facturas de venta pueden vincularse a clientes."})
-
-        if not cliente_uuid:
-            raise ValidationError({"cliente_uuid": "Una factura de venta debe tener un cliente vinculado."})
-
-        if not ClienteBridge.exists_by_uuid(cliente_uuid, empresa_id):
-            raise ValidationError({"cliente_uuid": "El cliente no existe o no pertenece a la empresa."})
-
-        return FacturaCRUDService.actualizar(factura, {"cliente_uuid": cliente_uuid})
-
-    @staticmethod
-    def vincular_proveedor(factura: Factura, proveedor_uuid: str | None, empresa_id: int) -> Factura:
-        """Vincula un proveedor existente a una factura de compra."""
-        from rest_framework.exceptions import ValidationError
-        from apps.tenant.facturas.services.selectors import ProveedorBridge
-
-        if factura.empresa_id != empresa_id:
-            raise ValidationError({"detail": "La factura no pertenece a la empresa activa."})
-
-        if factura.naturaleza != Factura.Naturaleza.COMPRA:
-            raise ValidationError({"proveedor_uuid": "Solo las facturas de compra pueden vincularse a proveedores."})
-
-        if not proveedor_uuid:
-            raise ValidationError({"proveedor_uuid": "Una factura de compra debe tener un proveedor vinculado."})
-
-        if not ProveedorBridge.exists_by_uuid(proveedor_uuid, empresa_id):
-            raise ValidationError({"proveedor_uuid": "El proveedor no existe o no pertenece a la empresa."})
-
-        return FacturaCRUDService.actualizar(factura, {"proveedor_uuid": proveedor_uuid})
-
 
 
 class FacturaInterAppAPI:
@@ -1331,54 +1310,14 @@ class FacturaInterAppAPI:
             empresa_id=None  # Sin empresa_id para acceso abierto
         )
 
-    @staticmethod
-    def recalcular_estado_pago_automatico(factura_uuid) -> bool:
-        """
-        [v3.11.0] Disparo cross-app desde Bancos tras conciliar una transaccion.
-
-        Reglas:
-        - Solo actua si medio_pago_codigo != '10' (no Efectivo).
-        - saldo_pendiente == 0  → PAGADA
-        - total_pagado_bancos > 0 pero saldo_pendiente > 0 → PAGO_PARCIAL
-        - total_pagado_bancos == 0 → NO_PAGADA
-
-        Returns True si el estado fue modificado, False si no cambio o es efectivo.
-        """
-        import logging
-        log = logging.getLogger(__name__)
-
-        try:
-            factura = Factura.objects.only(
-                'id', 'uuid', 'empresa_id', 'estado_pago',
-                'medio_pago_codigo', 'total',
-            ).get(uuid=factura_uuid)
-        except Factura.DoesNotExist:
-            log.warning("[BancosIntegracion] factura_uuid=%s no encontrada", factura_uuid)
-            return False
-
-        if factura.medio_pago_codigo == '10':
-            return False  # Efectivo: el usuario controla el estado manualmente
-
-        total_bancos = factura.total_pagado_bancos
-        saldo        = factura.saldo_pendiente
-
-        if saldo <= 0 and total_bancos > 0:
-            nuevo = 'PAGADA'
-        elif total_bancos > 0 and saldo > 0:
-            nuevo = 'PAGO_PARCIAL'
-        else:
-            nuevo = 'NO_PAGADA'
-
-        if factura.estado_pago == nuevo:
-            return False
-
-        factura.estado_pago = nuevo
-        factura.save(update_fields=['estado_pago'])
-        log.info(
-            "[BancosIntegracion] Factura uuid=%s estado_pago actualizado a %s",
-            factura_uuid, nuevo
-        )
-        return True
+    # Nota (reestructuracion arquitectonica v4.0.0 F2): se removio
+    # `recalcular_estado_pago_automatico()` (disparo cross-app desde Bancos
+    # tras conciliar una transaccion, v3.11.0) -- dependia de
+    # `total_pagado_bancos`/`saldo_pendiente`, tambien removidos de
+    # `Factura`. `estado_pago` vuelve a ser un campo manual simple; Bancos
+    # ya no lo modifica. El unico call site (`bancos/services/crud_service.py
+    # ::conciliar_transaccion()`) se actualizo en la misma pasada para dejar
+    # de invocarlo.
 
 
 class FacturaService:

@@ -47,31 +47,13 @@
     <div class="tab-pane fade show active" id="subtab-directorio" role="tabpanel" aria-labelledby="subtab-directorio-btn">
       <div class="card shadow-sm">
         <div class="card-header bg-white py-3 px-3">
-          <div class="d-flex justify-content-between align-items-center">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h6 class="mb-0 text-secondary fw-semibold">
               <i class="bi bi-truck me-2"></i>Directorio de Proveedores
             </h6>
 
             <div class="d-flex align-items-center gap-2">
-              {# Buscador inline #}
-              <div class="input-group input-group-sm w-auto">
-                <input type="text"
-                       id="search-proveedor"
-                       class="form-control"
-                       placeholder="Buscar proveedor..."
-                       hx-get="{% url 'proveedores:proveedor-tabla' %}"
-                       hx-trigger="keyup changed delay:400ms, search"
-                       hx-target="#proveedores-panel"
-                       name="q">
-                <button class="btn btn-outline-secondary" type="button" title="Buscar"
-                        hx-get="{% url 'proveedores:proveedor-tabla' %}"
-                        hx-target="#proveedores-panel"
-                        hx-include="#search-proveedor">
-                  <i class="bi bi-search"></i>
-                </button>
-              </div>
-
-              {# Boton Nuevo #}
+              {# Boton Nuevo + Refrescar #}
               <button class="btn btn-primary btn-sm"
                       hx-get="/api/v1/proveedores/render-offcanvas/crear/"
                       hx-target="#offcanvas-container-proveedores"
@@ -80,7 +62,61 @@
                       data-create-button>
                 <i class="bi bi-plus-lg me-1"></i>Nuevo Proveedor
               </button>
+              <button class="btn btn-outline-secondary btn-sm" title="Refrescar"
+                      hx-get="{% url 'proveedores:proveedor-tabla' %}"
+                      hx-target="#proveedores-panel"
+                      hx-include="#search-proveedor, #filtros-tipo-proveedores .active">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+
+              {# Buscador inline #}
+              <div class="input-group input-group-sm" style="max-width:260px;">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text"
+                       id="search-proveedor"
+                       class="form-control border-start-0 ps-0"
+                       placeholder="Buscar proveedor, NIT..."
+                       hx-get="{% url 'proveedores:proveedor-tabla' %}"
+                       hx-trigger="keyup changed delay:400ms, search"
+                       hx-target="#proveedores-panel"
+                       hx-include="#filtros-tipo-proveedores .active"
+                       name="q">
+              </div>
             </div>
+          </div>
+
+          {# Filtros por tipo (RELEASE-CLOSE/PROVEEDORES-02 -- coherencia visual con Clientes) #}
+          <div class="d-flex gap-2 flex-wrap mt-3" id="filtros-tipo-proveedores">
+            <button class="btn btn-sm btn-outline-dark active" data-filtro-prov=""
+                    hx-get="{% url 'proveedores:proveedor-tabla' %}" hx-target="#proveedores-panel"
+                    hx-include="#search-proveedor" name="filtro" value="">
+              <i class="bi bi-grid-3x3-gap me-1"></i>Todos
+            </button>
+            <button class="btn btn-sm btn-outline-info" data-filtro-prov="JURIDICA"
+                    hx-get="{% url 'proveedores:proveedor-tabla' %}" hx-target="#proveedores-panel"
+                    hx-include="#search-proveedor" name="filtro" value="JURIDICA">
+              <i class="bi bi-building me-1"></i>Jurídicas
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" data-filtro-prov="NATURAL"
+                    hx-get="{% url 'proveedores:proveedor-tabla' %}" hx-target="#proveedores-panel"
+                    hx-include="#search-proveedor" name="filtro" value="NATURAL">
+              <i class="bi bi-person me-1"></i>Naturales
+            </button>
+            <button class="btn btn-sm btn-outline-warning" data-filtro-prov="RETENEDOR"
+                    hx-get="{% url 'proveedores:proveedor-tabla' %}" hx-target="#proveedores-panel"
+                    hx-include="#search-proveedor" name="filtro" value="RETENEDOR">
+              <i class="bi bi-shield-check me-1"></i>Retenedores
+            </button>
+            <button class="btn btn-sm btn-outline-success" data-filtro-prov="ACTIVO"
+                    hx-get="{% url 'proveedores:proveedor-tabla' %}" hx-target="#proveedores-panel"
+                    hx-include="#search-proveedor" name="filtro" value="ACTIVO">
+              <i class="bi bi-check-circle me-1"></i>Activos
+            </button>
+            <button class="btn btn-sm btn-outline-danger" data-filtro-prov="INACTIVO"
+                    hx-get="{% url 'proveedores:proveedor-tabla' %}" hx-target="#proveedores-panel"
+                    hx-include="#search-proveedor" name="filtro" value="INACTIVO">
+              <i class="bi bi-x-circle me-1"></i>Inactivos
+            </button>
           </div>
         </div>
 
@@ -99,43 +135,67 @@
       <div class="card shadow-sm">
         <div class="card-header bg-white py-3 px-3">
           <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <h6 class="mb-0 text-secondary fw-semibold">
-              <i class="bi bi-journal-check me-2"></i>Cuentas por Pagar de Proveedores
-            </h6>
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+              <h6 class="mb-0 text-secondary fw-semibold">
+                <i class="bi bi-journal-check me-2"></i>Cuentas por Pagar
+              </h6>
+              {# KPIs resumen (mismo patron que clientes/cartera) #}
+              <div class="d-flex gap-3 align-items-center fs-7 text-muted border-start ps-3" id="cxp-kpi-summary">
+                <div>Pendiente: <span class="fw-bold text-danger" id="cxp-pendiente-monto">$0</span></div>
+                <div>Vencida: <span class="fw-bold text-danger" id="cxp-vencida-monto">$0</span></div>
+                <div>Pagado (histórico): <span class="fw-bold text-success" id="cxp-pagado-monto">$0</span></div>
+              </div>
+            </div>
 
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-              {# Selector de Estado de Pago #}
-              <select id="filtro-estado-cuentas-pagar" class="form-select form-select-sm w-auto"
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-outline-secondary btn-sm" title="Refrescar"
                       hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}"
-                      hx-trigger="change"
                       hx-target="#cuentas-pagar-panel"
-                      hx-include="#search-cuentas-pagar"
-                      name="estado_pago">
-                <option value="">Todos los Estados</option>
-                <option value="SIN_PAGO">Sin Pago</option>
-                <option value="PARCIAL">Pago Parcial</option>
-                <option value="PAGADA">Pagadas</option>
-              </select>
-
-              {# Buscador Cuentas por Pagar #}
-              <div class="input-group input-group-sm w-auto">
+                      hx-include="#search-cuentas-pagar, #filtros-estado-cuentas-pagar .active">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+              <div class="input-group input-group-sm" style="max-width:260px;">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
                 <input type="text"
                        id="search-cuentas-pagar"
-                       class="form-control"
-                       placeholder="Buscar factura..."
+                       class="form-control border-start-0 ps-0"
+                       placeholder="Buscar factura, proveedor..."
                        hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}"
                        hx-trigger="keyup changed delay:400ms, search"
                        hx-target="#cuentas-pagar-panel"
-                       hx-include="#filtro-estado-cuentas-pagar"
+                       hx-include="#filtros-estado-cuentas-pagar .active"
                        name="q">
-                <button class="btn btn-outline-secondary" type="button" title="Buscar"
-                        hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}"
-                        hx-target="#cuentas-pagar-panel"
-                        hx-include="#search-cuentas-pagar, #filtro-estado-cuentas-pagar">
-                  <i class="bi bi-search"></i>
-                </button>
               </div>
             </div>
+          </div>
+
+          {# Filtros por estado (RELEASE-CLOSE/PROVEEDORES-02 -- chips en vez de <select>, coherencia con Clientes/Cartera) #}
+          <div class="d-flex gap-2 flex-wrap mt-3" id="filtros-estado-cuentas-pagar">
+            <button class="btn btn-sm btn-outline-dark active" data-filtro-cxp=""
+                    hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}" hx-target="#cuentas-pagar-panel"
+                    hx-include="#search-cuentas-pagar" name="estado_pago" value="">
+              <i class="bi bi-grid-3x3-gap me-1"></i>Todas
+            </button>
+            <button class="btn btn-sm btn-outline-danger" data-filtro-cxp="SIN_PAGO"
+                    hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}" hx-target="#cuentas-pagar-panel"
+                    hx-include="#search-cuentas-pagar" name="estado_pago" value="SIN_PAGO">
+              <i class="bi bi-x-circle me-1"></i>Sin Pago
+            </button>
+            <button class="btn btn-sm btn-outline-warning" data-filtro-cxp="PARCIAL"
+                    hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}" hx-target="#cuentas-pagar-panel"
+                    hx-include="#search-cuentas-pagar" name="estado_pago" value="PARCIAL">
+              <i class="bi bi-hourglass-split me-1"></i>Pago Parcial
+            </button>
+            <button class="btn btn-sm btn-outline-success" data-filtro-cxp="PAGADA"
+                    hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}" hx-target="#cuentas-pagar-panel"
+                    hx-include="#search-cuentas-pagar" name="estado_pago" value="PAGADA">
+              <i class="bi bi-check-circle me-1"></i>Pagadas
+            </button>
+            <button class="btn btn-sm btn-outline-dark" data-filtro-cxp="vencidas"
+                    hx-get="{% url 'proveedores:cuentas-pagar-tabla' %}" hx-target="#cuentas-pagar-panel"
+                    hx-include="#search-cuentas-pagar" name="vencidas" value="true">
+              <i class="bi bi-alarm me-1"></i>Vencidas
+            </button>
           </div>
         </div>
 

@@ -1,0 +1,272 @@
+{
+  "name": "N8N-EVENTS -- Receptor de eventos SINTEL (Workflow B/C/D)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sintel-events",
+        "responseMode": "onReceived",
+        "responseData": "success",
+        "options": {}
+      },
+      "id": "webhook-sintel-events-1",
+      "name": "Webhook: eventos SINTEL",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-40, 300],
+      "webhookId": "sintel-events",
+      "notes": "responseMode=onReceived: responde 200 inmediato sin esperar el resto del workflow -- SINTEL (apps/services/integration_events/tasks.py) no debe bloquearse ni interpretar demoras de notificacion como fallo del webhook. La URL real de este nodo (http://<host_n8n>/webhook/sintel-events) es la que va en N8N_WEBHOOK_URL del .env de SINTEL (nunca al reves)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// N8N-SINTEL-02 FASE 7/12: valida la firma HMAC-SHA256 igual que\n// apps/services/integration_events/tasks.py::_firmar() del lado SINTEL.\n// Nunca procesar un evento cuya firma no coincide -- podria no venir de\n// SINTEL en absoluto (Fase 14, 'webhook sin proteccion').\nconst crypto = require('crypto');\n\nconst secret = $env.N8N_WEBHOOK_SECRET || '';\nconst rawBody = JSON.stringify($input.first().json, Object.keys($input.first().json).sort());\n// SINTEL firma con json.dumps(event, sort_keys=True) -- mismo criterio\n// de serializacion (claves ordenadas) para que el HMAC coincida byte a\n// byte. Si el body ya no es exactamente ese, la firma no calzara nunca\n// -- revisar contra tasks.py si esto falla sistematicamente.\nconst received = $input.first().headers['x-sintel-signature'] || '';\nconst expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');\n\nconst valido = expected === received;\n\nreturn [{ json: { ...$input.first().json, _firma_valida: valido, _event_id: $input.first().json.event_id } }];"
+      },
+      "id": "code-verificar-firma-1",
+      "name": "Verificar firma HMAC",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json._firma_valida }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-firma-valida-1",
+      "name": "Firma valida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {},
+      "id": "noop-firma-invalida-1",
+      "name": "Descartado: firma invalida",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [620, 460],
+      "notes": "Fase 14: cualquier POST a este webhook con firma incorrecta se descarta aqui -- nunca se ejecuta ninguna notificacion a partir de un payload no verificado."
+    },
+    {
+      "parameters": {
+        "jsCode": "// N8N-SINTEL-02 FASE 11: idempotencia real del lado n8n -- usa\n// almacenamiento estatico del propio workflow (persiste entre\n// ejecuciones, nativo de n8n, sin credencial/DB adicional). event_id\n// es el identificador real (DomainEvent.event_id, uuid4 generado por\n// SINTEL) -- nunca se reusa segun el contrato ya verificado en\n// tests/services/integration_events/test_contracts.py.\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.seenEventIds) staticData.seenEventIds = [];\n\nconst eventId = $input.first().json._event_id;\nconst yaVisto = staticData.seenEventIds.includes(eventId);\n\nif (!yaVisto) {\n  staticData.seenEventIds.push(eventId);\n  // Evita crecimiento sin limite -- conserva los ultimos 5000 event_id.\n  if (staticData.seenEventIds.length > 5000) {\n    staticData.seenEventIds = staticData.seenEventIds.slice(-5000);\n  }\n}\n\nreturn [{ json: { ...$input.first().json, _ya_procesado: yaVisto } }];"
+      },
+      "id": "code-idempotencia-1",
+      "name": "Verificar idempotencia (event_id)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json._ya_procesado }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "if-ya-procesado-1",
+      "name": "Ya procesado antes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [840, 240]
+    },
+    {
+      "parameters": {},
+      "id": "noop-duplicado-evento-1",
+      "name": "Descartado: evento repetido",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1060, 380]
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "output": "single",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "invoice.processed",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "INVOICE_PROCESSED"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "invoice.duplicate",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "INVOICE_DUPLICATE"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "OTRO_EVENTO" }
+      },
+      "id": "switch-event-type-1",
+      "name": "Switch por event_type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1060, 220]
+    },
+    {
+      "parameters": {},
+      "id": "noop-evento-desconocido-1",
+      "name": "Log: event_type desconocido",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1280, 460],
+      "notes": "Fase 17: nunca silenciar sin dejar rastro -- ampliar el Switch cuando se agreguen event_type nuevos (ej. invoice.failed, si algun dia se cablea con un aggregate_uuid real)."
+    },
+    {
+      "parameters": {},
+      "id": "noop-duplicado-log-1",
+      "name": "Log: duplicado (sin notificacion)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1280, 320],
+      "notes": "FASE 10, matriz de departamentos: invoice.duplicate NO es un error -- log silencioso, sin email/WhatsApp."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "destinatario_email",
+              "value": "={{ $env.SINTEL_DEPT_CONTABILIDAD_EMAIL }}",
+              "type": "string"
+            },
+            {
+              "name": "destinatario_whatsapp",
+              "value": "={{ $env.SINTEL_DEPT_CONTABILIDAD_WHATSAPP }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-destinatario-contabilidad-1",
+      "name": "Resolver destinatario: Contabilidad",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1280, 140],
+      "notes": "FASE 10: matriz departamento->destinatarios leida de variables de entorno del contenedor n8n (el usuario las carga) -- nunca hardcodeada en el nodo. 'Factura recibida -> Contabilidad -> Email + WhatsApp' (regla ya documentada en N8N_WORKFLOWS.md)."
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.destinatario_email }}",
+        "subject": "=SINTEL: factura procesada ({{ $json.payload.numero }})",
+        "message": "=Se proceso una factura nueva en SINTEL.\n\nNumero: {{ $json.payload.numero }}\nCUFE: {{ $json.payload.cufe }}\nTenant: {{ $json.tenant }}\nevent_id: {{ $json.event_id }}\nFecha: {{ $json.occurred_at }}",
+        "options": {}
+      },
+      "id": "gmail-send-procesada-1",
+      "name": "Email: factura procesada",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1500, 80],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PENDIENTE",
+          "name": "Gmail -- buzon facturas SINTEL (cargar credencial real)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "={{ $env.SINTEL_WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $json.destinatario_whatsapp }}",
+        "textBody": "=SINTEL: factura {{ $json.payload.numero }} procesada correctamente."
+      },
+      "id": "whatsapp-send-procesada-1",
+      "name": "WhatsApp: factura procesada",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [1500, 220],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "PENDIENTE",
+          "name": "WhatsApp Business Cloud API SINTEL (cargar credencial real)"
+        }
+      },
+      "notes": "REVISAR OBLIGATORIO antes de activar: igual que en Workflow A, el primer mensaje de una conversacion en WhatsApp Cloud API requiere una plantilla pre-aprobada por Meta -- cambiar a 'Send Template' con el nombre real antes de produccion."
+    }
+  ],
+  "connections": {
+    "Webhook: eventos SINTEL": {
+      "main": [[{ "node": "Verificar firma HMAC", "type": "main", "index": 0 }]]
+    },
+    "Verificar firma HMAC": {
+      "main": [[{ "node": "Firma valida?", "type": "main", "index": 0 }]]
+    },
+    "Firma valida?": {
+      "main": [
+        [{ "node": "Verificar idempotencia (event_id)", "type": "main", "index": 0 }],
+        [{ "node": "Descartado: firma invalida", "type": "main", "index": 0 }]
+      ]
+    },
+    "Verificar idempotencia (event_id)": {
+      "main": [[{ "node": "Ya procesado antes?", "type": "main", "index": 0 }]]
+    },
+    "Ya procesado antes?": {
+      "main": [
+        [{ "node": "Descartado: evento repetido", "type": "main", "index": 0 }],
+        [{ "node": "Switch por event_type", "type": "main", "index": 0 }]
+      ]
+    },
+    "Switch por event_type": {
+      "main": [
+        [{ "node": "Resolver destinatario: Contabilidad", "type": "main", "index": 0 }],
+        [{ "node": "Log: duplicado (sin notificacion)", "type": "main", "index": 0 }],
+        [{ "node": "Log: event_type desconocido", "type": "main", "index": 0 }]
+      ]
+    },
+    "Resolver destinatario: Contabilidad": {
+      "main": [
+        [
+          { "node": "Email: factura procesada", "type": "main", "index": 0 },
+          { "node": "WhatsApp: factura procesada", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": ""
+  },
+  "meta": {
+    "sintel_mission": "N8N-SINTEL-02 FASE 7/8/9/10/11/12",
+    "sintel_note": "Workflow generado por Claude Code sin acceso a la UI de n8n (no hay login). Importar via 'Import from File'. La 'IF: Ya procesado antes?' TRUE va a 'Descartado' (branch 0 = true en IF de n8n), FALSE continua (branch 1) -- revisar que el import respete ese orden. Ninguna credencial ni secreto real esta embebido en este archivo."
+  },
+  "id": "n8n-events-workflow-receptor"
+}

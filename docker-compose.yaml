@@ -219,7 +219,62 @@ services:
     depends_on:
       - nginx
 
-
+  # n8n -- orquestador de automatizacion EXTERNO a SINTEL (N8N-SINTEL-01,
+  # 2026-09-09). Version fijada (NO latest, ver docs/n8n/N8N_ARCHITECTURE.md).
+  # Base de datos PROPIA y aislada (rol/DB Postgres dedicados, ver la
+  # seccion "n8n" de .env -- CONNECT a la base `sintel` revocado
+  # explicitamente para el rol `n8n`, verificado con evidencia real).
+  # Puerto SOLO en 127.0.0.1 -- accesible desde el host para configuracion
+  # inicial (UI de n8n), NUNCA desde la red LAN/Internet (mismo patron que
+  # db/redis/neo4j). Exposicion publica via nginx queda DEFERRED (decision
+  # explicita del usuario, ver N8N_RELEASE_GATE.md).
+  n8n:
+    container_name: crm_sintel-n8n-1
+    image: n8nio/n8n:1.81.0
+    environment:
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY debe estar definido en .env}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=db
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${N8N_DB_NAME:-n8n}
+      - DB_POSTGRESDB_USER=${N8N_DB_USER:-n8n}
+      - DB_POSTGRESDB_PASSWORD=${N8N_DB_PASSWORD:?N8N_DB_PASSWORD debe estar definido en .env}
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+      - WEBHOOK_URL=${N8N_PROTOCOL:-http}://${N8N_HOST:-localhost}:${N8N_PORT:-5678}/
+      - GENERIC_TIMEZONE=America/Bogota
+      - TZ=America/Bogota
+      - N8N_RUNNERS_ENABLED=true
+      # N8N-SINTEL-02: variables de negocio que los workflows importados
+      # (docs/n8n/workflows/) leen via $env.<NOMBRE> -- NO via env_file
+      # (este servicio usa la imagen oficial de n8n, no el x-app-base de
+      # arriba con env_file: .env, por eso cada una se pasa explicita).
+      # Vacias por defecto: el workflow las usa cuando el usuario las
+      # define en el .env real, nunca commiteadas con un valor real.
+      - SINTEL_N8N_REFRESH_TOKEN=${SINTEL_N8N_REFRESH_TOKEN:-}
+      - N8N_WEBHOOK_SECRET=${N8N_WEBHOOK_SECRET:-}
+      - SINTEL_WHATSAPP_PHONE_NUMBER_ID=${SINTEL_WHATSAPP_PHONE_NUMBER_ID:-}
+      - SINTEL_DEPT_CONTABILIDAD_EMAIL=${SINTEL_DEPT_CONTABILIDAD_EMAIL:-}
+      - SINTEL_DEPT_CONTABILIDAD_WHATSAPP=${SINTEL_DEPT_CONTABILIDAD_WHATSAPP:-}
+      - SINTEL_DEPT_ADMINISTRACION_EMAIL=${SINTEL_DEPT_ADMINISTRACION_EMAIL:-}
+      - SINTEL_DEPT_ADMINISTRACION_WHATSAPP=${SINTEL_DEPT_ADMINISTRACION_WHATSAPP:-}
+      - SINTEL_DEPT_TI_EMAIL=${SINTEL_DEPT_TI_EMAIL:-}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      # Solo host local -- ver comentario del servicio arriba.
+      - "127.0.0.1:5678:5678"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -O /dev/null -q http://127.0.0.1:5678/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
 volumes:
   postgres_data:
@@ -230,6 +285,9 @@ volumes:
     driver: local
   neo4j_data:
     name: crm_sintel_neo4j_data
+    driver: local
+  n8n_data:
+    name: crm_sintel_n8n_data
     driver: local
   fastembed_cache:
     name: crm_sintel_fastembed_cache

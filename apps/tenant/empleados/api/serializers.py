@@ -414,6 +414,19 @@ class DevengoSerializer(NormalizationMixin, serializers.ModelSerializer):
             'contrato_tipo', 'contrato_tipo_display', 'contrato_cargo',
             'periodo_info',
         )
+        # WARNING: mision PERIODOS-NOMINA-01 (2026-09-11): DRF auto-genera un
+        # validador desde CADA UniqueConstraint de Devengo.Meta.constraints, y
+        # al hacerlo fuerza required=True sobre TODOS sus campos -- incluido
+        # 'periodo', que es legitimamente opcional (nullable, flujo historico
+        # sin periodo). El nuevo UniqueConstraint uniq_nomina_activo_per_empleado_periodo
+        # (agregado para integridad a nivel de DB) rompio la creacion clasica
+        # sin periodo con 400 "periodo: Este campo es requerido" pese a su
+        # required=False explicito arriba. Se desactiva la auto-generacion:
+        # validate() ya implementa manualmente AMBAS reglas de duplicado
+        # (periodo FK L428-447, periodo_mes+fecha_pago L465-483) -- los
+        # UniqueConstraint de DB quedan como ultima linea de defensa (race
+        # conditions/escritura directa), no como fuente de validadores DRF.
+        validators = []
 
     def validate(self, attrs):
         """

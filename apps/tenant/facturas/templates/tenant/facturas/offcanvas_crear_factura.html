@@ -295,9 +295,16 @@
     btnLabel.textContent = 'Subir de nuevo';
     btnUpload.disabled = false; uploading = false;
 
-    // Notificar al listado de facturas (skill: crud-fsd.md §4)
+    // Notificar al listado de facturas para que las pestañas Ventas/Compras
+    // se refresquen via HTMX -- FACTURAS-UI-CRONO-01: hallazgo real, este
+    // evento no coincidia con lo que list_factura.html escucha
+    // (hx-trigger="... facturaGuardada from:document"). 'listaFacturasChanged'
+    // no lo escucha nadie (solo aparece como header HX-Trigger del backend,
+    // que no aplica aqui porque este formulario usa fetch() plano, no HTMX) --
+    // unificado al mismo evento/target que ya usan facturas_editor.js y
+    // facturas_list.js en toda la app.
     if (ok > 0 || dup > 0) {
-      document.body.dispatchEvent(new CustomEvent('listaFacturasChanged'));
+      document.dispatchEvent(new Event('facturaGuardada'));
     }
   });
 

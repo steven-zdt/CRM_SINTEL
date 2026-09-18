@@ -145,6 +145,9 @@ class OrdenCompraDetailSerializer(serializers.ModelSerializer):
     # [OSF Fase F5] ver nota en OrdenCompraListSerializer.
     sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, default='')
     area_nombre = serializers.CharField(source='area.nombre', read_only=True, default='')
+    # FACTURAS-UI-CRONO-01: vinculacion manual a una Factura ya persistida.
+    factura_uuid = serializers.CharField(source='factura_asociada.uuid', read_only=True, default=None)
+    factura_numero = serializers.CharField(source='factura_asociada.numero', read_only=True, default='')
 
     def get_documento_soporte_numero(self, obj) -> str:
         if obj.documento_soporte:
@@ -176,6 +179,8 @@ class OrdenCompraDetailSerializer(serializers.ModelSerializer):
             'plantilla_uuid',
             'sede_nombre',
             'area_nombre',
+            'factura_uuid',
+            'factura_numero',
             'items',
             'created_at',
             'updated_at',
@@ -214,6 +219,16 @@ class OrdenCompraCreateUpdateSerializer(serializers.ModelSerializer):
             'observaciones',
             'items',
         )
+        # BUG (2026-09-12, hallazgo CO-3): 'estado' era escribible tanto en
+        # create como en update sin pasar por TRANSICIONES_VALIDAS -- un
+        # POST/PATCH directo con estado="APROBADA" saltaba
+        # _sincronizar_cuenta_por_pagar() (solo se dispara desde
+        # cambiar_estado_orden_compra()), permitiendo una orden "aprobada"
+        # sin Cuenta por Pagar generada. El modelo ya tiene
+        # default='BORRADOR' (models.py:206), asi que marcarlo read-only no
+        # cambia el comportamiento de creacion normal. Los cambios de estado
+        # deben ir exclusivamente por POST .../cambiar-estado/.
+        read_only_fields = ('estado',)
 
     def validate(self, attrs):
         fecha = attrs.get('fecha')

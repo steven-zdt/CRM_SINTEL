@@ -80,7 +80,8 @@
         _ocultarFeedback();
 
         try {
-            const res = await w.Sintel.Core.Http.request('POST', API_BASE, payload);
+            // T-9: delega a la SSoT de endpoints (empleados.api.js).
+            const res = await w.Sintel.Core.Http.request('POST', w.Sintel.Empleados.API.periodos.list, payload);
             if (res.ok) {
                 w.UIManager?.notifySuccess('Período de nómina creado correctamente');
                 _cerrar();

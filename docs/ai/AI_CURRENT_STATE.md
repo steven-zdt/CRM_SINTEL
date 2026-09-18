@@ -1,5 +1,13 @@
 # AI_CURRENT_STATE — Fase 0
 
+> **Actualización 2026-09-09**: este documento es una fotografía histórica
+> del estado ANTERIOR al AI Engine transversal (AI-01..AI-06, AI-VECTOR-01..11A
+> y la misión SINTEL-AI-UI-01 ya lo superaron por completo). Para el estado
+> real actual, ver `AI_RELEASE_GATE.md` (gates por fase, siempre la fuente
+> más actual) y `AI_UI_01_EXECUTION.md` (primera UI real del Asistente IA).
+> Se conserva sin reescribir como registro histórico de la auditoría
+> original — no lo trates como el estado vigente.
+
 Auditoría real de la IA existente en SINTEL, 2026-08-31, antes de
 diseñar el AI Engine transversal. **No se modificó código en esta
 fase.**

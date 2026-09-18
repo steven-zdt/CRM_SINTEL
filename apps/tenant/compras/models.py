@@ -175,6 +175,21 @@ class OrdenCompra(SedeAwareModel):
         verbose_name=_('Documento Soporte / Gasto')
     )
 
+    # FACTURAS-UI-CRONO-01: vinculacion MANUAL (nunca automatica) de una
+    # Factura de naturaleza COMPRA ya persistida en el modulo Facturas --
+    # mismo patron 1:1 ya usado por Venta.factura_asociada
+    # (apps/tenant/ventas/models.py), decision explicita del usuario ante
+    # el hallazgo de que Compras no tenia NINGUN mecanismo de vinculo
+    # (VCF-004, quedaba DEFERRED). NUNCA se crea una Factura desde aqui.
+    factura_asociada = models.OneToOneField(
+        'facturas.Factura',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='orden_compra_origen',
+        verbose_name=_('Factura electronica DIAN'),
+    )
+
     fecha = models.DateField(
         verbose_name=_('Fecha de Emision')
     )

@@ -185,11 +185,12 @@
             if (activoId) {
                 // ⚠️ UPDATE: Actualizar activo existente
                 console.log(`${MOD} Actualizando activo ID: ${activoId}`);
-                res = await w.Sintel.Core.Http.request('PATCH', `${CORE_API_BASE}/${activoId}/`, payload);
+                // T-9: delega a la SSoT de endpoints (inventario.api.js).
+                res = await w.Sintel.Inventario.API.activos.update(activoId, payload);
             } else {
                 // ⚠️ CREATE: Crear nuevo activo
                 console.log(`${MOD} Creando nuevo activo`);
-                res = await w.Sintel.Core.Http.request('POST', `${CORE_API_BASE}/`, payload);
+                res = await w.Sintel.Inventario.API.activos.save(payload);
             }
 
             // ⚠️ v2.61.3: Aislamiento Gradual - Solo verificar ok

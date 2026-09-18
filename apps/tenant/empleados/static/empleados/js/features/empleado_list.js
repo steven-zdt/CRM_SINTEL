@@ -57,9 +57,12 @@
                 if (nominasEl) nominasEl.textContent = data.empleados_pagados || 0;
                 if (costoEl) {
                     const val = parseFloat(data.total_nomina_mes) || 0;
-                    costoEl.textContent = new Intl.NumberFormat('es-CO', {
-                        style: 'currency', currency: 'COP', minimumFractionDigits: 0
-                    }).format(val);
+                    // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+                    costoEl.textContent = (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+                        ? w.DOMUtils.formatCurrency(val, { minimumFractionDigits: 0 })
+                        : new Intl.NumberFormat('es-CO', {
+                            style: 'currency', currency: 'COP', minimumFractionDigits: 0
+                        }).format(val);
                 }
             } else {
                 throw new Error(res.data?.detail || 'Error cargando resumen');

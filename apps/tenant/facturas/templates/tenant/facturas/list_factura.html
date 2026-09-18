@@ -124,7 +124,7 @@ ya no Tabulator — ver apps/tenant/facturas/tables.py y views.py.
       {% endcomment %}
       <div id="panel-ventas" data-facturas-panel
            hx-get="{% url 'facturas:tabla' naturaleza='venta' %}"
-           hx-trigger="load, keyup changed delay:400ms from:#search-factura, search from:#search-factura, facturaGuardada from:document"
+           hx-trigger="load, keyup changed delay:400ms from:#search-factura, search from:#search-factura, facturaGuardada from:document, listaFacturasChanged from:document"
            hx-include="#search-factura"
            hx-target="this"
            hx-swap="innerHTML"
@@ -143,7 +143,7 @@ ya no Tabulator — ver apps/tenant/facturas/tables.py y views.py.
       {# Panel HTMX. Ver nota en la pestaña de Ventas. #}
       <div id="panel-compras" data-facturas-panel
            hx-get="{% url 'facturas:tabla' naturaleza='compra' %}"
-           hx-trigger="load, keyup changed delay:400ms from:#search-factura, search from:#search-factura, facturaGuardada from:document"
+           hx-trigger="load, keyup changed delay:400ms from:#search-factura, search from:#search-factura, facturaGuardada from:document, listaFacturasChanged from:document"
            hx-include="#search-factura"
            hx-target="this"
            hx-swap="innerHTML"

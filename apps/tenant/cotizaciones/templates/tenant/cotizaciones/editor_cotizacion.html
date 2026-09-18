@@ -23,15 +23,6 @@
     {% endif %}
   </div>
   <div class="ms-auto d-flex gap-2">
-    <a href="{% if cotizacion %}/api/v1/cotizaciones/{{ cotizacion.uuid }}/exportar-pdf/{% else %}#{% endif %}" 
-      target="_blank"
-      id="btn-pdf-cot"
-      class="btn btn-outline-danger btn-sm {% if not cotizacion %}d-none{% endif %}">
-      <i class="bi bi-file-pdf"></i> PDF
-    </a>
-    <button type="button" class="btn btn-success btn-sm fw-semibold" id="btn-guardar-cot">
-      <i class="bi bi-check2-circle"></i> Guardar
-    </button>
     <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
   </div>
 </div>
@@ -413,6 +404,22 @@
   {# Spacing bottom #}
   <div class="py-4"></div>
 
+</div>
+
+{# ===== FOOTER (Q-6: Guardar/PDF movidos del header al footer) ===== #}
+<div class="offcanvas-footer border-top bg-white p-3">
+  <div class="d-flex justify-content-end gap-2">
+    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas">Cancelar</button>
+    <a href="{% if cotizacion %}/api/v1/cotizaciones/{{ cotizacion.uuid }}/exportar-pdf/{% else %}#{% endif %}"
+      target="_blank"
+      id="btn-pdf-cot"
+      class="btn btn-outline-danger btn-sm {% if not cotizacion %}d-none{% endif %}">
+      <i class="bi bi-file-pdf"></i> PDF
+    </a>
+    <button type="button" class="btn btn-success btn-sm fw-semibold" id="btn-guardar-cot">
+      <i class="bi bi-check2-circle"></i> Guardar
+    </button>
+  </div>
 </div>
 
 {# ===== SPINNER inline ===== #}

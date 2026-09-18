@@ -31,6 +31,7 @@ DOCUMENTO_LIST_FIELDS = (
     'fecha', 'total', 'categoria_contable', 'descripcion',
     'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
     'movimiento_inventario_uuid',
+    'proyecto_uuid',  # GASTOS_PROYECTOS_01
     'sede_id', 'sede__nombre',  # DT-SEDE-01: KPI por sede
 )
 
@@ -41,6 +42,7 @@ DOCUMENTO_DETAIL_FIELDS = (
     'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
     'resolucion_dian_id', 'proveedor_id',
     'movimiento_inventario_uuid',
+    'proyecto_uuid',  # GASTOS_PROYECTOS_01
     'sede_id', 'sede__uuid', 'sede__nombre',  # DT-SEDE-01
     'created_at', 'updated_at'
 )
@@ -210,6 +212,29 @@ class DocumentoSelector:
             'agotado': agotado,
             'disponibles': max(0, resolucion.rango_hasta - siguiente + 1) if not agotado else 0,
         }
+
+    @staticmethod
+    def get_by_proyecto(empresa_id: int, proyecto_uuid):
+        """
+        Lista los DocumentoSoporte activos y no anulados asociados a un
+        proyecto (GASTOS_PROYECTOS_01, Pull Model via UUID opaco).
+
+        No incluye anulados/inactivos: son los mismos gastos que participan
+        en calcular_costo_gastos() de Proyectos (misma regla de inclusion).
+        """
+        return DocumentoSoporte.objects.filter(
+            empresa_id=empresa_id,
+            proyecto_uuid=proyecto_uuid,
+            activo=True,
+            anulado=False,
+        ).select_related('proveedor', 'resolucion_dian').only(
+            *DOCUMENTO_LIST_FIELDS,
+            'resolucion_dian_id',
+            'resolucion_dian__prefijo',
+            'resolucion_dian__consecutivo',
+            'proveedor__razon_social',
+            'proveedor_id',
+        ).order_by('-fecha', '-consecutivo')
 
     @staticmethod
     def get_summary(empresa_id: int):

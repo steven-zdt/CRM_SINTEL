@@ -19,9 +19,12 @@
     const BTN_ID     = 'btn-guardar-liquidacion-crear';
     const FEEDBACK   = 'form-liquidacion-crear-feedback';
 
-    const COP = (v) => new Intl.NumberFormat('es-CO', {
-        style: 'currency', currency: 'COP', minimumFractionDigits: 0,
-    }).format(parseFloat(v) || 0);
+    // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+    const COP = (v) => (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+        ? w.DOMUtils.formatCurrency(parseFloat(v) || 0, { minimumFractionDigits: 0 })
+        : new Intl.NumberFormat('es-CO', {
+            style: 'currency', currency: 'COP', minimumFractionDigits: 0,
+        }).format(parseFloat(v) || 0);
 
     // ── Abrir offcanvas crear ─────────────────────────────────────────────────
     function open(empleadoUuid) {

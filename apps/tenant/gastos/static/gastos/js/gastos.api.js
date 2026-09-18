@@ -65,6 +65,11 @@
         inventario: {
             searchMovimientos: (q) => `/api/v1/inventario/movimientos/?search=${encodeURIComponent(q)}&page_size=10`,
         },
+        proyectos: {
+            // GASTOS_PROYECTOS_01: reutiliza el listado de Proyectos ya existente
+            // (?search=) -- no se crea un endpoint nuevo.
+            search: (q) => `/api/v1/proyectos/?search=${encodeURIComponent(q)}&page_size=10`,
+        },
 
         // Renderizado (HTMX / Views)
         endpoints: {

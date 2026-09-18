@@ -21,6 +21,11 @@ class VentaServiceMixin(BaseServiceMixin):
     def service_crear_borrador(self, empresa, payload: dict):
         return self.business_service_class.crear_venta_borrador(empresa=empresa, payload=payload)
 
+    def service_actualizar_venta(self, venta_uuid: str, empresa_id: int, payload: dict):
+        return self.business_service_class.actualizar_venta_borrador(
+            venta_uuid=venta_uuid, empresa_id=empresa_id, payload=payload,
+        )
+
     def service_procesar_y_facturar(self, empresa, payload: dict, venta_existente=None):
         """
         [OSF Fase F10] Resuelve la sede ACTIVA del usuario (OrganizationalContext,
@@ -52,6 +57,20 @@ class VentaServiceMixin(BaseServiceMixin):
 
     def service_anular_venta(self, venta_uuid: str, empresa_id: int):
         return self.business_service_class.anular_venta(venta_uuid=venta_uuid, empresa_id=empresa_id)
+
+    def service_vincular_factura_existente(self, venta, factura_uuid: str, empresa_id: int):
+        """FACTURAS-UI-CRONO-01: vinculacion manual de una Factura ya
+        persistida (naturaleza VENTA) -- nunca crea/emite una Factura."""
+        return self.business_service_class.vincular_factura_existente(
+            venta=venta, factura_uuid=factura_uuid, empresa_id=empresa_id,
+        )
+
+    def service_actualizar_gestion_pago(self, venta, data: dict, empresa_id: int):
+        """Integracion Facturas<->Ventas: pass-through de Gestion Manual de
+        Pago hacia la Factura vinculada (SSoT sigue siendo Factura)."""
+        return self.business_service_class.actualizar_gestion_pago(
+            venta=venta, data=data, empresa_id=empresa_id,
+        )
 
     def get_qs_list(self):
         empresa_id = self._get_empresa_id_seguro()

@@ -234,3 +234,21 @@ para el veredicto final. Decisiones H2/H3/H6/H7 requieren respuesta del
 usuario antes de decidir su alcance de implementación — el resto de los
 hallazgos (H1, H4, H5, gaps de test) se implementan directamente en la
 siguiente fase.
+
+---
+
+## Hallazgo nuevo — PROVEEDORES-02 (2026-09-15), no capturado en esta auditoría original
+
+- **H8 — "Abonar" no funcionaba sobre CxP originadas en Factura.** Esta auditoría (H6) documentó
+  el riesgo de doble conteo, pero no detectó que el camino de mutación (`registrar_abono()`) era
+  incompatible con la fuente PRIMARIA del listado (`Factura`, no `CuentasPagar`) — un bug real de
+  severidad alta (la acción principal del módulo fallaba en el caso más común), encontrado por
+  inspección de código antes de tocar la arquitectura (regla de la misión Proveedores §12).
+  Corregido con materialización idempotente (`resolver_cuenta_pagar()`/
+  `_materializar_desde_factura()`) + el listado unificado actualizado para preferir la
+  `CuentasPagar` vinculada sobre `Factura.estado_pago` crudo una vez que existe. Detalle completo:
+  `docs/proveedores/PROVEEDORES_FLOW.md` §8.3, `docs/proveedores/PROVEEDORES_RELEASE_GATE.md`
+  "Actualización — PROVEEDORES-02".
+- **H3/H6/H7 — sin cambios.** Siguen como decisiones pendientes/deuda documentada, no se tocaron
+  en esta pasada (fuera del alcance explícito de PROVEEDORES-02: representante obligatorio + fix
+  de CxP + coherencia visual con Clientes).

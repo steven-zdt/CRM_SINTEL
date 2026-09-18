@@ -243,11 +243,12 @@
             if (productoId) {
                 // ⚠️ UPDATE: Actualizar producto existente
                 console.log(`${MOD} Actualizando producto ID: ${productoId}`);
-                res = await w.Sintel.Core.Http.request('PATCH', `${CORE_API_BASE}/${productoId}/`, payload);
+                // T-9: delega a la SSoT de endpoints (inventario.api.js).
+                res = await w.Sintel.Inventario.API.productos.update(productoId, payload);
             } else {
                 // ⚠️ CREATE: Crear nuevo producto
                 console.log(`${MOD} Creando nuevo producto`);
-                res = await w.Sintel.Core.Http.request('POST', `${CORE_API_BASE}/`, payload);
+                res = await w.Sintel.Inventario.API.productos.save(payload);
             }
 
             // ⚠️ v2.61.3: Aislamiento Gradual - Solo verificar ok

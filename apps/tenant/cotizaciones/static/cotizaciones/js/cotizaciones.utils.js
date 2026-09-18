@@ -15,6 +15,10 @@
     },
     fmtMoney: function (v) {
       var num = parseFloat(v) || 0;
+      // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+      if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
+        return w.DOMUtils.formatCurrency(num, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      }
       return new Intl.NumberFormat('es-CO', {
         style: 'currency',
         currency: 'COP',

@@ -480,24 +480,29 @@ def preview_mail_ingestion(
             # (duplicando la regla de negocio VENTA/COMPRA). Ahora consulta el mismo servicio que
             # usa la persistencia real (FacturaBusinessService), garantizando que preview y
             # persistencia siempre den la misma naturaleza para el mismo documento.
-            # WARNING: BUGFIX (hallado durante FASE 12): normalize_document_number nunca estuvo
-            # exportado en apps.tenant.facturas.services (__init__.py) -- este import fallaba
-            # SIEMPRE, cayendo al except de abajo. El metodo real es
-            # FacturaBusinessService.normalize_document_number (staticmethod).
-            from apps.tenant.facturas.services.business_service import FacturaBusinessService
+            # FACTURAS-UI-CRONO-01 FASE 2/3: el guard de pertenencia usaba
+            # normalize_document_number (concatena el DV) mientras que
+            # guardar_desde_dto() usa same_nit()/clean_nit() (descarta el DV
+            # con guion) -- podian divergir para NIT con DV separado por
+            # guion. Alineado a same_nit(), la misma funcion que usa la
+            # persistencia real, para que preview nunca contradiga lo que
+            # pasara al guardar.
+            from apps.tenant.facturas.services.business_service import FacturaBusinessService, same_nit
 
             belongs_to_tenant = None  # None = no validado, True = pertenece, False = no pertenece
             validation_message = None
 
             try:
+                emisor_nit_raw = emisor.get("nit")
+                receptor_nit_raw = receptor.get("nit")
                 nit_tenant = FacturaBusinessService.normalize_document_number(empresa_nit_tenant)
-                emisor_nit = FacturaBusinessService.normalize_document_number(emisor.get("nit"))
-                receptor_nit = FacturaBusinessService.normalize_document_number(receptor.get("nit"))
+                emisor_nit = FacturaBusinessService.normalize_document_number(emisor_nit_raw)
+                receptor_nit = FacturaBusinessService.normalize_document_number(receptor_nit_raw)
 
-                if not nit_tenant:
+                if not empresa_nit_tenant:
                     belongs_to_tenant = None
                     validation_message = "No se pudo validar (empresa no configurada)"
-                elif emisor_nit != nit_tenant and receptor_nit != nit_tenant:
+                elif not same_nit(emisor_nit_raw, empresa_nit_tenant) and not same_nit(receptor_nit_raw, empresa_nit_tenant):
                     # Mismo guard que FacturaBusinessService.guardar_desde_dto(): si ni el
                     # emisor ni el receptor coinciden con la empresa, el documento seria
                     # rechazado en persistencia -- reflejarlo aqui identicamente.
@@ -507,12 +512,19 @@ def preview_mail_ingestion(
                         f"Receptor NIT: {receptor_nit} != Tenant NIT: {nit_tenant})"
                     )
                 else:
-                    naturaleza = FacturaBusinessService._resolver_naturaleza(emisor_nit, nit_tenant)
-                    belongs_to_tenant = True
-                    validation_message = (
-                        "VENTA (emitida por esta empresa)" if naturaleza == "VENTA"
-                        else "COMPRA (recibida por esta empresa)"
+                    naturaleza = FacturaBusinessService._resolver_naturaleza(
+                        emisor_nit_raw, receptor_nit_raw, empresa_nit_tenant
                     )
+                    belongs_to_tenant = True
+                    if naturaleza == "VENTA":
+                        validation_message = "VENTA (emitida por esta empresa)"
+                    elif naturaleza == "COMPRA":
+                        validation_message = "COMPRA (recibida por esta empresa)"
+                    else:
+                        # FACTURAS-UI-CRONO-01: caso ambiguo (ej. emisor Y
+                        # receptor son la propia empresa) -- nunca inventar
+                        # VENTA/COMPRA, mismo criterio que guardar_desde_dto().
+                        validation_message = "Revisar (naturaleza ambigua -- ver FACTURAS_NATURALEZA_RULE.md)"
             except Exception as e:
                 logger.warning(f"[preview_mail_ingestion] Error validando NIT: {e}")
                 belongs_to_tenant = None

@@ -233,11 +233,22 @@
         },
 
         formatMoney: function(amount) {
-            return new Intl.NumberFormat('es-CO', { 
-                style: 'currency', 
+            // BUG (2026-09-12, hallazgo T-5): sin este guard, una clave
+            // ausente en la respuesta del API (no solo en 0, sino no
+            // presente) llegaba aqui como undefined y renderizaba el string
+            // literal "NaN" en las tarjetas de Ingresos/Costos/Utilidad del
+            // Estado de Resultados.
+            const value = (amount === null || amount === undefined || amount === '' || isNaN(amount))
+                ? 0 : amount;
+            // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+            if (window.DOMUtils && typeof window.DOMUtils.formatCurrency === 'function') {
+                return window.DOMUtils.formatCurrency(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            }
+            return new Intl.NumberFormat('es-CO', {
+                style: 'currency',
                 currency: 'COP',
                 maximumFractionDigits: 0
-            }).format(amount);
+            }).format(value);
         }
     };
 

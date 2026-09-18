@@ -32,3 +32,8 @@ class ProyectoServiceMixin:
     def proyecto_crud_service(self):
         """Persistencia pura."""
         return services.crud_service
+
+    @property
+    def proyecto_documentos_service(self):
+        """Expediente documental (DocumentoProyecto) - Ciclo de Vida Controlado v4.0."""
+        return services.documentos_service

@@ -13,8 +13,9 @@ from django.db.models import F, Sum
 from rest_framework.exceptions import ValidationError
 
 from apps.tenant.empresa.models import Empresa
-from ..models import Proyecto, AsignacionPersonal, ItemPedido, TareaCorta
+from ..models import Proyecto, AsignacionPersonal, ItemPedido, TareaCorta, HistorialFaseProyecto
 from .crud_service import save_proyecto, delete_proyecto, save_tarea_corta, delete_tarea_corta
+from .documentos_service import documentos_obligatorios_faltantes
 
 try:
     from apps.tenant.clientes.models import Cliente as _Cliente
@@ -76,36 +77,61 @@ def calcular_costo_materiales(proyecto):
     
     return total
 
+def calcular_costo_gastos(proyecto):
+    """
+    Calcula el costo real de Gastos (DocumentoSoporte) asociados al proyecto.
+
+    GASTOS_PROYECTOS_01: Pull Model via UUID opaco (proyecto_uuid en
+    DocumentoSoporte). GASTO_COST_AMOUNT_SSoT = subtotal (confirmado en
+    apps/tenant/contabilidad/integracion/extractores/gastos.py: la linea
+    contable DEBE -- el gasto real reconocido -- usa subtotal, no total;
+    `total` es el pasivo neto a pagar al proveedor tras retenciones, un
+    concepto de tesoreria, no de costo).
+    """
+    from apps.tenant.gastos.models import DocumentoSoporte
+
+    total = DocumentoSoporte.objects.filter(
+        empresa_id=proyecto.empresa_id,
+        proyecto_uuid=proyecto.uuid,
+        activo=True,
+        anulado=False,
+    ).aggregate(total=Sum('subtotal'))['total'] or Decimal('0.00')
+
+    return total
+
 def calcular_indicadores_financieros(proyecto):
     """
     Calcula P&L y actualiza los indicadores financieros del proyecto.
     """
     costo_mano_obra = calcular_costo_mano_obra(proyecto)
     costo_materiales = calcular_costo_materiales(proyecto)
-    costo_total = costo_mano_obra + costo_materiales
-    
+    costo_gastos = calcular_costo_gastos(proyecto)
+    costo_total = costo_mano_obra + costo_materiales + costo_gastos
+
     valor_contrato = proyecto.valor_contrato_proyectado or Decimal('0.00')
     utilidad_estimada = valor_contrato - costo_total
-    
+
     if valor_contrato > 0:
         margen_rentabilidad = (utilidad_estimada / valor_contrato) * Decimal('100.00')
     else:
         margen_rentabilidad = Decimal('0.00')
-    
+
     # Actualizacion optimizada via crud_service
     proyecto.costo_mano_obra_real = costo_mano_obra
     proyecto.costo_materiales_real = costo_materiales
+    proyecto.costo_gastos_real = costo_gastos
     proyecto.utilidad_estimada = utilidad_estimada
     proyecto.margen_rentabilidad = margen_rentabilidad
-    
+
     save_proyecto(proyecto, update_fields=[
-        'costo_mano_obra_real', 'costo_materiales_real',
+        'costo_mano_obra_real', 'costo_materiales_real', 'costo_gastos_real',
         'utilidad_estimada', 'margen_rentabilidad'
     ])
-    
+
     return {
         'costo_mano_obra_real': costo_mano_obra,
         'costo_materiales_real': costo_materiales,
+        'costo_gastos_real': costo_gastos,
         'costo_total': costo_total,
         'utilidad_estimada': utilidad_estimada,
         'margen_rentabilidad': margen_rentabilidad,
@@ -310,17 +336,100 @@ def validar_servicio_asociado_dsv(proyecto, servicio_asociado):
     except Exception as e:
         raise ValidationError(f'Error validando servicio_asociado: {str(e)}')
 
-def cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id=None, responsable_nombre=None):
+
+# ==============================================================================
+# MAQUINA DE ESTADOS DEL CICLO DE VIDA (Ciclo de Vida Controlado v4.0)
+# ==============================================================================
+# Patron identico al ya probado en produccion en
+# apps.tenant.cotizaciones.services.business_service.CotizacionService.cambiar_estado:
+# mapa estatico en Python (no configurable en BD/por tenant), select_for_update()
+# para serializar transiciones concurrentes, idempotente en el mismo estado, y
+# gate documental resuelto ANTES de mutar cualquier campo.
+
+TRANSICIONES_VALIDAS_FASE = {
+    'BORRADOR': {'INICIO'},
+    'INICIO': {'PLANEACION'},
+    'PLANEACION': {'EJECUCION'},
+    'EJECUCION': {'CIERRE'},
+    'CIERRE': set(),
+}
+
+RESPONSABLE_FIELDS = [
+    'responsable_actual_id', 'responsable_actual_nombre',
+    'responsable_comercial_id', 'responsable_comercial_nombre',
+    'responsable_tecnico_id', 'responsable_tecnico_nombre',
+    'responsable_operativo_id', 'responsable_operativo_nombre',
+    'responsable_administrativo_id', 'responsable_administrativo_nombre',
+]
+
+
+@transaction.atomic
+def cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id=None, responsable_nombre=None,
+                           usuario=None, motivo=''):
     """
-    Valida y cambia la fase del proyecto.
+    Valida y cambia la fase del proyecto -- maquina de estados estricta (sin
+    saltos de fase). El checklist documental es informativo, NO bloqueante
+    (ver documentos_service.REQUISITOS_TRANSICION).
+
+    Atomicidad (Fase 4): select_for_update + validacion + persistencia de
+    fase_actual/responsable + creacion del HistorialFaseProyecto ocurren TODOS
+    en esta misma transaccion. Si algo falla, nada se persiste -- nunca queda
+    un proyecto "parcialmente avanzado" ni un historial huerfano sin su
+    cambio de fase correspondiente.
+
+    Raises:
+        ValidationError: fase invalida, transicion no adyacente, o algun
+        documento marcado explicitamente como obligatorio faltante (hoy
+        ninguno lo esta -- todos son opcionales).
     """
-    fases_validas = ['BORRADOR', 'INICIO', 'PLANEACION', 'EJECUCION', 'CIERRE']
+    fases_validas = dict(Proyecto.FASES)
     if nueva_fase not in fases_validas:
-        raise ValidationError(f'Fase invalida: {nueva_fase}')
-    
+        raise ValidationError({'detail': f'Fase invalida: {nueva_fase}'})
+
+    # Lock de fila: dos POST /avanzar-fase/ simultaneos sobre el mismo
+    # proyecto se serializan aqui (Fase 48 - concurrencia).
+    proyecto_actual = Proyecto.objects.select_for_update().get(pk=proyecto.pk)
+    fase_actual = proyecto_actual.fase_actual
+
+    if nueva_fase == fase_actual:
+        return proyecto  # idempotente: doble-click no rompe nada, no crea historial
+
+    if nueva_fase not in TRANSICIONES_VALIDAS_FASE.get(fase_actual, set()):
+        raise ValidationError({'detail': f'Transicion no permitida: {fase_actual} -> {nueva_fase}.'})
+
+    # Decision de producto (2026-09-18): el checklist documental es
+    # informativo, no bloqueante -- solo detienen la transicion los requisitos
+    # marcados explicitamente como obligatorios (hoy ninguno). Antes CUALQUIER
+    # documento faltante abortaba con 400 y dejaba el proyecto atascado en su
+    # fase. La UI sigue viendo que falta via `requisitos_siguiente_fase`.
+    obligatorios_faltantes = documentos_obligatorios_faltantes(proyecto_actual, fase_actual, nueva_fase)
+    if obligatorios_faltantes:
+        raise ValidationError({
+            'detail': f'No puede avanzar a {fases_validas.get(nueva_fase, nueva_fase)}. Faltan documentos obligatorios.',
+            'missing_documents': obligatorios_faltantes,
+        })
+
     proyecto.fase_actual = nueva_fase
+    update_fields = ['fase_actual', 'updated_at']
     if responsable_id or responsable_nombre:
         asignar_snapshot_responsable(proyecto, responsable_id, responsable_nombre, nueva_fase)
+        update_fields += RESPONSABLE_FIELDS
+
+    # Persistencia dentro de la MISMA transaccion que valido todo lo anterior
+    # (Fase 47 - la version anterior solo mutaba en memoria, dependia de que
+    # el caller hiciera un save() explicito despues; eso ya no es necesario).
+    save_proyecto(proyecto, update_fields=update_fields)
+
+    HistorialFaseProyecto.objects.create(
+        empresa_id=proyecto.empresa_id,
+        proyecto=proyecto,
+        fase_anterior=fase_actual,
+        fase_nueva=nueva_fase,
+        usuario=usuario,
+        motivo=motivo or '',
+    )
+
+    return proyecto
 
 # ==============================================================================
 # ORQUESTACIoN CRUD (v3.5)

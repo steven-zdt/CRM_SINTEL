@@ -21,13 +21,11 @@ class FacturaCoreViewSet(FacturaViewSet):
     # WARNING: v2.61.2: Facade ViewSet para Facturas en Core API.
     
     Hereda todas las acciones @action de FacturaViewSet:
-    - importar-ubl: POST
     - summary: GET
     - upload-ubl: POST (con batch processing y pre-validación v2.61.2)
     - upload-document: POST
     - ingest/{task_id}/status: GET
     - create-from-dto: POST (NO usa serializer, recibe DTO directamente)
-    - materialize: POST
     - xml: GET (detail)
     - app-response: GET (detail)
     - update-inbox-state: POST
@@ -45,7 +43,7 @@ class FacturaCoreViewSet(FacturaViewSet):
             return ws_serializers.FacturaWorkspaceListSerializer
         elif self.action == 'retrieve':
             return ws_serializers.FacturaWorkspaceDetailSerializer
-        elif self.action in ['create-from-dto', 'materialize', 'importar-ubl', 'upload-ubl', 'upload-document']:
+        elif self.action in ['create-from-dto', 'upload-ubl', 'upload-document']:
             # # WARNING: Estas acciones no usan serializer, trabajan directamente con request.data
             # Retornar None para que DRF no intente validar con serializer
             return None

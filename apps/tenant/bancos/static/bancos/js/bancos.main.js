@@ -77,6 +77,36 @@
         return;
       }
 
+      // 2b. Desactivar Cuenta (B-4: soft delete, oculta sin borrar el historial)
+      const btnDesactivarCuenta = e.target.closest('.btn-desactivar-cuenta');
+      if (btnDesactivarCuenta) {
+        const uuid = btnDesactivarCuenta.dataset.id;
+        const confirmado = await w.UIManager?.confirm('¿Desactivar esta cuenta bancaria? Podrá reactivarla luego; su historial de extractos no se pierde.');
+        if (!confirmado) return;
+        const res = await w.Sintel.Bancos.API.cuentas.desactivar(uuid);
+        if (res && res.ok) {
+          w.UIManager?.showSuccess('Cuenta desactivada correctamente');
+          w.Sintel.Bancos.CuentaList?.refresh();
+        } else {
+          w.UIManager?.handleError(res, MOD);
+        }
+        return;
+      }
+
+      // 2c. Activar Cuenta
+      const btnActivarCuenta = e.target.closest('.btn-activar-cuenta');
+      if (btnActivarCuenta) {
+        const uuid = btnActivarCuenta.dataset.id;
+        const res = await w.Sintel.Bancos.API.cuentas.activar(uuid);
+        if (res && res.ok) {
+          w.UIManager?.showSuccess('Cuenta activada correctamente');
+          w.Sintel.Bancos.CuentaList?.refresh();
+        } else {
+          w.UIManager?.handleError(res, MOD);
+        }
+        return;
+      }
+
       // 3. Ver Detalle de Extracto
       const btnViewExtracto = e.target.closest('.btn-view-extracto');
       if (btnViewExtracto) {

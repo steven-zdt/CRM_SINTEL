@@ -64,9 +64,7 @@
 
     <form id="form-factura" method="POST" onsubmit="return false;"
           class="d-flex flex-column flex-grow-1" style="overflow:hidden;"
-          data-naturaleza="{% if factura %}{{ factura.naturaleza }}{% endif %}"
-          data-total-pagado-bancos="{{ total_pagado_bancos|default:'0.00' }}"
-          data-saldo-pendiente="{{ saldo_pendiente|default:'0.00' }}">
+          data-naturaleza="{% if factura %}{{ factura.naturaleza }}{% endif %}">
       <input type="hidden" id="factura-id" name="id" value="{% if factura %}{{ factura.uuid }}{% endif %}">
 
       {# ── NAV TABS ─────────────────────────────────────────────────── #}
@@ -203,36 +201,6 @@
                          id="factura-medio-pago-codigo" name="medio_pago_codigo"
                          value="{% if factura %}{{ factura.medio_pago_codigo }}{% endif %}"
                          placeholder="Ej: 10 = Efectivo, 01 = Transferencia">
-                </div>
-              </div>
-
-              {# ── v3.11.0: Resumen de Pagos — Pull Model Bancos ────────────── #}
-              <div class="mt-3" id="resumen-pagos-bancos">
-                <div class="card border-0" style="background:#f0f7ff;">
-                  <div class="card-body py-2 px-3">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                      <i class="bi bi-bank text-primary"></i>
-                      <span class="small fw-semibold text-primary">Conciliación Bancaria</span>
-                      <span id="badge-medio-pago" class="badge ms-auto" style="font-size:.62rem;"></span>
-                    </div>
-                    <div class="row g-2" style="font-size:.82rem;">
-                      <div class="col-4 text-center">
-                        <div class="text-muted" style="font-size:.65rem;text-transform:uppercase;font-weight:700;">Total Factura</div>
-                        <div class="fw-bold font-monospace" id="rp-total">
-                          {% if factura %}${{ factura.total|floatformat:0 }}{% else %}—{% endif %}
-                        </div>
-                      </div>
-                      <div class="col-4 text-center border-start border-end">
-                        <div class="text-muted" style="font-size:.65rem;text-transform:uppercase;font-weight:700;">Pagado en Banco</div>
-                        <div class="fw-bold font-monospace text-success" id="rp-pagado">—</div>
-                      </div>
-                      <div class="col-4 text-center">
-                        <div class="text-muted" style="font-size:.65rem;text-transform:uppercase;font-weight:700;">Saldo Pendiente</div>
-                        <div class="fw-bold font-monospace" id="rp-saldo">—</div>
-                      </div>
-                    </div>
-                    <div id="rp-alerta" class="mt-2 d-none" style="font-size:.75rem;"></div>
-                  </div>
                 </div>
               </div>
 
@@ -577,23 +545,6 @@
             </div>
           </div>
 
-          {# Vinculación inventario #}
-          {% if factura and factura.items.exists %}
-          <div class="card mb-3 border-info">
-            <div class="card-header bg-info bg-opacity-10 border-info py-2 d-flex justify-content-between align-items-center">
-              <span class="small fw-semibold text-info"><i class="bi bi-box-seam me-1"></i>Vincular con Inventario</span>
-              <span class="badge bg-light text-muted border">Opcional</span>
-            </div>
-            <div class="card-body py-2">
-              <p class="small text-muted mb-2">
-                <i class="bi bi-info-circle me-1"></i>
-                Vincula cada ítem con un producto o servicio del inventario para trazabilidad.
-              </p>
-              <div id="container-vinculaciones" class="row g-3"></div>
-            </div>
-          </div>
-          {% endif %}
-
           {# Totales #}
           <div class="card">
             <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
@@ -717,4 +668,3 @@
 </div>
 
 <script src="{% static 'facturas/js/features/facturas_editor.js' %}"></script>
-<script src="{% static 'facturas/js/features/factura_inventario_vinculacion.js' %}"></script>

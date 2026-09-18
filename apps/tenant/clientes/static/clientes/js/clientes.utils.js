@@ -72,6 +72,12 @@
                                     <label class="form-check-label small">Principal</label>
                                 </div>
                             </div>
+                            <div class="col-md-4">
+                                <div class="form-check mt-4">
+                                    <input class="form-check-input contacto-representante-legal" type="checkbox" />
+                                    <label class="form-check-label small">Representante Legal</label>
+                                </div>
+                            </div>
                             <div class="col-12 text-end">
                                 <button type="button" class="btn btn-sm btn-outline-danger btn-eliminar-contacto">
                                     <i class="bi bi-trash"></i> Eliminar

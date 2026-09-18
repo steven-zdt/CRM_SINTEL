@@ -24,6 +24,10 @@
   function fmtMoneda(val) {
     const n = parseFloat(val);
     if (isNaN(n)) return '—';
+    // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+    if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
+      return '$ ' + w.DOMUtils.formatCurrency(n, { minimumFractionDigits: 2, maximumFractionDigits: 2, showSymbol: false });
+    }
     return '$ ' + n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 

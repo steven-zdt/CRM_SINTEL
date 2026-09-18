@@ -208,11 +208,12 @@ fallback amplio (atrapa cualquier excepción, cae al singleton `Empresa`).
 **También confirmado en la misma auditoría (no re-abrir)**: ADR-001
 respetado — `conciliar_transaccion()` nunca instancia `AsientoContable`/
 `MovimientoContable` directamente, solo dispara las APIs propias de
-`facturas`/`clientes` (Pull Model). El doc `.agent` sigue describiendo
-Tabulator en §1/§5 (línea ~78, ~368+) mientras el código real ya migró a
-django-tables2+HTMX (Fase 5-BIS) — deuda documentada preexistente
-(hallazgo B-6 del baseline), no corregida en esta pasada por estar fuera
-de los 8 ALTO priorizados.
+`facturas`/`clientes` (Pull Model).
+
+**B-6 — cerrado 2026-09-18**: las referencias a Tabulator en la tabla de
+stack (§Arquitectura) y en la estructura de archivos de §5.1 quedaron
+corregidas a django-tables2+HTMX (Fase 5-BIS) -- ya no describen una
+tecnología que el módulo abandonó.
 
 ---
 
@@ -273,7 +274,7 @@ Empresa (singleton por schema)
 | Backend | Django 5 + DRF + django-tenants |
 | Base de datos | PostgreSQL multi-schema |
 | Autenticacion | Dual-Auth: JWT + Session (BaseTenantViewSet) |
-| Frontend | Vanilla JS ES6 + HTMX 1.9.10 + Tabulator 6.2.5 + Bootstrap 5.3.2 |
+| Frontend | Vanilla JS ES6 + HTMX 1.9.10 + django-tables2 (Fase 5-BIS, ya no Tabulator) + Bootstrap 5.3.2 |
 | File upload | multipart/form-data → S3/Local FileField |
 | ETL | pandas + openpyxl para parsing de Excel bancario |
 
@@ -573,7 +574,7 @@ static/bancos/js/
     bancos.main.js        Orquestador: tabs, event delegation, modal eliminar
                           v2.0: agrega delegacion btn-conciliar-extracto
     features/
-        cuenta_list.js    Tabulator grid CuentaBancaria (sin cambios)
+        cuenta_list.js    Server-rendered (django-tables2+HTMX, Fase 5-BIS) -- ya no Tabulator
         cuenta_editor.js  Offcanvas crear/editar Cuenta (sin cambios)
         extracto_list.js  v2.0: nueva columna Conciliacion + boton Conciliar
         extracto_editor.js v2.0: reescrito — flujo guiado 4 pasos + autocomplete

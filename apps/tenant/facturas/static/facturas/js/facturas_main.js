@@ -317,7 +317,10 @@
             // 1. Obtener configuraciones activas de buzones desde el endpoint correcto
             // ⚠️ v2.60: Usar endpoint directo de MailInboxConfig (más confiable que depender de mailinboxAPI)
             let configsRes;
-            if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
+            if (w.facturasAPI && typeof w.facturasAPI.listMailConfigs === 'function') {
+                // T-9: delega a la SSoT de endpoints (facturas.api.js).
+                configsRes = await w.facturasAPI.listMailConfigs();
+            } else if (w.Sintel && w.Sintel.Core && w.Sintel.Core.Http) {
                 // ⚠️ Endpoint correcto: /api/v1/empresas/mail-inbox-config/
                 configsRes = await w.Sintel.Core.Http.request('GET', '/api/v1/empresas/mail-inbox-config/?is_active=true&page_size=100');
             } else if (w.mailinboxAPI && typeof w.mailinboxAPI.list === 'function') {
@@ -523,6 +526,12 @@
             if (!valor || valor === '0.00') return '$ 0,00';
             const num = parseFloat(valor);
             if (isNaN(num)) return '$ 0,00';
+            // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js)
+            // solo para COP -- DOMUtils.formatCurrency no acepta moneda
+            // dinamica, y `invoice.moneda` en teoria puede no ser COP.
+            if (moneda === 'COP' && w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
+                return w.DOMUtils.formatCurrency(num, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+            }
             return new Intl.NumberFormat('es-CO', {
                 style: 'currency',
                 currency: moneda,
@@ -2294,9 +2303,14 @@
                 initOffcanvasEvents();
                 initToolbarEvents(); // ⚠️ v2.60: Reinicializar eventos de toolbar cuando se carga dinámicamente
                 
-                // Si el offcanvas existe, inicializarlo
+                // Si el offcanvas existe y NO está abierto, inicializarlo.
+                // ⚠️ v3.17: Si está abierto (ej. usuario subiendo archivos y el
+                // grid se refresca via HTMX tras 'facturaGuardada'), NO reinicializar:
+                // initOffcanvas() hace dispose() + new Offcanvas() sin volver a
+                // llamar show(), dejando _isShown=false y por lo tanto el botón
+                // "Cerrar" (data-bs-dismiss="offcanvas") deja de funcionar.
                 const offcanvasEl = d.getElementById(OFFCANVAS_ID);
-                if (offcanvasEl) {
+                if (offcanvasEl && !offcanvasEl.classList.contains('show')) {
                     initOffcanvas(offcanvasEl);
                 }
                 

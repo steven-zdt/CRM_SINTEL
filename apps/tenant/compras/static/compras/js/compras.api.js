@@ -41,7 +41,9 @@
             list: PLANTILLAS_ROOT,
             detail: (uuid) => `${PLANTILLAS_ROOT}${uuid}/`,
             renderCrear: () => `${PLANTILLAS_ROOT}render-offcanvas/crear/`,
+            renderEditar: (uuid) => `${PLANTILLAS_ROOT}render-offcanvas/editar/?uuid=${uuid}`,
             create: (data) => _fetch('POST', PLANTILLAS_ROOT, data),
+            update: (uuid, data) => _fetch('PATCH', `${PLANTILLAS_ROOT}${uuid}/`, data),
         },
         proveedores: {
             list: '/api/v1/proveedores/'
@@ -66,7 +68,22 @@
 
         eliminar: function(uuid) {
             return _fetch('DELETE', this.compras.detail(uuid));
-        }
+        },
+
+        // FACTURAS-VENTAS-COMPRAS-01: asociacion MANUAL de una Factura ya
+        // persistida (naturaleza COMPRA) -- nunca crea/emite una Factura.
+        vincularFactura: function(uuid, facturaUuid) {
+            return _fetch('POST', `${API_ROOT}${uuid}/vincular-factura/`, { factura_uuid: facturaUuid });
+        },
+
+        // Reutiliza el buscador ya existente de Facturas (FASE 20/21: no se
+        // crea un segundo endpoint de busqueda) -- filtra por naturaleza=COMPRA.
+        buscarFacturasCompra: function(q) {
+            const url = new URL('/api/v1/facturas/buscar-para-movimiento/', window.location.origin);
+            url.searchParams.set('q', q);
+            url.searchParams.set('naturaleza', 'COMPRA');
+            return _fetch('GET', url.toString());
+        },
     };
 
     // getHeaders() se conserva por compatibilidad hacia atras -- no se

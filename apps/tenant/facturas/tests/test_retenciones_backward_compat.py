@@ -5,8 +5,16 @@ Verifica que:
 - Factura.retefuente lee desde @property (Contabilidad.Retencion)
 - ItemFactura retention fields leen desde @property
 - Serializers mantienen campos en read_only
-- Endpoint obtener_retenciones() sigue funcionando igual
 - Migración de datos preserva valores
+
+Nota (reestructuracion arquitectonica facturas=document store): el
+endpoint GET /api/v1/facturas/obtener-retenciones/ fue eliminado --
+consultaba retenciones DESDE Cliente, una decision de negocio ajena al
+alcance documental de Facturas (0 consumidores externos reales,
+verificado por grep repo-wide antes de eliminar). Los tests que lo
+cubrian (EndpointBackwardCompatTestCase) se retiraron junto con el
+endpoint. Las properties de retencion en Factura/ItemFactura (Pull Model
+hacia Contabilidad.Retencion, ADR-001) siguen intactas y probadas abajo.
 """
 
 from decimal import Decimal
@@ -62,11 +70,37 @@ class FacturaBackwardCompatTestCase(TenantAPITestCase):
             Decimal('100.00')
         )
 
-    def test_factura_total_retenciones_multiples(self):
-        """Test: Suma correcta de múltiples retenciones del mismo tipo."""
-        # Crear 3 retenciones RETEFUENTE
-        for monto in [50.00, 30.00, 20.00]:
-            RetencionesService.crear_retencion(
+    def test_factura_creacion_retencion_repetida_es_idempotente(self):
+        """Test: crear_retencion() repetida para el mismo (documento, tipo) es
+        idempotente -- devuelve la fila activa existente, no la duplica ni
+        suma un nuevo monto.
+
+        Nota (RELEASE-CLOSE-01): este test se llamaba
+        test_factura_total_retenciones_multiples y esperaba que 3 llamadas a
+        crear_retencion() con el mismo documento_origen+tipo sumaran sus
+        montos (50+30+20=100). Eso dejo de ser valido desde REM-P0-03
+        (docs/remediation/REM-P0-03.md, commit 4dbe80c, anterior y ajeno a
+        esta mision): crear_retencion() aplica un UniqueConstraint de
+        idempotencia real por (documento_origen, tipo, reversada=False) --
+        una 2a/3a llamada para el mismo documento+tipo devuelve la fila ya
+        existente en vez de crear una nueva. Confirmado que esto refleja el
+        uso real: el unico caller de produccion
+        (facturas/services/business_service.py::guardar_desde_dto) invoca
+        crear_retencion() como maximo una vez por tipo por documento -- el
+        escenario de 3 llamadas para el mismo tipo/documento nunca ocurre en
+        produccion. Esta es la conducta vigente; el test viejo probaba una
+        conducta obsoleta.
+        """
+        primera = RetencionesService.crear_retencion(
+            empresa=self.empresa,
+            tipo='RETEFUENTE',
+            monto=Decimal('50.00'),
+            documento_origen_app='facturas',
+            documento_origen_modelo='Factura',
+            documento_origen_id=self.factura.id,
+        )
+        for monto in [30.00, 20.00]:
+            repetida = RetencionesService.crear_retencion(
                 empresa=self.empresa,
                 tipo='RETEFUENTE',
                 monto=Decimal(str(monto)),
@@ -74,10 +108,11 @@ class FacturaBackwardCompatTestCase(TenantAPITestCase):
                 documento_origen_modelo='Factura',
                 documento_origen_id=self.factura.id,
             )
+            self.assertEqual(repetida.pk, primera.pk)
 
         self.assertEqual(
             self.factura.total_retencion_fuente,
-            Decimal('100.00')
+            Decimal('50.00')
         )
 
     def test_factura_retencion_default_si_no_existen_registros(self):
@@ -271,75 +306,3 @@ class ItemFacturaBackwardCompatTestCase(TenantAPITestCase):
 
         field_valor = ItemFactura._meta.get_field('valor_retefuente')
         self.assertFalse(field_valor.editable)
-
-
-class EndpointBackwardCompatTestCase(TenantAPITestCase):
-    """Tests para compatibilidad del endpoint obtener-retenciones."""
-
-    def setUp(self):
-        super().setUp()
-
-        self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            nombre='Endpoint Test',
-            nit='850123456',
-        )
-
-    def test_obtener_retenciones_venta_consulta_clientes(self):
-        """Test: GET /api/v1/facturas/obtener-retenciones/ para VENTA."""
-        from apps.tenant.clientes.models import Cliente
-        from apps.tenant.contabilidad.models import ConfiguracionRetenciones, CuentaContable
-
-        # Crear cliente con retenciones
-        cliente = Cliente.objects.create(
-            empresa=self.empresa,
-            numero_documento='123456789',
-            razon_social='Cliente Retenedor',
-            tipo_persona='JURIDICA',
-            tipo_documento='NIT',
-            regimen_tributario='ORDINARIO',
-            aplica_retefuente=True,
-            retefuente_porcentaje=Decimal('2.50'),
-        )
-
-        # Crear config en Contabilidad
-        cuenta = CuentaContable.objects.create(
-            empresa=self.empresa,
-            codigo='2365',
-            nombre='Retención',
-            nivel=6,
-            tipo='PASIVO',
-            activa=True,
-        )
-
-        ConfiguracionRetenciones.objects.create(
-            empresa=self.empresa,
-            tipo_tercero='CLIENTE',
-            nit_tercero='123456789',
-            tipo_retencion='RETEFUENTE',
-            porcentaje_por_defecto=Decimal('2.50'),
-            naturaleza='VENTA',
-            cuenta_retencion=cuenta,
-            activa=True,
-        )
-
-        response = self.client.get(
-            '/api/v1/facturas/obtener-retenciones/?nit=123456789&naturaleza=VENTA',
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        data = response.json()
-        self.assertTrue(data['aplica_retefuente'])
-        self.assertEqual(float(data['retefuente_porcentaje']), 2.50)
-
-    def test_obtener_retenciones_compra_devuelve_defaults(self):
-        """Test: GET /api/v1/facturas/obtener-retenciones/ para COMPRA retorna 0."""
-        response = self.client.get(
-            '/api/v1/facturas/obtener-retenciones/'
-            '?nit=999888777&naturaleza=COMPRA',
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        data = response.json()
-        # COMPRA siempre retorna defaults (retenciones en XML)
-        self.assertFalse(data['aplica_retefuente'])
-        self.assertEqual(float(data['retefuente_porcentaje']), 0.00)

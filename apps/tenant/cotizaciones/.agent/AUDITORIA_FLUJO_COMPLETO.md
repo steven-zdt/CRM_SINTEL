@@ -1,10 +1,58 @@
 # Auditoría Flujo Completo — Módulo Cotizaciones
 
-**Versión auditada:** v3.10.3 → correcciones CRUD 2026-08-26
-**Fecha:** 2026-05-25 (actualizado 2026-08-26)
-**Estado:** ✅ OPERATIVO (0 CRÍTICOS) — ver actualización de auditoría CRUD abajo
-**Auditor:** Claude Code (claude-sonnet-4-6)
+**Versión auditada:** v3.10.3 → correcciones CRUD 2026-08-26 → fix PDF 2026-09-12
+**Fecha:** 2026-05-25 (actualizado 2026-08-26, 2026-09-12)
+**Estado:** ✅ OPERATIVO (0 CRÍTICOS) — ver actualización de auditoría CRUD abajo. Fase 1 de remediación (2026-09-12, `docs/remediation/AUDIT_BASELINE_20260912.md`) cerró 1 hallazgo CRÍTICO nuevo (Q-1, PDF), ver sección abajo.
+**Auditor:** Claude Code (claude-sonnet-4-6). Fase 1 remediación 2026-09-12: Claude Sonnet 5 (Anthropic).
 **Ubicación:** `apps/tenant/cotizaciones/`
+
+---
+
+## 2026-09-12 — Fase 1 de remediación: Q-1, PDF recalculaba IVA de forma independiente (CRÍTICO)
+
+Auditoría transversal "Cotizaciones — botón Guardar + PDF" (parte de
+`docs/remediation/AUDIT_BASELINE_20260912.md`) encontró que
+`CotizacionPDFExportService.preparar_contexto()`
+(`services/pdf_export_service.py`) **recalculaba IVA de forma
+independiente al dominio** en vez de leer el total ya calculado por
+`CotizacionService.calcular_totales()` (`services/business_service.py`),
+usando `Decimal(str(cotizacion.iva_porcentaje or 19))` — el default `19`
+(en vez de `or 0`, que SÍ usa `calcular_totales()`) hacía que una
+cotización explícitamente exenta de IVA (`iva_porcentaje=0`) se
+**facturara al cliente en el PDF con 19% de IVA**, divergiendo del total
+real ya persistido/mostrado en el resto de la UI.
+
+**Fix**: una línea (`or 0` en vez de `or 19`), con la razón documentada
+inline citando la SSoT real (`business_service.py:251`). No se tocó el
+resto de `preparar_contexto()` (el mismo recálculo independiente del
+subtotal/AIU/redondeo sigue siendo deuda documentada — ver `AUDIT_BASELINE_20260912.md`
+hallazgos Q-3/Q-4, no CRÍTICOS, fuera de alcance de esta fase).
+
+**Test nuevo**: `tests/test_pdf_iva_cero.py::test_pdf_no_aplica_19_por_ciento_cuando_iva_es_cero`
+— crea una cotización real con `iva_porcentaje=0`, llama
+`preparar_contexto()` directamente y verifica `iva_valor == 0` y
+`total_neto == subtotal_items` (antes del fix, hubiera dado
+`subtotal * 1.19`). **Resultado: 1 passed** (motor PDF real, sin mocks).
+
+**Cerrado** (ver `docs/remediation/AUDIT_BASELINE_20260912.md` Q-2): el
+directorio `services/pdf/` (pipeline PDF huérfano que el commit
+`76bf65cb` creyó haber eliminado, pero seguía físicamente en disco como
+untracked) fue borrado físicamente en la fase de remediación
+MEDIO/BAJO. Confirmado sin importadores reales antes de eliminar.
+
+---
+
+> **AVISO (2026-09-08):** las secciones originales de este documento (abajo)
+> describen el estado **anterior a COTIZACIONES-01/02** — en particular,
+> "`estado` es decorativo, sin máquina de estados" (línea ~41) y "Conversión
+> Cotización→Venta: confirmado que NO existe" (línea ~47) **ya no son
+> ciertas**. Fuente de verdad vigente sobre el ciclo de vida comercial
+> completo (máquina de estados de 5 valores, historial, PDF gating,
+> Cotización→Venta→Factura, Cotización→Proyecto, DEFERRED de Abastecimiento):
+> `docs/cotizaciones/COTIZACIONES_RELEASE_GATE.md` (actualización
+> "COTIZACIONES-02", al final del archivo) y
+> `docs/cotizaciones/COTIZACIONES_STATE_MACHINE.md`. El resto de este
+> documento (auditoría CRUD 2026-08-26) sigue vigente sin cambios.
 
 ---
 
@@ -428,8 +476,8 @@ para el detalle completo del release gate).
 | `list_full.html` | 82 | Listado con Tabulator + filtros |
 | `list.html` | 50 | Listado básico |
 | `list_cotizaciones.html` | 12 | Página raíz del módulo |
-| `offcanvas_crear_cotizacion.html` | 40 | Form creación rápida |
-| `offcanvas_editar_cotizacion.html` | 41 | Form edición rápida |
+| `offcanvas_crear_cotizacion.html` | 40 | **HUÉRFANA** — sin consumidor real desde 2026-08-27; la pantalla en uso es `editor_cotizacion.html` (ver Q-8) |
+| `offcanvas_editar_cotizacion.html` | 41 | **HUÉRFANA** — sin consumidor real desde 2026-08-27; la pantalla en uso es `editor_cotizacion.html` (ver Q-8) |
 | `offcanvas_crear_producto.html` | 28 | Form producto |
 | `offcanvas_crear_servicio.html` | 24 | Form servicio |
 | `offcanvas_list_plantillas.html` | 21 | Lista de configuraciones |

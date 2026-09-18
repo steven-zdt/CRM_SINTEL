@@ -85,6 +85,17 @@ class ContactoCliente(SintelTenantBaseModel):
     telefono = models.CharField(max_length=32, blank=True, help_text="Telefono del contacto")
     activo = models.BooleanField(default=True, help_text="Estado del contacto")
     is_principal = models.BooleanField(default=False, help_text="Marca el contacto principal")
+    # mision "Clientes + Cartera" (2026-09-11) seccion 7-10: un Cliente
+    # JURIDICA exige un representante legal (persona natural) asociado.
+    # Se modela como rol sobre ContactoCliente (Caso B del mission brief)
+    # en vez de una entidad PersonaNatural/RepresentanteLegal nueva -- no
+    # hay evidencia de otros usos de "persona natural" en el dominio que
+    # justifiquen una entidad separada, y este campo no duplica datos ya
+    # capturados por ContactoCliente (nombre/documento vive ahi mismo).
+    es_representante_legal = models.BooleanField(
+        default=False,
+        help_text="Marca a este contacto como el representante legal del cliente (requerido si Cliente.tipo_persona=JURIDICA)",
+    )
 
     class Meta:
         verbose_name = "Contacto de Cliente"
@@ -214,3 +225,51 @@ class Cartera(SintelTenantBaseModel):
             self.estado_pago = "PARCIAL"
 
         super().save(*args, **kwargs)
+
+
+class CarteraNota(SintelTenantBaseModel):
+    """
+    Anotacion de seguimiento sobre una obligacion de Cartera (mision
+    "Clientes + Cartera" seccion 29-30, 2026-09-11): historial append-only
+    de interacciones ("cliente informa que paga viernes", "abono por
+    consignacion", etc.) -- nunca sobrescribe/reemplaza `Cartera.
+    observaciones` (que sigue existiendo, sin cambios, para el caso de uso
+    simple de un solo texto libre). Cada nota conserva quien la escribio y
+    cuando; no tiene update/delete en el Service Layer (misma semantica de
+    inmutabilidad ya usada para `Devengo`/historial de estados en otras
+    apps de este proyecto).
+    """
+    TIPO = [
+        ("SEGUIMIENTO", "Seguimiento"),
+        ("PROMESA_PAGO", "Promesa de pago"),
+        ("DISPUTA", "Disputa/Reclamo"),
+        ("OTRO", "Otro"),
+    ]
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
+    empresa = models.ForeignKey(
+        'empresa.Empresa', on_delete=models.PROTECT, related_name="cartera_notas", db_index=True,
+    )
+    cartera = models.ForeignKey(
+        Cartera, on_delete=models.CASCADE, related_name="notas", db_index=True,
+    )
+    # FK a perfil.TenantProfile (nunca al modelo de usuario global, AGENTS.md)
+    # -- SET_NULL: conserva la nota aunque el perfil que la escribio sea
+    # eliminado despues.
+    usuario = models.ForeignKey(
+        'perfil.TenantProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="cartera_notas",
+    )
+    tipo = models.CharField(max_length=20, choices=TIPO, default="SEGUIMIENTO")
+    texto = models.TextField()
+
+    class Meta:
+        verbose_name = "Nota de Cartera"
+        verbose_name_plural = "Notas de Cartera"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["empresa", "cartera"]),
+        ]
+
+    def __str__(self):
+        return f"Nota {self.get_tipo_display()} - {self.cartera.numero_factura}"

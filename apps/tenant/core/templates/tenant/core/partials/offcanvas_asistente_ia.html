@@ -1,0 +1,121 @@
+{# offcanvas_asistente_ia.html -- Panel global del Asistente IA (mision SINTEL-AI-UI-01) #}
+{# Estatico, siempre presente en el DOM del workspace (no HTMX) -- se abre via #}
+{# window.Sintel.Core.mostrarOffcanvasSeguro('offcanvas-asistente-ia'), nunca via #}
+{# bootstrap.Offcanvas.getOrCreateInstance() directo (AGENTS.md Sec.26). #}
+{# JS real: core/js/common/ai.assistant.js (window.Sintel.AI). Llama unicamente a #}
+{# POST /api/v1/ai/ask/ (AI-06, ya existente) -- este panel no agrega backend nuevo. #}
+
+<style>
+  #offcanvas-asistente-ia {
+    width: 420px !important;
+  }
+  #offcanvas-asistente-ia .offcanvas-body {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+  }
+  #asistente-ia-contexto {
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+  }
+  #asistente-ia-mensajes {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 1rem;
+  }
+  #asistente-ia-mensajes .asistente-ia-msg {
+    max-width: 92%;
+    margin-bottom: 0.75rem;
+    padding: 0.55rem 0.8rem;
+    border-radius: 0.75rem;
+    font-size: 0.875rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #asistente-ia-mensajes .asistente-ia-msg-usuario {
+    margin-left: auto;
+    background: #0d6efd;
+    color: #fff;
+    border-bottom-right-radius: 0.15rem;
+  }
+  #asistente-ia-mensajes .asistente-ia-msg-asistente {
+    margin-right: auto;
+    background: #f1f3f5;
+    color: #212529;
+    border-bottom-left-radius: 0.15rem;
+  }
+  #asistente-ia-mensajes .asistente-ia-msg-error {
+    margin-right: auto;
+    background: #f8d7da;
+    color: #842029;
+    border-bottom-left-radius: 0.15rem;
+  }
+  #asistente-ia-mensajes .asistente-ia-fuentes {
+    margin-top: 0.4rem;
+    font-size: 0.75rem;
+    opacity: 0.8;
+    border-top: 1px solid rgba(0,0,0,0.08);
+    padding-top: 0.35rem;
+  }
+  #asistente-ia-empty .asistente-ia-ejemplo {
+    display: block;
+    width: 100%;
+    text-align: left;
+  }
+  #offcanvas-asistente-ia .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+  }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-asistente-ia"
+     aria-labelledby="offcanvas-asistente-ia-label">
+    <div class="offcanvas-header border-bottom py-3 px-4">
+        <h5 class="offcanvas-title fw-semibold" id="offcanvas-asistente-ia-label">
+            <i class="bi bi-stars text-primary me-2"></i>Asistente IA
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+
+    <div class="offcanvas-body">
+        <div id="asistente-ia-contexto" class="text-muted">
+            <i class="bi bi-shield-check me-1"></i>Solo consulta informacion de tu empresa. No crea ni modifica registros.
+        </div>
+
+        <div id="asistente-ia-mensajes" aria-live="polite">
+            <div id="asistente-ia-empty" class="text-muted small">
+                <p class="mb-2">Hola. Puedo ayudarte a consultar la informacion disponible en SINTEL.</p>
+                <p class="mb-2">Ejemplos:</p>
+                <div class="d-flex flex-column gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary asistente-ia-ejemplo">
+                        &iquest;Que clientes tenemos registrados?
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary asistente-ia-ejemplo">
+                        &iquest;Que productos tienen menor stock?
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary asistente-ia-ejemplo">
+                        &iquest;Que informacion tienes sobre este cliente?
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="offcanvas-footer">
+        <div id="asistente-ia-error" class="alert alert-danger py-2 px-3 small d-none mb-2" role="alert" aria-live="assertive"></div>
+        <form id="asistente-ia-form" autocomplete="off">
+            <div class="input-group">
+                <input type="text" id="asistente-ia-input" class="form-control"
+                       placeholder="Escribe una pregunta..." maxlength="2000"
+                       aria-label="Pregunta para el Asistente IA">
+                <button type="submit" id="asistente-ia-enviar" class="btn btn-primary" aria-label="Enviar pregunta">
+                    <span id="asistente-ia-enviar-spinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                    <i id="asistente-ia-enviar-icono" class="bi bi-send"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

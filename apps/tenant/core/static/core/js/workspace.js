@@ -37,7 +37,7 @@
             'facturas': '🧾 Facturas',
             'contabilidad': '📚 Contabilidad',
             'inventario': '📦 Inventario',
-            'empleados': '👥 Empleados',
+            'empleados': '👥 Colaboradores',
             'gastos': '💰 Gastos',
             'bancos': '🏦 Bancos',
             'proveedores': '🏪 Proveedores',

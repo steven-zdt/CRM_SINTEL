@@ -170,7 +170,12 @@ class Factura(SintelTenantBaseModel):
     forma_pago = models.CharField(max_length=30, blank=True, null=True, verbose_name=_('Forma de pago'))
     medio_pago_codigo = models.CharField(max_length=10, blank=True, null=True, verbose_name=_('PaymentMeansCode'))
     payment_due_date = models.DateField(blank=True, null=True, verbose_name=_('Fecha límite de pago'))
-    
+    fecha_pago = models.DateField(
+        blank=True, null=True, verbose_name=_('Fecha de Pago'),
+        help_text=_('Fecha real en la que se registro el pago (gestion manual) -- '
+                    'distinta de payment_due_date/fecha_vencimiento, que son plazos.')
+    )
+
     # Vinculación Contable (v3.7)
 
     # Vinculación Cotización (v3.9.3) — Soft reference
@@ -273,6 +278,15 @@ class Factura(SintelTenantBaseModel):
         ]
         # # WARNING: v2.60: Constraint único por cufe garantiza idempotencia (definido en el campo con unique=True)
         # Django permite múltiples NULLs en campos únicos, así que esto funciona correctamente
+        # COTIZACIONES-02: numero es asignado por FacturaCRUDService.crear() antes del
+        # insert (no es un campo blank/autogenerado por la DB) -- este constraint cierra
+        # el gap de idempotencia real de crear_factura_desde_venta(), que hasta ahora
+        # dependia por completo de que el caller (procesar_y_facturar_venta) revisara
+        # Venta.estado antes de invocarla. Verificado con 0 pares (empresa, numero)
+        # duplicados en las 3 bases de datos reales (home/admin/aipoc) antes de agregar.
+        constraints = [
+            models.UniqueConstraint(fields=['empresa', 'numero'], name='uniq_factura_numero_por_empresa'),
+        ]
 
     @property
     def tiene_nota_credito(self) -> bool:
@@ -342,32 +356,15 @@ class Factura(SintelTenantBaseModel):
             logger.exception("total_reteiva: fallo leyendo RetencionesService (factura_id=%s)", self.id)
             return Decimal('0.00')
 
-    # ── Pull Model: Bancos (v3.11.0, ADR-001) ──────────────────────────────
-    # medio_pago_codigo == '10' significa "Efectivo" segun catalogo DIAN.
-    # Para pagos en efectivo no se requiere conciliacion bancaria.
-
-    @property
-    def total_pagado_bancos(self) -> Decimal:
-        """
-        [Pull Model v3.11.0] Total conciliado en bancos para esta factura.
-        Lee de TransaccionBancaria via BancosBridge (sin FK directa).
-        Retorna 0.00 si el objeto no esta guardado aun.
-        """
-        if not self.pk or not self.empresa_id:
-            return Decimal('0.00')
-        try:
-            from apps.tenant.facturas.services.selectors import BancosBridge
-            return BancosBridge.obtener_total_conciliado(self.empresa_id, self.uuid)
-        except Exception:
-            return Decimal('0.00')
-
-    @property
-    def saldo_pendiente(self) -> Decimal:
-        """
-        [Pull Model v3.11.0] Diferencia entre total factura y lo conciliado en bancos.
-        Nunca negativo: max(0, total - total_pagado_bancos).
-        """
-        return max(Decimal('0.00'), (self.total or Decimal('0.00')) - self.total_pagado_bancos)
+    # Nota (reestructuracion arquitectonica v4.0.0 F2 -- "Facturas = document
+    # store"): se removieron `total_pagado_bancos`/`saldo_pendiente`
+    # (Pull Model v3.11.0, ADR-001) junto con `BancosBridge`
+    # (services/selectors.py) -- Facturas ya no consulta Bancos. Era
+    # exactamente la direccion de dependencia inversa a la deseada (Bancos
+    # debe leer Facturas, nunca al reves). 0 consumidores externos ni tests
+    # dependian de estas properties (verificado por grep repo-wide antes de
+    # remover). `estado_pago` sigue existiendo como campo manual simple, sin
+    # logica automatica que dependa de conciliacion bancaria.
 
     def __str__(self):
         cufe_str = f" | {self.cufe}" if self.cufe else ""
@@ -1104,6 +1101,7 @@ MANUAL_EDITABLE_FIELDS = [
     'categoria',
     'fecha_vencimiento',
     'payment_due_date',
+    'fecha_pago',
     'forma_pago',
     'medio_pago_codigo',
     # F26: 'orden_compra' removido -- campo fantasma, Factura nunca lo tuvo

@@ -78,6 +78,17 @@ class ProveedorBusinessService:
                 "activo": True,
                 "observaciones": "Creado automaticamente desde factura XML de compra.",
             },
+            # RELEASE-CLOSE/PROVEEDORES-02: "todo Proveedor debe tener un
+            # Representante" es una regla de la UI interactiva de creacion
+            # (Fase 9/10 de la mision, "cuando el usuario crea un
+            # proveedor..."). Este caller resuelve/crea un Proveedor de forma
+            # automatica desde metadata fiscal de una Factura XML (sin
+            # usuario ni representante disponibles en el documento) -- no
+            # confundir con la creacion interactiva. Sin llamadores en vivo
+            # hoy (verificado por grep repo-wide: solo el management command
+            # backfill_proveedores_facturas_compra.py lo invoca), pero se
+            # mantiene fail-open aqui para no romperlo.
+            exigir_representante=False,
         )
         return proveedor, True
 
@@ -134,8 +145,59 @@ class ProveedorBusinessService:
     # 2. CRUD ORCHESTRATION
     # ==============================================================================
 
-    def crear_proveedor(self, empresa_id, data):
-        """Orquesta la creación de un proveedor con validaciones."""
+    @staticmethod
+    def _construir_payload_representante(representante_data: dict, usuario, tipo_persona: str) -> dict:
+        """
+        Arma el payload final del Representante principal a crear junto con
+        el Proveedor. Para NATURAL, precarga nombre/email/telefono/cargo
+        desde el usuario real (TenantProfile + su User) cuando
+        representante_data no los trae -- "no pedir datos que el sistema ya
+        posee" (mandato de la mision). `numero_documento`/`tipo_documento`
+        NUNCA se auto-rellenan: ni `User` ni `TenantProfile` tienen ese dato
+        en el sistema hoy (verificado en apps/tenant/perfil/models.py) -- se
+        exigen explicitos en el payload, ver crear_proveedor().
+        """
+        payload = dict(representante_data or {})
+        payload.setdefault("tipo_documento", "CC")
+        payload["es_principal"] = True
+
+        if tipo_persona == "NATURAL" and usuario is not None:
+            user_obj = getattr(usuario, "user", usuario)
+            nombre = f"{getattr(user_obj, 'first_name', '') or ''} {getattr(user_obj, 'last_name', '') or ''}".strip()
+            payload.setdefault("nombre_completo", nombre or getattr(user_obj, "email", "") or "Representante")
+            payload.setdefault("email_contacto", getattr(user_obj, "email", "") or "")
+            payload.setdefault("telefono_contacto", getattr(usuario, "telefono_corporativo", "") or "")
+            payload.setdefault("cargo", getattr(usuario, "cargo", "") or "Representante Legal")
+
+        return payload
+
+    @transaction.atomic
+    def crear_proveedor(self, empresa_id, data, representante_data=None, usuario=None, exigir_representante=True):
+        """
+        Orquesta la creación de un proveedor con validaciones.
+
+        representante_data / usuario (parametros nuevos, opcionales):
+        permiten crear el Proveedor + su primer Representante en la MISMA
+        transaccion atomica -- Regla de Oro de la mision Proveedores: "todo
+        Proveedor debe tener al menos un Representante".
+          - tipo_persona=JURIDICA: representante_data es obligatorio (numero_
+            documento + nombre_completo como minimo) -- si falta, se rechaza
+            ANTES de tocar la BD, nunca queda un Proveedor huerfano sin
+            representante.
+          - tipo_persona=NATURAL: se autogenera el representante principal
+            usando datos reales del usuario que crea el proveedor
+            (`usuario`, un TenantProfile) -- salvo numero_documento/
+            tipo_documento, que el sistema no posee y SI se piden.
+
+        exigir_representante (default True): la regla de arriba aplica a la
+        creacion INTERACTIVA (ProveedorViewSet.create(), la UI real). Se
+        pone en False para callers automatizados sistema-a-sistema que no
+        tienen ni usuario ni datos de representante disponibles, ej.
+        resolver_o_crear_desde_factura_compra() (resuelve un Proveedor desde
+        metadata fiscal de una Factura XML, sin intervencion humana) -- con
+        False se preserva el comportamiento historico (proveedor sin
+        representante) para esos casos, en vez de romperlos.
+        """
         if not Empresa.objects.filter(id=empresa_id).exists():
             raise ValidationError({"empresa": ["La empresa no existe."]})
         data = self._sanitize_retenciones(data)
@@ -151,7 +213,39 @@ class ProveedorBusinessService:
                 ]
             })
 
-        return self.crud.create(empresa_id, data)
+        tipo_persona = data.get("tipo_persona", "JURIDICA")
+        if not exigir_representante:
+            pass
+        elif tipo_persona == "JURIDICA":
+            if not representante_data or not str(representante_data.get("numero_documento", "")).strip():
+                raise ValidationError({
+                    "representante": [
+                        "Un Proveedor Persona Jurídica requiere un Representante Legal "
+                        "con número de documento."
+                    ]
+                })
+            if not str(representante_data.get("nombre_completo", "")).strip():
+                raise ValidationError({
+                    "representante": ["El Representante Legal requiere nombre completo."]
+                })
+        elif tipo_persona == "NATURAL":
+            if not str((representante_data or {}).get("numero_documento", "")).strip():
+                raise ValidationError({
+                    "representante": [
+                        "Falta el número de documento del representante principal "
+                        "(no existe en el sistema para el usuario actual, indíquelo)."
+                    ]
+                })
+
+        proveedor = self.crud.create(empresa_id, data)
+
+        if representante_data or (exigir_representante and tipo_persona == "NATURAL"):
+            rep_payload = ProveedorBusinessService._construir_payload_representante(
+                representante_data, usuario, tipo_persona
+            )
+            RepresentanteCRUDService().create(empresa_id, proveedor.id, rep_payload)
+
+        return proveedor
 
     def actualizar_proveedor(self, proveedor, data):
         """Orquesta la actualización de un proveedor con validaciones."""
@@ -287,6 +381,81 @@ class CuentasPagarBusinessService:
         return cuenta_pagar_obj
 
     @staticmethod
+    def _materializar_desde_factura(empresa_id: int, factura_uuid: str):
+        """
+        Si `factura_uuid` corresponde a una Factura(COMPRA) real de esta
+        empresa sin CuentasPagar vinculada aun, la materializa de forma
+        idempotente (get_or_create, mismo patron que
+        CuentasPagarBusinessService.registrar_cuenta_pagar()) para poder
+        operar sobre ella (abono). Retorna None si el uuid no corresponde a
+        ninguna Factura de compra real de esta empresa.
+
+        [RELEASE-CLOSE / PROVEEDORES-02] Hallazgo real: antes de este metodo,
+        "Abonar" sobre una fila de CxP originada en una Factura (la fuente
+        PRIMARIA del listado unificado -- ver CuentasPagarSelector.
+        qs_list_unificado) fallaba con 400 "no encontrado", porque
+        registrar_abono() solo buscaba en CuentasPagar por uuid, y ninguna
+        Factura tiene una CuentasPagar vinculada hasta su primer abono.
+        """
+        from apps.tenant.facturas.models import Factura
+        from apps.tenant.proveedores.models import CuentasPagar, Proveedor
+
+        factura = (
+            Factura.objects
+            .filter(empresa_id=empresa_id, uuid=factura_uuid, naturaleza="COMPRA")
+            .only("id", "uuid", "numero", "proveedor_uuid", "total", "fecha_emision", "payment_due_date")
+            .first()
+        )
+        if not factura or not factura.proveedor_uuid:
+            return None
+
+        proveedor = (
+            Proveedor.objects
+            .filter(empresa_id=empresa_id, uuid=factura.proveedor_uuid)
+            .only("id")
+            .first()
+        )
+        if not proveedor:
+            return None
+
+        fecha_emision = factura.fecha_emision.date() if factura.fecha_emision else None
+        cuenta_pagar_obj, _created = CuentasPagar.objects.get_or_create(
+            empresa_id=empresa_id, proveedor=proveedor, numero_factura=factura.numero,
+            defaults={
+                "factura_uuid": factura.uuid,
+                "fecha_emision": fecha_emision or factura.payment_due_date,
+                "fecha_vencimiento": factura.payment_due_date or fecha_emision,
+                "valor_total": factura.total,
+            },
+        )
+        if not cuenta_pagar_obj.factura_uuid:
+            # get_or_create encontro una CxP preexistente con el mismo numero
+            # (ej. creada a mano antes de que llegara la Factura electronica) --
+            # se vincula ahora para que quede como fuente autoritativa unica.
+            cuenta_pagar_obj.factura_uuid = factura.uuid
+            cuenta_pagar_obj.save(update_fields=["factura_uuid"])
+        return cuenta_pagar_obj
+
+    @staticmethod
+    def resolver_cuenta_pagar(cuenta_pagar_uuid: str, empresa_id: int):
+        """
+        Resuelve una CuentasPagar por uuid aceptando los 2 origenes posibles
+        del listado unificado: (a) uuid de una CuentasPagar real, o (b) uuid
+        de una Factura(COMPRA) sin CuentasPagar aun -- se materializa antes
+        de devolverla. Usado por mutaciones (registrar_abono); el detalle de
+        solo lectura usa CuentasPagarSelector.resolver_fila_por_uuid() (no
+        escribe).
+        """
+        from apps.tenant.proveedores.models import CuentasPagar
+
+        cuenta_pagar_obj = CuentasPagar.objects.filter(
+            uuid=cuenta_pagar_uuid, empresa_id=empresa_id,
+        ).first()
+        if cuenta_pagar_obj:
+            return cuenta_pagar_obj
+        return CuentasPagarBusinessService._materializar_desde_factura(empresa_id, cuenta_pagar_uuid)
+
+    @staticmethod
     @transaction.atomic
     def registrar_abono(cuenta_pagar_uuid: str, monto, observaciones: str, empresa_id: int):
         """
@@ -295,13 +464,12 @@ class CuentasPagarBusinessService:
         """
         from apps.tenant.proveedores.models import CuentasPagar
 
+        resuelta = CuentasPagarBusinessService.resolver_cuenta_pagar(cuenta_pagar_uuid, empresa_id)
         cuenta_pagar_obj = (
-            CuentasPagar.objects
-            .select_for_update()
-            .filter(uuid=cuenta_pagar_uuid, empresa_id=empresa_id)
-            .first()
+            CuentasPagar.objects.select_for_update().filter(pk=resuelta.pk).first()
+            if resuelta else None
         )
-        
+
         if not cuenta_pagar_obj:
             raise ValidationError(f"Registro de Cuentas por Pagar con UUID {cuenta_pagar_uuid} no encontrado.")
 
@@ -325,8 +493,52 @@ class CuentasPagarBusinessService:
         # Se hace un save completo para asegurar que las validaciones y el calculo
         # dinamico de saldo y estado_pago de CuentasPagar.save() se ejecuten adecuadamente.
         cuenta_pagar_obj.save()
-        
+
         return cuenta_pagar_obj
+
+    @staticmethod
+    @transaction.atomic
+    def eliminar_cuenta_pagar(cuenta_pagar_uuid: str, empresa_id: int):
+        """
+        Elimina una Cuenta por Pagar preservando integridad financiera.
+
+        Regla (decision explicita, no se inventa un estado ANULADA nuevo --
+        la maquina de estados de CuentasPagar se mantiene minima a
+        proposito, ver PROVEEDORES_AUDIT.md):
+          - Debe ser una CuentasPagar real, SIN Factura asociada
+            (factura_uuid IS NULL). Una fila originada en una Factura NUNCA
+            es eliminable desde aqui -- el documento fiscal sigue existiendo
+            en Facturas y volveria a aparecer en el listado unificado en la
+            siguiente carga; "eliminar" esa fila no elimina la obligacion
+            real, solo la trazabilidad de sus abonos.
+          - valor_pagado == 0 -> hard delete permitido (no hay historial de
+            pagos que perder).
+          - valor_pagado > 0 -> rechazado (400), preserva el historial
+            financiero. No hard-delete parcial ni soft-delete disponible hoy.
+        """
+        from apps.tenant.proveedores.models import CuentasPagar
+
+        cuenta_pagar_obj = (
+            CuentasPagar.objects
+            .select_for_update()
+            .filter(uuid=cuenta_pagar_uuid, empresa_id=empresa_id)
+            .first()
+        )
+        if not cuenta_pagar_obj:
+            raise ValidationError(
+                "Registro de Cuentas por Pagar no encontrado en su organizacion."
+            )
+        if cuenta_pagar_obj.factura_uuid:
+            raise ValidationError(
+                "Esta obligacion proviene de una Factura registrada -- "
+                "no puede eliminarse desde Cuentas por Pagar."
+            )
+        if cuenta_pagar_obj.valor_pagado > Decimal("0"):
+            raise ValidationError(
+                "No se puede eliminar una obligacion con pagos registrados "
+                f"(valor pagado: {cuenta_pagar_obj.valor_pagado})."
+            )
+        cuenta_pagar_obj.delete()
 
 # ==============================================================================
 # Representante Business Service (DSV + Validaciones)
@@ -361,6 +573,7 @@ class RepresentanteBusinessService:
             qs = qs.exclude(uuid=str(exclude_uuid))
         return qs.only("id").exists()
 
+    @transaction.atomic
     def crear_representante(self, empresa_id: int, proveedor_uuid: str, data: dict):
         """
         Orquesta la creación de un representante con validaciones DSV.
@@ -369,6 +582,14 @@ class RepresentanteBusinessService:
         1. Valida que la empresa exista
         2. Valida que el proveedor exista y pertenece a la empresa
         3. Valida unicidad de documento por proveedor
+
+        Regla de un solo principal (RELEASE-CLOSE / PROVEEDORES-02): si el
+        nuevo representante se crea con es_principal=True (default del
+        modelo) y el proveedor ya tiene otro principal, ese otro se degrada
+        a es_principal=False en la MISMA transaccion -- nunca quedan dos
+        representantes principales del mismo proveedor. Antes de este fix
+        solo existia el guard al ELIMINAR el ultimo principal (ver
+        eliminar_representante), ninguno al crear uno nuevo.
         """
         # DSV 1: Empresa existe
         if not Empresa.objects.filter(id=empresa_id).exists():
@@ -395,9 +616,15 @@ class RepresentanteBusinessService:
                 ]
             })
 
+        if data.get("es_principal", True):
+            Representante.objects.filter(
+                empresa_id=empresa_id, proveedor_id=proveedor.id, es_principal=True,
+            ).update(es_principal=False)
+
         # CRUD: Crear con empresa_id y proveedor_id (DSV)
         return self.crud.create(empresa_id, proveedor.id, data)
 
+    @transaction.atomic
     def actualizar_representante(
         self,
         empresa_id: int,
@@ -406,6 +633,10 @@ class RepresentanteBusinessService:
     ):
         """
         Orquesta la actualización de un representante con validaciones DSV.
+
+        Regla de un solo principal: si esta actualización marca
+        es_principal=True, degrada a False cualquier OTRO representante
+        principal del mismo proveedor (misma regla que crear_representante).
         """
         # DSV 1: Representante existe y pertenece a la empresa
         representante = RepresentanteSelector.get_by_uuid(empresa_id, representante_uuid)
@@ -422,6 +653,11 @@ class RepresentanteBusinessService:
                     "Ya existe otro representante con este documento para este proveedor."
                 ]
             })
+
+        if data.get("es_principal") is True:
+            Representante.objects.filter(
+                empresa_id=empresa_id, proveedor_id=representante.proveedor_id, es_principal=True,
+            ).exclude(uuid=representante_uuid).update(es_principal=False)
 
         # CRUD: Actualizar
         return self.crud.update(representante, data)

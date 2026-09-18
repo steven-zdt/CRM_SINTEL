@@ -1,9 +1,11 @@
-"""COTIZACIONES-01: conversion Cotizacion -> Venta.
+"""COTIZACIONES-01/02: conversion Cotizacion -> Venta.
 
 Gap de cobertura real: la conversion no existia en absoluto (confirmado con
 evidencia negativa en 3 auditorias previas -- ver docs/cotizaciones/
-COTIZACIONES_INTEGRATIONS.md). Este archivo cubre la implementacion nueva:
-CotizacionService.convertir_a_venta().
+COTIZACIONES_INTEGRATIONS.md). Este archivo cubre CotizacionService.
+convertir_a_venta(). COTIZACIONES-02 (mismo dia): la condicion de entrada
+cambio de ACEPTADA a APROBADA (rename de estados, 0 filas reales
+afectadas).
 """
 import datetime
 from decimal import Decimal
@@ -17,7 +19,7 @@ from apps.tenant.cotizaciones.services import CotizacionService
 from apps.tenant.ventas.models import Venta
 
 
-def _crear_cotizacion_aceptada(empresa, cliente, con_items=True):
+def _crear_cotizacion_aprobada(empresa, cliente, con_items=True):
     from apps.tenant.cotizaciones.configuracion.models import ConfiguracionCotizacion
 
     ConfiguracionCotizacion.objects.get_or_create(
@@ -37,15 +39,15 @@ def _crear_cotizacion_aceptada(empresa, cliente, con_items=True):
     }
     cotizacion = CotizacionService.crear_preforma(empresa, payload)
     CotizacionService.cambiar_estado(cotizacion, Cotizacion.Estado.ENVIADA)
-    return CotizacionService.cambiar_estado(cotizacion, Cotizacion.Estado.ACEPTADA)
+    return CotizacionService.cambiar_estado(cotizacion, Cotizacion.Estado.APROBADA)
 
 
 @pytest.mark.django_db
-def test_convertir_cotizacion_aceptada_crea_venta(tenant, factory_empresa, factory_cliente):
+def test_convertir_cotizacion_aprobada_crea_venta(tenant, factory_empresa, factory_cliente):
     empresa = factory_empresa()
     cliente = factory_cliente(empresa=empresa)
     with schema_context(tenant.schema_name):
-        cotizacion = _crear_cotizacion_aceptada(empresa, cliente)
+        cotizacion = _crear_cotizacion_aprobada(empresa, cliente)
 
         venta = CotizacionService.convertir_a_venta(cotizacion)
 
@@ -71,7 +73,7 @@ def test_convertir_es_idempotente_no_duplica_venta(tenant, factory_empresa, fact
     empresa = factory_empresa()
     cliente = factory_cliente(empresa=empresa)
     with schema_context(tenant.schema_name):
-        cotizacion = _crear_cotizacion_aceptada(empresa, cliente)
+        cotizacion = _crear_cotizacion_aprobada(empresa, cliente)
 
         venta1 = CotizacionService.convertir_a_venta(cotizacion)
         venta2 = CotizacionService.convertir_a_venta(cotizacion)
@@ -131,7 +133,7 @@ def test_no_se_puede_convertir_sin_cliente(tenant, factory_empresa, factory_clie
     empresa = factory_empresa()
     cliente = factory_cliente(empresa=empresa)
     with schema_context(tenant.schema_name):
-        cotizacion = _crear_cotizacion_aceptada(empresa, cliente)
+        cotizacion = _crear_cotizacion_aprobada(empresa, cliente)
         cotizacion.cliente = None
         cotizacion.save(update_fields=["cliente"])
 
@@ -144,7 +146,7 @@ def test_no_se_puede_convertir_sin_items(tenant, factory_empresa, factory_client
     empresa = factory_empresa()
     cliente = factory_cliente(empresa=empresa)
     with schema_context(tenant.schema_name):
-        cotizacion = _crear_cotizacion_aceptada(empresa, cliente, con_items=False)
+        cotizacion = _crear_cotizacion_aprobada(empresa, cliente, con_items=False)
         assert cotizacion.items.count() == 0
 
         with pytest.raises(ValidationError):
@@ -159,7 +161,7 @@ def test_venta_no_cruza_tenants(tenant, tenant_b, factory_empresa, factory_clien
     empresa = factory_empresa()
     cliente = factory_cliente(empresa=empresa)
     with schema_context(tenant.schema_name):
-        cotizacion = _crear_cotizacion_aceptada(empresa, cliente)
+        cotizacion = _crear_cotizacion_aprobada(empresa, cliente)
         venta = CotizacionService.convertir_a_venta(cotizacion)
         venta_uuid = venta.uuid
 

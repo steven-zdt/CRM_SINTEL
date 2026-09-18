@@ -11,6 +11,13 @@ Responsabilidades:
 Restricciones:
 - Todos los imports de apps externas dentro de metodos (evitar circularidad).
 - Cero emojis. Cero campos cuenta_contable_uuid.
+
+VENTAS-COMPRAS-FACTURAS-01 (2026-09-09): el pipeline DIAN completo de este
+modulo (construccion de DTO UBL 2.1, CUFE, XML, firma XAdES-EPES) sigue
+presente sin modificar -- NO se elimino codigo. Lo que cambio es que
+`procesar_y_facturar_venta()` ahora nunca llega a ejecutarlo: rechaza toda
+peticion con `EMISION_FISCAL_VENTA_AUTORIZADA = False`. Ver el docstring de
+ese metodo para el detalle completo.
 """
 import logging
 from decimal import Decimal
@@ -24,6 +31,16 @@ from apps.tenant.ventas.models import Venta
 from apps.tenant.ventas.services.crud_service import VentaCRUDService
 
 logger = logging.getLogger(__name__)
+
+# VENTAS-COMPRAS-FACTURAS-01 (2026-09-09): SINTEL todavia NO esta autorizada
+# por la DIAN para crear/emitir/transmitir Facturas electronicas -- `facturas`
+# es el dueño fiscal exclusivo (recibe XML ya generado/firmado por un
+# proveedor tecnologico externo, via FacturaBusinessService.guardar_desde_dto()).
+# Deliberadamente una CONSTANTE de codigo, no un settings/env var: reactivar
+# este camino es una decision legal/fiscal que exige un cambio de codigo
+# explicito y revisado (PR), nunca un toggle de entorno que alguien active
+# sin supervision. Ver docs/comercial/VENTAS_COMPRAS_FACTURAS_RELEASE_GATE.md.
+EMISION_FISCAL_VENTA_AUTORIZADA = False
 
 
 class VentaBusinessService:
@@ -491,6 +508,62 @@ class VentaBusinessService:
             logger.error("[VentaBS] crear_venta_borrador error: %s", exc, exc_info=True)
             return False, {"detail": "Error interno al crear la venta."}, 500
 
+    @staticmethod
+    @transaction.atomic
+    def actualizar_venta_borrador(venta_uuid: str, empresa_id: int, payload: dict) -> tuple:
+        """
+        Actualiza cabecera (fecha_emision, fecha_vencimiento, observaciones,
+        proyecto) y, si vienen en el payload, reemplaza los items de una
+        Venta en estado BORRADOR.
+
+        REGRESION corregida (2026-09-12, hallazgo V-2): VentaDetailSerializer
+        marcaba todos los campos read-only, asi que PATCH/PUT respondian 200
+        sin persistir ningun cambio -- VentaCRUDService.actualizar_venta()
+        ya existia (con la guarda de estado BORRADOR) pero nadie lo invocaba.
+        cliente y resolucion no son editables aqui a proposito: no forman
+        parte de campos_cabecera en VentaCRUDService.actualizar_venta() --
+        si se necesita cambiar el cliente, se anula y se crea una Venta
+        nueva (mismo criterio que Ordenes de Compra/Cotizaciones).
+        """
+        try:
+            venta = Venta.objects.filter(uuid=venta_uuid, empresa_id=empresa_id).first()
+            if not venta:
+                return False, {"detail": "Venta no encontrada."}, 404
+
+            data = {}
+            for campo in ("fecha_emision", "fecha_vencimiento", "observaciones"):
+                if campo in payload:
+                    data[campo] = payload[campo]
+
+            if "proyecto" in payload:
+                proyecto_uuid = payload.get("proyecto")
+                if proyecto_uuid:
+                    from apps.tenant.proyectos.models import Proyecto
+                    proyecto = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa_id).first()
+                    if not proyecto:
+                        return False, {"detail": f"Proyecto {proyecto_uuid} no valido."}, 400
+                    data["proyecto"] = proyecto
+                else:
+                    data["proyecto"] = None
+
+            items_data = None
+            if "items" in payload:
+                items_data = payload.get("items") or []
+                if not items_data:
+                    return False, {"detail": "Debe incluir al menos un item."}, 400
+                items_data = VentaBusinessService._dsv_items(items_data, empresa_id)
+
+            venta = VentaCRUDService.actualizar_venta(venta, data, items_data)
+            return True, venta, 200
+
+        except ValueError as exc:
+            transaction.set_rollback(True)
+            return False, {"detail": str(exc)}, 400
+        except Exception as exc:
+            transaction.set_rollback(True)
+            logger.error("[VentaBS] actualizar_venta_borrador error: %s", exc, exc_info=True)
+            return False, {"detail": "Error interno al actualizar la venta."}, 500
+
     # ------------------------------------------------------------------
     # Metodo principal: procesar Y facturar en un solo paso
     # ------------------------------------------------------------------
@@ -537,6 +610,16 @@ class VentaBusinessService:
         volver a ejecutar nada (200, no 201) -- el ancla de idempotencia es
         `Venta.uuid`, ya presente en el URL, sin requerir un
         `Idempotency-Key` nuevo del cliente. Una Venta `ANULADA` se rechaza.
+
+        [VENTAS-COMPRAS-FACTURAS-01] Barrera de emision fiscal (Fase 8):
+        rechaza SIEMPRE que `EMISION_FISCAL_VENTA_AUTORIZADA` sea False,
+        antes de cualquier escritura (DSV, consecutivo, Venta, DTO, CUFE,
+        XML, firma) -- garantiza cero datos parciales. La UNICA excepcion es
+        el retorno idempotente de una `venta_existente` que YA esta
+        `FACTURADA_DIAN` (historico previo a esta mision, o facturada
+        legitimamente en un entorno donde el flag este en True): eso es una
+        lectura pura, no emite nada nuevo, y por eso se evalua antes de la
+        barrera.
         """
         try:
             if venta_existente is not None:
@@ -544,6 +627,20 @@ class VentaBusinessService:
                     return True, venta_existente, 200
                 if venta_existente.estado == Venta.Estado.ANULADA:
                     return False, {"detail": "Una venta anulada no puede facturarse."}, 400
+
+            if not EMISION_FISCAL_VENTA_AUTORIZADA:
+                logger.warning(
+                    "[VentaBS] Intento de emision fiscal bloqueado -- SINTEL no "
+                    "esta autorizada por la DIAN para emitir facturas. empresa=%s",
+                    empresa.id,
+                )
+                return False, {
+                    "detail": (
+                        "La emision de facturas electronicas no esta habilitada en "
+                        "SINTEL. Cargue el XML generado por su proveedor tecnologico "
+                        "externo en el modulo de Facturas."
+                    ),
+                }, 403
 
             # -- Validaciones previas --
             items_data = payload.get("items", [])
@@ -679,6 +776,223 @@ class VentaBusinessService:
             transaction.set_rollback(True)
             logger.error("[VentaBS] procesar_y_facturar_venta error: %s", exc, exc_info=True)
             return False, {"detail": f"Error al procesar la venta: {exc}"}, 500
+
+    # ------------------------------------------------------------------
+    # FACTURAS-UI-CRONO-01: vinculacion MANUAL de una Factura ya
+    # existente (nunca emitida desde Ventas -- la barrera fiscal de
+    # arriba sigue intacta). El usuario elige una Factura de naturaleza
+    # VENTA ya persistida en el modulo Facturas y la asocia a esta
+    # Venta -- reutiliza factura_asociada/VentaCRUDService.vincular_factura()
+    # ya existentes (VCF-005), sin crear un segundo mecanismo.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    @transaction.atomic
+    def vincular_factura_existente(venta: Venta, factura_uuid: str, empresa_id: int) -> tuple:
+        """
+        Vincula manualmente una Factura YA PERSISTIDA (naturaleza VENTA) a
+        esta Venta. NO crea ni emite ninguna Factura -- la barrera fiscal
+        (EMISION_FISCAL_VENTA_AUTORIZADA) es ortogonal a esto y no se toca.
+
+        DSV: la Factura debe pertenecer a la misma empresa que la Venta
+        (anti-IDOR, resuelta via FacturaSelectors.qs_detail(empresa_id=...),
+        nunca Factura.objects.get() directo). `ventas` no importa el
+        modelo Factura a nivel de modulo (regla del Bridge, AGENTS.md
+        SS17) -- import local dentro del metodo.
+
+        Retorna (ok, resultado, status_code).
+        """
+        if not factura_uuid:
+            return False, {"error": "missing_factura_uuid", "message": "factura_uuid es requerido."}, 400
+
+        if venta.factura_asociada_id:
+            return False, {
+                "error": "venta_ya_vinculada",
+                "message": "Esta Venta ya tiene una Factura vinculada.",
+            }, 409
+
+        from apps.tenant.facturas.models import Factura
+        from apps.tenant.facturas.services.selectors import FacturaSelectors
+
+        factura = FacturaSelectors.qs_detail(empresa_id=empresa_id).filter(uuid=factura_uuid).first()
+        if not factura:
+            return False, {
+                "error": "factura_not_found",
+                "message": "La Factura no existe o no pertenece a esta empresa.",
+            }, 404
+
+        if factura.naturaleza != Factura.Naturaleza.VENTA:
+            return False, {
+                "error": "naturaleza_incorrecta",
+                "message": "Solo se puede vincular una Factura de naturaleza VENTA a una Venta.",
+            }, 422
+
+        # `venta_origen` es el accessor reverso de un OneToOneField -- Django
+        # lo hace compatible con hasattr() (levanta una excepcion que
+        # tambien es AttributeError cuando no existe fila vinculada, sin
+        # necesidad de un try/except propio ni de un "_id" que no existe
+        # en el lado reverso de una OneToOne).
+        if hasattr(factura, "venta_origen") and factura.venta_origen.id != venta.id:
+            return False, {
+                "error": "factura_ya_vinculada",
+                "message": "Esta Factura ya esta vinculada a otra Venta.",
+            }, 409
+
+        venta = VentaCRUDService.vincular_factura(venta, factura)
+        logger.info(
+            "[VentaBS] Venta id=%s vinculada manualmente a Factura id=%s (naturaleza=%s).",
+            venta.id, factura.id, factura.naturaleza,
+        )
+        return True, venta, 200
+
+    @staticmethod
+    @transaction.atomic
+    def crear_venta_desde_factura(factura, empresa) -> "Venta":
+        """
+        Reconciliacion masiva Facturas->Ventas (FST-375 secc. 16-18/35-39):
+        crea una Venta comercial BORRADOR a partir de una Factura fiscal
+        (naturaleza VENTA) que no tiene ninguna Venta existente que reclamar
+        -- ver management command
+        `facturas.management.commands.migrar_facturas_a_ventas`.
+
+        NO reimplementa logica de creacion/vinculo: compone
+        VentaCRUDService.crear_venta() (ya usado por crear_venta_borrador)
+        + VentaCRUDService.vincular_factura() (ya usado por
+        vincular_factura_existente), en la misma transaccion.
+
+        DSV cliente: resuelve `factura.cliente_uuid` si ya esta backfileado;
+        si no, reutiliza ClienteBusinessService.resolver_o_crear_desde_factura_venta()
+        (mismo servicio que ya usa
+        facturas.management.commands.backfill_clientes_facturas_venta) --
+        nunca crea un catalogo paralelo de clientes.
+
+        Raises:
+            ValueError: la Factura no tiene items (no se puede crear una
+            Venta sin al menos un item, misma regla que crear_venta_borrador).
+        """
+        from apps.tenant.clientes.models import Cliente
+        from apps.tenant.clientes.services.business_service import ClienteBusinessService
+
+        items = list(factura.items.all())
+        if not items:
+            raise ValueError(
+                "La Factura no tiene items -- no se puede crear una Venta sin al menos un item."
+            )
+
+        cliente = None
+        if factura.cliente_uuid:
+            cliente = Cliente.objects.filter(
+                uuid=factura.cliente_uuid, empresa_id=factura.empresa_id
+            ).first()
+        if cliente is None:
+            cliente, _created = ClienteBusinessService.resolver_o_crear_desde_factura_venta(
+                empresa_id=factura.empresa_id,
+                receptor_nit=factura.receptor_nit,
+                receptor_razon_social=factura.receptor_razon_social,
+                receptor_email=factura.receptor_email,
+                receptor_telefono=factura.receptor_telefono,
+                receptor_direccion=factura.receptor_direccion,
+            )
+
+        items_data = [
+            {
+                "descripcion": item.descripcion,
+                "cantidad": item.cantidad,
+                "precio_unitario": item.valor_unitario,
+                "porcentaje_iva": item.porcentaje_iva,
+            }
+            for item in items
+        ]
+
+        fecha_emision = factura.fecha_emision
+        fecha_emision = fecha_emision.date() if hasattr(fecha_emision, "date") else fecha_emision
+
+        venta = VentaCRUDService.crear_venta(
+            empresa=empresa,
+            cliente=cliente,
+            data={
+                "fecha_emision": fecha_emision,
+                "fecha_vencimiento": factura.fecha_vencimiento,
+                "observaciones": f"Migrada automaticamente desde Factura {factura.numero} "
+                                  f"(uuid={factura.uuid}).",
+                "numero_factura": factura.numero,
+            },
+            items_data=items_data,
+        )
+        venta = VentaCRUDService.vincular_factura(venta, factura)
+        logger.info(
+            "[VentaBS] Venta id=%s creada y vinculada por migracion desde Factura id=%s.",
+            venta.id, factura.id,
+        )
+        return venta
+
+    # ------------------------------------------------------------------
+    # Integracion Facturas<->Ventas: Gestion Manual de Pago. `Factura` sigue
+    # siendo el unico SSoT de estos 5 campos (ya vivian ahi antes de esta
+    # mision, junto a fecha_pago -- nuevo, mismo dueno) -- este metodo es un
+    # pass-through fino que reutiliza FacturaBusinessService.
+    # actualizar_factura_limitado() (mismo servicio que ya usa el editor
+    # propio de Facturas), restringido a los campos de gestion manual.
+    # Nunca se tocan campos fiscales desde aqui (el propio servicio de
+    # Facturas ya rechaza XML_IMMUTABLE_FIELDS de todos modos).
+    # ------------------------------------------------------------------
+
+    GESTION_PAGO_FIELDS = (
+        "estado_pago", "forma_pago", "medio_pago_codigo", "payment_due_date", "fecha_pago",
+    )
+
+    @staticmethod
+    @transaction.atomic
+    def actualizar_gestion_pago(venta: Venta, data: dict, empresa_id: int) -> tuple:
+        """
+        Actualiza los campos de Gestion Manual de Pago de la Factura
+        vinculada a esta Venta. Requiere que la Venta ya tenga una Factura
+        asociada (via vincular_factura_existente()) -- no crea ninguna.
+
+        DSV: la Factura se re-resuelve por empresa_id (nunca se confia en
+        el objeto ya cacheado en venta.factura_asociada) antes de escribir.
+
+        Retorna (ok, resultado, status_code).
+        """
+        if not venta.factura_asociada_id:
+            return False, {
+                "error": "sin_factura_vinculada",
+                "message": "Esta Venta no tiene ninguna Factura vinculada todavia.",
+            }, 404
+
+        from rest_framework.exceptions import ValidationError
+        from apps.tenant.facturas.services.selectors import FacturaSelectors
+        from apps.tenant.facturas.services.business_service import FacturaBusinessService
+
+        factura = FacturaSelectors.qs_detail(empresa_id=empresa_id).filter(
+            pk=venta.factura_asociada_id
+        ).first()
+        if not factura:
+            return False, {
+                "error": "factura_not_found",
+                "message": "La Factura vinculada no existe o no pertenece a esta empresa.",
+            }, 404
+
+        payload_filtrado = {
+            field: data[field] for field in VentaBusinessService.GESTION_PAGO_FIELDS if field in data
+        }
+        if not payload_filtrado:
+            return False, {
+                "error": "sin_campos",
+                "message": "No se envio ningun campo de gestion manual valido.",
+            }, 400
+
+        try:
+            FacturaBusinessService.actualizar_factura_limitado(factura, payload_filtrado, empresa_id)
+        except ValidationError as exc:
+            detail = exc.detail if hasattr(exc, "detail") else {"detail": str(exc)}
+            return False, detail, 400
+
+        logger.info(
+            "[VentaBS] Gestion de pago actualizada para Venta id=%s (Factura id=%s): campos=%s",
+            venta.id, factura.id, list(payload_filtrado.keys()),
+        )
+        return True, venta, 200
 
     # ------------------------------------------------------------------
     # F23: salida de inventario real por venta facturada (Pull hacia

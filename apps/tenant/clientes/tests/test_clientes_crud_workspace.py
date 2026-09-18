@@ -49,7 +49,14 @@ def test_clientes_crud_completo(client, admin_user, tenant):
         "direccion": "Calle 123 #45-67",
         "ciudad": "Bogotá",
         "activo": True,
-        "observaciones": "Cliente de prueba para tests"
+        "observaciones": "Cliente de prueba para tests",
+        # DEUDA-C01 (mision "Clientes + Cartera", 2026-09-11): JURIDICA
+        # via ViewSet (validar_representante=True) exige representante legal.
+        "contactos": [{
+            "nombre_completo": "Representante Legal Test",
+            "email": "representante.workspace@example.com",
+            "es_representante_legal": True,
+        }],
     }
     
     with schema_context(tenant.schema_name):
@@ -173,7 +180,14 @@ def test_clientes_create_validaciones(client, admin_user, tenant):
             "numero_documento": "900111222",
             "razon_social": "CLIENTE VALIDO S.A.S.",
             "regimen_tributario": "ORDINARIO",
-            "activo": True
+            "activo": True,
+            # DEUDA-C01 (mision "Clientes + Cartera", 2026-09-11): JURIDICA
+            # via ViewSet (validar_representante=True) exige representante legal.
+            "contactos": [{
+                "nombre_completo": "Representante Legal Test",
+                "email": "representante.validaciones@example.com",
+                "es_representante_legal": True,
+            }],
         }
         resp = client.post(
             "/api/v1/clientes/",

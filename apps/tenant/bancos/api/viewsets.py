@@ -130,6 +130,26 @@ class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMix
         except Exception as e:
             return self.handle_service_error(e)
 
+    @action(detail=True, methods=["post"], url_path="desactivar")
+    def desactivar(self, request, uuid=None):
+        """B-4: soft delete -- oculta la cuenta sin perder su historial."""
+        try:
+            instance = self.get_object()
+            cuenta = self.service_desactivar_cuenta(instance)
+            return Response(self.get_serializer(cuenta).data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    @action(detail=True, methods=["post"], url_path="activar")
+    def activar(self, request, uuid=None):
+        """B-4: reactiva una cuenta previamente desactivada."""
+        try:
+            instance = self.get_object()
+            cuenta = self.service_activar_cuenta(instance)
+            return Response(self.get_serializer(cuenta).data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return self.handle_service_error(e)
+
     # --- UI / HTMX Offcanvas Actions ---
 
     @action(detail=False, methods=["get"], renderer_classes=[TemplateHTMLRenderer], url_path="render-offcanvas/crear")

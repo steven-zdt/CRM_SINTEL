@@ -226,4 +226,3 @@ class PeriodoNominaCRUDService:
         periodo.save(update_fields=update_fields)
         logger.info(f"[PeriodoNominaCRUD] Periodo ID={periodo.id} -> estado={estado}")
         return periodo
-        return contrato

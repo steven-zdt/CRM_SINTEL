@@ -1,5 +1,10 @@
 {% load static %}
 {# assets_pendientes.html - Scripts para el modulo de Pendientes de Contabilizar #}
+{% comment %}
+T-9: plantilla_applicator.js ahora delega a PlantillaAPI (plantilla.api.js) --
+debe cargar antes.
+{% endcomment %}
+<script src="{% static 'contabilidad/js/plantilla/plantilla.api.js' %}"></script>
 <script src="{% static 'contabilidad/js/pendiente/plantilla_applicator.js' %}"></script>
 <script src="{% static 'contabilidad/js/pendiente/plantilla_interceptor.js' %}"></script>
 <script src="{% static 'contabilidad/js/pendiente/pendiente_list.js' %}"></script>

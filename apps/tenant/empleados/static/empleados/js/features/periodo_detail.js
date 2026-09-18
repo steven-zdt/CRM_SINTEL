@@ -45,18 +45,18 @@
             { key: 'anular',           label: 'Anular período',       cls: 'btn-outline-danger', icon: 'bi-x-circle', confirm: '¿Anular este período? Esta acción no se puede deshacer.' },
         ],
         EN_REVISION:  [
-            { key: 'aprobar',          label: 'Aprobar',              cls: 'btn-success',        icon: 'bi-hand-thumbs-up' },
+            { key: 'aprobar',          label: 'Aprobar',              cls: 'btn-success',        icon: 'bi-hand-thumbs-up', confirm: '¿Aprobar este período? Los devengos quedarán listos para pago.' },
             { key: 'rechazarRevision', label: 'Rechazar (volver a preliquidado)', cls: 'btn-outline-warning', icon: 'bi-arrow-counterclockwise' },
             { key: 'bloquear',         label: 'Bloquear',             cls: 'btn-outline-secondary', icon: 'bi-slash-circle' },
             { key: 'anular',           label: 'Anular período',       cls: 'btn-outline-danger', icon: 'bi-x-circle', confirm: '¿Anular este período? Esta acción no se puede deshacer.' },
         ],
         APROBADO:     [
-            { key: 'marcarPagado',     label: 'Marcar como pagado',   cls: 'btn-success',        icon: 'bi-cash-coin' },
+            { key: 'marcarPagado',     label: 'Marcar como pagado',   cls: 'btn-success',        icon: 'bi-cash-coin', confirm: '¿Marcar este período como pagado? Esta acción no se puede deshacer.' },
             { key: 'bloquear',         label: 'Bloquear',             cls: 'btn-outline-secondary', icon: 'bi-slash-circle' },
             { key: 'anular',           label: 'Anular período',       cls: 'btn-outline-danger', icon: 'bi-x-circle', confirm: '¿Anular este período? Esta acción no se puede deshacer.' },
         ],
         PAGADO:       [
-            { key: 'cerrar',           label: 'Cerrar período',       cls: 'btn-secondary',      icon: 'bi-lock' },
+            { key: 'cerrar',           label: 'Cerrar período',       cls: 'btn-secondary',      icon: 'bi-lock', confirm: '¿Cerrar este período? Es un estado terminal, sin transiciones de salida.' },
         ],
         CERRADO:      [],
         ANULADO:      [],
@@ -71,6 +71,10 @@
 
     function _money(v) {
         const n = Number(v || 0);
+        // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+        if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
+            return w.DOMUtils.formatCurrency(n, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        }
         return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
     }
 
@@ -204,6 +208,33 @@
         return `<div class="d-flex flex-wrap gap-2 border-top pt-3 mt-3">${botones}</div>`;
     }
 
+    // mision "Periodos de Nomina" seccion 15-19 (2026-09-11): costo real de
+    // la empresa, no solo el neto pagado -- todos los valores vienen del
+    // backend (PeriodoNominaSelector.get_resumen()), nunca calculados aqui.
+    function _renderResumenFinanciero(data) {
+        const ap = data.aportes_patronales || {};
+        return `
+          <div class="card mb-3">
+            <div class="card-header py-2"><i class="bi bi-cash-stack me-1"></i>Resumen Financiero</div>
+            <div class="card-body py-2 small">
+              <div class="d-flex justify-content-between"><span>Total devengado</span><span class="fw-semibold">${_money(data.total_devengado)}</span></div>
+              <div class="d-flex justify-content-between text-danger"><span>Deducciones (empleado)</span><span>- ${_money(data.total_deducciones)}</span></div>
+              <div class="d-flex justify-content-between border-top pt-1 mt-1"><span class="fw-semibold">Total neto a pagar</span><span class="fw-bold text-success">${_money(data.total_neto)}</span></div>
+
+              <div class="text-muted mt-3 mb-1" style="font-size:.75rem; text-transform:uppercase; letter-spacing:.03em;">Aportes a cargo del empleador</div>
+              <div class="d-flex justify-content-between"><span>EPS</span><span>${_money(ap.eps_patronal)}</span></div>
+              <div class="d-flex justify-content-between"><span>AFP</span><span>${_money(ap.pension_patronal)}</span></div>
+              <div class="d-flex justify-content-between"><span>ARL</span><span>${_money(ap.arl_patronal)}</span></div>
+              <div class="d-flex justify-content-between"><span>Caja de Compensación</span><span>${_money(ap.caja_compensacion)}</span></div>
+              <div class="d-flex justify-content-between"><span>ICBF</span><span>${_money(ap.icbf)}</span></div>
+              <div class="d-flex justify-content-between"><span>SENA</span><span>${_money(ap.sena)}</span></div>
+              <div class="d-flex justify-content-between border-top pt-1 mt-1"><span class="fw-semibold">Total aportes patronales</span><span class="fw-semibold">${_money(data.total_aportes_patronales)}</span></div>
+
+              <div class="d-flex justify-content-between border-top pt-2 mt-2"><span class="fw-bold">Costo total empresa</span><span class="fw-bold">${_money(data.costo_total_empresa)}</span></div>
+            </div>
+          </div>`;
+    }
+
     function _render(data) {
         const periodo = data.periodo;
         const [badgeCls, badgeIcon] = ESTADO_BADGE[periodo.estado] || ['bg-secondary', 'bi-question-circle'];
@@ -243,6 +274,8 @@
               </div>
             </div>
           </div>
+
+          ${_renderResumenFinanciero(data)}
 
           <div class="small mb-3">
             <div><span class="text-muted">Fecha de pago planeada:</span> ${periodo.fecha_pago}</div>

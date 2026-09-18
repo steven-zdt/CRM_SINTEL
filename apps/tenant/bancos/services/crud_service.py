@@ -47,8 +47,35 @@ class CuentaBancariaCRUDService:
 
     @staticmethod
     @transaction.atomic
+    def desactivar_cuenta(cuenta: CuentaBancaria) -> CuentaBancaria:
+        """B-4: soft delete -- oculta la cuenta sin perder su historial."""
+        cuenta.activo = False
+        cuenta.save(update_fields=["activo", "updated_at"])
+        logger.info(f"[CuentaBancariaCRUD] Desactivada cuenta ID={cuenta.id}")
+        return cuenta
+
+    @staticmethod
+    @transaction.atomic
+    def activar_cuenta(cuenta: CuentaBancaria) -> CuentaBancaria:
+        """B-4: reactiva una cuenta previamente desactivada."""
+        cuenta.activo = True
+        cuenta.save(update_fields=["activo", "updated_at"])
+        logger.info(f"[CuentaBancariaCRUD] Reactivada cuenta ID={cuenta.id}")
+        return cuenta
+
+    @staticmethod
+    @transaction.atomic
     def eliminar_cuenta(cuenta: CuentaBancaria) -> None:
-        """Delete a bank account if no statements are linked."""
+        """Delete a bank account if no statements are linked.
+
+        B-4: mismo estandar que Proveedor/Cliente (bloqueo si activa, fisico
+        si inactiva) -- eliminar_cuenta() ya no es el unico camino para
+        ocultar una cuenta, ver desactivar_cuenta().
+        """
+        if cuenta.activo:
+            raise ValidationError(
+                "No se puede eliminar una cuenta bancaria activa. Desactivela primero."
+            )
         if cuenta.extractos.exists():
             raise ValidationError(
                 "No se puede eliminar la cuenta bancaria porque tiene extractos asociados."

@@ -78,10 +78,12 @@ DETAIL_FIELDS = (
     "emisor_razon_social",
     "emisor_direccion",
     "emisor_email",
+    "emisor_telefono",
     "receptor_nit",
     "receptor_razon_social",
     "receptor_direccion",
     "receptor_email",
+    "receptor_telefono",
     "moneda",
     "subtotal",
     "impuestos",
@@ -95,6 +97,17 @@ DETAIL_FIELDS = (
     "cotizacion_numero",
     "cufe",
     "qr_url",
+    "qr_code",
+    # FST-375 (docs/.../PROMPT_IA_EDITORA_FACTURAS_VENTAS_FST375.md secc. 11):
+    # datos de autorizacion DIAN -- ya existian en el modelo (poblados desde
+    # el XML), pero el detalle nunca los exponia. Siempre solo lectura
+    # (ver FacturaDetailSerializer.read_only_fields).
+    "autorizacion_numero",
+    "autorizacion_prefijo",
+    "autorizacion_rango_desde",
+    "autorizacion_rango_hasta",
+    "autorizacion_vigencia_inicio",
+    "autorizacion_vigencia_fin",
     "sede_id",       # DT-SEDE-02: FK id (valido en Meta.fields y en .only())
     "created_at",
     "updated_at",
@@ -540,43 +553,10 @@ class InventarioItemBridge:
                 return None
         return None
 
-
-class BancosBridge:
-    """
-    [v3.11.0] Pull Model bridge: Facturas lee transacciones bancarias conciliadas
-    sin FK directa (Bounded Context §18, ADR-001).
-
-    Importacion dinamica de TransaccionBancaria para evitar circularidad
-    entre apps.tenant.facturas y apps.tenant.bancos.
-    """
-
-    @staticmethod
-    def obtener_total_conciliado(empresa_id: int, factura_uuid) -> Decimal:
-        """
-        Suma el valor absoluto de todas las TransaccionBancaria conciliadas
-        que referencian esta factura.
-
-        DEBITO  (valor < 0) → pago de facturas de COMPRA
-        CREDITO (valor >= 0) → cobro de facturas de VENTA
-        ABS garantiza suma correcta en ambos casos.
-
-        Returns Decimal: total conciliado en bancos, 0.00 si no hay ninguno.
-        """
-        from django.db.models import Func, F, Sum
-        from apps.tenant.bancos.models import TransaccionBancaria
-
-        if not factura_uuid or not empresa_id:
-            return Decimal('0.00')
-
-        result = (
-            TransaccionBancaria.objects
-            .filter(
-                empresa_id=empresa_id,
-                factura_uuid=factura_uuid,
-                conciliado=True,
-            )
-            .aggregate(
-                total=Sum(Func(F('valor'), function='ABS'))
-            )
-        )
-        return Decimal(str(result['total'] or '0.00'))
+# Nota (reestructuracion arquitectonica v4.0.0 F2): `BancosBridge` (leia
+# TransaccionBancaria desde Facturas, Pull Model v3.11.0/ADR-001) se
+# removio -- era la direccion de dependencia inversa a la deseada (Bancos
+# debe leer Facturas via FacturaInterAppAPI, nunca al reves). Su unico
+# consumidor era `Factura.total_pagado_bancos`/`saldo_pendiente`
+# (models.py), tambien removidos. 0 otros consumidores (verificado por
+# grep repo-wide antes de remover).

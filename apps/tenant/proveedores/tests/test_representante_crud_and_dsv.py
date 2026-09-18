@@ -136,12 +136,21 @@ class RepresentanteServiceCRUDTests(SintelTenantTestCase):
             empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
             data={"tipo_documento": "CC", "numero_documento": "9090909090", "nombre_completo": "P1", "es_principal": True},
         )
-        self.service.crear_representante(
+        principal2 = self.service.crear_representante(
             empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
             data={"tipo_documento": "CC", "numero_documento": "9090909091", "nombre_completo": "P2", "es_principal": True},
         )
-        # ambos son_principal=True (el modelo no exige un unico principal a nivel
-        # de constraint) -- eliminar uno no deja el proveedor sin principal.
+        # RELEASE-CLOSE/PROVEEDORES-02: crear_representante() ahora degrada
+        # automaticamente cualquier OTRO principal existente al crear uno
+        # nuevo con es_principal=True (antes ambos quedaban en True, sin
+        # constraint de unicidad -- ver test_representante_obligatorio_y_
+        # cxp_delete.py::RepresentantePrincipalUnicoTests). principal1 ya NO
+        # es principal aqui; se puede eliminar precisamente PORQUE dejo de
+        # serlo, no porque "ambos sean principales" como decia el comentario
+        # original de este test.
+        principal1.refresh_from_db()
+        self.assertFalse(principal1.es_principal)
+        self.assertTrue(Representante.objects.get(pk=principal2.pk).es_principal)
         self.service.eliminar_representante(empresa_id=self.empresa.id, representante_uuid=str(principal1.uuid))
         self.assertFalse(Representante.objects.filter(uuid=principal1.uuid).exists())
 

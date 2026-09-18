@@ -18,8 +18,7 @@
       <input type="hidden" id="devengo-empleado-id"  name="empleado"{% if empleado %} value="{{ empleado.id }}"{% endif %}>
       <input type="hidden" id="devengo-contrato-id"  name="contrato"{% if contrato %} value="{{ contrato.id }}"{% endif %}>
       <input type="hidden" id="devengo-periodo_mes"  name="periodo_mes">
-      {# mision auditoria nomina "correccion arquitectonica" (2026-09-10): FK
-         al PeriodoNomina contenedor -- solo vincula, nunca fuerza dias_laborados. #}
+      {# FK al PeriodoNomina contenedor -- solo vincula, nunca fuerza dias_laborados. #}
       <input type="hidden" id="devengo-periodo-uuid" name="periodo"{% if periodo %} value="{{ periodo.uuid }}"{% endif %}>
 
       {% if periodo %}
@@ -113,7 +112,7 @@
           <div class="col-md-6">
             <label for="devengo-dias_laborados" class="form-label fw-bold text-danger">Días Laborados *</label>
             <input type="number" class="form-control" id="devengo-dias_laborados" name="dias_laborados"
-                   step="0.1" min="0.1" max="31" required
+                   step="0.1" min="0.5" max="31" required
                    hx-post="/api/v1/empleados/devengos/preview-calculo/"
                    hx-target="#devengo-campos-calculados-wrapper"
                    hx-include="#form-devengo"

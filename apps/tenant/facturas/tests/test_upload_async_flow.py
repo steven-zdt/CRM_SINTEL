@@ -1,5 +1,10 @@
 """
-Tests para flujo async completo: upload → status → materialize (Fase 2).
+Tests para flujo async completo: upload → status → create-from-dto (Fase 2).
+
+Nota (v4.0.0, reestructuracion arquitectonica): el endpoint `materialize`
+(duplicado de `create-from-dto`, ya deprecado en el propio codigo) fue
+eliminado -- 0 consumidores externos reales verificados por grep repo-wide.
+`test_materialize_sin_dto_retorna_400` se retiro junto con el endpoint.
 
 # WARNING: TENANT-AWARE: Usa TenantTestCase para garantizar aislamiento por esquema.
 # WARNING: CELERY: Requiere CELERY_TASK_ALWAYS_EAGER=True en tests para ejecución síncrona.
@@ -79,7 +84,7 @@ class UploadAsyncFlowTests(SintelTenantTestCase):
             settings.CELERY_TASK_ALWAYS_EAGER = True
     
     def test_async_flow_completo(self):
-        """Test: Flujo completo async (upload → status → materialize)."""
+        """Test: Flujo completo async (upload → status → create-from-dto)."""
         # Hallazgo real: ingest_document() (apps/services/document_ingest/
         # ingest_service.py) documenta su propio parametro async_mode como
         # "FASE 5: placeholder para futuro" -- nunca genera task_id, asi
@@ -113,9 +118,12 @@ class UploadAsyncFlowTests(SintelTenantTestCase):
         # Si está listo (SUCCESS), materializar
         if status_data.get("state") == "SUCCESS":
             dto = status_data["result"]
-            
-            # 3. Materializar
-            url_mat = reverse("factura-materialize")
+
+            # 3. Materializar (v4.0.0: `materialize` fue eliminado -- duplicaba
+            # `create-from-dto`, ya deprecado en el propio codigo, 0
+            # consumidores externos reales. Si este test se des-skippea algun
+            # dia, usar create-from-dto en su lugar).
+            url_mat = reverse("factura-create-from-dto")
             m = self.client.post(
                 url_mat,
                 {"dto": dto, "persist_anexos": True},
@@ -180,12 +188,3 @@ class UploadAsyncFlowTests(SintelTenantTestCase):
         # Puede retornar 404 o 202 dependiendo de cómo Celery maneje tareas inexistentes
         self.assertIn(resp.status_code, (404, 202))
     
-    def test_materialize_sin_dto_retorna_400(self):
-        """Test: Materialize sin DTO retorna 400."""
-        url_mat = reverse("factura-materialize")
-        resp = self.client.post(url_mat, {}, content_type="application/json")
-        
-        self.assertEqual(resp.status_code, 400)
-        data = resp.json()
-        self.assertIn("error", data)
-        self.assertEqual(data["error"], "missing_dto")

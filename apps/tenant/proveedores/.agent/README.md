@@ -1,7 +1,7 @@
 # Documentación Módulo Proveedores
 
-**Última actualización:** 2026-09-08 (PROVEEDORES-01, auditoría integral)
-**Status:** ✅ Auditado y corregido — ver `docs/proveedores/PROVEEDORES_AUDIT.md`
+**Última actualización:** 2026-09-15 (PROVEEDORES-02, ver `docs/proveedores/PROVEEDORES_FLOW.md` §8) — histórico: 2026-09-08 (PROVEEDORES-01, auditoría integral)
+**Status:** ✅ Verificado con evidencia real — `pytest apps/tenant/proveedores/tests` 53 passed, 0 failed; `manage.py check`/`makemigrations --check` limpios. Ver `docs/proveedores/PROVEEDORES_RELEASE_GATE.md`
 
 ---
 

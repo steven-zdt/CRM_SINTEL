@@ -59,6 +59,8 @@
                 <span class="badge bg-warning text-dark">Pendiente</span>
             {% elif instance.estado == 'APROBADA' %}
                 <span class="badge bg-success">Aprobada</span>
+            {% elif instance.estado == 'PARCIAL' %}
+                <span class="badge bg-info text-dark">Recibida Parcial</span>
             {% elif instance.estado == 'RECIBIDA' %}
                 <span class="badge bg-info text-dark">Recibida</span>
             {% elif instance.estado == 'ANULADA' %}
@@ -151,6 +153,48 @@
         </div>
         {% endif %}
 
+        {# ── Sección: Factura de compra asociada (FACTURAS-VENTAS-COMPRAS-01) #}
+        {# Asociacion MANUAL de una Factura ya persistida en el modulo        #}
+        {# Facturas -- nunca crea ni emite una Factura nueva.                 #}
+        <div class="section-divider" id="compra-factura-widget" data-compra-uuid="{{ instance.uuid }}">
+            <p class="section-title">Factura de compra</p>
+
+            <div id="compra-factura-asociada" class="{% if not instance.factura_asociada %}d-none{% endif %}">
+                {% if instance.factura_asociada %}
+                <div class="card border border-success-subtle bg-success-subtle p-3 rounded-3 mb-2">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <h6 class="mb-1 text-success-emphasis fw-bold">{{ instance.factura_asociada.numero }}</h6>
+                            {% if instance.factura_asociada.cufe %}
+                            <p class="mb-0 text-muted small" style="word-break:break-all;">CUFE: {{ instance.factura_asociada.cufe }}</p>
+                            {% endif %}
+                        </div>
+                        <span class="badge bg-success">Vinculada</span>
+                    </div>
+                </div>
+                {% if instance.estado != 'ANULADA' %}
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-compra-factura-action="cambiar">
+                    <i class="bi bi-arrow-repeat me-1"></i>Cambiar factura
+                </button>
+                {% endif %}
+                {% endif %}
+            </div>
+
+            {% if instance.estado != 'ANULADA' %}
+            <div id="compra-factura-buscador" class="{% if instance.factura_asociada %}d-none{% endif %}">
+                <button type="button" class="btn btn-outline-primary btn-sm mb-2" data-compra-factura-action="mostrar-buscador">
+                    <i class="bi bi-search me-1"></i>Vincular factura existente
+                </button>
+                <div id="compra-factura-buscador-panel" class="d-none border rounded p-2 bg-light">
+                    <input type="text" class="form-control form-control-sm mb-2"
+                           id="compra-factura-buscar-input"
+                           placeholder="Buscar por numero, CUFE o proveedor...">
+                    <div id="compra-factura-buscar-resultados" class="small"></div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
         {# ── Sección: Items de la Orden ─────────────────────────── #}
         <div class="section-divider">
             <p class="section-title">Detalle de Items</p>
@@ -236,12 +280,26 @@
                         <i class="bi bi-x-circle me-1"></i>Anular
                     </button>
                 {% elif instance.estado == 'APROBADA' %}
-                    <button type="button" class="btn btn-info btn-sm btn-cambiar-estado me-2 text-dark" data-estado="RECIBIDA" data-uuid="{{ instance.uuid }}">
-                        <i class="bi bi-box-seam me-1"></i>Marcar Recibida
-                    </button>
+                    {% comment %}
+                    CO-2 (2026-09-12): "Marcar Recibida" removido -- TRANSICIONES_VALIDAS['APROBADA']
+                    no incluye RECIBIDA (business_service.py); el unico camino real a RECIBIDA es
+                    RecepcionCompraBusinessService.confirmar_recepcion(), que hoy no tiene UI
+                    (RecepcionCompraViewSet.render_offcanvas_* deliberadamente no existe). Este
+                    boton siempre devolvia 400 transicion_invalida. Reintroducir solo cuando exista
+                    una UI real de Recepciones que llame a ese flujo.
+                    {% endcomment %}
                     <button type="button" class="btn btn-danger btn-sm btn-cambiar-estado" data-estado="ANULADA" data-uuid="{{ instance.uuid }}">
                         <i class="bi bi-x-circle me-1"></i>Anular
                     </button>
+                {% elif instance.estado == 'PARCIAL' %}
+                    {% comment %}
+                    CO-6 (2026-09-18): PARCIAL solo se auto-transiciona en
+                    TRANSICIONES_VALIDAS (business_service.py) -- la asigna
+                    RecepcionCompraBusinessService.confirmar_recepcion(), y
+                    cambiar_estado() manual no puede sacarla de ese flujo, ni
+                    siquiera a ANULADA. Sin botones aqui es correcto, no un
+                    olvido.
+                    {% endcomment %}
                 {% endif %}
             </div>
             <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cerrar</button>

@@ -13,8 +13,19 @@ dejaba la Venta del URL huerfana en BORRADOR para siempre. Ahora:
   la misma Venta sin re-ejecutar nada (200, no 201, sin duplicar Factura
   ni MovimientoInventario).
 - venta_existente en ANULADA -> rechazado (400).
+
+VENTAS-COMPRAS-FACTURAS-01 (2026-09-09): `procesar_y_facturar_venta()`
+ahora rechaza por defecto (`EMISION_FISCAL_VENTA_AUTORIZADA = False`,
+ver Fase 8 -- SINTEL no esta autorizada por la DIAN para emitir Facturas).
+Los tests de este archivo prueban el comportamiento del PIPELINE interno
+(idempotencia, promocion de la misma fila) -- siguen siendo evidencia
+valida de que ese codigo no se rompio, asi que se mockea el flag a True
+en vez de eliminar la cobertura. El bloqueo real (flag en False, el
+comportamiento que corre hoy en produccion) tiene su propio test en
+`test_bloqueo_emision_fiscal.py`.
 """
 from decimal import Decimal
+from unittest import mock
 
 from apps.tenant.clientes.models import Cliente
 from apps.tenant.empresa.models import Empresa, Sede
@@ -24,6 +35,10 @@ from apps.tenant.ventas.models import Venta
 from apps.tenant.ventas.services.business_service import VentaBusinessService
 from apps.tenant.ventas.services.crud_service import VentaCRUDService
 from tests.tenant.base_test import SintelTenantTestCase
+
+_EMISION_HABILITADA = mock.patch(
+    "apps.tenant.ventas.services.business_service.EMISION_FISCAL_VENTA_AUTORIZADA", True,
+)
 
 
 class VentaFacturaIdempotenciaComercial04Tests(SintelTenantTestCase):
@@ -84,6 +99,7 @@ class VentaFacturaIdempotenciaComercial04Tests(SintelTenantTestCase):
             ],
         }
 
+    @_EMISION_HABILITADA
     def test_promueve_la_misma_venta_en_vez_de_crear_una_hermana(self):
         venta_borrador = self._crear_venta_borrador()
         venta_id_original = venta_borrador.id
@@ -103,6 +119,7 @@ class VentaFacturaIdempotenciaComercial04Tests(SintelTenantTestCase):
         self.assertEqual(Venta.objects.filter(empresa=self.empresa).count(), 1, "no debe quedar una segunda Venta huerfana")
         self.assertEqual(Factura.objects.filter(empresa=self.empresa).count(), 1)
 
+    @_EMISION_HABILITADA
     def test_reintento_sobre_venta_ya_facturada_es_idempotente(self):
         venta_borrador = self._crear_venta_borrador()
         ok1, venta1, code1 = VentaBusinessService.procesar_y_facturar_venta(

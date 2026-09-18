@@ -76,7 +76,9 @@
       },
       get: (id) => w.Sintel.Core.Http.request('GET', `${CARTERA_BASE}/${id}/`),
       kpis: () => w.Sintel.Core.Http.request('GET', `${CARTERA_BASE}/kpis/`),
-      registrarAbono: (id, payload) => w.Sintel.Core.Http.request('POST', `${CARTERA_BASE}/${id}/registrar-abono/`, payload)
+      registrarAbono: (id, payload) => w.Sintel.Core.Http.request('POST', `${CARTERA_BASE}/${id}/registrar-abono/`, payload),
+      getNotas: (id) => w.Sintel.Core.Http.request('GET', `${CARTERA_BASE}/${id}/notas/`),
+      agregarNota: (id, payload) => w.Sintel.Core.Http.request('POST', `${CARTERA_BASE}/${id}/notas/`, payload)
     });
   }
 

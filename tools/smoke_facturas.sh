@@ -45,11 +45,16 @@ while (( ATTEMPT < POLL_MAX )); do
 done
 [[ -n "$DTO" ]] || die "Timeout esperando SUCCESS"
 
-# ============ STEP 3: Materialize ============
-log "Materializando factura ..."
+# ============ STEP 3: Materialize (create-from-dto) ============
+# Nota (RELEASE-CLOSE-01): el endpoint /materialize/ fue eliminado en la
+# reestructuracion v4.0.0 de Facturas (duplicaba create-from-dto, ya
+# deprecado en el propio codigo, 0 consumidores externos reales). Este
+# script quedo huerfano apuntando a la URL vieja -- actualizado al mismo
+# endpoint que ya usan los tests (test_upload_async_flow.py).
+log "Materializando factura (create-from-dto) ..."
 MAT_JSON=$($CURL -b "$COOKIE_JAR" -H "Content-Type: application/json" \
   -d "{\"dto\": ${DTO}, \"persist_anexos\": true}" \
-  -X POST "${BASE_URL}/api/v1/facturas/materialize/")
+  -X POST "${BASE_URL}/api/v1/facturas/create-from-dto/")
 echo "$MAT_JSON" | $JQ .
 FACT_ID=$(echo "$MAT_JSON" | $JQ -r '.id // empty')
 FACT_NUM=$(echo "$MAT_JSON" | $JQ -r '.numero // empty')
@@ -77,4 +82,4 @@ if [[ "$HAS_APP" == "true" ]]; then
   $CURL -b "$COOKIE_JAR" "${BASE_URL}/api/v1/facturas/${FACT_ID}/app-response/" | head -c 200 | sed 's/.*/& .../g'
 fi
 
-log "SMOKE OK (upload → status → materialize → list → detail → anexos)"
+log "SMOKE OK (upload → status → create-from-dto → list → detail → anexos)"

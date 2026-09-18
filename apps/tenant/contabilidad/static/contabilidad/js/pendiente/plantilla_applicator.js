@@ -13,7 +13,6 @@
   'use strict';
 
   const MOD = '[plantilla.applicator]';
-  const API_PLANTILLAS = '/api/v1/contabilidad/plantillas-contables/';
 
   // Mapeo app_label → tipo_transaccion para filtrar plantillas disponibles
   const APP_TIPO_MAP = {
@@ -47,10 +46,9 @@
     const tipoTx = APP_TIPO_MAP[appLabel] || '';
     if (!tipoTx) return [];
     try {
-      const url = API_PLANTILLAS + '?tipo_transaccion=' + tipoTx + '&activo=true&page_size=100';
-      const res = await w.Sintel.Core.Http.request('GET', url);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.data.results || [];
+      // T-9: delega a la SSoT de endpoints (plantilla.api.js).
+      const data = await w.PlantillaAPI.list({ tipo_transaccion: tipoTx, activo: true, page_size: 100 });
+      return data.results || [];
     } catch (e) {
       console.error(MOD, 'loadPlantillas error:', e);
       return [];
@@ -63,9 +61,9 @@
   async function getPlantillaLineas(uuid) {
     if (_detailCache[uuid]) return _detailCache[uuid];
     try {
-      const res = await w.Sintel.Core.Http.request('GET', API_PLANTILLAS + uuid + '/');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const lineas = res.data.lineas || [];
+      // T-9: delega a la SSoT de endpoints (plantilla.api.js).
+      const data = await w.PlantillaAPI.retrieve(uuid);
+      const lineas = data.lineas || [];
       _detailCache[uuid] = lineas;
       return lineas;
     } catch (e) {
@@ -110,7 +108,10 @@
     }
     const filas = lineas.map(function (l) {
       const monto = calcularMonto(l.origen_valor, montos, l.porcentaje_aplicar || 100);
-      const montoFmt = monto.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+      // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+      const montoFmt = (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+        ? w.DOMUtils.formatCurrency(monto, { minimumFractionDigits: 2, maximumFractionDigits: 2, showSymbol: false })
+        : monto.toLocaleString('es-CO', { minimumFractionDigits: 2 });
       const badgeCls = l.naturaleza === 'DEBE' ? 'bg-danger' : 'bg-success';
       return [
         '<tr>',

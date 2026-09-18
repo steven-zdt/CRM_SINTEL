@@ -1,5 +1,51 @@
 # AI_MCP_POLICY — Fases 2, 3, 31-33
 
+## N8N-SINTEL-02 (2026-09-10) — validacion de conexion MCP (transporte
+## solamente, sin reabrir tools/call)
+
+A pedido del usuario, se valido que `/mcp/` responde de verdad ahora
+que n8n tiene cuenta owner creada -- **sin decorar ningun ViewSet ni
+invocar `tools/call`** (que es exactamente donde vive el defecto de
+`execute_tool()` documentado abajo). Se uso la identidad tecnica real
+de n8n (`crear_identidad_tecnica_n8n --schema home`, rotada) contra
+`http://127.0.0.1/mcp/` (nginx real, `Host: home.sintel.net.co`):
+
+```
+POST /mcp/ {"method":"initialize"}  -> 200, protocolVersion 2025-06-18,
+                                        serverInfo django-rest-framework-mcp 0.1.0a2
+POST /mcp/ {"method":"tools/list"}  -> 200, {"tools": []}  (0 ViewSets decorados, esperado)
+```
+
+**Conexion real confirmada operativa a nivel de transporte.** Sin
+embargo, verificar esto expuso un **hallazgo real adicional, distinto
+del bug de `execute_tool()`**: la misma llamada `tools/list` **sin
+ningun header `Authorization`** devuelve exactamente el mismo `200
+{"tools": []}` -- cero diferencia. Causa raiz, confirmada leyendo el
+codigo instalado (`djangorestframework_mcp/views.py:26`): `MCPView.
+authentication_classes = []` (lista vacia a nivel de clase, nunca
+sobreescrita por SINTEL) -- `perform_mcp_authentication_and_permissions_
+check()` no tiene ningun autenticador que ejecutar, y `has_mcp_
+permission()` por defecto devuelve `True` (linea 38 del mismo archivo:
+"Default behavior: Allow all requests"). Es decir: **el propio
+transporte MCP (`initialize`/`tools/list`) no exige ninguna credencial
+hoy** -- el `BYPASS_VIEWSET_AUTHENTICATION=False`/`BYPASS_VIEWSET_
+PERMISSIONS=False` de `config/settings.py` solo aplica dentro de
+`execute_tool()` (`tools/call`, por-ViewSet), no a la capa de
+descubrimiento.
+
+**Impacto real hoy: ninguno** -- con 0 tools registradas, lo unico que
+un llamante sin credenciales puede ver es una lista vacia. **Impacto
+potencial si se decora un ViewSet en el futuro sin corregir esto
+primero**: nombre, descripcion y schema de entrada de cada tool (no los
+datos, pero si su existencia y forma) quedarian visibles via
+`tools/list` a cualquiera que alcance `/mcp/`, sin JWT. No es el mismo
+defecto que bloquea AI-07 (ese rompe permisos DENTRO de `tools/call`,
+este es ausencia total de auth en el descubrimiento) -- ambos deben
+resolverse antes de reactivar MCP para negocio real, no solo el ya
+conocido. **No corregido aqui** (fuera de alcance de "validar
+conexion" -- el usuario decidio explicitamente seguir en REST puro
+para N8N-SINTEL-02, ver `N8N_MCP_CONTRACT.md`).
+
 ## AI-07 = BLOQUEADO POR DEFECTO DE TERCEROS (investigado 2026-09-01)
 
 Se intentó la primera exposición real (`@mcp_viewset(actions=["list",

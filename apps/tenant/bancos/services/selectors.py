@@ -9,10 +9,10 @@ from apps.tenant.bancos.models import (
 )
 
 CUENTA_LIST_FIELDS = (
-    "id", "uuid", "nombre", "banco", "tipo", "numero", "empresa_id"
+    "id", "uuid", "nombre", "banco", "tipo", "numero", "activo", "empresa_id"
 )
 CUENTA_DETAIL_FIELDS = (
-    "id", "uuid", "nombre", "banco", "tipo", "numero", "empresa_id", "created_at", "updated_at"
+    "id", "uuid", "nombre", "banco", "tipo", "numero", "activo", "empresa_id", "created_at", "updated_at"
 )
 
 EXTRACTO_LIST_FIELDS = (

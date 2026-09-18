@@ -154,6 +154,9 @@
           <div class="d-flex gap-3 ms-2 align-items-center fs-7 text-muted border-start ps-3" id="cartera-kpi-summary">
             <div>Pendiente: <span class="fw-bold text-danger" id="cartera-pendiente-monto">$0.00</span> (<span id="cartera-pendiente-count">0</span>)</div>
             <div>Pagado: <span class="fw-bold text-success" id="cartera-pagado-monto">$0.00</span></div>
+            <div>Sin Pago: <span class="fw-bold" id="cartera-sin-pago-count">0</span></div>
+            <div>Parcial: <span class="fw-bold text-warning" id="cartera-parcial-count">0</span></div>
+            <div>Vencidas: <span class="fw-bold text-danger" id="cartera-vencidas-count">0</span></div>
           </div>
         </div>
         <div class="input-group input-group-sm" style="max-width:300px;">
@@ -176,6 +179,9 @@
         </button>
         <button class="btn btn-sm btn-outline-success" data-filtro-cartera="PAGADA">
           <i class="bi bi-check-circle me-1"></i>Pagadas
+        </button>
+        <button class="btn btn-sm btn-outline-dark" data-filtro-cartera="VENCIDAS">
+          <i class="bi bi-alarm me-1"></i>Vencidas
         </button>
       </div>
 

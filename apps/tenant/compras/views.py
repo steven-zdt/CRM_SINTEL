@@ -13,9 +13,9 @@ from django_tables2 import SingleTableView
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from apps.tenant.api.mixins import SintelDSVMixin
-from apps.tenant.compras.models import OrdenCompra
-from apps.tenant.compras.services.selectors import OrdenCompraSelector
-from apps.tenant.compras.tables import OrdenCompraTable
+from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra
+from apps.tenant.compras.services.selectors import OrdenCompraSelector, PlantillaOrdenCompraSelector
+from apps.tenant.compras.tables import OrdenCompraTable, PlantillaOrdenCompraTable
 
 logger = logging.getLogger(__name__)
 
@@ -73,3 +73,25 @@ class OrdenCompraTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
             context["kpi_aprobadas"] = 0
             context["kpi_pendientes"] = 0
         return context
+
+
+class PlantillaOrdenCompraTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
+    """
+    CO-1 (2026-09-12): pantalla de gestion de plantillas -- antes solo se
+    podian crear (offcanvas_crear_plantilla.html), nunca listar/ver las
+    existentes. Muestra TODAS las plantillas (vigente_only=False, a
+    diferencia del dropdown de "Nueva Orden" que solo trae las vigentes)
+    para que una plantilla desactivada sea visible y reactivable.
+    """
+    model = PlantillaOrdenCompra
+    table_class = PlantillaOrdenCompraTable
+    template_name = "tenant/compras/partials/tabla_plantillas.html"
+    table_pagination = {"per_page": 20}
+
+    def get_queryset(self):
+        try:
+            empresa_id = self.get_empresa_id()
+        except DRFValidationError:
+            logger.warning("[PlantillaOrdenCompraTableView] Sin empresa resuelta para user=%s", self.request.user.pk)
+            return PlantillaOrdenCompra.objects.none()
+        return PlantillaOrdenCompraSelector.get_list(empresa_id=empresa_id, vigente_only=False)

@@ -40,7 +40,8 @@ class ProveedorTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
         if not empresa_id:
             return Proveedor.objects.none()
         search = (self.request.GET.get("q") or "").strip() or None
-        return ProveedorSelector.get_list(empresa_id, search)
+        filtro = (self.request.GET.get("filtro") or "").strip() or None
+        return ProveedorSelector.get_list(empresa_id, search, filtro)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

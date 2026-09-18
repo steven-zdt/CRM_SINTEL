@@ -1,8 +1,19 @@
 # AUDITORIA DE FLUJO DE TRABAJO - MODULO DE COMPRAS
 
-**Version auditada:** v3.10.5 → corregida 2026-06-18 → sincronizacion CxP 2026-08-26  
-**Auditor:** Claude Code  
-**Estado actual:** 6 bugs criticos/altos corregidos — 3 items de deuda tecnica pendientes
+**Version auditada:** v3.10.5 → corregida 2026-06-18 → sincronizacion CxP 2026-08-26 → Fase 2 remediación 2026-09-12
+**Auditor:** Claude Code. Fase 2 remediación 2026-09-12: Claude Sonnet 5 (Anthropic).
+**Estado actual:** 6 bugs criticos/altos corregidos — 3 items de deuda tecnica pendientes. **4 hallazgos ALTO nuevos encontrados y corregidos 2026-09-12** (CO-1..CO-4, ver sección abajo) — **verificado: `pytest apps/tenant/compras/tests/` completo → 43 passed (suite preexistente, sin regresión) + 6 tests nuevos → 6 passed.**
+
+---
+
+## 2026-09-12 — Fase 2 de remediación: CO-1, CO-2, CO-3, CO-4 (ALTO, `docs/remediation/AUDIT_BASELINE_20260912.md`)
+
+**✅ Verificado.** `pytest apps/tenant/compras/tests/` completo → **43 passed** (suite preexistente, cero regresión) + `test_co1_plantillas_visibles.py` (1 caso) + `test_co3_co4_estado_endpoint.py` (3 casos) → **4 passed**. Detalle fila por fila en `docs/remediation/RELEASE_GATE_20260912.md`.
+
+- **CO-1 — Plantillas con `vigente=False` invisibles en toda la UI.** No era un bug de API (`PlantillaOrdenCompraViewSet`/`PlantillaOrdenCompraSelector` ya filtraban correctamente por `empresa_id`) sino de UI: cero consumidores reales de `API.plantillas.list` — el único punto de acceso era el dropdown de "Nueva Orden", que fuerza `vigente_only=True`. **Fix**: pantalla de gestión nueva — `PlantillaOrdenCompraTable`/`PlantillaOrdenCompraTableView` (`tables.py`/`views.py`, mismo patrón django-tables2+HTMX ya usado por `OrdenCompraTable`), ruta `compras:plantillas-tabla`, panel nuevo en `compras_list.html`. Acciones por fila: Editar (nueva acción `render_offcanvas_editar` en `PlantillaOrdenCompraViewSet`, reutiliza `offcanvas_crear_plantilla.html` en modo edición) y Activar/Desactivar (`PATCH {vigente: bool}` sobre el endpoint ya existente, sin cambio de backend). El evento `plantilla-created` (antes sin ningún listener, hallazgo CO-8 del baseline) se unificó en `plantilla-changed`, ahora con listener real (refresca el panel).
+- **CO-2 — Botón "Marcar Recibida" siempre devolvía 400.** `TRANSICIONES_VALIDAS['APROBADA']` (`business_service.py`) no incluye `RECIBIDA` desde que se introdujo el flujo de Recepciones (`RecepcionCompraBusinessService.confirmar_recepcion()`, sin UI propia por decisión documentada). El botón viejo nunca se limpió tras ese cambio. **Fix**: botón removido de `offcanvas_detalle_compras.html`, con comentario explicando cuándo reintroducirlo (cuando exista UI de Recepciones).
+- **CO-3 — `estado` escribible en el serializer genérico bypaseaba la máquina de estados.** `OrdenCompraCreateUpdateSerializer` no marcaba `estado` como `read_only`; tanto `crear_orden()` como `actualizar_orden()` (`crud_service.py`) usan el valor de `data` tal cual sin pasar por `TRANSICIONES_VALIDAS` ni disparar `_sincronizar_cuenta_por_pagar()` — un `POST`/`PATCH` directo con `estado="APROBADA"` podía crear/dejar una orden "aprobada" sin Cuenta por Pagar generada. **Fix**: `estado` en `read_only_fields` (el modelo ya tiene `default='BORRADOR'`, la creación normal no cambia).
+- **CO-4 — Transiciones (Aprobar/Anular) no actualizaban `updated_at`.** `OrdenCompraCRUDService.cambiar_estado()` hacía `orden.save(update_fields=['estado'])` — Django solo refresca un campo `auto_now=True` si está listado en `update_fields`. **Fix**: `update_fields=['estado', 'updated_at']`.
 
 ---
 
@@ -394,6 +405,15 @@ recepcion CONFIRMADA — ver `services/business_service.py`,
 Tests: `apps/tenant/compras/tests/test_sincronizacion_cuentas_pagar.py`.
 
 ---
+
+## 12. Vista dinámica por menú (2026-09-15)
+
+`compras_list.html` pasó de mostrar "Órdenes de Compra" y "Plantillas de Numeración" como 2 cards
+siempre visibles y apiladas, a un menú de pestañas (`nav-pills`, mismo patrón que
+Clientes/Proveedores) — clic en cada pestaña muestra solo esa lista. Cambio de solo-template,
+sin tocar `views.py`/`urls.py`/`tables.py` ni backend: cada tab conserva su propio panel HTMX
+(`#compras-panel` / `#plantillas-panel`) con los mismos `hx-get`/`hx-trigger` de antes. Sin
+verificación visual en navegador real en esta pasada (sin acceso a browser interactivo).
 
 ## 11. Reglas de Mantenimiento
 

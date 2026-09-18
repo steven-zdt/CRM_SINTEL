@@ -117,6 +117,7 @@ class ContactoClienteSerializer(NormalizationMixin, serializers.ModelSerializer)
             'telefono',
             'activo',
             'is_principal',
+            'es_representante_legal',
             'cliente_nombre',
             'cliente_documento',
         ]
@@ -319,6 +320,20 @@ class FacturaCxCListSerializer(serializers.Serializer):
     """
     Read-only: mapea Factura.VENTA a los campos de display de la pestana Cartera.
     Patron Pull Model Bounded Context (AGENTS.md §18) — sin FK directa.
+
+    Auditoria "Clientes + Cartera" (2026-09-11): antes, valor_pagado/saldo
+    se INFERIAN del enum Factura.estado_pago (3 estados) — una factura
+    PAGO_PARCIAL siempre mostraba valor_pagado=0/saldo=total, IGNORANDO el
+    monto real de los abonos ya registrados en `Cartera` (fuente de verdad
+    real de los abonos, ver CarteraBusinessService.registrar_abono()). Ahora
+    el ViewSet arma un `cartera_map` (bulk, sin N+1) via
+    CarteraSelector.get_cartera_map_by_factura_uuids() y lo pasa en
+    `context` -- si existe una Cartera real para esta factura, sus
+    valor_pagado/saldo/estado_pago mandan; si no existe (factura nunca
+    tocada por Cartera), se mantiene el fallback anterior basado en el
+    enum. Ver DEUDA documentada en AUDITORIA_FLUJO_CLIENTES.md sobre la
+    reconciliacion pendiente con Bancos (tercera fuente de pagos, fuera de
+    alcance de este fix puntual).
     """
     uuid            = serializers.UUIDField()
     numero_factura  = serializers.CharField(source='numero')
@@ -335,17 +350,33 @@ class FacturaCxCListSerializer(serializers.Serializer):
 
     _ESTADO_MAP = {'NO_PAGADA': 'SIN_PAGO', 'PAGO_PARCIAL': 'PARCIAL', 'PAGADA': 'PAGADA'}
     _DISPLAY_MAP = {'NO_PAGADA': 'Sin Pago', 'PAGO_PARCIAL': 'Pago Parcial', 'PAGADA': 'Pagada'}
+    _CARTERA_DISPLAY_MAP = {'SIN_PAGO': 'Sin Pago', 'PARCIAL': 'Pago Parcial', 'PAGADA': 'Pagada'}
+
+    def _cartera(self, obj):
+        return (self.context.get('cartera_map') or {}).get(str(obj.uuid))
 
     def get_estado_pago(self, obj):
+        cartera = self._cartera(obj)
+        if cartera:
+            return cartera['estado_pago']
         return self._ESTADO_MAP.get(obj.estado_pago, 'SIN_PAGO')
 
     def get_estado_pago_display(self, obj):
+        cartera = self._cartera(obj)
+        if cartera:
+            return self._CARTERA_DISPLAY_MAP.get(cartera['estado_pago'], cartera['estado_pago'])
         return self._DISPLAY_MAP.get(obj.estado_pago, obj.estado_pago)
 
     def get_valor_pagado(self, obj):
+        cartera = self._cartera(obj)
+        if cartera:
+            return str(cartera['valor_pagado'])
         return str(obj.total) if obj.estado_pago == 'PAGADA' else '0.00'
 
     def get_saldo(self, obj):
+        cartera = self._cartera(obj)
+        if cartera:
+            return str(cartera['saldo'])
         return '0.00' if obj.estado_pago == 'PAGADA' else str(obj.total)
 
 
@@ -353,3 +384,38 @@ class CarteraAbonoSerializer(serializers.Serializer):
     """Serializer for registering a payment/abono on cartera."""
 
     monto = serializers.DecimalField(max_digits=15, decimal_places=2, min_value=0.01)
+
+
+class CarteraNotaInputSerializer(serializers.Serializer):
+    """Input para registrar una nueva CarteraNota."""
+
+    texto = serializers.CharField(max_length=4000)
+    tipo = serializers.ChoiceField(
+        choices=["SEGUIMIENTO", "PROMESA_PAGO", "DISPUTA", "OTRO"],
+        default="SEGUIMIENTO", required=False,
+    )
+
+
+class CarteraNotaSerializer(serializers.Serializer):
+    """Read-only: historial de notas de una obligacion de Cartera."""
+
+    uuid = serializers.UUIDField()
+    tipo = serializers.CharField()
+    tipo_display = serializers.SerializerMethodField()
+    texto = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    usuario_nombre = serializers.SerializerMethodField()
+
+    _TIPO_DISPLAY = {
+        "SEGUIMIENTO": "Seguimiento", "PROMESA_PAGO": "Promesa de pago",
+        "DISPUTA": "Disputa/Reclamo", "OTRO": "Otro",
+    }
+
+    def get_tipo_display(self, obj):
+        return self._TIPO_DISPLAY.get(obj.tipo, obj.tipo)
+
+    def get_usuario_nombre(self, obj):
+        if not obj.usuario or not obj.usuario.user:
+            return None
+        nombre = f"{obj.usuario.user.first_name} {obj.usuario.user.last_name}".strip()
+        return nombre or obj.usuario.user.email

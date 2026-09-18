@@ -13,11 +13,20 @@ ARQUITECTURA V2.40 (Zero-Coupling con otras apps de negocio):
 
 import uuid as uuid_module
 
+from django.conf import settings
+from django.core.files.storage import FileSystemStorage
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.tenant.core.models import SintelTenantBaseModel  # [v2.61.4] Herencia SSoT
 from apps.tenant.empresa.models import Empresa  # uNICA Dependencia Externa (SSoT)
+
+# Storage privado para el expediente documental (DocumentoProyecto). NO usa el
+# storage por defecto (MEDIA_ROOT) porque nginx sirve /media/ publicamente sin
+# autenticacion (ver PRIVATE_MEDIA_ROOT en config/settings.py). Solo se accede
+# via el endpoint de descarga autenticado en api/viewsets.py.
+documentos_storage = FileSystemStorage(location=str(settings.PRIVATE_MEDIA_ROOT))
 
 
 class Proyecto(SintelTenantBaseModel):
@@ -155,6 +164,7 @@ class Proyecto(SintelTenantBaseModel):
     # --- INDICADORES FINANCIEROS (Modelo Anemico) ---
     costo_mano_obra_real = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Calculado por services.py'))
     costo_materiales_real = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Calculado por services.py'))
+    costo_gastos_real = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Calculado por services.py -- suma de DocumentoSoporte.subtotal asociados (GASTOS_PROYECTOS_01)'))
     utilidad_estimada = models.DecimalField(max_digits=15, decimal_places=2, default=0, help_text=_('Calculado por services.py'))
     margen_rentabilidad = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text=_('Calculado por services.py'))
 
@@ -239,6 +249,156 @@ class Proyecto(SintelTenantBaseModel):
 
     def __str__(self):
         return f"{self.nombre} ({self.codigo})"
+
+
+class DocumentoProyecto(SintelTenantBaseModel):
+    """
+    Expediente documental del proyecto (Ciclo de Vida Controlado v4.0).
+
+    Un proyecto puede tener multiples documentos por tipo a lo largo de su
+    ciclo de vida. Para los tipos de "unico vigente" (todos salvo
+    DOCUMENTO_EJECUCION), subir uno nuevo del mismo tipo desactiva
+    (activo=False) el anterior en la misma transaccion -- nunca se duplica
+    silenciosamente el requisito de un gate de fase, y el archivo viejo se
+    conserva (no se borra fisicamente).
+
+    Archivo almacenado en `documentos_storage` (PRIVATE_MEDIA_ROOT), NUNCA en
+    MEDIA_ROOT -- nginx sirve /media/ publicamente sin autenticacion, y estos
+    documentos (ordenes de compra, autorizaciones, actas) son mas sensibles
+    que el resto de archivos del sistema. Solo se sirven via el endpoint de
+    descarga autenticado que valida empresa_id + proyecto_id + uuid.
+    """
+    class TipoDocumento(models.TextChoices):
+        ORDEN_COMPRA = 'ORDEN_COMPRA', _('Orden de Compra')
+        ORDEN_PEDIDO = 'ORDEN_PEDIDO', _('Orden de Pedido')
+        AUTORIZACION = 'AUTORIZACION', _('Autorizacion')
+        COTIZACION_APROBADA = 'COTIZACION_APROBADA', _('Cotizacion Aprobada')
+        ACTA_INICIO = 'ACTA_INICIO', _('Acta de Inicio')
+        CRONOGRAMA = 'CRONOGRAMA', _('Cronograma')
+        DOCUMENTO_EJECUCION = 'DOCUMENTO_EJECUCION', _('Documento de Ejecucion')
+        ACTA_ENTREGA = 'ACTA_ENTREGA', _('Acta de Entrega')
+        INFORME_FINAL = 'INFORME_FINAL', _('Informe Final')
+
+    # Tipos que admiten multiples documentos activos simultaneamente. El resto
+    # son de "unico vigente": subir uno nuevo desactiva el anterior.
+    TIPOS_MULTIPLES = {TipoDocumento.DOCUMENTO_EJECUCION}
+
+    uuid = models.UUIDField(
+        default=uuid_module.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
+
+    proyecto = models.ForeignKey(
+        Proyecto,
+        on_delete=models.CASCADE,
+        related_name='documentos',
+        verbose_name=_('Proyecto'),
+    )
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name='documentos_proyecto',
+        verbose_name=_('Empresa'),
+        help_text=_('DSV: valida que el documento pertenezca al tenant'),
+    )
+
+    fase = models.CharField(
+        _('Fase'),
+        max_length=20,
+        choices=Proyecto.FASES,
+        help_text=_('Fase del ciclo de vida a la que corresponde este documento'),
+    )
+    tipo_documento = models.CharField(
+        _('Tipo de Documento'),
+        max_length=30,
+        choices=TipoDocumento.choices,
+    )
+    nombre = models.CharField(_('Nombre'), max_length=200, blank=True)
+    archivo = models.FileField(
+        _('Archivo'),
+        upload_to='proyectos/documentos/%Y/%m/',
+        storage=documentos_storage,
+    )
+    fecha_documento = models.DateField(_('Fecha del Documento'), null=True, blank=True)
+    observaciones = models.TextField(_('Observaciones'), blank=True)
+    subido_por = models.ForeignKey(
+        'perfil.TenantProfile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='documentos_proyecto_subidos',
+        verbose_name=_('Subido por'),
+    )
+    activo = models.BooleanField(_('Activo'), default=True)
+
+    class Meta:
+        verbose_name = _('Documento de Proyecto')
+        verbose_name_plural = _('Documentos de Proyecto')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['empresa', 'proyecto', 'tipo_documento', 'activo']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_tipo_documento_display()} - {self.proyecto.nombre}"
+
+
+class HistorialFaseProyecto(SintelTenantBaseModel):
+    """
+    Historial append-only de cambios de fase del proyecto (Ciclo de Vida
+    Controlado v4.0). Clon del patron ya probado en produccion:
+    apps.tenant.cotizaciones.models.CotizacionHistorialEstado.
+
+    Se crea EXCLUSIVAMENTE dentro de la misma transaccion atomica que el
+    cambio de fase real (ver services/business_service.py::cambiar_fase_proyecto).
+    No existe ningun update/delete expuesto para esta tabla en el Service
+    Layer -- solo creacion y lectura.
+    """
+    uuid = models.UUIDField(
+        default=uuid_module.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
+
+    proyecto = models.ForeignKey(
+        Proyecto,
+        on_delete=models.CASCADE,
+        related_name='historial_fases',
+        verbose_name=_('Proyecto'),
+    )
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name='historial_fases_proyecto',
+        verbose_name=_('Empresa'),
+        help_text=_('DSV: valida que el historial pertenezca al tenant'),
+    )
+
+    fase_anterior = models.CharField(_('Fase Anterior'), max_length=20, blank=True, default='')
+    fase_nueva = models.CharField(_('Fase Nueva'), max_length=20)
+    usuario = models.ForeignKey(
+        'perfil.TenantProfile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cambios_fase_proyecto',
+        verbose_name=_('Usuario'),
+    )
+    motivo = models.TextField(_('Motivo'), blank=True, default='')
+
+    class Meta:
+        verbose_name = _('Historial de Fase')
+        verbose_name_plural = _('Historial de Fases')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['empresa', 'proyecto', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.proyecto.nombre}: {self.fase_anterior} -> {self.fase_nueva}"
 
 
 class AsignacionPersonal(SintelTenantBaseModel):
@@ -558,6 +718,27 @@ class TareaDiariaProyecto(SintelTenantBaseModel):
         _('Notas de Progreso'),
         blank=True,
         help_text=_('Actualizaciones diarias sobre la ejecucion')
+    )
+
+    # --- Bitacora de Ejecucion (Ciclo de Vida Controlado v4.0) ---
+    avance = models.PositiveIntegerField(
+        _('Avance (%)'),
+        null=True,
+        blank=True,
+        validators=[MaxValueValidator(100)],
+        help_text=_('Porcentaje de avance reportado para esta tarea (0-100), opcional')
+    )
+    bloqueos = models.TextField(
+        _('Bloqueos'),
+        blank=True,
+        default='',
+        help_text=_('Impedimentos u obstaculos reportados en el dia')
+    )
+    incidencias = models.TextField(
+        _('Incidencias'),
+        blank=True,
+        default='',
+        help_text=_('Incidentes o eventos relevantes reportados en el dia')
     )
 
     class Meta:

@@ -566,6 +566,38 @@ class PeriodoNominaSelector:
         )
         resultado = {k: (str(v) if isinstance(v, Decimal) else v) for k, v in agregados.items()}
 
+        # mision "Periodos de Nomina" seccion 15-19 (2026-09-11): costo real
+        # de la empresa = devengado + aportes patronales (EPS/pension/ARL/
+        # parafiscales), NUNCA solo el neto pagado al empleado. Import local
+        # para evitar import circular (business_service ya importa este
+        # modulo a nivel de archivo).
+        from apps.tenant.empleados.services.business_service import NominaCalculationService
+
+        desglose_aportes = {
+            'eps_patronal': Decimal('0.00'), 'pension_patronal': Decimal('0.00'),
+            'arl_patronal': Decimal('0.00'), 'caja_compensacion': Decimal('0.00'),
+            'icbf': Decimal('0.00'), 'sena': Decimal('0.00'),
+        }
+        total_aportes = Decimal('0.00')
+        qs_aportes = Devengo.objects.filter(
+            empresa_id=empresa_id, periodo_id=periodo_id, anulado=False
+        ).select_related('empleado', 'contrato').only(
+            'id', 'salario_base', 'empleado__nivel_riesgo_arl', 'contrato__tipo'
+        )
+        for devengo in qs_aportes:
+            aportes = NominaCalculationService.calcular_aportes_patronales(
+                ibc=devengo.salario_base,
+                tipo_contrato=devengo.contrato.tipo,
+                nivel_riesgo_arl=devengo.empleado.nivel_riesgo_arl,
+            )
+            for k in desglose_aportes:
+                desglose_aportes[k] += aportes[k]
+            total_aportes += aportes['total_aportes_patronales']
+
+        resultado['aportes_patronales'] = {k: str(v) for k, v in desglose_aportes.items()}
+        resultado['total_aportes_patronales'] = str(total_aportes)
+        resultado['costo_total_empresa'] = str(Decimal(resultado['total_devengado']) + total_aportes)
+
         periodo = PeriodoNomina.objects.filter(id=periodo_id, empresa_id=empresa_id).only('id', 'empresa_id').first()
         resultado['pendientes'] = (
             EmpleadoSelector.get_empleados_pendientes_para_periodo(periodo).count() if periodo else 0

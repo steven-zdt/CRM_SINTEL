@@ -21,7 +21,11 @@ from apps.tenant.proyectos.models import (
     ItemPresupuestoProyecto,
     TareaDiariaProyecto,
     TareaCorta,
+    DocumentoProyecto,
+    HistorialFaseProyecto,
 )
+from apps.tenant.proyectos.services.documentos_service import resolver_requisitos_transicion
+from apps.tenant.proyectos.services.business_service import TRANSICIONES_VALIDAS_FASE
 from apps.tenant.perfil.models import TenantProfile
 
 try:
@@ -129,7 +133,7 @@ class ProyectoListSerializer(serializers.ModelSerializer):
             # Financieros
             'valor_contrato_proyectado',
             'costo_planeado_total', 'utilidad_planeada', 'margen_planeado',
-            'costo_mano_obra_real', 'costo_materiales_real',
+            'costo_mano_obra_real', 'costo_materiales_real', 'costo_gastos_real',
             'costo_total', 'utilidad_estimada', 'margen_rentabilidad',
 
             # Progreso
@@ -140,13 +144,13 @@ class ProyectoListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'created_at', 'updated_at',
-            'costo_mano_obra_real', 'costo_materiales_real',
+            'costo_mano_obra_real', 'costo_materiales_real', 'costo_gastos_real',
             'utilidad_estimada', 'margen_rentabilidad',
         ]
 
     def get_costo_total(self, obj):
-        """Calcula el costo total (mano de obra + materiales)."""
-        return obj.costo_mano_obra_real + obj.costo_materiales_real
+        """Calcula el costo total (mano de obra + materiales + gastos)."""
+        return obj.costo_mano_obra_real + obj.costo_materiales_real + obj.costo_gastos_real
 
 
 class AsignacionPersonalSerializer(NormalizationMixin, serializers.ModelSerializer):
@@ -278,6 +282,63 @@ class ItemPresupuestoSerializer(NormalizationMixin, serializers.ModelSerializer)
         return attrs
 
 
+class DocumentoProyectoSerializer(serializers.ModelSerializer):
+    """
+    Serializer del expediente documental (Ciclo de Vida Controlado v4.0).
+
+    [SHIELD] No expone la ruta fisica del archivo -- solo metadatos y una
+    bandera `tiene_archivo`; la descarga real ocurre exclusivamente via el
+    endpoint autenticado `documentos/{uuid}/descargar/` (nunca una URL
+    directa), porque el storage es privado (ver models.documentos_storage).
+    """
+    tipo_documento_display = serializers.CharField(source='get_tipo_documento_display', read_only=True)
+    fase_display = serializers.CharField(source='get_fase_display', read_only=True)
+    subido_por_nombre = serializers.SerializerMethodField()
+    tiene_archivo = serializers.SerializerMethodField()
+    nombre_archivo = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DocumentoProyecto
+        fields = [
+            'uuid', 'proyecto_id', 'fase', 'fase_display',
+            'tipo_documento', 'tipo_documento_display', 'nombre', 'nombre_archivo',
+            'tiene_archivo', 'fecha_documento', 'observaciones',
+            'subido_por_nombre', 'activo', 'created_at', 'updated_at',
+        ]
+        read_only_fields = fields
+
+    def get_subido_por_nombre(self, obj):
+        if not obj.subido_por_id:
+            return None
+        return str(obj.subido_por.user) if getattr(obj.subido_por, 'user_id', None) else str(obj.subido_por)
+
+    def get_tiene_archivo(self, obj):
+        return bool(obj.archivo)
+
+    def get_nombre_archivo(self, obj):
+        if not obj.archivo:
+            return None
+        return obj.nombre or obj.archivo.name.rsplit('/', 1)[-1]
+
+
+class HistorialFaseProyectoSerializer(serializers.ModelSerializer):
+    """Serializer de solo lectura para el historial append-only de fases."""
+    usuario_nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = HistorialFaseProyecto
+        fields = [
+            'uuid', 'proyecto_id', 'fase_anterior', 'fase_nueva',
+            'usuario_nombre', 'motivo', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_usuario_nombre(self, obj):
+        if not obj.usuario_id:
+            return None
+        return str(obj.usuario.user) if getattr(obj.usuario, 'user_id', None) else str(obj.usuario)
+
+
 class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     """
     Serializer completo para detalle de proyecto v3.3 y operaciones Write.
@@ -309,6 +370,11 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     movimiento_referencia = serializers.DictField(read_only=True, allow_null=True)
     cotizacion_info = serializers.SerializerMethodField()
 
+    # Ciclo de Vida Controlado v4.0: checklist de gate documental resuelto
+    # server-side, listo para que el frontend (siguiente pasada) lo pinte
+    # sin reimplementar la logica de REQUISITOS_TRANSICION en JS.
+    requisitos_siguiente_fase = serializers.SerializerMethodField()
+
     # DT-SEDE-03: sede para KPIs por sede
     sede = UUIDOrPKRelatedField(
         queryset=Sede.objects.none(),
@@ -323,7 +389,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         exclude = ['empresa']  # SSoT: La empresa se maneja a nivel de viewset/middleware/services
         read_only_fields = [
             'id', 'uuid', 'created_at', 'updated_at',
-            'costo_mano_obra_real', 'costo_materiales_real',
+            'costo_mano_obra_real', 'costo_materiales_real', 'costo_gastos_real',
             'utilidad_estimada', 'margen_rentabilidad',
             'costo_planeado_total', 'utilidad_planeada', 'margen_planeado',
         ]
@@ -365,6 +431,21 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             return _FacturaInterAppAPI.resolve_cotizacion(factura_id=obj.factura_costo_id)
         except Exception:
             return None
+
+    def get_requisitos_siguiente_fase(self, obj):
+        """
+        Checklist de documentos requeridos para avanzar desde la fase actual
+        a la siguiente (si existe una siguiente fase en la maquina de
+        estados). None si ya esta en CIERRE (no hay siguiente).
+        """
+        siguientes = TRANSICIONES_VALIDAS_FASE.get(obj.fase_actual, set())
+        if not siguientes:
+            return None
+        nueva_fase = next(iter(siguientes))
+        return {
+            'fase_destino': nueva_fase,
+            'requisitos': resolver_requisitos_transicion(obj, obj.fase_actual, nueva_fase),
+        }
 
     def to_internal_value(self, data):
         """
@@ -486,15 +567,15 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
 
     def get_costo_total(self, obj):
         """Calcula el costo total del proyecto."""
-        return obj.costo_mano_obra_real + obj.costo_materiales_real
+        return obj.costo_mano_obra_real + obj.costo_materiales_real + obj.costo_gastos_real
 
     def get_indicadores_financieros(self, obj):
         """
-        Indicadores financieros reales y planeados (v3.5.3-fix).
+        Indicadores financieros reales y planeados (v3.5.3-fix, GASTOS_PROYECTOS_01).
 
         BASE: valor_contrato_proyectado es la base de todos los calculos.
         REAL:
-          utilidad_real   = valor_contrato - (costo_mano_obra_real + costo_materiales_real)
+          utilidad_real   = valor_contrato - (costo_mano_obra_real + costo_materiales_real + costo_gastos_real)
           margen_real %   = utilidad_real / valor_contrato * 100
         PLANEADO:
           utilidad_plan   = valor_contrato - costo_planeado_total
@@ -506,7 +587,8 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         valor_contrato   = float(obj.valor_contrato_proyectado or 0)
         costo_mano_obra  = float(obj.costo_mano_obra_real or 0)
         costo_materiales = float(obj.costo_materiales_real or 0)
-        costo_total_real = costo_mano_obra + costo_materiales
+        costo_gastos     = float(obj.costo_gastos_real or 0)
+        costo_total_real = costo_mano_obra + costo_materiales + costo_gastos
         costo_plan       = float(obj.costo_planeado_total or 0)
 
         utilidad_real  = valor_contrato - costo_total_real
@@ -525,6 +607,7 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
                 "valor_contrato":    float(valor_contrato),
                 "costo_mano_obra":   float(costo_mano_obra),
                 "costo_materiales":  float(costo_materiales),
+                "costo_gastos":      float(costo_gastos),
                 "costo_total":       float(costo_total_real),
                 "utilidad_estimada": float(utilidad_real),
                 "margen_rentabilidad": round(float(margen_real), 2),
@@ -602,7 +685,7 @@ class TareaDiariaSerializer(NormalizationMixin, serializers.ModelSerializer):
         fields = [
             'id', 'uuid', 'proyecto_id', 'fecha_inicio', 'fecha_fin', 'titulo', 'descripcion',
             'estado', 'estado_display', 'prioridad', 'prioridad_display',
-            'asignado_a', 'notas_progreso', 'created_at'
+            'asignado_a', 'notas_progreso', 'avance', 'bloqueos', 'incidencias', 'created_at'
         ]
         read_only_fields = ['id', 'uuid', 'estado_display', 'prioridad_display', 'created_at']
 

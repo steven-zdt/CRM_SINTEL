@@ -192,51 +192,6 @@
   }
 
   /**
-   * Vincula o desvincula una cotización opcional a una factura.
-   * @param {string} facturaUuid - UUID de la factura
-   * @param {string|null} cotizacionUuid - UUID de la cotización o null para desvincular
-   * @returns {Promise<{ok: boolean, status: number, data: any}>}
-   */
-  async function vincularCotizacion(facturaUuid, cotizacionUuid = null) {
-    if (!facturaUuid) {
-      throw new Error('facturaUuid es requerido');
-    }
-    return await Http.request('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-cotizacion/`, {
-      cotizacion_uuid: cotizacionUuid || null,
-    });
-  }
-
-  /**
-   * Vincula un cliente a una factura de venta.
-   * @param {string} facturaUuid - UUID de la factura
-   * @param {string} clienteUuid - UUID del cliente
-   * @returns {Promise<{ok: boolean, status: number, data: any}>}
-   */
-  async function vincularCliente(facturaUuid, clienteUuid) {
-    if (!facturaUuid) {
-      throw new Error('facturaUuid es requerido');
-    }
-    return await Http.request('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-cliente/`, {
-      cliente_uuid: clienteUuid || null,
-    });
-  }
-
-  /**
-   * Vincula un proveedor a una factura de compra.
-   * @param {string} facturaUuid - UUID de la factura
-   * @param {string} proveedorUuid - UUID del proveedor
-   * @returns {Promise<{ok: boolean, status: number, data: any}>}
-   */
-  async function vincularProveedor(facturaUuid, proveedorUuid) {
-    if (!facturaUuid) {
-      throw new Error('facturaUuid es requerido');
-    }
-    return await Http.request('PATCH', `${FACTURAS_API_BASE}/${facturaUuid}/vincular-proveedor/`, {
-      proveedor_uuid: proveedorUuid || null,
-    });
-  }
-
-  /**
    * Elimina una factura (alias de deleteFactura para compatibilidad)
    * ⚠️ v2.61.1: DEPRECATED - Usar deleteFactura() en su lugar
    * @param {number} facturaId - ID de la factura
@@ -341,9 +296,6 @@
       uploadDocumento,
       getBatchUploadStatus,  // ⚠️ v2.61.2: Nueva función para consultar estado de batch upload
       getDocumentXML,
-      vincularCotizacion,
-      vincularCliente,
-      vincularProveedor,
       deleteDocument,
       deleteFactura,
       createFacturaFromDTO,

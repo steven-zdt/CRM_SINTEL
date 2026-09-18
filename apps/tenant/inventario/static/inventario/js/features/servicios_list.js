@@ -64,7 +64,8 @@
                 btnDelete.disabled = true;
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
-                    const deleteRes = await w.Sintel.Core.Http.request('DELETE', `${CORE_API_BASE}/${uuid}/`);
+                    // T-9: delega a la SSoT de endpoints (inventario.api.js).
+                    const deleteRes = await w.Sintel.Inventario.API.servicios.delete(uuid);
                     if (!deleteRes.ok) {
                         if (w.UIManager?.handleError) {
                             w.UIManager.handleError(deleteRes, MOD, {

@@ -53,8 +53,13 @@ class CuentaBancariaSerializer(serializers.ModelSerializer):
             "banco",
             "tipo",
             "numero",
+            "activo",
         )
-        read_only_fields = ("id", "uuid")
+        # B-4: 'activo' solo se muta via las acciones dedicadas
+        # (activar/desactivar), nunca por el PUT/PATCH generico -- mismo
+        # criterio que CO-3 (no bypasear la maquina de estados/flags desde
+        # el serializer generico de edicion).
+        read_only_fields = ("id", "uuid", "activo")
 
 class ExtractoBancarioListSerializer(serializers.ModelSerializer):
     """Serializer for ExtractoBancario lists with conciliacion summary."""

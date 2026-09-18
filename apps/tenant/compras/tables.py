@@ -8,12 +8,13 @@ como filtro server-side, no hubo que agregar nada al Service Layer).
 import django_tables2 as tables
 from django.utils.html import format_html
 
-from apps.tenant.compras.models import OrdenCompra
+from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra
 
 _BADGE_ESTADO = {
     "BORRADOR": ("bg-secondary bg-opacity-10 text-secondary", "border-secondary border-opacity-20"),
     "PENDIENTE": ("bg-warning bg-opacity-10 text-warning-emphasis", "border-warning border-opacity-20"),
     "APROBADA": ("bg-success bg-opacity-10 text-success", "border-success border-opacity-20"),
+    "PARCIAL": ("bg-info bg-opacity-10 text-info-emphasis", "border-info border-opacity-20"),
     "RECIBIDA": ("bg-info bg-opacity-10 text-info-emphasis", "border-info border-opacity-20"),
     "ANULADA": ("bg-danger bg-opacity-10 text-danger", "border-danger border-opacity-20"),
 }
@@ -94,4 +95,54 @@ class OrdenCompraTable(tables.Table):
             '<i class="bi bi-trash"></i></button>'
             "</div>",
             record.uuid, edit_cls, delete_cls,
+        )
+
+
+class PlantillaOrdenCompraTable(tables.Table):
+    """
+    CO-1 (2026-09-12): pantalla de gestion de plantillas -- antes solo
+    existia el formulario "Nueva Plantilla", sin ningun lugar para VER las
+    ya creadas (una plantilla con vigente=False era invisible en todas
+    partes, incluido el dropdown de "Nueva Orden" que filtra vigente_only=True).
+    """
+    nombre = tables.Column(verbose_name="Nombre")
+    prefijo = tables.Column(verbose_name="Prefijo", empty_values=())
+    rango = tables.Column(empty_values=(), orderable=False, verbose_name="Rango")
+    consecutivo_actual = tables.Column(verbose_name="Siguiente Consecutivo")
+    vigente = tables.Column(verbose_name="Estado")
+    acciones = tables.Column(empty_values=(), orderable=False, verbose_name="")
+
+    class Meta:
+        model = PlantillaOrdenCompra
+        fields = ()
+        sequence = ("nombre", "prefijo", "rango", "consecutivo_actual", "vigente", "acciones")
+        attrs = {"class": "table table-hover align-middle mb-0", "id": "tabla-plantillas-compra"}
+        empty_text = "No se encontraron plantillas de numeración registradas"
+        order_by = "-vigente"
+
+    def render_prefijo(self, value):
+        return value or format_html('<span class="text-muted small">—</span>')
+
+    def render_rango(self, record):
+        return format_html("{} – {}", record.rango_desde, record.rango_hasta)
+
+    def render_vigente(self, value):
+        if value:
+            return format_html('<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-20 px-2 py-1">Vigente</span>')
+        return format_html('<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20 px-2 py-1">Inactiva</span>')
+
+    def render_acciones(self, record):
+        toggle_label = "Desactivar" if record.vigente else "Activar"
+        toggle_icon = "bi-toggle2-off" if record.vigente else "bi-toggle2-on"
+        toggle_cls = "btn-outline-secondary" if record.vigente else "btn-outline-success"
+        return format_html(
+            '<div class="btn-group btn-group-sm">'
+            '<button type="button" class="btn btn-outline-primary"'
+            ' hx-get="/api/v1/compras/plantillas/render-offcanvas/editar/?uuid={0}"'
+            ' hx-target="#offcanvas-container-plantillas" hx-swap="innerHTML" title="Editar">'
+            '<i class="bi bi-pencil"></i></button>'
+            '<button type="button" class="btn {1} btn-toggle-plantilla" data-uuid="{0}" data-vigente="{2}" title="{3}">'
+            '<i class="bi {4}"></i></button>'
+            "</div>",
+            record.uuid, toggle_cls, "true" if record.vigente else "false", toggle_label, toggle_icon,
         )

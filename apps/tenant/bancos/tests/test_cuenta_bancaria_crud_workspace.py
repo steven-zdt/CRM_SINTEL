@@ -80,6 +80,13 @@ class CuentaBancariaCrudWorkspaceTests(SintelTenantTestCase):
         self.assertEqual(len(items), initial_count + 1)
 
         # 6. DELETE positivo (sin extractos asociados)
+        # B-4: eliminar_cuenta() ahora exige desactivar primero (mismo
+        # estandar que Proveedor/Cliente: bloqueo si activo, fisico si
+        # inactivo) -- una cuenta activa ya no se puede borrar directamente.
+        resp = self.api_client.post(f"/api/v1/bancos/cuentas/{cuenta_uuid}/desactivar/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
+        self.assertFalse(resp.json()["activo"])
+
         resp = self.api_client.delete(f"/api/v1/bancos/cuentas/{cuenta_uuid}/")
         self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT, resp.content)
         self.assertFalse(CuentaBancaria.objects.filter(uuid=cuenta_uuid).exists())
@@ -90,8 +97,15 @@ class CuentaBancariaCrudWorkspaceTests(SintelTenantTestCase):
         cuenta = CuentaBancaria.objects.get(uuid=cuenta_uuid)
         ExtractoBancario.objects.create(empresa=self.empresa, cuenta=cuenta, mes=1, anio=2026)
 
+        # B-4: desactivar primero para aislar especificamente la guarda de
+        # extractos (sin esto, el rechazo real seria "cuenta activa", no
+        # "tiene extractos asociados" -- falso positivo de cobertura).
+        resp = self.api_client.post(f"/api/v1/bancos/cuentas/{cuenta_uuid}/desactivar/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
+
         resp = self.api_client.delete(f"/api/v1/bancos/cuentas/{cuenta_uuid}/")
         self.assertIn(resp.status_code, (status.HTTP_400_BAD_REQUEST, status.HTTP_422_UNPROCESSABLE_ENTITY), resp.content)
+        self.assertIn(b"extractos asociados", resp.content)
         self.assertTrue(CuentaBancaria.objects.filter(uuid=cuenta_uuid).exists())
 
     def test_cuenta_bancaria_create_campos_requeridos_vacios(self):
@@ -105,3 +119,32 @@ class CuentaBancariaCrudWorkspaceTests(SintelTenantTestCase):
     def test_cuenta_bancaria_read_uuid_inexistente_retorna_404(self):
         resp = self.api_client.get("/api/v1/bancos/cuentas/00000000-0000-0000-0000-000000000000/")
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND, resp.content)
+
+    def test_b4_desactivar_activar_cuenta_bancaria(self):
+        resp = self.api_client.post("/api/v1/bancos/cuentas/", data=self._payload_valido(), format="json")
+        cuenta_uuid = resp.json()["uuid"]
+        self.assertTrue(resp.json()["activo"])
+
+        # Desactivar: soft delete, la cuenta sigue existiendo pero oculta.
+        resp = self.api_client.post(f"/api/v1/bancos/cuentas/{cuenta_uuid}/desactivar/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
+        self.assertFalse(resp.json()["activo"])
+        cuenta_db = CuentaBancaria.objects.get(uuid=cuenta_uuid)
+        self.assertFalse(cuenta_db.activo)
+
+        # Activa -> eliminar directo esta bloqueado (ya cubierto en otro test);
+        # reactivar debe revertir el estado.
+        resp = self.api_client.post(f"/api/v1/bancos/cuentas/{cuenta_uuid}/activar/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
+        self.assertTrue(resp.json()["activo"])
+        cuenta_db.refresh_from_db()
+        self.assertTrue(cuenta_db.activo)
+
+    def test_b4_eliminar_cuenta_activa_es_rechazada(self):
+        resp = self.api_client.post("/api/v1/bancos/cuentas/", data=self._payload_valido(), format="json")
+        cuenta_uuid = resp.json()["uuid"]
+
+        resp = self.api_client.delete(f"/api/v1/bancos/cuentas/{cuenta_uuid}/")
+        self.assertEqual(resp.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, resp.content)
+        self.assertIn(b"activa", resp.content)
+        self.assertTrue(CuentaBancaria.objects.filter(uuid=cuenta_uuid).exists())

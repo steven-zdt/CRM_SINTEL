@@ -256,8 +256,32 @@ class OrdenCompraCRUDService:
             raise ValidationError(f"Estado '{nuevo_estado}' no es valido.")
 
         orden.estado = nuevo_estado
-        orden.save(update_fields=['estado'])
+        # BUG (2026-09-12, hallazgo CO-4): Django solo refresca un campo
+        # auto_now=True (updated_at) si esta incluido en update_fields --
+        # sin 'updated_at' aqui, una transicion de estado (Aprobar/Anular)
+        # no dejaba ningun rastro de CUANDO ocurrio.
+        orden.save(update_fields=['estado', 'updated_at'])
         logger.info(f"[OrdenCompraCRUD] Cambio de estado Orden ID={orden.id} a {nuevo_estado}")
+        return orden
+
+    @staticmethod
+    @transaction.atomic
+    def vincular_factura(orden: OrdenCompra, factura) -> OrdenCompra:
+        """
+        FACTURAS-UI-CRONO-01: asigna manualmente la Factura (naturaleza
+        COMPRA) ya persistida en el modulo Facturas -- mismo patron que
+        VentaCRUDService.vincular_factura() (apps/tenant/ventas/services/
+        crud_service.py). A diferencia de Ventas, OrdenCompra.ESTADO_CHOICES
+        no tiene un estado equivalente a FACTURADA_DIAN -- no se inventa
+        uno nuevo aqui (regla explicita de la mision), el estado de la
+        orden no cambia por este vinculo.
+        """
+        orden.factura_asociada = factura
+        orden.save(update_fields=["factura_asociada"])
+        logger.info(
+            "[OrdenCompraCRUD] Orden ID=%s vinculada manualmente a Factura ID=%s",
+            orden.id, factura.id,
+        )
         return orden
 
     @staticmethod

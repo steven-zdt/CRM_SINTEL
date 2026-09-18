@@ -112,8 +112,8 @@
       </div>
     </div>
 
-    {# --- 2. Formulario de Abono (Solo si no esta pagada) --- #}
-    {% if cuentas_pagar.estado_pago != 'PAGADA' %}
+    {# --- 2. Formulario de Abono (Solo si no esta pagada y no es modo "Ver") --- #}
+    {% if modo != 'ver' and cuentas_pagar.estado_pago != 'PAGADA' %}
       <p class="section-title">
         <i class="bi bi-cash-coin"></i>Registrar Abono
       </p>
@@ -142,10 +142,15 @@
           <textarea id="observaciones_abono_cuentas_pagar" class="form-control" rows="2" placeholder="Notas sobre el pago..."></textarea>
         </div>
       </form>
-    {% else %}
+    {% elif cuentas_pagar.estado_pago == 'PAGADA' %}
       <div class="alert alert-success text-center" role="alert">
         <i class="bi bi-check-circle-fill me-2 fs-5"></i>
         Esta obligacion de cuentas por pagar ya se encuentra completamente liquidada.
+      </div>
+    {% else %}
+      <div class="alert alert-secondary text-center" role="alert">
+        <i class="bi bi-eye me-2 fs-5"></i>
+        Vista de solo lectura. Use "Abonar" desde la tabla para registrar un pago.
       </div>
     {% endif %}
 
@@ -155,7 +160,7 @@
     <button type="button" class="btn btn-outline-secondary w-50" data-bs-dismiss="offcanvas">
       Cancelar
     </button>
-    {% if cuentas_pagar.estado_pago != 'PAGADA' %}
+    {% if modo != 'ver' and cuentas_pagar.estado_pago != 'PAGADA' %}
       <button type="button" id="btn-guardar-abono-cuentas-pagar" class="btn btn-success w-50">
         <i class="bi bi-cash-coin me-1"></i>Registrar Abono
       </button>

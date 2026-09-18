@@ -1,0 +1,130 @@
+{# offcanvas_detalle_devengo.html — Detalle de Nómina (solo lectura) #}
+{# feature 2026-09-10: antes "Ver" reutilizaba el formulario de CREAR (editable) #}
+{# solo para mostrar datos. Devengo es inmutable (405 en update/partial_update), #}
+{# esta vista es puramente informativa. Zero JS en HTML (mismo patron que #}
+{# offcanvas_detalle_liquidacion.html): interacciones resueltas en nomina_list.js. #}
+{% load currency_filters %}
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-devengo-detalle"
+     aria-labelledby="offcanvas-devengo-detalle-label"
+     style="width: min(720px, 96vw);">
+
+  <div class="offcanvas-header py-3 px-4 border-bottom"
+       style="background: linear-gradient(135deg,#1e3a5f 0%,#0d6efd 100%);">
+    <div class="flex-grow-1 min-w-0">
+      <h5 class="offcanvas-title fw-bold text-white mb-0 text-truncate" id="offcanvas-devengo-detalle-label">
+        <i class="bi bi-cash-coin me-2"></i>Nómina {{ devengo.periodo_mes }}
+      </h5>
+      <small class="text-white opacity-75">
+        {{ empleado.nombre_completo }} &mdash; Doc: {{ empleado.numero_documento }}
+      </small>
+    </div>
+    <div class="d-flex align-items-center gap-2 ms-2 flex-shrink-0">
+      {% if devengo.anulado %}
+        <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Anulada</span>
+      {% else %}
+        <span class="badge bg-success"><i class="bi bi-check2-circle me-1"></i>Vigente</span>
+      {% endif %}
+      <button type="button" class="btn-close btn-close-white ms-1" data-bs-dismiss="offcanvas"></button>
+    </div>
+  </div>
+
+  <div class="offcanvas-body p-0" style="overflow-y:auto;">
+
+    {# ── KPI Strip ──────────────────────────────────────────── #}
+    <div class="d-flex gap-0 border-bottom" style="background:#f8f9fa;">
+      <div class="flex-fill text-center py-3 border-end">
+        <div class="text-muted" style="font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;">Días Laborados</div>
+        <div class="fw-bold mt-1" style="font-size:.95rem;">{{ devengo.dias_laborados }}</div>
+      </div>
+      <div class="flex-fill text-center py-3 border-end">
+        <div class="text-muted" style="font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;">Fecha de Pago</div>
+        <div class="fw-bold mt-1" style="font-size:.95rem;">{{ devengo.fecha_pago|date:"d/m/Y" }}</div>
+      </div>
+      <div class="flex-fill text-center py-3" style="background:#0d6efd10;">
+        <div class="text-primary" style="font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;font-weight:700;">Neto a Pagar</div>
+        <div class="fw-bold text-primary mt-1" style="font-size:1.1rem;">{{ devengo.neto_pagar|currency_cop }}</div>
+      </div>
+    </div>
+
+    <div class="p-4">
+
+      {# ── Datos laborales ──────────────────────────────────── #}
+      <div class="mb-4">
+        <div class="text-muted mb-2" style="font-size:.65rem;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">
+          <i class="bi bi-person-badge me-1"></i>Datos Laborales
+        </div>
+        <div class="row g-2 small">
+          <div class="col-6"><span class="text-muted">Empleado:</span> <strong>{{ empleado.nombre_completo }}</strong></div>
+          <div class="col-6"><span class="text-muted">Documento:</span> {{ empleado.numero_documento }}</div>
+          <div class="col-6"><span class="text-muted">Cargo:</span> {{ contrato.cargo }}</div>
+          <div class="col-6"><span class="text-muted">Contrato:</span> {{ contrato.get_tipo_display }}</div>
+          {% if devengo.periodo %}
+          <div class="col-12"><span class="text-muted">Período de nómina:</span> <strong>{{ devengo.periodo.periodo_mes }}</strong> ({{ devengo.periodo.get_estado_display }})</div>
+          {% endif %}
+          {% if devengo.fecha_inicio and devengo.fecha_fin %}
+          <div class="col-12"><span class="text-muted">Rango laborado:</span> {{ devengo.fecha_inicio|date:"d/m/Y" }} → {{ devengo.fecha_fin|date:"d/m/Y" }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      {# ── Devengados desglosados ───────────────────────────── #}
+      <div class="mb-4">
+        <div class="text-muted mb-2" style="font-size:.65rem;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">
+          <i class="bi bi-plus-circle me-1 text-success"></i>Devengados
+        </div>
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><td>Salario Base</td><td class="text-end font-monospace">{{ devengo.salario_base|currency_cop }}</td></tr>
+            <tr><td>Auxilio de Transporte</td><td class="text-end font-monospace">{{ devengo.auxilio_transporte|currency_cop }}</td></tr>
+            <tr><td>Horas Extras y Recargos</td><td class="text-end font-monospace">{{ devengo.valor_horas_extras|currency_cop }}</td></tr>
+            <tr><td>Otros Devengos</td><td class="text-end font-monospace">{{ devengo.otros_devengos|currency_cop }}</td></tr>
+          </tbody>
+          <tfoot class="table-success">
+            <tr><td class="fw-semibold">Total Devengado</td><td class="text-end font-monospace fw-semibold">{{ total_devengado|currency_cop }}</td></tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {# ── Deducciones desglosadas ───────────────────────────── #}
+      <div class="mb-4">
+        <div class="text-muted mb-2" style="font-size:.65rem;text-transform:uppercase;font-weight:700;letter-spacing:.06em;">
+          <i class="bi bi-dash-circle me-1 text-danger"></i>Deducciones
+        </div>
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><td>Salud (4%)</td><td class="text-end font-monospace">{{ devengo.salud_empleado|currency_cop }}</td></tr>
+            <tr><td>Pensión (4%)</td><td class="text-end font-monospace">{{ devengo.pension_empleado|currency_cop }}</td></tr>
+            <tr><td>Préstamos</td><td class="text-end font-monospace">{{ devengo.prestamos|currency_cop }}</td></tr>
+            <tr><td>Descuentos Operativos</td><td class="text-end font-monospace">{{ devengo.descuentos_operativos|currency_cop }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      {% if devengo.observaciones %}
+      <div class="mb-2">
+        <div class="text-muted mb-1" style="font-size:.65rem;text-transform:uppercase;font-weight:700;">
+          <i class="bi bi-chat-left-text me-1"></i>Observaciones
+        </div>
+        <div class="bg-light border rounded p-2 small text-muted">{{ devengo.observaciones|linebreaksbr }}</div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  {# ── Footer con acciones ───────────────────────────────────── #}
+  <div class="offcanvas-footer border-top bg-light p-3">
+    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+      <a href="/api/v1/empleados/devengos/{{ devengo.uuid }}/pdf/"
+         target="_blank"
+         class="btn btn-danger btn-sm">
+        <i class="bi bi-file-earmark-pdf me-1"></i>Generar Desprendible PDF
+      </a>
+      <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="offcanvas">
+        <i class="bi bi-x-lg me-1"></i>Cerrar
+      </button>
+    </div>
+  </div>
+</div>

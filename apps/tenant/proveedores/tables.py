@@ -19,6 +19,13 @@ from apps.tenant.proveedores.models import Proveedor
 
 _SIN_DATO = mark_safe('<span class="text-muted small">—</span>')
 
+# Mismo mapeo visual que clientes/tables.py::_TIPO_PERSONA_MAP -- coherencia
+# de badges entre ambos modulos (RELEASE-CLOSE/PROVEEDORES-02, Fase 7/18).
+_TIPO_PERSONA_MAP = {
+    "JURIDICA": ("bg-info", "Jurídica"),
+    "NATURAL": ("bg-secondary", "Natural"),
+}
+
 
 def _fmt_cop(value):
     try:
@@ -32,16 +39,22 @@ class ProveedorTable(tables.Table):
     # empty_values=(): django-tables2 solo llama a render_<campo>() cuando el
     # valor no esta en empty_values (por defecto (None, '')) -- forzamos ()
     # para que el render propio maneje siempre el caso vacio/legacy.
-    razon_social = tables.Column(verbose_name="Razón Social", empty_values=())
-    numero_documento = tables.Column(verbose_name="NIT/Documento", empty_values=())
-    cuentas_pagar = tables.Column(empty_values=(), orderable=False, verbose_name="Cuentas por Pagar")
+    razon_social = tables.Column(verbose_name="Proveedor", empty_values=())
+    tipo_persona = tables.Column(verbose_name="Tipo", empty_values=())
+    numero_documento = tables.Column(verbose_name="Documento", empty_values=())
+    regimen_tributario = tables.Column(verbose_name="Régimen", empty_values=())
+    contacto = tables.Column(accessor="email_contacto", empty_values=(), orderable=False, verbose_name="Contacto")
     activo = tables.Column(verbose_name="Estado")
+    cuentas_pagar = tables.Column(empty_values=(), orderable=False, verbose_name="Cartera")
     acciones = tables.Column(empty_values=(), orderable=False, verbose_name="")
 
     class Meta:
         model = Proveedor
         fields = ()
-        sequence = ("razon_social", "numero_documento", "cuentas_pagar", "activo", "acciones")
+        sequence = (
+            "razon_social", "tipo_persona", "numero_documento", "regimen_tributario",
+            "contacto", "activo", "cuentas_pagar", "acciones",
+        )
         attrs = {"class": "table table-hover align-middle mb-0", "id": "tabla-proveedores"}
         # data-uuid habilita "click en la fila abre el detalle" (excepto sobre
         # los botones de accion) -- replica el rowClick de Tabulator que tenia
@@ -54,11 +67,39 @@ class ProveedorTable(tables.Table):
         self.cuentas_pagar_map = cuentas_pagar_map or {}
         super().__init__(*args, **kwargs)
 
-    def render_razon_social(self, value):
-        return value or "—"
+    def render_razon_social(self, record):
+        nombre = record.razon_social or record.nombre_comercial or "—"
+        return format_html('<span class="fw-semibold">{}</span>', nombre)
 
-    def render_numero_documento(self, value):
-        return value or _SIN_DATO
+    def render_tipo_persona(self, value):
+        cls, label = _TIPO_PERSONA_MAP.get(value, ("bg-light text-dark", value or "—"))
+        return format_html('<span class="badge {}">{}</span>', cls, label)
+
+    def render_numero_documento(self, record):
+        if not record.numero_documento:
+            return _SIN_DATO
+        dv = f"-{record.digito_verificacion}" if record.digito_verificacion else ""
+        return format_html('<span class="small">{} {}{}</span>', record.get_tipo_documento_display(), record.numero_documento, dv)
+
+    def render_regimen_tributario(self, record):
+        label = record.get_regimen_tributario_display() if record.regimen_tributario else "—"
+        ret_html = (
+            mark_safe('<span class="badge bg-warning ms-1" title="Agente Retenedor"><i class="bi bi-shield-check"></i></span>')
+            if record.es_retenedor else ""
+        )
+        return format_html('<span class="small">{}</span>{}', label, ret_html)
+
+    def render_contacto(self, record):
+        parts = []
+        if record.email_contacto:
+            parts.append(format_html('<div class="text-truncate small"><i class="bi bi-envelope me-1 text-muted"></i>{}</div>', record.email_contacto))
+        if record.telefono_contacto:
+            parts.append(format_html('<div class="small"><i class="bi bi-telephone me-1 text-muted"></i>{}</div>', record.telefono_contacto))
+        if record.ciudad:
+            parts.append(format_html('<div class="small text-muted"><i class="bi bi-geo-alt me-1"></i>{}</div>', record.ciudad))
+        if not parts:
+            return _SIN_DATO
+        return format_html('<div class="lh-sm">{}</div>', mark_safe("".join(parts)))
 
     def render_cuentas_pagar(self, record):
         c = self.cuentas_pagar_map.get(str(record.uuid))
@@ -93,13 +134,19 @@ class ProveedorTable(tables.Table):
         return mark_safe('<span class="badge bg-secondary">Inactivo</span>')
 
     def render_acciones(self, record):
+        # Ver / Editar / Representantes / Eliminar (mision Proveedores §7 --
+        # acciones claras, mismo patron de btn-group-sm que Clientes).
         is_active = record.activo is True
         delete_disabled = "disabled" if is_active else ""
         delete_class = "opacity-50" if is_active else ""
         return format_html(
             '<div class="btn-group btn-group-sm">'
+            '<button type="button" class="btn btn-outline-info btn-view-proveedor" data-id="{0}" title="Ver">'
+            '<i class="bi bi-eye"></i></button>'
             '<button type="button" class="btn btn-outline-primary btn-edit-proveedor" data-id="{0}" title="Editar">'
             '<i class="bi bi-pencil"></i></button>'
+            '<button type="button" class="btn btn-outline-secondary btn-representantes-proveedor" data-id="{0}" title="Representantes">'
+            '<i class="bi bi-person-check"></i></button>'
             '<button type="button" class="btn btn-outline-danger btn-delete-proveedor {1}" data-id="{0}" {2} title="Eliminar">'
             '<i class="bi bi-trash"></i></button>'
             "</div>",
@@ -108,14 +155,17 @@ class ProveedorTable(tables.Table):
 
 
 class CuentasPagarTable(tables.Table):
-    # Fuente: Factura.naturaleza='COMPRA' (fuente de verdad, ver
-    # CuentasPagarSelector.qs_list_facturas_compra en services/selectors.py
-    # y CuentasPagarViewSet.list en la API DRF -- misma SSoT). El modelo
-    # CuentasPagar (distinto) solo se usa para persistir abonos.
+    # Fuente: CuentasPagarSelector.qs_list_unificado() -- lista Python de
+    # filas ya normalizadas a una forma comun (ver
+    # CuentasPagarSelector._fila_unificada), sin importar si la fila se
+    # origina en una Factura(COMPRA) o en una CuentasPagar real (manual o
+    # generada al aprobar una Orden de Compra). `Meta.model` se deja en
+    # Factura solo por compatibilidad de nombres de campo con django-tables2
+    # (no se usa para resolver el queryset, que ya llega resuelto).
     numero_factura = tables.Column(accessor="numero", verbose_name="Factura", empty_values=())
     proveedor_nombre = tables.Column(accessor="emisor_razon_social", verbose_name="Proveedor", empty_values=())
     valor_total = tables.Column(accessor="total", verbose_name="Monto Total", empty_values=())
-    saldo = tables.Column(accessor="total", verbose_name="Saldo Pendiente", empty_values=(), orderable=False)
+    saldo = tables.Column(accessor="saldo", verbose_name="Saldo Pendiente", empty_values=(), orderable=False)
     fecha_vencimiento = tables.Column(accessor="payment_due_date", verbose_name="Vencimiento", empty_values=())
     estado_pago = tables.Column(verbose_name="Estado", empty_values=())
     acciones = tables.Column(empty_values=(), orderable=False, verbose_name="")
@@ -137,12 +187,8 @@ class CuentasPagarTable(tables.Table):
     def render_valor_total(self, value):
         return _fmt_cop(value)
 
-    def render_saldo(self, record):
-        # Saldo = 0 si PAGADA, total en cualquier otro caso (misma logica
-        # que FacturaCxPListSerializer.get_saldo en api/serializers.py).
-        if record.estado_pago == "PAGADA":
-            return _fmt_cop(0)
-        return _fmt_cop(record.total)
+    def render_saldo(self, value):
+        return _fmt_cop(value)
 
     def render_fecha_vencimiento(self, value):
         return value.strftime("%Y-%m-%d") if value else _SIN_DATO
@@ -152,7 +198,7 @@ class CuentasPagarTable(tables.Table):
         # ligada a un CharField con choices por su get_FOO_display() humano
         # ("Pagada", "No Pagada"...) -- usamos record.estado_pago directo
         # para comparar contra el valor crudo del choice (mismo patron que
-        # render_saldo/render_acciones en esta misma clase).
+        # render_acciones en esta misma clase).
         if record.estado_pago == "PAGADA":
             return mark_safe('<span class="badge bg-success">Pagada</span>')
         if record.estado_pago == "PAGO_PARCIAL":
@@ -160,13 +206,27 @@ class CuentasPagarTable(tables.Table):
         return mark_safe('<span class="badge bg-danger">Sin Pago</span>')
 
     def render_acciones(self, record):
+        # "Ver": siempre disponible, abre el offcanvas en modo solo-lectura.
+        # "Abonar": solo si no esta PAGADA.
+        # "Eliminar": solo CxP manuales (sin Factura) y sin pagos aun -- ver
+        # CuentasPagarSelector._fila_unificada (`puede_eliminar`) y
+        # CuentasPagarBusinessService.eliminar_cuenta_pagar().
         es_pagada = record.estado_pago == "PAGADA"
-        btn_disabled = "disabled" if es_pagada else ""
-        btn_class = "opacity-50" if es_pagada else ""
-        return format_html(
-            '<div class="btn-group btn-group-sm">'
-            '<button type="button" class="btn btn-outline-success btn-abono-cuentas-pagar {0}" data-uuid="{1}" {2} title="Registrar Abono">'
-            '<i class="bi bi-cash-coin"></i> Abono</button>'
-            "</div>",
-            btn_class, record.uuid, btn_disabled,
-        )
+        botones = [format_html(
+            '<button type="button" class="btn btn-outline-secondary btn-ver-cuentas-pagar" '
+            'data-uuid="{0}" title="Ver"><i class="bi bi-eye"></i></button>',
+            record.uuid,
+        )]
+        if not es_pagada:
+            botones.append(format_html(
+                '<button type="button" class="btn btn-outline-success btn-abono-cuentas-pagar" '
+                'data-uuid="{0}" title="Registrar Abono"><i class="bi bi-cash-coin"></i> Abono</button>',
+                record.uuid,
+            ))
+        if getattr(record, "puede_eliminar", False):
+            botones.append(format_html(
+                '<button type="button" class="btn btn-outline-danger btn-eliminar-cuentas-pagar" '
+                'data-uuid="{0}" title="Eliminar"><i class="bi bi-trash"></i></button>',
+                record.uuid,
+            ))
+        return format_html('<div class="btn-group btn-group-sm">{}</div>', mark_safe("".join(botones)))

@@ -105,10 +105,22 @@
       "PowerShell(pwsh -NoProfile -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\Administrator\\\\Documents\\\\ecommerce_sintel_rest\\\\ai_engine\\\\e2e_http\\\\e2e_support_ai_chat_test.ps1\")",
       "Bash(node --check apps/tenant/gastos/static/gastos/js/features/gasto_list.js)",
       "Bash(echo \"EXIT:$?\")",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(python -m py_compile apps/tenant/ai_knowledge/tests/test_indexing.py apps/tenant/ai_knowledge/tasks.py)",
+      "Bash(./venv/Scripts/python.exe -m pytest apps/tenant/ai_knowledge/tests/test_indexing.py -q --no-header -p no:cacheprovider)",
+      "Bash(curl -s -o /dev/null -w \"health=%{http_code}\\\\n\" http://localhost:8000/health)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s -o /dev/null -w \"health\\(directo\\)=%{http_code}  \" http://localhost:8000/health)",
+      "Bash(curl -sk -o /dev/null -w \"health\\(nginx\\)=%{http_code}\\\\n\" https://localhost/health)",
+      "Bash(./venv/Scripts/python.exe -m pytest apps/services/ai/tests/ apps/tenant/ai_knowledge/tests/ --collect-only -q -p no:cacheprovider)",
+      "Bash(grep -nE \"^---$|^\\\\*\\\\*A\\\\. Infraestructura|^\\\\*\\\\*Contexto:|Actualizacion previa.*DOC-M4\" documentacion/arquitectura_general.md)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Administrator\\Documents\\crm_sintel"
     ]
-  }
+  },
+  "disabledMcpjsonServers": [
+    "gemini-api-docs-mcp"
+  ]
 }

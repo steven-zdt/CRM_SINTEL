@@ -160,11 +160,12 @@
             if (categoriaId) {
                 // ⚠️ UPDATE: Actualizar categoría existente
                 console.log(`${MOD} Actualizando categoría ID: ${categoriaId}`);
-                res = await w.Sintel.Core.Http.request('PATCH', `${CORE_API_BASE}/${categoriaId}/`, payload);
+                // T-9: delega a la SSoT de endpoints (inventario.api.js).
+                res = await w.Sintel.Inventario.API.categorias.update(categoriaId, payload);
             } else {
                 // ⚠️ CREATE: Crear nueva categoría
                 console.log(`${MOD} Creando nueva categoría`);
-                res = await w.Sintel.Core.Http.request('POST', `${CORE_API_BASE}/`, payload);
+                res = await w.Sintel.Inventario.API.categorias.save(payload);
             }
 
             // ⚠️ v2.61.3: Aislamiento Gradual - Solo verificar ok

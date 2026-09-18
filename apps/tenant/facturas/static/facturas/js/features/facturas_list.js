@@ -143,7 +143,8 @@
                 btnDelete.innerHTML = '<i class="bi bi-hourglass-split"></i>';
 
                 try {
-                    const res = await w.Sintel.Core.Http.request('DELETE', `/api/v1/facturas/${id}/`);
+                    // T-9: delega a la SSoT de endpoints (facturas.api.js).
+                    const res = await w.facturasAPI.deleteFactura(id);
 
                     if (res.ok) {
                         const offcanvasVerFactura = d.getElementById('offcanvas-ver-factura');
@@ -225,6 +226,10 @@
                 if (!value || value === '0.00' || value === '0') return '$ 0,00';
                 const num = parseFloat(value);
                 if (isNaN(num)) return '$ 0,00';
+                // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+                if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
+                    return w.DOMUtils.formatCurrency(num, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                }
                 return new Intl.NumberFormat('es-CO', {
                     style: 'currency',
                     currency: 'COP',

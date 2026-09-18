@@ -122,7 +122,8 @@
         if (uuid) {
             res = await w.Sintel.Core.Http.request('PATCH', `/api/v1/proyectos/${uuid}/`, data);
         } else {
-            res = await w.Sintel.Core.Http.request('POST', '/api/v1/proyectos/', data);
+            // T-9: delega a la SSoT de endpoints (proyectos.api.js).
+            res = await w.proyectosAPI.create(data);
         }
 
         // Error Boundary: Restaurar estado del botón
@@ -502,7 +503,10 @@
     function initInformeCierre() {
         if (!currentProyecto) return;
 
-        const fmt    = (n) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n || 0);
+        // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+        const fmt    = (n) => (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+            ? w.DOMUtils.formatCurrency(n || 0, { minimumFractionDigits: 0 })
+            : new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n || 0);
         const fmtPct = (n) => `${(n || 0).toFixed(1)}%`;
         const setEl  = (id, text) => { const el = d.querySelector(`#${id}`); if (el) el.textContent = text; };
 
@@ -521,7 +525,8 @@
         const costoPlan   = parseFloat(currentProyecto.costo_planeado_total)      || 0;
         const costoMO     = parseFloat(currentProyecto.costo_mano_obra_real)      || 0;
         const costoMat    = parseFloat(currentProyecto.costo_materiales_real)     || 0;
-        const costoReal   = costoMO + costoMat;
+        const costoGastos = parseFloat(currentProyecto.costo_gastos_real)         || 0;
+        const costoReal   = costoMO + costoMat + costoGastos;
 
         // Presupuesto planeado por categoria (Fase 2 _items como fallback si ya estan cargados)
         const items = w.Sintel?.ProyectosPresupuesto?._items || [];
@@ -609,6 +614,11 @@
             w.Sintel.TareasDiarias.init(currentProyecto.uuid, currentProyecto, enCierre);
         }
 
+        // 1.7. Gastos del Proyecto (GASTOS_PROYECTOS_01 - Fase 3)
+        if (currentProyecto?.uuid) {
+            w.Sintel.ProyectosGastos.init(currentProyecto.uuid);
+        }
+
         // 2. Equipo de Trabajo (Fase 3)
         const equipoList = d.querySelector('#equipo-trabajo-list');
         if (equipoList) {
@@ -681,7 +691,8 @@
         const valContrato    = parseFloat(currentProyecto.valor_contrato_proyectado) || 0;
         const costPersonal   = parseFloat(currentProyecto.costo_mano_obra_real) || 0;
         const costMateriales = parseFloat(currentProyecto.costo_materiales_real) || 0;
-        const costTotal      = costPersonal + costMateriales;
+        const costGastos     = parseFloat(currentProyecto.costo_gastos_real) || 0;
+        const costTotal      = costPersonal + costMateriales + costGastos;
         // utilidad_real = valor_contrato - costo_total_real
         const utilidad = valContrato - costTotal;
         // margen_real % = utilidad_real / valor_contrato * 100
@@ -695,6 +706,7 @@
         setElementText('fin-valor-contrato',   w.proyectosAPI.formatCurrency(valContrato));
         setElementText('fin-costo-personal',   w.proyectosAPI.formatCurrency(costPersonal));
         setElementText('fin-costo-materiales', w.proyectosAPI.formatCurrency(costMateriales));
+        setElementText('fin-costo-gastos',     w.proyectosAPI.formatCurrency(costGastos));
         setElementText('fin-costo-total',      w.proyectosAPI.formatCurrency(costTotal));
         setElementText('fin-utilidad-neta',    w.proyectosAPI.formatCurrency(utilidad));
 
@@ -744,7 +756,10 @@
         if (totalEl) {
             const total = (info.total_con_impuestos != null) ? info.total_con_impuestos : info.total;
             totalEl.textContent = (total != null && total !== '' && !isNaN(total))
-                ? new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(total)
+                // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+                ? ((w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+                    ? w.DOMUtils.formatCurrency(total, { maximumFractionDigits: 0 })
+                    : new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(total))
                 : '---';
         }
         if (clienteEl)  clienteEl.textContent  = info.cliente_razon_social || info.cliente || '---';
@@ -1534,6 +1549,176 @@
 
     // ============================================================================
     // FIN MÓDULO PRESUPUESTO
+    // ============================================================================
+
+    // ============================================================================
+    // MÓDULO GASTOS DEL PROYECTO (GASTOS_PROYECTOS_01)
+    // ============================================================================
+
+    const ProyectosGastos = {
+        _proyectoUuid: null,
+
+        async init(proyectoUuid) {
+            if (!proyectoUuid) return;
+            this._proyectoUuid = proyectoUuid;
+            this._bindSearch();
+
+            const resp = await w.proyectosAPI.gastos.list(proyectoUuid);
+            if (!resp.ok) {
+                console.error(`${MOD} Error al cargar gastos del proyecto:`, resp);
+                this._render([], 0);
+                return;
+            }
+            const data = resp.data || {};
+            this._render(data.results || [], data.costo_gastos_real);
+        },
+
+        _render(items, costoGastosReal) {
+            const tbody = d.getElementById('tbody-gastos-proyecto');
+            if (tbody) {
+                if (items.length === 0) {
+                    tbody.innerHTML = `
+                        <tr><td colspan="7" class="text-center text-muted py-3">
+                            <small><i class="bi bi-info-circle me-1"></i>Sin gastos asociados a este proyecto.</small>
+                        </td></tr>`;
+                } else {
+                    tbody.innerHTML = items.map(g => {
+                        const estado = g.anulado
+                            ? '<span class="badge bg-danger">Anulado</span>'
+                            : (g.activo ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>');
+                        return `
+                            <tr data-uuid="${g.uuid}">
+                                <td><small>${g.fecha || '—'}</small></td>
+                                <td><small>${g.numero_documento || '—'}</small></td>
+                                <td><small>${g.proveedor_nombre || '—'}</small></td>
+                                <td><small>${g.descripcion || '—'}</small></td>
+                                <td class="text-end"><small>${w.proyectosAPI.formatCurrency(g.subtotal)}</small></td>
+                                <td>${estado}</td>
+                                <td>
+                                    <button type="button" class="btn btn-xs btn-outline-danger"
+                                            onclick="window.Sintel.ProyectosGastos.desvincular('${g.uuid}')"
+                                            title="Desvincular">
+                                        <i class="bi bi-x-circle"></i>
+                                    </button>
+                                </td>
+                            </tr>`;
+                    }).join('');
+                }
+            }
+
+            const totalEl = d.getElementById('gastos-proyecto-total');
+            if (totalEl) {
+                const total = costoGastosReal !== undefined
+                    ? parseFloat(costoGastosReal) || 0
+                    : items.reduce((s, g) => s + (parseFloat(g.subtotal) || 0), 0);
+                totalEl.textContent = w.proyectosAPI.formatCurrency(total);
+            }
+        },
+
+        _bindSearch() {
+            const btnToggle = d.getElementById('btn-agregar-gasto-proyecto');
+            const buscador = d.getElementById('gasto-proyecto-buscador');
+            const searchInput = d.getElementById('gasto-proyecto-search');
+            const suggestions = d.getElementById('gasto-proyecto-suggestions');
+            if (!btnToggle || !buscador || !searchInput || !suggestions) return;
+            if (searchInput.dataset.gastosBound === 'true') return;
+            searchInput.dataset.gastosBound = 'true';
+
+            btnToggle.addEventListener('click', () => {
+                buscador.classList.toggle('d-none');
+                if (!buscador.classList.contains('d-none')) searchInput.focus();
+            });
+
+            let debounceTimer;
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(debounceTimer);
+                const query = e.target.value.trim();
+                if (query.length < 2) {
+                    suggestions.classList.add('d-none');
+                    return;
+                }
+                debounceTimer = setTimeout(async () => {
+                    const resp = await w.Sintel.Core.Http.request('GET', w.proyectosAPI.gastos.search(query));
+                    const items = resp.ok ? (resp.data.results || resp.data || []) : [];
+                    this._renderSuggestions(items, suggestions, searchInput);
+                }, 300);
+            });
+
+            d.addEventListener('click', (e) => {
+                if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                    suggestions.classList.add('d-none');
+                }
+            });
+        },
+
+        _renderSuggestions(items, container, searchInput) {
+            if (items.length === 0) {
+                container.innerHTML = '<div class="list-group-item small text-muted">No se encontraron gastos</div>';
+            } else {
+                // Gastos sin proyecto primero, para reducir errores de doble asignacion.
+                const ordenados = [...items].sort((a, b) => (a.proyecto_uuid ? 1 : 0) - (b.proyecto_uuid ? 1 : 0));
+                container.innerHTML = ordenados.map(g => {
+                    const yaAsociado = g.proyecto_uuid ? ' <span class="badge bg-warning text-dark">Ya asociado a otro proyecto</span>' : '';
+                    return `<button type="button" class="list-group-item list-group-item-action small py-2" data-uuid="${g.uuid}">
+                        <div class="d-flex justify-content-between">
+                            <span><strong>${g.ds_vendedor || ''}</strong> — ${g.ds_numero_documento || ''}</span>
+                            <span>${w.proyectosAPI.formatCurrency(g.ds_subtotal)}</span>
+                        </div>
+                        <small class="text-muted">${g.descripcion || ''}</small>${yaAsociado}
+                    </button>`;
+                }).join('');
+            }
+            container.classList.remove('d-none');
+            container.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', () => this.agregar(btn.dataset.uuid));
+            });
+        },
+
+        async agregar(gastoUuid) {
+            const resp = await w.proyectosAPI.gastos.agregar(gastoUuid, this._proyectoUuid);
+            if (!resp.ok) {
+                w.UIManager?.handleError(resp, 'Error al asociar el gasto al proyecto');
+                return;
+            }
+            w.SintelFeedback?.success('Gasto asociado correctamente. Costo del proyecto actualizado.');
+            d.getElementById('gasto-proyecto-buscador')?.classList.add('d-none');
+            d.getElementById('gasto-proyecto-search').value = '';
+            await this.init(this._proyectoUuid);
+            await refrescarProyectoActual();
+        },
+
+        async desvincular(gastoUuid) {
+            if (!(await w.UIManager?.confirm('¿Desvincular este gasto del proyecto?'))) return;
+
+            const resp = await w.proyectosAPI.gastos.desvincular(gastoUuid);
+            if (!resp.ok) {
+                w.UIManager?.handleError(resp, 'Error al desvincular el gasto');
+                return;
+            }
+            w.SintelFeedback?.success('Gasto desvinculado. Costo del proyecto actualizado.');
+            await this.init(this._proyectoUuid);
+            await refrescarProyectoActual();
+        }
+    };
+
+    w.Sintel.ProyectosGastos = ProyectosGastos;
+
+    /**
+     * Recarga currentProyecto desde la API y refresca el panel de
+     * indicadores financieros tras una mutacion de Gastos (el costo real
+     * cambio en el backend, pero currentProyecto en memoria quedo obsoleto).
+     */
+    async function refrescarProyectoActual() {
+        if (!currentProyecto?.uuid) return;
+        const resp = await w.proyectosAPI.get(currentProyecto.uuid);
+        if (resp.ok) {
+            currentProyecto = resp.data;
+            populateStepDetails();
+        }
+    }
+
+    // ============================================================================
+    // FIN MÓDULO GASTOS DEL PROYECTO
     // ============================================================================
 
     // ============================================================================

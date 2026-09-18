@@ -49,4 +49,14 @@ from .tareas_service import (
     TAREA_FIELDS
 )
 
+from .documentos_service import (
+    DocumentosCRUDService,
+    DocumentosBusinessService,
+    resolver_requisitos_transicion,
+    documentos_faltantes,
+    documentos_obligatorios_faltantes,
+    validar_archivo,
+    DOCUMENTO_FIELDS,
+)
+
 from .api_mixins import TareaCortaServiceMixin

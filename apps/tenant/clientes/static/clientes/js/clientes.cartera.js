@@ -22,6 +22,9 @@
         kpiPendienteMonto: '#cartera-pendiente-monto',
         kpiPendienteCount: '#cartera-pendiente-count',
         kpiPagadoMonto: '#cartera-pagado-monto',
+        kpiSinPagoCount: '#cartera-sin-pago-count',
+        kpiParcialCount: '#cartera-parcial-count',
+        kpiVencidasCount: '#cartera-vencidas-count',
         filtrosEstado: '#filtros-estado-cartera'
     };
 
@@ -38,9 +41,12 @@
         error: (m, d2) => console.error(`[Clientes.Cartera] ${m}`, d2 || '')
     };
 
-    const COP = (v) => new Intl.NumberFormat('es-CO', {
-        style: 'currency', currency: 'COP', minimumFractionDigits: 0
-    }).format(parseFloat(v) || 0);
+    // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+    const COP = (v) => (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+        ? w.DOMUtils.formatCurrency(parseFloat(v) || 0, { minimumFractionDigits: 0 })
+        : new Intl.NumberFormat('es-CO', {
+            style: 'currency', currency: 'COP', minimumFractionDigits: 0
+        }).format(parseFloat(v) || 0);
 
     // ── KPIs ─────────────────────────────────────────────────────────────────
     async function cargarCarteraKPIs() {
@@ -55,6 +61,9 @@
             setVal(DOM.kpiPendienteMonto, COP(k.pendiente_monto));
             setVal(DOM.kpiPendienteCount, k.pendiente_count);
             setVal(DOM.kpiPagadoMonto, COP(k.pagado_monto));
+            setVal(DOM.kpiSinPagoCount, k.sin_pago_count ?? 0);
+            setVal(DOM.kpiParcialCount, k.parcial_count ?? 0);
+            setVal(DOM.kpiVencidasCount, k.vencidas_count ?? 0);
         } catch (err) {
             log.error('Error cargando KPIs de cartera', err);
         }
@@ -99,12 +108,37 @@
         </button>`;
     }
 
+    // mision "Clientes + Cartera" seccion 39 (2026-09-11): dias vencida --
+    // solo tiene sentido con saldo pendiente (una factura PAGADA no "esta
+    // vencida" aunque su fecha de vencimiento ya haya pasado).
+    function _diasVencida(row) {
+        if (row.estado_pago === 'PAGADA' || !row.fecha_vencimiento) return 0;
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        const vence = new Date(row.fecha_vencimiento + 'T00:00:00');
+        const dias = Math.floor((hoy - vence) / 86400000);
+        return dias > 0 ? dias : 0;
+    }
+
     const COLUMNS = [
         { title: 'Factura', field: 'numero_factura', widthGrow: 1.5, formatter: fmtFactura },
         { title: 'Cliente', field: 'cliente_nombre', widthGrow: 2.5 },
         {
-            title: 'Fecha Vence', field: 'fecha_vencimiento', width: 110,
-            formatter: (cell) => cell.getValue() ? `<span class="small">${cell.getValue()}</span>` : '—'
+            title: 'Emisión', field: 'fecha_emision', width: 110,
+            formatter: (cell) => {
+                const v = cell.getValue();
+                return v ? `<span class="small">${String(v).slice(0, 10)}</span>` : '—';
+            }
+        },
+        {
+            title: 'Fecha Vence', field: 'fecha_vencimiento', width: 130,
+            formatter: (cell) => {
+                const row = cell.getRow().getData();
+                const v = cell.getValue();
+                if (!v) return '—';
+                const dias = _diasVencida(row);
+                const badge = dias > 0 ? ` <span class="badge bg-danger">${dias}d vencida</span>` : '';
+                return `<span class="small">${v}</span>${badge}`;
+            }
         },
         {
             title: 'Total', field: 'valor_total', width: 120, hozAlign: 'right',
@@ -201,6 +235,23 @@
         });
     }
 
+    // "VENCIDAS" (mision "Clientes + Cartera" seccion 40) es un pseudo-filtro:
+    // no es un estado_pago real, se traduce a ?vencidas=1 en la API.
+    function _buildCarteraUrl() {
+        const base = '/api/v1/clientes/cartera/';
+        const url = new URL(base, location.origin);
+        if (state.filtroEstado === 'VENCIDAS') {
+            url.searchParams.set('vencidas', '1');
+        } else if (state.filtroEstado) {
+            url.searchParams.set('estado_pago', state.filtroEstado); // BUG FIX: param correcto
+        }
+        const q = d.querySelector(DOM.search)?.value?.trim();
+        if (q) {
+            url.searchParams.set('search', q);
+        }
+        return url;
+    }
+
     function initFiltros() {
         const container = d.querySelector(DOM.filtrosEstado);
         if (!container || container.dataset.bound) return;
@@ -214,16 +265,7 @@
             btn.classList.add('active');
 
             state.filtroEstado = btn.dataset.filtroCartera;
-            
-            const base = '/api/v1/clientes/cartera/';
-            const url = new URL(base, location.origin);
-            if (state.filtroEstado) {
-                url.searchParams.set('estado_pago', state.filtroEstado); // BUG FIX: param correcto
-            }
-            const q = d.querySelector(DOM.search)?.value?.trim();
-            if (q) {
-                url.searchParams.set('search', q);
-            }
+            const url = _buildCarteraUrl();
             state.table.replaceData(url.pathname + url.search);
         });
     }
@@ -266,7 +308,8 @@
         const selectCliente = form.querySelector('#cartera-cliente-id[multiple!=""]');
         if (selectCliente && selectCliente.tagName === 'SELECT') {
             try {
-                const res = await w.Sintel.Core.Http.request('GET', '/api/v1/clientes/?page_size=200');
+                // T-9: delega a la SSoT de endpoints (clientes.api.js).
+                const res = await w.clientesAPI.list({ page_size: 200 });
                 if (res.ok && res.data?.results) {
                     res.data.results.forEach(c => {
                         const opt = d.createElement('option');
@@ -368,6 +411,55 @@
         });
     }
 
+    // ── Notas de Seguimiento (mision "Clientes + Cartera" seccion 29-30) ──────
+    function _renderNotas(container, notas) {
+        const lista = container.querySelector('#cartera-notas-lista');
+        if (!lista) return;
+        if (!notas || !notas.length) {
+            lista.innerHTML = '<p class="text-muted">Sin notas registradas.</p>';
+            return;
+        }
+        lista.innerHTML = notas.map(n => `
+            <div class="border-bottom pb-2 mb-2">
+              <div class="d-flex justify-content-between text-muted">
+                <span class="badge bg-light text-dark border">${n.tipo_display}</span>
+                <span>${new Date(n.created_at).toLocaleString('es-CO')}${n.usuario_nombre ? ' · ' + n.usuario_nombre : ''}</span>
+              </div>
+              <div>${n.texto.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</div>
+            </div>`).join('');
+    }
+
+    function initNotaForm(el) {
+        const form = el.querySelector('#form-nota-cartera');
+        if (!form) return;
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const uuid = form.dataset.carteraUuid;
+            const texto = form.querySelector('#nota-texto')?.value?.trim();
+            const tipo = form.querySelector('#nota-tipo')?.value || 'SEGUIMIENTO';
+            if (!texto) return;
+
+            const btn = form.querySelector('button[type="submit"]');
+            if (btn) btn.disabled = true;
+
+            try {
+                const res = await w.AppCliente.carteraApi.agregarNota(uuid, { texto, tipo });
+                if (res.ok) {
+                    form.querySelector('#nota-texto').value = '';
+                    _renderNotas(el, res.data);
+                } else {
+                    showError(res.data?.texto?.[0] || res.data?.detail || 'No se pudo guardar la nota.');
+                }
+            } catch (err) {
+                log.error('Error guardando nota', err);
+                showError('Error de conexion al guardar la nota.');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        });
+    }
+
     // ── Notifications ────────────────────────────────────────────────────────
     function showSuccess(msg) {
         if (w.UIManager?.success) w.UIManager.success(msg);
@@ -398,6 +490,7 @@
             if (elAbono && w.UIManager?.handleOffcanvas) {
                 w.UIManager.handleOffcanvas(elAbono, 'show');
                 initAbonoForm(elAbono);
+                initNotaForm(elAbono);
             }
             // Offcanvas de crear nueva obligación
             const elCrear = d.getElementById('offcanvas-crear-cartera');
@@ -421,15 +514,7 @@
             clearTimeout(e.target._t);
             e.target._t = setTimeout(() => {
                 if (!state.table) return;
-                const q = e.target.value.trim();
-                const base = '/api/v1/clientes/cartera/';
-                const url = new URL(base, location.origin);
-                if (state.filtroEstado) {
-                    url.searchParams.set('estado_pago', state.filtroEstado); // BUG FIX: param correcto
-                }
-                if (q) {
-                    url.searchParams.set('search', q);
-                }
+                const url = _buildCarteraUrl();
                 state.table.replaceData(url.pathname + url.search);
             }, 300);
         }

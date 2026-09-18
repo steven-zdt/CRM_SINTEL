@@ -122,7 +122,20 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
                     )
                 })
 
+        # GASTOS_PROYECTOS_01: capturar proyecto anterior antes de guardar --
+        # el PATCH de Gasto no pasa por business_service, asi que el
+        # recalculo se dispara aqui tras persistir (cubre: cambio de
+        # proyecto, desvinculacion, vinculacion posterior, y edicion del
+        # subtotal de un gasto ya asociado).
+        proyecto_anterior = instance.proyecto_uuid
+
         super().perform_update(serializer)
+
+        from apps.tenant.gastos.services.business_service import _recalcular_proyecto
+        proyecto_nuevo = serializer.instance.proyecto_uuid
+        proyectos_a_recalcular = {p for p in (proyecto_anterior, proyecto_nuevo) if p}
+        for proyecto_uuid in proyectos_a_recalcular:
+            _recalcular_proyecto(proyecto_uuid, empresa_id)
 
     def create(self, request, *args, **kwargs):
         """Crea un nuevo Gasto via Service Layer."""

@@ -70,6 +70,7 @@ class VentaListSerializer(serializers.ModelSerializer):
     )
     factura_numero = serializers.SerializerMethodField()
     factura_uuid = serializers.SerializerMethodField()
+    estado_pago = serializers.SerializerMethodField()
     resolucion_prefijo = serializers.SerializerMethodField()
 
     class Meta:
@@ -93,6 +94,7 @@ class VentaListSerializer(serializers.ModelSerializer):
             "factura_asociada_id",
             "factura_numero",
             "factura_uuid",
+            "estado_pago",
             "created_at",
         )
         read_only_fields = fields
@@ -105,6 +107,12 @@ class VentaListSerializer(serializers.ModelSerializer):
     def get_factura_uuid(self, obj):
         if obj.factura_asociada_id and obj.factura_asociada:
             return str(obj.factura_asociada.uuid)
+        return None
+
+    def get_estado_pago(self, obj):
+        """Gestion Manual: SSoT es Factura.estado_pago -- Venta solo lee."""
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return obj.factura_asociada.estado_pago
         return None
 
     def get_resolucion_prefijo(self, obj):
@@ -134,6 +142,12 @@ class VentaDetailSerializer(serializers.ModelSerializer):
     factura_numero = serializers.SerializerMethodField()
     factura_uuid = serializers.SerializerMethodField()
     factura_estado = serializers.SerializerMethodField()
+    factura_cufe = serializers.SerializerMethodField()
+    estado_pago = serializers.SerializerMethodField()
+    forma_pago = serializers.SerializerMethodField()
+    medio_pago_codigo = serializers.SerializerMethodField()
+    payment_due_date = serializers.SerializerMethodField()
+    fecha_pago = serializers.SerializerMethodField()
     items = ItemVentaSerializer(many=True, read_only=True)
 
     class Meta:
@@ -161,6 +175,12 @@ class VentaDetailSerializer(serializers.ModelSerializer):
             "factura_numero",
             "factura_uuid",
             "factura_estado",
+            "factura_cufe",
+            "estado_pago",
+            "forma_pago",
+            "medio_pago_codigo",
+            "payment_due_date",
+            "fecha_pago",
             "items",
             "created_at",
             "updated_at",
@@ -190,4 +210,39 @@ class VentaDetailSerializer(serializers.ModelSerializer):
     def get_factura_estado(self, obj):
         if obj.factura_asociada_id and obj.factura_asociada:
             return obj.factura_asociada.estado
+        return None
+
+    def get_factura_cufe(self, obj):
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return obj.factura_asociada.cufe
+        return None
+
+    # --- Gestion Manual de Pago (SSoT = Factura, Venta solo lee/refleja) ---
+    # Editable via PATCH /api/v1/ventas/{uuid}/gestion-pago/, que delega en
+    # FacturaBusinessService.actualizar_factura_limitado() -- nunca se
+    # escribe directamente sobre estos campos desde este serializer.
+
+    def get_estado_pago(self, obj):
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return obj.factura_asociada.estado_pago
+        return None
+
+    def get_forma_pago(self, obj):
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return obj.factura_asociada.forma_pago
+        return None
+
+    def get_medio_pago_codigo(self, obj):
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return obj.factura_asociada.medio_pago_codigo
+        return None
+
+    def get_payment_due_date(self, obj):
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return obj.factura_asociada.payment_due_date
+        return None
+
+    def get_fecha_pago(self, obj):
+        if obj.factura_asociada_id and obj.factura_asociada:
+            return obj.factura_asociada.fecha_pago
         return None

@@ -41,6 +41,9 @@
         // Inicializar buscador de movimientos de inventario (Pull Model v3.8+)
         initMovimientoSearch(form);
 
+        // Inicializar buscador de proyecto (opcional -- GASTOS_PROYECTOS_01)
+        initProyectoSearch(form);
+
         // ── Eventos para Valores Financieros (Input editable) ────────────────
         const subtotalInput = form.querySelector('#subtotal');
 
@@ -276,7 +279,10 @@
         const total_retenciones = monto_retefuente + monto_reteica + monto_reteiva;
         const total = subtotal - total_retenciones;
 
-        const fmt = (n) => n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+        const fmt = (n) => (window.DOMUtils && typeof window.DOMUtils.formatCurrency === 'function')
+            ? window.DOMUtils.formatCurrency(n, { minimumFractionDigits: 2, maximumFractionDigits: 2, showSymbol: false })
+            : n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         // Actualizar badges de porcentaje
         const pctBadge = (id, pct) => {
@@ -314,6 +320,7 @@
             subtotal: parseFloat(form.querySelector('#subtotal')?.value) || 0,
             total: parseFloat(form.querySelector('#total')?.value) || 0,
             movimiento_inventario_uuid: form.querySelector('#movimiento_inventario_uuid')?.value || null,
+            proyecto_uuid: form.querySelector('#proyecto_uuid')?.value || null,
         };
     }
 
@@ -475,8 +482,79 @@
         });
     }
 
+    /**
+     * Buscador de proyecto (opcional -- GASTOS_PROYECTOS_01).
+     * Mismo patron que initMovimientoSearch() (Pull Model via UUID).
+     */
+    function initProyectoSearch(form) {
+        const searchInput = form.querySelector('#proyecto_search');
+        const uuidInput = form.querySelector('#proyecto_uuid');
+        const suggestions = form.querySelector('#proyecto-suggestions');
+
+        if (!searchInput || !uuidInput || !suggestions) return;
+
+        const currentLabel = searchInput.dataset.currentLabel;
+        if (currentLabel && uuidInput.value && !searchInput.value) {
+            searchInput.value = currentLabel;
+        }
+
+        let debounceTimer;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+                suggestions.classList.add('d-none');
+                return;
+            }
+            debounceTimer = setTimeout(async () => {
+                try {
+                    const url = window.Sintel.Gastos.API.proyectos.search(query);
+                    const response = await fetch(url, { headers: window.Sintel.Gastos.getHeaders() });
+                    const result = await response.json();
+                    renderProyectoSuggestions(result.results || [], suggestions, searchInput, uuidInput);
+                } catch (err) {
+                    console.error('[GastoEditor] Error buscando proyectos:', err);
+                }
+            }, 300);
+        });
+
+        searchInput.addEventListener('change', () => {
+            if (!searchInput.value.trim()) uuidInput.value = '';
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                suggestions.classList.add('d-none');
+            }
+        });
+    }
+
+    function renderProyectoSuggestions(items, container, searchInput, uuidInput) {
+        if (items.length === 0) {
+            container.innerHTML = '<div class="list-group-item small text-muted">No se encontraron proyectos</div>';
+        } else {
+            container.innerHTML = items.map(p => {
+                const label = `${p.codigo || ''} — ${p.nombre || ''}`;
+                return `<button type="button" class="list-group-item list-group-item-action small py-2"
+                            data-uuid="${p.uuid}" data-label="${label}">
+                    <strong>${p.codigo || ''}</strong> — ${p.nombre || ''}
+                </button>`;
+            }).join('');
+        }
+        container.classList.remove('d-none');
+        container.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                searchInput.value = btn.dataset.label;
+                uuidInput.value = btn.dataset.uuid;
+                container.classList.add('d-none');
+            });
+        });
+    }
+
     // Exportar
-    window.Sintel.Gastos.Editor = { init, cargarResoluciones, calcularTotales, initMovimientoSearch };
+    window.Sintel.Gastos.Editor = {
+        init, cargarResoluciones, calcularTotales, initMovimientoSearch, initProyectoSearch
+    };
 
     // Inicialización HTMX
     document.body.addEventListener('htmx:afterSettle', (evt) => {

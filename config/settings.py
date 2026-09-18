@@ -362,6 +362,13 @@ STATICFILES_DIRS = [
 MEDIA_URL = '/media/'  # URL base para archivos media
 MEDIA_ROOT = BASE_DIR / 'media'  # Directorio donde se almacenan los archivos subidos
 
+# Storage privado (fuera de MEDIA_ROOT): nginx sirve /media/ publicamente sin
+# autenticacion (ver nginx/nginx.conf, location /media/). Documentos sensibles
+# (ej. DocumentoProyecto) usan este directorio en vez de MEDIA_ROOT para que
+# nunca queden alcanzables por URL directa; solo se sirven via un endpoint
+# DRF autenticado que valida empresa_id antes de responder con el archivo.
+PRIVATE_MEDIA_ROOT = BASE_DIR / 'media_private'
+
 # django-tables2: plantilla Bootstrap 5 por defecto para todas las tablas server-rendered
 # (reemplazo de Tabulator/DataTables — ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS)
 DJANGO_TABLES2_TEMPLATE = "django_tables2/bootstrap5.html"

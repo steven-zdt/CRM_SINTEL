@@ -70,7 +70,8 @@
                 btnDel.disabled = true;
                 btnDel.innerHTML = '<i class="bi bi-hourglass-split"></i>';
                 try {
-                    const res = await w.Sintel.Core.Http.request('DELETE', `/api/v1/proyectos/${uuid}/`);
+                    // T-9: delega a la SSoT de endpoints (proyectos.api.js).
+                    const res = await w.proyectosAPI.delete(uuid);
                     if (res.ok) {
                         w.SintelFeedback?.success?.('Proyecto eliminado correctamente');
                         w.refreshProyectosTable?.();

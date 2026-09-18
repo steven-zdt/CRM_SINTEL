@@ -126,3 +126,44 @@ COMERCIAL-01 §6 queda resuelto para el único punto de entrada real que
 existe hoy (`POST /ventas/{uuid}/procesar-facturar/`) — no quedó como
 diseño pendiente, se implementó en la misma fase por decisión explícita
 del usuario tras confirmar el mecanismo correcto.
+
+---
+
+## 7. Adenda 2026-09-08 (COTIZACIONES-02) — `crear_factura_desde_venta()` deja de depender solo del caller
+
+COMERCIAL-04 (§4 arriba) cerró el gap en el único punto de entrada HTTP
+real, pero dejó `crear_factura_desde_venta()` **sin protección propia** —
+seguía "siempre crea una `Factura` nueva" (COMERCIAL-01 §6), confiando por
+completo en que el caller (`procesar_y_facturar_venta`) revisara
+`Venta.estado` antes de invocarla. Correcto para el único caller que existe
+hoy, pero no autocontenido: cualquier caller nuevo (p. ej. el nuevo
+`CotizacionService.facturar_venta_de_cotizacion()`, COTIZACIONES-02 §7) que
+reutilizara `procesar_y_facturar_venta()` heredaba la misma protección solo
+indirectamente.
+
+Se cerró el gap en el propio método:
+
+- **`Factura.Meta.constraints`** (`apps/tenant/facturas/models.py`) — nuevo
+  `UniqueConstraint(fields=['empresa', 'numero'], name=
+  'uniq_factura_numero_por_empresa')` (migración `facturas.0041`). Verificado
+  antes de agregarlo: **0 pares `(empresa, numero)` duplicados** en las 3
+  bases reales (`home`, `admin`, `aipoc`).
+- **`crear_factura_desde_venta()`** — el `FacturaCRUDService.crear(...)` que
+  antes corría directo ahora va envuelto en un `transaction.atomic()`
+  anidado (savepoint real, nunca un `savepoint()` suelto fuera de
+  `atomic()` — ver incidente documentado 2026-08-25) con `except
+  IntegrityError`: si el `INSERT` choca con el constraint nuevo (llamada
+  repetida/concurrente que ya insertó la misma `Factura(empresa, numero)`),
+  se recupera y devuelve la `Factura` existente en vez de propagar el
+  error o duplicar.
+
+**No cambia** el mecanismo de COMERCIAL-04 (`venta_existente.estado`) —
+sigue siendo la primera línea de defensa y el camino normal (evita incluso
+llegar a `crear_factura_desde_venta()` en un replay). Este cierre es la
+segunda línea, para que el método sea seguro por sí mismo ante cualquier
+caller presente o futuro, no solo ante el flujo `procesar_y_facturar_venta`.
+
+Test dedicado: `apps/tenant/cotizaciones/tests/test_facturar_venta.py::
+test_facturar_venta_es_idempotente_no_duplica_factura` (ejercita el camino
+completo `Cotizacion → Venta → Factura` dos veces, confirma 1 sola
+`Factura`).

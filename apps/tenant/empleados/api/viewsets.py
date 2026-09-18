@@ -1559,14 +1559,27 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
         if not empleado_param:
             return Response({'error': 'empleado es requerido'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # WARNING [fix 2026-09-10]: este endpoint recibe DOS formas distintas
+        # de 'empleado' segun el caller en devengo_editor.js -- UUID desde
+        # _cargarInfoEmpleadoPreseleccionado() (Master-Detail / flujo con
+        # periodo), PK entero desde cargarInfoEmpleado() (dropdown clasico,
+        # selectEmp.value = emp.id). El filtro solo aceptaba UUID: con un PK
+        # entero, Postgres no podia castearlo a uuid y esto devolvia 500 en
+        # vez de 404 -- "crear nomina" quedaba roto para cualquier empleado
+        # elegido desde el dropdown clasico, aunque su contrato SI existiera
+        # (nunca se llegaba a verificar el contrato porque la busqueda del
+        # empleado ya fallaba). Mismo criterio UUID-o-PK que UUIDOrPKRelatedField.
+        param_str = str(empleado_param).strip()
+        qs = Empleado.objects.filter(empresa_id=empresa.id, estado='ACTIVO').only(
+            'id', 'uuid', 'primer_nombre', 'primer_apellido',
+            'numero_documento', 'eps', 'afp', 'arl'
+        )
         try:
-            emp = Empleado.objects.filter(
-                empresa_id=empresa.id, uuid=empleado_param, estado='ACTIVO'
-            ).only(
-                'id', 'uuid', 'primer_nombre', 'primer_apellido',
-                'numero_documento', 'eps', 'afp', 'arl'
-            ).get()
-        except Empleado.DoesNotExist:
+            if '-' in param_str and not param_str.isdigit():
+                emp = qs.get(uuid=param_str)
+            else:
+                emp = qs.get(pk=int(param_str))
+        except (Empleado.DoesNotExist, ValueError, TypeError):
             return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
         contrato = ContratoSelector.get_activo_for_empleado(empresa.id, emp.id)
@@ -1650,10 +1663,67 @@ class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
     @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle', permission_classes=[IsTenantMember])
     def render_offcanvas_detalle(self, request, uuid=None):
         """
-        Endpoint HTMX para renderizar los detalles del devengo.
+        GET /api/v1/empleados/devengos/<uuid>/render-offcanvas/detalle/
+
+        WARNING [feature 2026-09-10]: antes reutilizaba offcanvas_crear_devengo.html
+        (el mismo formulario editable) solo para "ver" un devengo -- no habia
+        vista de solo lectura real, ni forma de generar el desprendible en
+        PDF desde la UI. Devengo es inmutable tras crearse (update/
+        partial_update -> 405), asi que esta vista es puramente informativa:
+        empleado, contrato, periodo, devengados y deducciones DESGLOSADOS por
+        concepto (nunca solo "deducciones: $X"), con enlace al PDF.
         """
         instance = self.get_object()
-        return Response({'devengo': instance}, template_name='tenant/empleados/offcanvas_crear_devengo.html')
+        total_devengado = (
+            instance.salario_base + instance.auxilio_transporte
+            + instance.otros_devengos + instance.valor_horas_extras
+        )
+        return Response(
+            {
+                'devengo': instance, 'empleado': instance.empleado, 'contrato': instance.contrato,
+                'total_devengado': total_devengado,
+            },
+            template_name='tenant/empleados/offcanvas_detalle_devengo.html',
+        )
+
+    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='pdf', permission_classes=[IsTenantMember])
+    def pdf(self, request, uuid=None):
+        """
+        GET /api/v1/empleados/devengos/<uuid>/pdf/
+        Desprendible de nomina -- documento HTML listo para imprimir/guardar
+        como PDF, para enviar al empleado. Mismo patron ya probado en
+        LiquidacionPrestacionViewSet.pdf() (liquidacion_pdf.html).
+        """
+        empresa = self.get_empresa()
+        if not empresa:
+            return Response({"error": "Sin tenant asignado"}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            devengo = (
+                Devengo.objects
+                .filter(empresa_id=empresa.id)
+                .select_related('empleado', 'contrato', 'periodo')
+                .get(uuid=uuid)
+            )
+        except Devengo.DoesNotExist:
+            return Response({"error": "Nomina no encontrada"}, status=status.HTTP_404_NOT_FOUND)
+
+        total_devengado = (
+            devengo.salario_base + devengo.auxilio_transporte
+            + devengo.otros_devengos + devengo.valor_horas_extras
+        )
+        total_deducciones = (
+            devengo.salud_empleado + devengo.pension_empleado
+            + devengo.prestamos + devengo.descuentos_operativos
+        )
+        context = {
+            'devengo':           devengo,
+            'empleado':          devengo.empleado,
+            'contrato':          devengo.contrato,
+            'empresa':           empresa,
+            'total_devengado':   total_devengado,
+            'total_deducciones': total_deducciones,
+        }
+        return Response(context, template_name='tenant/empleados/devengo_pdf.html')
 
 
 _RESOLUCION_LIST_FIELDS = (

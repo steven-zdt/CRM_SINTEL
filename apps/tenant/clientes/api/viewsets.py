@@ -210,9 +210,10 @@ class ClienteViewSet(OrganizationalContextMixin, ClienteServiceMixin, ContactoCl
             contactos_raw = request.data.get('contactos')
             try:
                 cliente, created = self.cliente_service.registrar_cliente_completo(
-                    empresa_id=empresa.id, 
-                    data=serializer.validated_data, 
-                    contactos_raw=contactos_raw
+                    empresa_id=empresa.id,
+                    data=serializer.validated_data,
+                    contactos_raw=contactos_raw,
+                    validar_representante=True,
                 )
                 data = ClienteDetailSerializer(cliente, context=self.get_serializer_context()).data
                 data['redirect'] = '/workspace/#clientes'
@@ -237,7 +238,8 @@ class ClienteViewSet(OrganizationalContextMixin, ClienteServiceMixin, ContactoCl
                     empresa_id=cliente.empresa_id,
                     data=serializer.validated_data,
                     contactos_raw=contactos_raw,
-                    cliente_instance=cliente
+                    cliente_instance=cliente,
+                    validar_representante=True,
                 )
             except serializers.ValidationError as e:
                 return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
@@ -262,14 +264,15 @@ class ClienteViewSet(OrganizationalContextMixin, ClienteServiceMixin, ContactoCl
                     empresa_id=cliente.empresa_id,
                     data=serializer.validated_data,
                     contactos_raw=contactos_raw,
-                    cliente_instance=cliente
+                    cliente_instance=cliente,
+                    validar_representante=True,
                 )
             except serializers.ValidationError as e:
                 return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
             data = ClienteDetailSerializer(cliente, context=self.get_serializer_context()).data
             data['redirect'] = '/workspace/#clientes'
             return Response(data)
-        
+
         logger.error(f'[ClienteViewSet.partial_update] Errores de validación: {serializer.errors}')
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -760,19 +763,25 @@ class CarteraViewSet(OrganizationalContextMixin, CarteraServiceMixin, BaseTenant
         cliente_uuid = request.query_params.get('cliente_uuid') or request.query_params.get('cliente_id')
         estado_pago  = request.query_params.get('estado_pago')
         search       = request.query_params.get('search', '').strip() or None
+        solo_vencidas = request.query_params.get('vencidas') in ('1', 'true', 'True')
 
         qs = CarteraSelector.qs_list_facturas_venta(
             empresa_id=empresa.id,
             cliente_uuid=cliente_uuid,
             estado_pago=estado_pago,
             search=search,
+            solo_vencidas=solo_vencidas,
         )
 
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(qs, request)
         rows = page if page is not None else list(qs)
 
-        serializer = FacturaCxCListSerializer(rows, many=True)
+        cartera_map = CarteraSelector.get_cartera_map_by_factura_uuids(
+            empresa_id=empresa.id,
+            factura_uuids=[r.uuid for r in rows],
+        )
+        serializer = FacturaCxCListSerializer(rows, many=True, context={'cartera_map': cartera_map})
         if page is not None:
             return paginator.get_paginated_response(serializer.data)
         return Response(serializer.data)
@@ -812,6 +821,36 @@ class CarteraViewSet(OrganizationalContextMixin, CarteraServiceMixin, BaseTenant
         except ValidationError as e:
             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=True, methods=['get', 'post'], url_path='notas')
+    def notas(self, request, uuid=None):
+        """
+        GET /api/v1/clientes/cartera/{uuid}/notas/ — historial de notas.
+        POST /api/v1/clientes/cartera/{uuid}/notas/ — agrega una nueva nota.
+        Mision "Clientes + Cartera" seccion 29-30: notas de seguimiento,
+        nunca reemplazan el campo `observaciones` legado de `Cartera`.
+        """
+        cartera = self.get_object()
+        from apps.tenant.clientes.api.serializers import CarteraNotaInputSerializer, CarteraNotaSerializer
+
+        if request.method == 'POST':
+            serializer = CarteraNotaInputSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            perfil = getattr(request.user, 'tenant_profile', None)
+            try:
+                self.cartera_service.agregar_nota(
+                    empresa_id=cartera.empresa_id,
+                    cartera_uuid=cartera.uuid,
+                    texto=serializer.validated_data['texto'],
+                    usuario=perfil,
+                    tipo=serializer.validated_data.get('tipo', 'SEGUIMIENTO'),
+                )
+            except ValidationError as e:
+                return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+
+        notas = CarteraSelector.get_notas(empresa_id=cartera.empresa_id, cartera_id=cartera.id)
+        data = CarteraNotaSerializer(notas, many=True).data
+        return Response(data, status=status.HTTP_201_CREATED if request.method == 'POST' else status.HTTP_200_OK)
+
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
             return CarteraDetailSerializer
@@ -837,10 +876,43 @@ class CarteraViewSet(OrganizationalContextMixin, CarteraServiceMixin, BaseTenant
         if not cliente_obj:
             raise NotFound("Cliente no encontrado en esta empresa.")
 
+        # REGRESION (2026-09-12, hallazgo C-2): registrar_cartera() es un
+        # get_or_create() idempotente pensado para sincronizacion ETL (unico
+        # invocador real hoy es este mismo endpoint manual -- ver
+        # docs/integration/CROSS_APP_FINDINGS.md). Si se reenvia el mismo
+        # (cliente, numero_factura) desde el formulario "Nueva Obligacion",
+        # la rama "not created" sobreescribia valor_pagado sin locking, sin
+        # guarda de "ya PAGADA" y sin CarteraNota -- bypaseando por completo
+        # registrar_abono(), la unica via de pago autorizada. Se corta el
+        # bypass en el punto de entrada manual, sin tocar la semantica de
+        # upsert de registrar_cartera() (cubierta por su propio test para
+        # el uso ETL futuro).
+        numero_factura = serializer.validated_data.get('numero_factura')
+        ya_existe = Cartera.objects.filter(
+            empresa_id=empresa.id, cliente_id=cliente_obj.id, numero_factura=numero_factura,
+        ).exists()
+        if ya_existe:
+            return Response(
+                {'detail': f'Ya existe una obligacion de cartera para el cliente y numero de '
+                           f'factura "{numero_factura}". Para registrar un pago, use "Registrar Abono" '
+                           f'sobre la obligacion existente.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         try:
+            # BUG (2026-09-12, hallazgo lateral de C-2): registrar_cartera()
+            # lee data["cliente_id"], pero serializer.validated_data trae la
+            # clave "cliente" (instancia Cliente ya resuelta por el
+            # PrimaryKeyRelatedField del ModelSerializer) -- sin este mapeo
+            # explicito, cliente_id siempre era None y la creacion de CUALQUIER
+            # obligacion nueva via este endpoint fallaba con "El cliente
+            # especificado no pertenece a esta empresa.". Nunca se detecto
+            # porque el unico test existente llamaba registrar_cartera()
+            # directamente a nivel de servicio (con cliente_id ya correcto),
+            # no a traves del endpoint HTTP.
             cartera, created = self.cartera_service.registrar_cartera(
                 empresa_id=empresa.id,
-                data={**serializer.validated_data, 'empresa_id': empresa.id},
+                data={**serializer.validated_data, 'empresa_id': empresa.id, 'cliente_id': cliente_obj.id},
             )
             out_serializer = CarteraDetailSerializer(cartera)
             http_status = status.HTTP_201_CREATED if created else status.HTTP_200_OK
@@ -975,8 +1047,26 @@ class CarteraViewSet(OrganizationalContextMixin, CarteraServiceMixin, BaseTenant
             }
             return render_template_safe(context, 'tenant/clientes/offcanvas_crear_cartera.html', request=request)
 
-        context = {'cartera': cartera, 'cliente': cartera.cliente, 'empresa': cartera.empresa}
+        context = self._contexto_abono(cartera)
         return render_template_safe(context, 'tenant/clientes/offcanvas_abono_cartera.html', request=request)
+
+    def _contexto_abono(self, cartera):
+        """Contexto compartido por ambos endpoints render-offcanvas/abono*
+        (seccion 26-29 de la mision "Clientes + Cartera"): dias vencida +
+        historial de notas, ademas de los datos ya existentes."""
+        from django.utils import timezone as tz
+        dias_vencida = None
+        if cartera.estado_pago != 'PAGADA' and cartera.fecha_vencimiento:
+            delta = (tz.now().date() - cartera.fecha_vencimiento).days
+            if delta > 0:
+                dias_vencida = delta
+        return {
+            'cartera': cartera,
+            'cliente': cartera.cliente,
+            'empresa': cartera.empresa,
+            'dias_vencida': dias_vencida,
+            'notas': CarteraSelector.get_notas(empresa_id=cartera.empresa_id, cartera_id=cartera.id),
+        }
 
     @action(
         detail=True,
@@ -989,11 +1079,7 @@ class CarteraViewSet(OrganizationalContextMixin, CarteraServiceMixin, BaseTenant
         GET /api/v1/clientes/cartera/{uuid}/render-offcanvas/abono/
         """
         cartera = self.get_object()
-        context = {
-            'cartera': cartera,
-            'cliente': cartera.cliente,
-            'empresa': cartera.empresa
-        }
+        context = self._contexto_abono(cartera)
         return render_template_safe(
             context,
             'tenant/clientes/offcanvas_abono_cartera.html',

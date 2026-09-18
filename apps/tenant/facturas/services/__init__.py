@@ -70,18 +70,25 @@ def _determinar_naturaleza(emisor_nit: str | None, empresa_nit: str | None) -> s
     Determina si la factura es VENTA o COMPRA.
 
     - VENTA: cuando el emisor_nit (normalizado) == empresa_nit (normalizado).
-    - COMPRA: en cualquier otro caso (incluye None).
+    - COMPRA: en cualquier otro caso (incluye None) -- este wrapper de
+      compatibilidad NUNCA retorna None/"Revisar" (a diferencia de
+      FacturaBusinessService._resolver_naturaleza()), para no cambiar el
+      contrato de sus 2 callers reales (management commands
+      backfill_naturaleza_facturas.py, fix_naturaleza_inconsistent.py) sin
+      decision explicita del usuario sobre reclasificar datos existentes.
 
-    Delega a FacturaBusinessService._resolver_naturaleza() como SSoT.
+    FACTURAS-UI-CRONO-01 FASE 2: este docstring YA decia "Delega a
+    FacturaBusinessService._resolver_naturaleza()" pero el codigo
+    reimplementaba su propia comparacion con _norm_nit() (funcion de
+    normalizacion DISTINTA a same_nit()/clean_nit() usada por la
+    persistencia real) -- duplicacion real de la regla de negocio,
+    confirmada porque _norm_nit() y same_nit() pueden divergir en NITs
+    con caracteres no estandar. Corregido para delegar de verdad.
     """
     from apps.tenant.facturas.models import Factura
 
-    nit_emisor = _norm_nit(emisor_nit)
-    nit_empresa = _norm_nit(empresa_nit)
-
-    if nit_emisor and nit_empresa and nit_emisor == nit_empresa:
-        return Factura.Naturaleza.VENTA
-    return Factura.Naturaleza.COMPRA
+    naturaleza = FacturaBusinessService._resolver_naturaleza(emisor_nit, None, empresa_nit)
+    return naturaleza or Factura.Naturaleza.COMPRA
 
 
 def _split_factura_payload(data: dict | None) -> tuple[dict, dict]:

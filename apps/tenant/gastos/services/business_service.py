@@ -16,6 +16,27 @@ HAS_ACCOUNTING = False
 logger = logging.getLogger(__name__)
 
 
+def _recalcular_proyecto(proyecto_uuid, empresa_id) -> None:
+    """
+    GASTOS_PROYECTOS_01: dispara el recalculo de indicadores financieros del
+    Proyecto asociado a un Gasto. Pull Model via import perezoso -- mismo
+    patron ya usado por este servicio para Contabilidad/Inventario/Proveedores.
+    No usa Signals (regla de negocio): se llama explicitamente desde el
+    Service Layer de Gastos en cada mutacion que afecte el costo.
+
+    Silenciosa si el proyecto ya no existe (UUID huerfano) -- el gasto sigue
+    siendo valido independientemente del proyecto.
+    """
+    if not proyecto_uuid:
+        return
+    from apps.tenant.proyectos.models import Proyecto
+    from apps.tenant.proyectos.services.business_service import calcular_indicadores_financieros
+
+    proyecto = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa_id).first()
+    if proyecto:
+        calcular_indicadores_financieros(proyecto)
+
+
 class GastoBusinessService:
     """
     Logica de negocio centralizada para Gastos.
@@ -59,7 +80,10 @@ class GastoBusinessService:
 
             # Logica de negocio: Anulacion es irreversible. v2.62: Trazabilidad
             DocumentoCRUDService.anular_documento(documento, motivo, usuario)
-            
+
+            # GASTOS_PROYECTOS_01: un gasto anulado sale del costo del proyecto
+            _recalcular_proyecto(documento.proyecto_uuid, documento.empresa_id)
+
             return True, {"message": "Gasto anulado correctamente."}, 200
         except ValidationError as e:
             return False, e.detail, 400
@@ -80,6 +104,10 @@ class GastoBusinessService:
             raise ValidationError("Documento no encontrado.")
 
         DocumentoCRUDService.desactivar_documento(documento)
+
+        # GASTOS_PROYECTOS_01: un gasto desactivado sale del costo del proyecto
+        _recalcular_proyecto(documento.proyecto_uuid, documento.empresa_id)
+
         return {"message": "Gasto desactivado correctamente."}
 
     @staticmethod
@@ -195,6 +223,18 @@ class GastoBusinessService:
                     })
                 ds_data['movimiento_inventario_uuid'] = movimiento_uuid
 
+            # DSV: Proyecto (opcional -- GASTOS_PROYECTOS_01, Pull Model via UUID)
+            proyecto_uuid = ds_data.get('proyecto_uuid')
+            if proyecto_uuid:
+                from apps.tenant.proyectos.models import Proyecto
+                if not Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa.id).exists():
+                    raise ValidationError({
+                        "proyecto_uuid": f"El proyecto '{proyecto_uuid}' no es valido o no pertenece a su empresa."
+                    })
+                ds_data['proyecto_uuid'] = proyecto_uuid
+            else:
+                ds_data['proyecto_uuid'] = None
+
             # 1. Preparar Totales (v3.7.1 Pull Model)
             # NOTA: La fecha del documento (fecha_doc) corresponde a la fecha de la factura
             # del proveedor y NO debe ser restringida por el rango de vigencia de la resolucion
@@ -221,7 +261,10 @@ class GastoBusinessService:
 
             # 3. Persistencia via CRUD
             documento = DocumentoCRUDService.crear_documento(ds_data, empresa, resolucion)
-            
+
+            # 3.1 Recalcular indicadores del proyecto si el gasto quedo asociado
+            _recalcular_proyecto(documento.proyecto_uuid, empresa.id)
+
             # 4. Registrar Retenciones en Contabilidad (v3.7.1)
             for tipo in ['RETEFUENTE', 'RETEICA', 'RETEIVA']:
                 pct = config_ret.get(f'{tipo.lower()}_porcentaje', Decimal('0.00'))

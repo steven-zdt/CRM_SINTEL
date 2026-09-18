@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+{# devengo_pdf.html — Desprendible de Nómina (feature 2026-09-10) #}
+{# Endpoint: GET /api/v1/empleados/devengos/<uuid>/pdf/ #}
+{# Diseño optimizado para impresión / guardar como PDF -- mismo patron ya #}
+{# probado en liquidacion_pdf.html, adaptado a Devengo (nomina individual). #}
+{% load currency_filters %}
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Desprendible de Nómina — {{ empleado.nombre_completo }} — {{ devengo.fecha_pago }}</title>
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #212529; }
+
+    .doc-header { background: linear-gradient(135deg, #1e3a5f 0%, #0d6efd 100%); color: #fff; padding: 24px 32px; }
+    .doc-header h1 { font-size: 1.4rem; font-weight: 700; margin: 0; }
+    .doc-header .sub { font-size: .82rem; opacity: .85; margin-top: 2px; }
+
+    .section-label {
+      font-size: .62rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; color: #6c757d; margin-bottom: 4px;
+    }
+    .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 32px; border-bottom: 1px solid #dee2e6; }
+    .info-cell .val { font-weight: 600; font-size: .9rem; }
+
+    .cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+    .cols-2 > div:first-child { border-right: 1px solid #dee2e6; }
+
+    table.dev-table { width: 100%; border-collapse: collapse; margin: 0; }
+    table.dev-table thead tr { background: #1e3a5f; color: #fff; }
+    table.dev-table th { padding: 8px 14px; font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+    table.dev-table td { padding: 7px 14px; border-bottom: 1px solid #f0f0f0; font-size: .85rem; }
+    table.dev-table tr:nth-child(even) td { background: #fafafa; }
+    table.dev-table tfoot tr { background: #e9ecef; }
+    table.dev-table tfoot td { padding: 9px 14px; font-weight: 700; font-size: .88rem; }
+    .devengos-table tfoot tr { background: #d1e7dd; }
+    .deducciones-table tfoot tr { background: #f8d7da; }
+
+    .total-box { background: linear-gradient(135deg, #1e3a5f, #0d6efd); color: #fff; padding: 18px 32px; margin: 0; }
+    .total-box .label { font-size: .72rem; opacity: .8; text-transform: uppercase; letter-spacing: .06em; }
+    .total-box .amount { font-size: 1.8rem; font-weight: 700; font-family: monospace; }
+
+    .firma-section { padding: 32px 32px 24px; }
+    .firma-line { border-top: 1px solid #333; width: 200px; margin-top: 40px; padding-top: 4px; font-size: .75rem; color: #666; text-align: center; }
+
+    .legal-footer { padding: 12px 32px; background: #f8f9fa; border-top: 1px solid #dee2e6; font-size: .68rem; color: #888; }
+
+    @media print {
+      .no-print { display: none !important; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .doc-header, .total-box { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      table.dev-table thead tr, table.dev-table tfoot tr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      @page { margin: 12mm 10mm; size: A4; }
+    }
+  </style>
+</head>
+<body>
+
+  {# ── Barra superior (solo pantalla) ─────────────────────────── #}
+  <div class="no-print d-flex justify-content-between align-items-center px-4 py-2 border-bottom bg-white" style="position:sticky;top:0;z-index:10;box-shadow:0 1px 4px rgba(0,0,0,.1);">
+    <div class="fw-semibold" style="font-size:.85rem;">
+      <i class="bi bi-file-earmark-pdf text-danger me-2"></i>
+      Vista previa del desprendible de nómina
+    </div>
+    <div class="d-flex gap-2">
+      <button onclick="window.print()" class="btn btn-danger btn-sm">
+        <i class="bi bi-printer me-1"></i>Imprimir / Guardar PDF
+      </button>
+      <button onclick="window.close()" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-x-lg me-1"></i>Cerrar
+      </button>
+    </div>
+  </div>
+
+  {# ── Documento ────────────────────────────────────────────── #}
+  <div id="documento-pdf" style="max-width:860px;margin:0 auto;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.08);">
+
+    {# ── Encabezado ────────────────────────────────────────── #}
+    <div class="doc-header">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div style="font-size:.72rem;opacity:.7;text-transform:uppercase;letter-spacing:.08em;">
+            Desprendible de Pago de Nómina
+          </div>
+          <h1 class="mt-1">{{ devengo.periodo_mes }}</h1>
+          <div class="sub">{{ empresa.razon_social|default:"Empresa" }} &mdash; NIT: {{ empresa.nit|default:"—" }}</div>
+        </div>
+        <div class="text-end" style="opacity:.9;">
+          <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;">Fecha de pago</div>
+          <div style="font-size:1.2rem;font-weight:700;font-family:monospace;">{{ devengo.fecha_pago|date:"d/m/Y" }}</div>
+          <div style="font-size:.68rem;margin-top:4px;">
+            {% if devengo.anulado %}
+              <span style="background:rgba(220,53,69,.35);padding:2px 8px;border-radius:4px;">✗ ANULADA</span>
+            {% else %}
+              <span style="background:rgba(255,255,255,.25);padding:2px 8px;border-radius:4px;">✓ VIGENTE</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Info Empleado / Contrato / Período ────────────────── #}
+    <div class="info-grid">
+      <div class="info-cell">
+        <div class="section-label">Empleado</div>
+        <div class="val">{{ empleado.nombre_completo }}</div>
+        <div style="font-size:.75rem;color:#6c757d;">{{ empleado.tipo_documento }}: {{ empleado.numero_documento }}</div>
+      </div>
+      <div class="info-cell">
+        <div class="section-label">Cargo / Contrato</div>
+        <div class="val">{{ contrato.cargo }}</div>
+        <div style="font-size:.75rem;color:#6c757d;">{{ contrato.get_tipo_display }}</div>
+      </div>
+      <div class="info-cell">
+        <div class="section-label">Período Laborado</div>
+        <div class="val" style="font-family:monospace;font-size:.82rem;">
+          {% if devengo.fecha_inicio and devengo.fecha_fin %}{{ devengo.fecha_inicio|date:"d/m/Y" }} → {{ devengo.fecha_fin|date:"d/m/Y" }}{% else %}{{ devengo.periodo_mes }}{% endif %}
+        </div>
+        <div style="font-size:.75rem;color:#6c757d;">{{ devengo.dias_laborados }} día(s) laborados</div>
+      </div>
+      <div class="info-cell">
+        <div class="section-label">Salario Base Contrato</div>
+        <div class="val">{{ contrato.salario_mensual|currency_cop }}</div>
+        <div style="font-size:.75rem;color:#6c757d;">+ {{ contrato.auxilio_transporte|currency_cop }} aux. transp.</div>
+      </div>
+    </div>
+
+    {# ── Devengados / Deducciones, desglosados por concepto ─── #}
+    <div class="cols-2">
+      <div>
+        <table class="dev-table devengos-table">
+          <thead><tr><th colspan="2"><i class="bi bi-plus-circle me-1"></i>Devengados</th></tr></thead>
+          <tbody>
+            <tr><td>Salario Base ({{ devengo.dias_laborados }} días)</td><td class="text-end font-monospace">{{ devengo.salario_base|currency_cop }}</td></tr>
+            <tr><td>Auxilio de Transporte</td><td class="text-end font-monospace">{{ devengo.auxilio_transporte|currency_cop }}</td></tr>
+            <tr><td>Horas Extras y Recargos</td><td class="text-end font-monospace">{{ devengo.valor_horas_extras|currency_cop }}</td></tr>
+            <tr><td>Otros Devengos</td><td class="text-end font-monospace">{{ devengo.otros_devengos|currency_cop }}</td></tr>
+          </tbody>
+          <tfoot><tr><td>Total Devengado</td><td class="text-end font-monospace">{{ total_devengado|currency_cop }}</td></tr></tfoot>
+        </table>
+      </div>
+      <div>
+        <table class="dev-table deducciones-table">
+          <thead><tr><th colspan="2"><i class="bi bi-dash-circle me-1"></i>Deducciones</th></tr></thead>
+          <tbody>
+            <tr><td>Salud (4%)</td><td class="text-end font-monospace">{{ devengo.salud_empleado|currency_cop }}</td></tr>
+            <tr><td>Pensión (4%)</td><td class="text-end font-monospace">{{ devengo.pension_empleado|currency_cop }}</td></tr>
+            <tr><td>Préstamos</td><td class="text-end font-monospace">{{ devengo.prestamos|currency_cop }}</td></tr>
+            <tr><td>Descuentos Operativos</td><td class="text-end font-monospace">{{ devengo.descuentos_operativos|currency_cop }}</td></tr>
+          </tbody>
+          <tfoot><tr><td>Total Deducciones</td><td class="text-end font-monospace">{{ total_deducciones|currency_cop }}</td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+
+    {# ── Total neto ───────────────────────────────────────── #}
+    <div class="total-box d-flex justify-content-between align-items-center">
+      <div class="label">Neto a Pagar</div>
+      <div class="amount">{{ devengo.neto_pagar|currency_cop }}</div>
+    </div>
+
+    {# ── Observaciones ────────────────────────────────────── #}
+    {% if devengo.observaciones %}
+    <div style="padding:16px 32px;border-top:1px solid #dee2e6;background:#fafafa;">
+      <div class="section-label">Observaciones</div>
+      <div style="font-size:.82rem;color:#555;margin-top:4px;">{{ devengo.observaciones|linebreaksbr }}</div>
+    </div>
+    {% endif %}
+
+    {# ── Firmas ────────────────────────────────────────────── #}
+    <div class="firma-section d-flex justify-content-around">
+      <div class="text-center">
+        <div class="firma-line">{{ empleado.nombre_completo }}</div>
+        <div style="font-size:.68rem;color:#888;">Empleado — {{ empleado.numero_documento }}</div>
+      </div>
+      <div class="text-center">
+        <div class="firma-line">Representante Legal</div>
+        <div style="font-size:.68rem;color:#888;">{{ empresa.razon_social|default:"Empresa" }}</div>
+      </div>
+    </div>
+
+    {# ── Footer legal ─────────────────────────────────────── #}
+    <div class="legal-footer">
+      Documento generado por <strong>SINTEL CRM</strong> el {% now "d/m/Y H:i" %} ·
+      Ref. UUID: {{ devengo.uuid }}
+      {% if devengo.periodo %} · Período de nómina: {{ devengo.periodo.periodo_mes }}{% endif %} ·
+      Este documento no reemplaza el comprobante fiscal de nómina electrónica DIAN.
+    </div>
+
+  </div>
+
+</body>
+</html>

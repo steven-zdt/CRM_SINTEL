@@ -277,6 +277,25 @@
                 </div>
             </div>
 
+            {# ── Sección: Proyecto (Opcional) — GASTOS_PROYECTOS_01 ───── #}
+            <div class="section-divider">
+                <p class="section-title">
+                    <i class="bi bi-kanban me-1"></i>Proyecto (Opcional)
+                </p>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label for="proyecto_search" class="form-label">Buscar Proyecto</label>
+                        <div class="position-relative">
+                            <input type="text" class="form-control" id="proyecto_search"
+                                   placeholder="Buscar por código o nombre del proyecto..." autocomplete="off">
+                            <input type="hidden" id="proyecto_uuid" name="proyecto_uuid">
+                            <div id="proyecto-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050;"></div>
+                        </div>
+                        <small class="text-muted">Asocie este gasto a un proyecto para que impacte su costo real. No es obligatorio.</small>
+                    </div>
+                </div>
+            </div>
+
             {# ── Sección: Detalles y Observaciones ────────────────────── #}
             <div class="section-divider">
                 <p class="section-title">

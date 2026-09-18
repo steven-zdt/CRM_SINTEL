@@ -199,8 +199,12 @@ urlpatterns = [
     # - /api/v1/core/v1/facturas/items-factura/ (CRUD items)
     # - /api/v1/core/v1/facturas/notas-credito/ (CRUD notas crédito)
     # Todas las acciones @action se heredan automáticamente:
-    #   - importar-ubl, summary, upload-ubl (con batch processing y pre-validación v2.61.2)
+    #   - summary, upload-ubl (con batch processing y pre-validación v2.61.2)
     #   - upload-document, xml, gestor-offcanvas, etc.
+    #   [RELEASE-CLOSE-01, 2026-09-15] importar-ubl fue eliminado en la
+    #   reestructuracion v4.0.0 de Facturas (duplicaba upload-ubl/create-from-dto,
+    #   0 consumidores reales) -- comentario desactualizado corregido, no
+    #   representaba una ruta viva.
     # # WARNING: v2.61.2: OPTIMIZACIONES:
     #   - Batch processing: upload-ubl soporta files[] (múltiples archivos)
     #   - Pre-validación de idempotencia: extrae CUFE/CUDE con regex antes del parsing completo
@@ -219,7 +223,6 @@ urlpatterns = [
     # - GET /api/v1/core/_apps/facturas/ (list facturas con paginación)
     # - GET /api/v1/core/_apps/facturas/{id}/ (retrieve factura)
     # - DELETE /api/v1/core/_apps/facturas/{id}/ (delete factura)
-    # - POST /api/v1/core/_apps/facturas/importar-ubl/ (importar UBL desde texto)
     # - GET /api/v1/core/_apps/facturas/summary/ (resumen de facturación neta)
     # - POST /api/v1/core/_apps/facturas/upload-ubl/ (upload UBL file - single o batch)
     #   # WARNING: v2.61.2: Soporta batch processing con files[] (múltiples archivos)
@@ -231,7 +234,6 @@ urlpatterns = [
     # - POST /api/v1/core/_apps/facturas/upload-document/ (upload documento universal - XML/PDF/XLS/CSV/TXT)
     # - GET /api/v1/core/_apps/facturas/ingest/{task_id}/status/ (estado de ingesta asíncrona)
     # - POST /api/v1/core/_apps/facturas/create-from-dto/ (crear factura desde DTO canónico)
-    # - POST /api/v1/core/_apps/facturas/materialize/ (materializar factura desde resultado de pipeline)
     # - GET /api/v1/core/_apps/facturas/{id}/xml/ (obtener XML de factura)
     # - GET /api/v1/core/_apps/facturas/{id}/app-response/ (obtener ApplicationResponse XML)
     # - POST /api/v1/core/_apps/facturas/update-inbox-state/ (actualizar estado de inbox)

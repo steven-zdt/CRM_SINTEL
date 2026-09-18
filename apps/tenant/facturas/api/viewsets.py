@@ -70,14 +70,12 @@ from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.facturas.api.mixins import FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin
 from apps.tenant.facturas.inbox_state import update_inbox_state
 from apps.tenant.facturas.services import FacturaSelectors, FacturaServiceMixin, FacturaBusinessService, FacturaCRUDService
-from apps.tenant.facturas.services.selectors import InventarioItemBridge
 from apps.tenant.facturas.services.electronic_invoice_service import ElectronicInvoiceApplicationService
 from apps.tenant.facturas.utils.ubl_parser import fast_get_cufe
 from .serializers import (
     FacturaDetailSerializer,
     FacturaListSerializer,
     FacturaWriteSerializer,
-    ImportUBLSerializer,
     ItemFacturaSerializer,
     NotaCreditoDetailSerializer,
     NotaCreditoListSerializer,
@@ -240,7 +238,7 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
             qs = Factura.objects.filter(empresa_id=empresa_id).only('id', 'estado', 'empresa_id', 'sede_id')
             if sede_ids is not None:
                 qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
-        elif self.action in ("partial_update", "update", "cambiar_estado", "vincular_cotizacion", "vincular_cliente", "vincular_proveedor"):
+        elif self.action in ("partial_update", "update", "cambiar_estado"):
             qs = Factura.objects.filter(empresa_id=empresa_id)
             if sede_ids is not None:
                 qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
@@ -314,10 +312,9 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         # WARNING: v2.95: PATCH (partial_update) usa FacturaWriteSerializer con permisos de escritura
         """
         # # WARNING: v2.61.2: Acciones que no usan serializer (trabajan directamente con request.data)
-        if self.action in ['create-from-dto', 'materialize', 'importar-ubl', 'upload-ubl', 'upload-document',
+        if self.action in ['create-from-dto', 'upload-ubl', 'upload-document',
                            'summary', 'xml', 'app-response', 'update-inbox-state', 'gestor-offcanvas',
-                           'lista-centro-costos', 'por_estado', 'cambiar_estado', 'vincular_cotizacion',
-                           'vincular_cliente', 'vincular_proveedor']:
+                           'lista-centro-costos', 'por_estado', 'cambiar_estado']:
             return None
 
         if self.action == "list":
@@ -403,120 +400,12 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
             
-    @action(detail=True, methods=["patch"], url_path="vincular-cotizacion")
-    def vincular_cotizacion(self, request: Request, uuid=None) -> Response:
-        """
-        Vincula o desvincula una cotización a esta factura.
-        # WARNING: SINTEL v3.5: Delegación a BusinessService.
-        """
-        factura = self.get_object()
-        empresa_id = resolve_empresa_id_from_request(request)
-
-        # Wrap in dict to match business service expected data
-        data = {"cotizacion_uuid": request.data.get("cotizacion_uuid")}
-
-        try:
-            with transaction.atomic():
-                factura = FacturaBusinessService.actualizar_factura_limitado(
-                    factura=factura,
-                    data=data,
-                    empresa_id=empresa_id
-                )
-
-            # Retrieve detail serializer manually since get_serializer_class returns None for actions
-            return Response(FacturaDetailSerializer(factura).data, status=status.HTTP_200_OK)
-
-        except ValidationError as e:
-            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
-        except DjangoValidationError as e:
-            msgs = e.messages if hasattr(e, 'messages') else [str(e)]
-            return Response({"error": "validation_error", "detail": msgs}, status=status.HTTP_400_BAD_REQUEST)
-        except (ValueError, IntegrityError, ProtectedError) as e:
-            return Response(
-                {"error": "update_failed", "detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-    @action(detail=True, methods=["patch"], url_path="vincular-cliente")
-    def vincular_cliente(self, request: Request, uuid=None) -> Response:
-        """
-        Vincula un cliente a una factura de venta.
-        """
-        factura = self.get_object()
-        empresa_id = resolve_empresa_id_from_request(request)
-
-        try:
-            with transaction.atomic():
-                factura = FacturaBusinessService.vincular_cliente(
-                    factura=factura,
-                    cliente_uuid=request.data.get("cliente_uuid"),
-                    empresa_id=empresa_id,
-                )
-
-            return Response(
-                FacturaDetailSerializer(factura, context={"request": request}).data,
-                status=status.HTTP_200_OK,
-            )
-        except ValidationError as e:
-            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
-        except DjangoValidationError as e:
-            msgs = e.messages if hasattr(e, 'messages') else [str(e)]
-            return Response({"error": "validation_error", "detail": msgs}, status=status.HTTP_400_BAD_REQUEST)
-        except (ValueError, IntegrityError, ProtectedError) as e:
-            return Response(
-                {"error": "update_failed", "detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        except Exception as e:
-            log_up.error(f"[facturas:vincular_cliente] Unexpected error: {str(e)}", extra={"factura_id": factura.id})
-            return Response(
-                {"error": "internal_error", "detail": "Ocurrió un error inesperado al vincular el cliente."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    @action(detail=True, methods=["patch"], url_path="vincular-proveedor")
-    def vincular_proveedor(self, request: Request, uuid=None) -> Response:
-        """
-        Vincula un proveedor a una factura de compra.
-        """
-        factura = self.get_object()
-        empresa_id = resolve_empresa_id_from_request(request)
-
-        try:
-            with transaction.atomic():
-                factura = FacturaBusinessService.vincular_proveedor(
-                    factura=factura,
-                    proveedor_uuid=request.data.get("proveedor_uuid"),
-                    empresa_id=empresa_id,
-                )
-
-            return Response(
-                FacturaDetailSerializer(factura, context={"request": request}).data,
-                status=status.HTTP_200_OK,
-            )
-        except ValidationError as e:
-            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
-        except DjangoValidationError as e:
-            msgs = e.messages if hasattr(e, 'messages') else [str(e)]
-            return Response({"error": "validation_error", "detail": msgs}, status=status.HTTP_400_BAD_REQUEST)
-        except (ValueError, IntegrityError, ProtectedError) as e:
-            return Response(
-                {"error": "update_failed", "detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        except Exception as e:
-            log_up.error(f"[facturas:vincular_proveedor] Unexpected error: {str(e)}", extra={"factura_id": factura.id})
-            return Response(
-                {"error": "internal_error", "detail": "Ocurrió un error inesperado al vincular el proveedor."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    
     def create(self, request: Request, *args, **kwargs) -> Response:
         """
         Bloqueado: Las facturas solo se crean mediante importación UBL.
         
         # WARNING: IMPORTANTE: Las facturas son documentos históricos importados.
-        No se pueden crear manualmente. Use /upload-ubl/ o /importar-ubl/.
+        No se pueden crear manualmente. Use /upload-ubl/ o /create-from-dto/.
         
         Returns:
             405 Method Not Allowed
@@ -914,65 +803,6 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
     
     # # WARNING: FASE 4: Acciones detail para anexos XML y Buzón IMAP delegadas a mixins (FacturaXMLMixin, FacturaMailMixin)
     
-    @action(detail=False, methods=['get'], url_path='obtener-retenciones')
-    def obtener_retenciones(self, request: Request) -> Response:
-        """
-        Obtiene retenciones aplicables desde Cliente (VENTA).
-        Para COMPRA, retorna defaults (0.00) ya que las retenciones están en el XML.
-
-        Query params:
-        - nit: NIT del cliente (solo para VENTA)
-        - naturaleza: VENTA o COMPRA
-
-        Returns:
-            {
-                "aplica_retefuente": bool,
-                "retefuente_porcentaje": Decimal,
-                "aplica_reteica": bool,
-                "reteica_porcentaje": Decimal,
-                "aplica_reteiva": bool,
-                "reteiva_porcentaje": Decimal,
-            }
-        """
-        naturaleza = request.query_params.get('naturaleza', 'VENTA')
-
-        try:
-            # COMPRA: retenciones ya están en el XML, no extraer de Proveedores
-            if naturaleza == 'COMPRA':
-                return Response({
-                    "aplica_retefuente": False,
-                    "retefuente_porcentaje": "0.00",
-                    "aplica_reteica": False,
-                    "reteica_porcentaje": "0.00",
-                    "aplica_reteiva": False,
-                    "reteiva_porcentaje": "0.00",
-                }, status=status.HTTP_200_OK)
-
-            # VENTA: extraer desde Cliente
-            nit = request.query_params.get('nit')
-            if not nit:
-                return Response({
-                    "error": "missing_nit",
-                    "message": "Parámetro 'nit' es obligatorio"
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            empresa_id = resolve_empresa_id_from_request(request)
-            retenciones = self.service_obtener_retenciones_cliente(nit, empresa_id)
-
-            # Convertir Decimal a string para JSON
-            result = {
-                k: str(v) if isinstance(v, Decimal) else v
-                for k, v in retenciones.items()
-            }
-
-            return Response(result, status=status.HTTP_200_OK)
-        except Exception as e:
-            logger.exception("Error obteniendo retenciones")
-            return Response({
-                "error": "internal_error",
-                "message": str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
     @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
     def gestor_offcanvas(self, request):
         """
@@ -1128,73 +958,27 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         context['naturalezas'] = Factura.Naturaleza.choices
         context['categorias'] = Factura.Categoria.choices
 
-        # v3.11.0: datos de conciliacion bancaria para el JS del editor
-        if context.get('factura'):
-            _f = context['factura']
-            context['total_pagado_bancos'] = str(_f.total_pagado_bancos)
-            context['saldo_pendiente']     = str(_f.saldo_pendiente)
-        else:
-            context['total_pagado_bancos'] = '0.00'
-            context['saldo_pendiente']     = '0.00'
-
         # Template completo para edición
         return Response(context, template_name='tenant/facturas/offcanvas_editar_factura.html')
-
-    @action(detail=False, methods=["get"], url_path="inventario-catalogo")
-    def inventario_catalogo(self, request: Request) -> Response:
-        """
-        Busca productos y servicios unificados del inventario.
-        """
-        from .serializers import CatalogoItemInventarioSerializer
-
-        empresa_id = resolve_empresa_id_from_request(request)
-
-        search = request.query_params.get("q", "")
-        catalogo = InventarioItemBridge.buscar_catalogo(empresa_id=empresa_id, search=search)
-
-        serializer = CatalogoItemInventarioSerializer(catalogo, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @action(detail=True, methods=["get"], url_path="trazabilidad-inventario")
-    def trazabilidad_inventario(self, request: Request, pk=None) -> Response:
-        """
-        Retorna la trazabilidad de los items de la factura con respecto al inventario.
-        """
-        factura = self.get_object()
-        items = factura.items.all().only(
-            "id", "uuid", "codigo", "descripcion", "cantidad",
-            "item_inventario_uuid", "item_inventario_tipo", "item_inventario_codigo"
-        )
-        
-        empresa_id = resolve_empresa_id_from_request(request)
-
-        trazabilidad = []
-        for item in items:
-            info = None
-            if item.item_inventario_uuid and item.item_inventario_tipo:
-                info = InventarioItemBridge.resolver_item(
-                    empresa_id=empresa_id,
-                    item_uuid=item.item_inventario_uuid,
-                    item_tipo=item.item_inventario_tipo
-                )
-            trazabilidad.append({
-                "item_factura_id": item.id,
-                "item_factura_uuid": str(item.uuid),
-                "codigo_factura": item.codigo,
-                "descripcion_factura": item.descripcion,
-                "cantidad": float(item.cantidad),
-                "vinculado": info is not None,
-                "item_inventario": info
-            })
-            
-        return Response(trazabilidad, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='buscar-para-movimiento')
     def buscar_para_movimiento(self, request):
         """
-        Búsqueda de facturas para vincular con movimientos de inventario.
+        Busqueda generica de Facturas ya persistidas -- usada hoy por
+        Inventario (vincular movimiento) y por FACTURAS-VENTAS-COMPRAS-01
+        (buscador de Venta/Compra para asociacion manual, FASE 20-21: NO
+        se crea un segundo endpoint de busqueda, se reutiliza este).
         GET /api/v1/facturas/buscar-para-movimiento/?q=FV-2026-001&naturaleza=VENTA
-        Retorna: [{ numero, fecha, receptor_razon_social, total, naturaleza }]
+        Retorna: [{ uuid, numero, fecha, tercero, nit, total, naturaleza }]
+
+        FACTURAS-VENTAS-COMPRAS-01: hallazgo real -- antes solo buscaba/
+        mostraba `receptor_razon_social` ("cliente"), correcto para VENTA
+        (el tercero relevante es el receptor) pero incorrecto para COMPRA
+        (el tercero relevante es el EMISOR/proveedor). Ahora busca en
+        ambos lados y calcula el tercero correcto segun la naturaleza real
+        de cada fila -- nunca por el parametro `naturaleza` de la query
+        (ese solo filtra, `Factura.naturaleza` ya viene resuelta por
+        FacturaBusinessService._resolver_naturaleza(), SSoT).
         """
         query = request.query_params.get('q', '').strip()
         naturaleza = request.query_params.get('naturaleza', '').strip()
@@ -1204,13 +988,20 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
 
         empresa_id = resolve_empresa_id_from_request(request)
         qs = Factura.objects.filter(empresa_id=empresa_id).only(
-            'uuid', 'numero', 'fecha_emision', 'receptor_razon_social', 'receptor_nit',
+            'uuid', 'numero', 'fecha_emision', 'cufe',
+            'emisor_razon_social', 'emisor_nit',
+            'receptor_razon_social', 'receptor_nit',
             'total', 'naturaleza'
         )
 
-        # Búsqueda por número o cliente
+        # Busqueda por numero, CUFE, o tercero (emisor O receptor -- FASE 21)
         qs = qs.filter(
-            Q(numero__icontains=query) | Q(receptor_razon_social__icontains=query)
+            Q(numero__icontains=query) |
+            Q(cufe__icontains=query) |
+            Q(emisor_razon_social__icontains=query) |
+            Q(emisor_nit__icontains=query) |
+            Q(receptor_razon_social__icontains=query) |
+            Q(receptor_nit__icontains=query)
         )
 
         # Filtro por naturaleza si se proporciona
@@ -1220,17 +1011,24 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         # Ordenar por fecha descendente, límite 20 resultados
         qs = qs.order_by('-fecha_emision')[:20]
 
-        resultados = [
-            {
+        resultados = []
+        for f in qs:
+            # VENTA: el tercero relevante es el receptor (nuestro cliente).
+            # COMPRA: el tercero relevante es el emisor (nuestro proveedor).
+            if f.naturaleza == Factura.Naturaleza.COMPRA:
+                tercero, nit = f.emisor_razon_social, f.emisor_nit
+            else:
+                tercero, nit = f.receptor_razon_social, f.receptor_nit
+            resultados.append({
                 'uuid': str(f.uuid),
                 'numero': f.numero,
                 'fecha': f.fecha_emision.strftime('%d/%m/%Y') if f.fecha_emision else '',
-                'cliente': f.receptor_razon_social or f.receptor_nit or 'N/A',
+                'tercero': tercero or nit or 'N/A',
+                'cliente': tercero or nit or 'N/A',  # compat: consumidor existente (inventario)
+                'nit': nit or '',
                 'total': str(f.total),
-                'naturaleza': f.naturaleza
-            }
-            for f in qs
-        ]
+                'naturaleza': f.naturaleza,
+            })
 
         return Response(resultados, status=status.HTTP_200_OK)
 

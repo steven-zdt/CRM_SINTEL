@@ -37,8 +37,19 @@ def _ensure_tenant(schema_name, nombre):
     # vinculada (Factura.cotizacion_uuid) -- auditoria REL Cotizaciones
     # FASE 5, 2026-08-26.
     # 'tenant_ventas' agregado para los tests de convertir_a_venta()
-    # (COTIZACIONES-01, 2026-09-08).
-    required_apps = ['empresa', 'perfil', 'tenant_clientes', 'tenant_cotizaciones', 'facturas', 'tenant_ventas']
+    # (COTIZACIONES-01, 2026-09-08). 'tenant_inventario' (ItemVenta.producto/
+    # servicio son FK reales a ese catalogo) y 'tenant_proyectos'
+    # (convertir_a_proyecto) agregados en COTIZACIONES-02, mismo dia.
+    # 'tenant_gastos' agregado 2026-09-18: GASTOS_PROYECTOS_01 acoplo
+    # calcular_indicadores_financieros() (llamado desde
+    # orchestrate_create_proyecto(), en el camino de convertir_a_proyecto())
+    # a tenant_gastos_documentosoporte via import perezoso -- sin esta
+    # migracion, convertir_a_proyecto() fallaba con "relation ... does not
+    # exist" en cualquier tenant de test que no tuviera ya esa tabla.
+    required_apps = [
+        'empresa', 'perfil', 'tenant_clientes', 'tenant_cotizaciones', 'facturas',
+        'tenant_ventas', 'tenant_inventario', 'tenant_proyectos', 'tenant_gastos',
+    ]
     for app in required_apps:
         call_command('migrate_schemas', '--tenant', '-s', tenant_obj.schema_name, app, '--noinput', verbosity=0)
 

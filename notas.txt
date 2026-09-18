@@ -25,7 +25,7 @@ COMANDOS PARA OPERAR EL PROYECTO SINtel - Multi-tenant SaaS
 
 # ARCHIVO DE CONFIGURACIÓN:
 # Ver windows_terminal_settings.json para ejemplo completo de configuración JSON
-
+C:\Windows\System32\drivers\etc\hosts -Value 
 
 📦 INICIALIZACIÓN Y CONFIGURACIÓN
 ================================================================================
@@ -156,7 +156,7 @@ setup_tenant_publico.bat
 # Setup completo (migraciones + tenant público)
 make migrate && make setup
 
-docker compose up --build
+docker compose  build --no-cache
 
 # Ejecutar migraciones para un tenant específico
 

@@ -277,6 +277,13 @@ class TestHTTPStatusCodesProveedores:
             "email_contacto": "http201@example.com",
             "telefono_contacto": "3001001001",
             "activo": True,
+            # RELEASE-CLOSE/PROVEEDORES-02: JURIDICA exige Representante
+            # Legal (Regla Critica 3) -- ver ProveedorBusinessService.
+            # crear_proveedor(). Sin esto, la API real rechaza con 400.
+            "representante": {
+                "tipo_documento": "CC", "numero_documento": "1001001001",
+                "nombre_completo": "Representante HTTP 201",
+            },
         }
 
         response = jwt_tenant_client.post(
@@ -314,6 +321,10 @@ class TestHTTPStatusCodesProveedores:
             "email_contacto": "http200@example.com",
             "telefono_contacto": "3002002002",
             "activo": True,
+            "representante": {
+                "tipo_documento": "CC", "numero_documento": "1002002002",
+                "nombre_completo": "Representante HTTP 200",
+            },
         }
 
         # Primer POST: Create

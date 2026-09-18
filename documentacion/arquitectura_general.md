@@ -1,7 +1,198 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.63.0
-**Ultima actualizacion:** 2026-09-03 (DOC-M50) — **POC pgvector fases
+**Version:** 3.64.0
+**Ultima actualizacion:** 2026-09-08 (DOC-M51) — **4 misiones/fases
+consecutivas en la misma sesion larga: AI-VECTOR-11A (cache de
+query-embeddings), PROVEEDORES-01 (auditoria integral), COTIZACIONES-01
+(maquina de estados + Cotizacion->Venta) y COTIZACIONES-02 (ciclo comercial
+completo -- **cierre formal 2026-09-14 y verificacion final RELEASE-CLOSE-01
+2026-09-15, ver DOC-M56 abajo; el "EN VERIFICACION" de este parrafo es
+historico, ya superado**).** Posterior a DOC-M50 (2026-09-03).
+
+**A. AI-VECTOR-11A -- cache de query-embeddings (`PASS`, 2026-09-08):**
+cierra la limitacion L2 dejada abierta por AI-VECTOR-11.1 (`embed_query`
+local ~25-28ms mas caro que el fetch baseline). Nuevo
+`apps/tenant/ai_knowledge/services/query_embedding_cache.py` -- Redis
+directo (mismo patron que `password_reset.py::_redis()`, el proyecto no
+tiene `CACHES` configurado), key
+`ai_embed_query:{schema}:{model}:{sha256(texto)}` (aisla por tenant, nunca
+texto en claro, auto-invalida por modelo), TTL configurable, fail-open si
+Redis falla. `RetrievalService.search()` envuelve la unica llamada a
+`embed_query()`. Incidente real resuelto: conexion Redis nueva por llamada
++ Windows resolviendo `localhost` via IPv6 primero (~2048ms) -- fix: cliente
+cacheado a nivel de proceso + `127.0.0.1` explicito. Benchmark corregido
+(media doble de latencia por query, ahora `T_search_ms` unico). Resultado:
+`LATENCY_GAIN` -6.47 -> -0.1007 (~65x menos negativo). 72 tests pasan
+(67 previos + 5 nuevos). Detalle: `docs/ai/AI_VECTOR_POC_EXECUTION.md`
+§AI-VECTOR-11A. **NEXT:** AI-VECTOR-11.2+ requiere go-ahead explicito del
+usuario.
+
+**B. PROVEEDORES-01 -- auditoria y correccion integral (`PASS_WITH_LIMITATIONS`,
+commit `df61d8a`):** Directorio/Representantes/Cuentas-por-Pagar. 5
+hallazgos corregidos (namespace JS dual muerto, campos de retencion sin
+efecto real deprecados, codigo muerto en el ServiceMixin, `.agent/README.md`
+reescrito, gap de aislamiento multi-tenant `NP-PROV-001` cerrado con 2
+schemas reales) + 22 tests nuevos (Representante CRUD/DSV/unicidad,
+`registrar_abono`, aislamiento CxP). Permisos binarios mantenidos a
+proposito (H3). Deuda documentada, no cerrada: `Representante` duplica
+`clientes.ContactoCliente` (H7, fusion fuera de alcance). Detalle:
+`docs/proveedores/PROVEEDORES_RELEASE_GATE.md`.
+
+**C. COTIZACIONES-01 -- maquina de estados + Cotizacion->Venta (commit
+`83416ba`):** primera maquina de estados real del modulo
+(`CotizacionService.TRANSICIONES_VALIDAS`/`cambiar_estado()`, `estado`
+removido de `PATCH` generico). Nombres reales verificados en codigo:
+`BORRADOR/ENVIADA/ACEPTADA/CANCELADA` (no los `APROBADA/ARCHIVADA` que
+asumia el brief original -- decision explicita tras confirmar que esos
+nombres no existian). `CotizacionService.convertir_a_venta()` (idempotente,
+`Venta.cotizacion_uuid` unico + `select_for_update`), items copiados como
+snapshot (sin vincular al catalogo de Inventario -- no existe mapeo real,
+ver `COTIZACIONES_INTEGRATIONS.md`). Veredicto `COMPLETED_WITH_DEFERRED`
+(catalogo Producto/Servicio inalcanzable en UI sigue como `GAP_DE_NEGOCIO`).
+42 tests pasan. Detalle: `docs/cotizaciones/COTIZACIONES_RELEASE_GATE.md`.
+
+**D. COTIZACIONES-02 -- ciclo comercial completo (misma sesion, 2026-09-08;
+cierre formal 2026-09-14; verificacion final RELEASE-CLOSE-01 2026-09-15,
+ver DOC-M56):** disparada por el usuario al notar que el tramo
+`Venta->Factura` (COMERCIAL-01/03/04) ya existia pero `Cotizacion->Venta`
+seguia sin formalizar end-to-end, mas un gap de idempotencia pendiente en
+`crear_factura_desde_venta()` (ver §E). Empezo por auditoria del codigo real
+(INSPECT), no por crear modelos. **2o rename de estados en 2 dias**,
+verificado con evidencia (0 filas reales en `ACEPTADA`/`CANCELADA` en las 3
+bases antes de renombrar, no un supuesto): `ACEPTADA->APROBADA`,
+`CANCELADA->RECHAZADA`, + `ARCHIVADA` nuevo (5 estados, migracion
+`tenant_cotizaciones.0010`). Implementado: historial de estados
+(`CotizacionHistorialEstado`, append-only) + `CotizacionEstadoConfig`
+(presentacion, 1:1 por empresa, deliberadamente NO fusionado con
+`ConfiguracionCotizacion` que es 1:N); `BORRADOR->ENVIADA` gateado por PDF
+real exitoso (`generar_pdf_y_enviar()`, a diferencia del helper preexistente
+que traga fallos en silencio); `Cotizacion->Venta` ahora exige `APROBADA`;
+`Venta->Factura` desde Cotizacion (`facturar_venta_de_cotizacion()`,
+reutiliza `procesar_y_facturar_venta(venta_existente=venta)` de
+COMERCIAL-04 sin reimplementar DTO/DIAN); `Cotizacion->Proyecto`
+(`convertir_a_proyecto()`, reutiliza `orchestrate_create_proyecto()`
+existente, filtra por `CotizacionItem.tipo_item=='SERVICIO'` -- señal
+confiable, no por `tipo_cotizacion` que siempre queda en `'MIXTO'`);
+proteccion de datos por estado (edicion solo en `BORRADOR`, DELETE
+bloqueado fuera de `BORRADOR`/`ENVIADA`). **DEFERRED explicito** (sin
+inventar la regla): Abastecimiento (Cotizacion->OrdenCompra->Inventario) --
+`CotizacionItem` no tiene soft-reference a `inventario.Producto/Servicio`,
+evidencia insuficiente para un heuristico de matching. **Cierre formal
+2026-09-14:** regresion de 4 apps (`ventas`/`facturas`/`cotizaciones`/
+`compras`) ejecutada -- 357 passed, 2 failed (1 preexistente ajeno de
+retenciones, 1 causado por esta sesion y corregido), `manage.py check` +
+`makemigrations --check` limpios post-cambio de `Factura`. Veredicto:
+`COMPLETED_WITH_DEFERRED`. **Re-verificado RELEASE-CLOSE-01 (2026-09-15,
+ver DOC-M56):** confirma el veredicto sigue vigente contra el codigo actual.
+Detalle: `docs/cotizaciones/COTIZACIONES_RELEASE_GATE.md` (actualizacion
+"COTIZACIONES-02").
+
+**E. Cierre del gap de idempotencia en `crear_factura_desde_venta()`
+(parte de COTIZACIONES-02, cierra un hallazgo abierto desde COMERCIAL-01
+§6):** COMERCIAL-04 (2026-08-24) habia cerrado el gap solo en el unico
+punto de entrada HTTP real (`procesar_y_facturar_venta`, via
+`venta_existente.estado`), dejando el metodo `crear_factura_desde_venta()`
+sin proteccion propia. Ahora: `UniqueConstraint(empresa, numero)` nuevo en
+`Factura` (migracion `facturas.0041`, verificado 0 duplicados reales en
+`home`/`admin`/`aipoc` antes de agregarlo) + `IntegrityError` capturado
+dentro de un `transaction.atomic()` anidado (savepoint real -- nunca un
+`savepoint()` suelto, ver incidente 2026-08-25) que recupera y devuelve la
+`Factura` existente en vez de duplicar. Detalle:
+`docs/comercial/COMERCIAL_04_IDEMPOTENCIA.md` §7.
+
+**Tests (venv local, nunca Docker):** AI-VECTOR-11A 72 pasan;
+PROVEEDORES-01 40 pasan; COTIZACIONES-01 42 pasan; COTIZACIONES-02 37/41
+pasan en la corrida inicial (4 fallos, causa raiz identificada: los tests
+no capturaban la instancia fresca que devuelven `cambiar_estado()`/
+`generar_pdf_y_enviar()` -- ambos hacen fetch-and-mutate via
+`select_for_update()`, nunca mutan el objeto Python del caller -- corregido
+en los 4 tests, no en el servicio; re-verificacion en curso al momento de
+este DOC-M).
+
+**[DOC-M56, 2026-09-15] RELEASE-CLOSE-01 -- verificacion final de Facturas
+v4.0.0 y cierre formal de COTIZACIONES-02:** misión de auditoría/verificación
+(no de nueva funcionalidad) sobre el estado real del código, sin confiar en
+`MEMORY.md`/docs previos como fuente de verdad. Reprodujo el único failure
+conocido (`test_factura_total_retenciones_multiples`), lo clasificó como
+test obsoleto (A -- el guard de idempotencia real de `crear_retencion()`,
+REM-P0-03, preexistente y ajeno a esta misión, hace que el escenario de 3
+llamadas al mismo `documento_origen+tipo` nunca ocurra en producción -- el
+único caller real invoca como máximo una vez por tipo por documento) y lo
+corrigió sin tocar código de producción. Confirmó con `grep` repo-wide que
+`BancosBridge`/`total_pagado_bancos`/`saldo_pendiente`/
+`recalcular_estado_pago_automatico`/endpoints removidos en v4.0.0 siguen en
+0 referencias vivas, y encontró 1 hallazgo nuevo no capturado por la
+auditoría anterior: `tools/smoke_facturas.sh` seguía invocando el endpoint
+`/materialize/` ya eliminado (script de smoke manual, huérfano, corregido a
+`create-from-dto`). Re-corrida fresca (no reutiliza el resultado histórico):
+`pytest apps/tenant/facturas/tests` -- **205 passed, 0 failed, 12 skipped**;
+`pytest apps/tenant/ventas/tests apps/tenant/facturas/tests
+apps/tenant/cotizaciones/tests apps/tenant/compras/tests` -- **358 passed, 0
+failed, 13 skipped (4:01:13)** (la corrida anterior, de otra sesión, había
+dado 357/2 -- ambos failures ya investigados entonces; esta cifra de hoy es
+la que se toma como resultado real, no la anterior, por mandato explícito de
+la misión "no reutilizar un resultado histórico"). `manage.py check`,
+`makemigrations --check --dry-run` y `tools/organizational_governance/cli.py
+--report` limpios. **Veredicto: `RELEASE-CLOSE-01 = COMPLETED`.**
+`COTIZACIONES-02` pasa de "EN VERIFICACION" (histórico, DOC-M51 §D) a
+confirmado `COMPLETED_WITH_DEFERRED` con evidencia fresca (el DEFERRED de
+Abastecimiento Cotización→OrdenCompra→Inventario sigue vigente, sin cambios).
+Detalle completo: `apps/tenant/facturas/.agent/COMPLETO_FLUJO_FACTURAS.md`
+§"RELEASE-CLOSE-01", `docs/cotizaciones/COTIZACIONES_RELEASE_GATE.md`
+§"Re-verificación RELEASE-CLOSE-01", `RELEASE-CLOSE-01_FINAL_REPORT.md`
+(raíz del repo). **NEXT:** `BANCOS-04` (Extracto→Movimiento→Matching→
+Aplicación 1:N→Conciliación), consumiendo Facturas únicamente vía el
+contrato de lectura ya estabilizado (`FacturaInterAppAPI.get_by_id()`) — no
+implementado en esta misión.
+
+**[DOC-M57, 2026-09-15] PROVEEDORES-02 -- representante obligatorio + fix
+real de Cuentas por Pagar + coherencia visual con Clientes/Compras:** misión
+sobre `apps/tenant/proveedores/`, con el doc `.agent/AUDITORIA_FLUJO_
+PROVEEDORES.md` ya marcado obsoleto por el propio módulo (superado por
+`docs/proveedores/PROVEEDORES_AUDIT.md`/`FLOW.md`/`RELEASE_GATE.md` de
+PROVEEDORES-01, 2026-09-08). **Reglas nuevas:**
+`ProveedorBusinessService.crear_proveedor()` atómico, exige Representante --
+JURIDICA lo pide explícito (rechaza antes de tocar BD si falta), NATURAL lo
+autogenera desde el usuario real (`TenantProfile`/`User`), pidiendo solo
+numero/tipo de documento (dato que el sistema no posee para ningún usuario).
+Un solo `es_principal=True` por proveedor reforzado en creación/edición
+(antes solo al eliminar). **Bug real encontrado por inspección de código (no
+en ningún plan previo):** "Abonar" fallaba (400) sobre cualquier fila de
+Cuentas por Pagar originada en una Factura real -- la fuente PRIMARIA del
+listado unificado, el caso más común -- porque `registrar_abono()` solo
+buscaba por UUID en el modelo `CuentasPagar`, inexistente hasta el primer
+abono; el offcanvas de gestión además leía un atributo (`proveedor_nombre`)
+que no existe en ese modelo. Corregido con materialización idempotente
+(`resolver_cuenta_pagar()`/`_materializar_desde_factura()`) + el listado
+unificado (`qs_list_unificado()`) actualizado para preferir la `CuentasPagar`
+vinculada sobre `Factura.estado_pago` crudo una vez que existe (evita que el
+abono recién registrado desaparezca de la tabla en la siguiente carga). DELETE
+de CxP agregado (antes NOT_APPLICABLE por diseño): bloqueado si tiene Factura
+asociada o si `valor_pagado > 0`, sin inventar un estado `ANULADA` nuevo ni
+PATCH genérico (decisión explícita del usuario). **Frontend sincronizado con
+Clientes:** Directorio con columnas Tipo/Documento/Régimen/Contacto + filtros
+chips + acciones Ver/Editar/Representantes/Eliminar; Cuentas por Pagar con
+chips de estado + KPIs en vivo + acciones Ver/Abonar/Eliminar. **Compras**
+(pedido explícito, mismo patrón visual): `compras_list.html` pasó de 2 cards
+siempre visibles y apiladas a un menú de pestañas -- clic en cada menú
+muestra su lista; cambio de solo-template, sin backend nuevo. **Verificado
+con evidencia real:** `pytest apps/tenant/proveedores/tests` (Docker) --
+**53 passed, 0 failed** (33m58s); `manage.py check`/`makemigrations --check`
+limpios, sin migraciones nuevas. `pytest apps/tenant/compras/tests` en curso
+al momento de este DOC-M. **Nota operativa de testing:** en esta sesión se
+midió que el mismo tipo de test vía `venv` local tarda ~30x más que vía
+Docker en esta máquina (2h11min vs ~280s -- RAM limitada, `TenantTestCase`
+recreando esquemas bajo swap) -- se revirtió a `docker compose exec web
+pytest` para todo test Django/pytest; venv local queda solo para comandos sin
+DB de test (`check`, `makemigrations --check`, herramientas estáticas). Sin
+verificación visual en navegador real (sin acceso a browser interactivo).
+Detalle completo: `docs/proveedores/PROVEEDORES_FLOW.md` §8,
+`PROVEEDORES_AUDIT.md` (hallazgo H8), `PROVEEDORES_RELEASE_GATE.md`,
+`apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md` §12.
+
+---
+
+**Actualizacion previa:** 2026-09-03 (DOC-M50) — **POC pgvector fases
 AI-VECTOR-06 a AI-VECTOR-10: seguridad/aislamiento, `RetrievalTool`
 integrada, indexacion real de `aipoc` via Celery, benchmark, Release Gate =
 `POC_PASS_WITH_LIMITATIONS`**. Posterior a DOC-M49 (2026-09-03).
@@ -2970,22 +3161,32 @@ indice ANN, trigger de reindexado.
 | App | Ruta | SSoT de auditoria |
 |---|---|---|
 | `core` (tenant) | `apps/tenant/core/` | `apps/tenant/core/.agent/AUDITORIA_FLUJO_CORE.md` |
-| `empresa` | `apps/tenant/empresa/` | `apps/tenant/empresa/.agent/AUDITORIA_EMPRESA.md` |
-| `perfil` | `apps/tenant/perfil/` | `apps/tenant/perfil/.agent/AUDITORIA_FLUJO_COMPLETO.md` |
-| `facturas` | `apps/tenant/facturas/` | `apps/tenant/facturas/.agent/AUDITORIA_FLUJO_COMPLETO_FACTUR.md` |
+| `empresa` | `apps/tenant/empresa/` | `apps/tenant/empresa/.agent/AUDITORIA_FLUJO_EMPRESA.md` |
+| `perfil` | `apps/tenant/perfil/` | `apps/tenant/perfil/.agent/AUDITORIA_FLUJO_PERFIL.md` |
+| `facturas` | `apps/tenant/facturas/` | `apps/tenant/facturas/.agent/COMPLETO_FLUJO_FACTURAS.md` |
 | `contabilidad` | `apps/tenant/contabilidad/` | `apps/tenant/contabilidad/.agent/AUDITORIA_COMPLETA_CONTABILIDAD.md` |
-| `gastos` | `apps/tenant/gastos/` | `apps/tenant/gastos/.agent/AUDITORIA_FLUJO_COMPLETO_GASTOS.md` |
+| `gastos` | `apps/tenant/gastos/` | `apps/tenant/gastos/.agent/AUDITORIA_FLUJO_GASTOS.md` |
 | `inventario` | `apps/tenant/inventario/` | `apps/tenant/inventario/.agent/AUDITORIA_FLUJO_INVENTARIO.md` |
 | `empleados` | `apps/tenant/empleados/` | `apps/tenant/empleados/.agent/AUDITORIA_FLUJO_EMPLEADOS.md` |
 | `cotizaciones` | `apps/tenant/cotizaciones/` | `apps/tenant/cotizaciones/.agent/AUDITORIA_FLUJO_COMPLETO.md` |
 | `clientes` | `apps/tenant/clientes/` | `apps/tenant/clientes/.agent/AUDITORIA_FLUJO_CLIENTES.md` |
-| `proveedores` | `apps/tenant/proveedores/` | `apps/tenant/proveedores/.agent/AUDITORIA_FLUJO_COMPLETO_PROVE.md` |
+| `proveedores` | `apps/tenant/proveedores/` | `apps/tenant/proveedores/.agent/AUDITORIA_FLUJO_PROVEEDORES.md` |
 | `proyectos` | `apps/tenant/proyectos/` | `apps/tenant/proyectos/.agent/AUDITORIA_FLUJO_COMPLETO.md` |
-| `dashboard` | `apps/tenant/dashboard/` | `apps/tenant/dashboard/.agent/` |
+| `dashboard` | `apps/tenant/dashboard/` | `apps/tenant/dashboard/.agent/AUDITORIA_FLUJO_DASHBOARD.md` |
 | `bancos` | `apps/tenant/bancos/` | `apps/tenant/bancos/.agent/AUDITORIA_FLUJO_COMPLETO.md` |
 | `compras` | `apps/tenant/compras/` | `apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md` |
 | `ventas` | `apps/tenant/ventas/` | `apps/tenant/ventas/.agent/ARQUITECTURA_VENTAS.md` |
 | `landing` | `apps/tenant/landing/` | `apps/tenant/landing/.agent/AUDITORIA_FLUJO_LANDING.md` |
+
+**[DOC-M55, 2026-09-14]** Tabla verificada archivo-por-archivo contra el filesystem real (`ls` directo,
+no asumido) tras encontrar 5 rutas rotas apuntando a nombres de archivo que no existen:
+`empresa` (`AUDITORIA_EMPRESA.md` → `AUDITORIA_FLUJO_EMPRESA.md`), `perfil` (`AUDITORIA_FLUJO_COMPLETO.md` →
+`AUDITORIA_FLUJO_PERFIL.md`), `facturas` (`AUDITORIA_FLUJO_COMPLETO_FACTUR.md` → `COMPLETO_FLUJO_FACTURAS.md`),
+`gastos` (`AUDITORIA_FLUJO_COMPLETO_GASTOS.md` → `AUDITORIA_FLUJO_GASTOS.md`), `proveedores`
+(`AUDITORIA_FLUJO_COMPLETO_PROVE.md` → `AUDITORIA_FLUJO_PROVEEDORES.md`); y `dashboard` apuntaba solo al
+directorio `.agent/` sin nombre de archivo, corregido a `AUDITORIA_FLUJO_DASHBOARD.md`. Las 17 rutas de
+la tabla están confirmadas existentes al momento de este commit — no garantiza que sigan existiendo si
+un app renombra su doc despues sin actualizar esta tabla.
 
 ### 10.3. Cobertura de Tests
 
@@ -3318,6 +3519,65 @@ cambia.
 parametros `search`/`estado` nuevos en selectores existentes de
 `empresa`/`proveedores`/`proyectos`, sin cambios de esquema). Ninguna fila
 de esta tabla cambia.
+
+**[DOC-M52]** SINTEL-AI-UI-01 (2026-09-09) no toca modelos ni migraciones
+-- primera UI del Asistente IA transversal (AI-06), reutilizando 100% del
+backend ya existente (`POST /api/v1/ai/ask/`). Solo archivos nuevos de
+frontend (1 template offcanvas + 1 modulo JS `window.Sintel.AI`, ambos en
+`apps/tenant/core/`), 3 archivos existentes modificados minimamente
+(`_header.html`, `workspace.html`, `assets_core.html` -- boton + includes
++ 1 `<script>`), 1 archivo de test Python nuevo
+(`apps/services/ai/tests/test_ai_ui_01_security.py`) y 1 spec Playwright
+nuevo (`tests/e2e/specs/70-ai-ui-01-assistant.spec.js`). Ver
+`docs/ai/AI_UI_01_AUDIT.md`/`AI_UI_01_EXECUTION.md` para el detalle
+completo. Ninguna fila de esta tabla cambia (0 modelos, 0 migraciones).
+
+**[DOC-M53]** VENTAS-COMPRAS-FACTURAS-01 (2026-09-09) no toca modelos ni
+migraciones -- barrera de emision fiscal: SINTEL no esta autorizada por la
+DIAN para crear/emitir/transmitir Facturas electronicas, `facturas` es el
+dueño fiscal exclusivo (recibe XML externo). `VentaBusinessService.
+procesar_y_facturar_venta()` (`apps/tenant/ventas/services/business_service.py`)
+ahora rechaza con 403 antes de cualquier escritura via una constante de
+codigo nueva (`EMISION_FISCAL_VENTA_AUTORIZADA = False`, deliberadamente
+NO un settings/env var -- reactivar requiere un cambio de codigo revisado).
+Codigo DIAN (CUFE/UBL/XAdES) intacto, solo inalcanzable. 2 botones de UI
+removidos (`offcanvas_detalle_venta.html`, `offcanvas_crear_venta.html`).
+1 archivo de test nuevo (`test_bloqueo_emision_fiscal.py`, 6/6 verde,
+incluye la prueba HTTP explicita "POST Venta -> NO aparece nueva
+Factura"). 6 archivos de test existentes actualizados (mock del flag a
+True, preservan su cobertura del pipeline DIAN interno en vez de
+eliminarla) -- no archivos de test nuevos atribuidos a la fila de abajo
+mas alla del ya contado. `compras` auditado completo: nunca tuvo relacion
+con `facturas`, ya cumplia la regla, 0 cambios. Contrato de consumo
+`Factura -> Ventas/Compras` DEFERRED explicito (decisiones de negocio
+pendientes, ver `docs/comercial/VENTAS_COMPRAS_FACTURAS_FLOW.md`). Ver
+`docs/comercial/VENTAS_COMPRAS_FACTURAS_RELEASE_GATE.md` para el detalle
+completo. Ninguna fila de esta tabla cambia (0 modelos, 0 migraciones).
+
+**[DOC-M54]** N8N-SINTEL-01 (2026-09-09) no toca modelos ni migraciones
+-- integra n8n (self-hosted, Docker, `n8nio/n8n:1.81.0`, version fijada)
+como orquestador de automatizacion EXTERNO a SINTEL. Servicio Docker
+nuevo con base de datos Postgres PROPIA y aislada (rol/DB dedicados en
+el mismo servidor; `REVOKE CONNECT ON DATABASE sintel FROM PUBLIC`
+verificado con evidencia real: el rol `n8n` no puede conectar a
+`sintel`). Modulo transversal nuevo `apps/services/integration_events/`
+(contrato de evento de dominio + publisher + tarea Celery, nunca un
+Django signal -- regla del proyecto). 1 management command nuevo
+(`crear_identidad_tecnica_n8n`, identidad JWT dedicada reutilizando
+simplejwt ya existente). Se habilito `FEATURE_UPLOAD_DOCUMENT_ENDPOINT`
+(endpoint ya existente y probado, `POST /api/v1/core/_apps/facturas/upload-document/`,
+reutiliza el pipeline oficial sin duplicar el parser XML). MCP formal
+(`django-rest-framework-mcp`) quedo DEFERRED -- mismo defecto de
+terceros que ya bloqueo AI-07 confirmado vigente; REST API simple
+elegido en su lugar (decision explicita del usuario). Verificado con
+evidencia real: POST real con la identidad tecnica -> 201 -> Factura
+persistida y clasificada correctamente -> limpiada tras la prueba;
+resto del stack SINTEL (`db`/`redis`/`neo4j`/`nginx`/`celery`/`web`)
+healthy despues de todos los cambios. Exposicion publica de n8n (nginx +
+dominio), WhatsApp/email reales, y el workflow receptor del lado de n8n
+quedan DEFERRED (requieren decision/credenciales del usuario o trabajo
+en la UI de n8n). Ver `docs/n8n/N8N_RELEASE_GATE.md` para el detalle
+completo. Ninguna fila de esta tabla cambia (0 modelos, 0 migraciones).
 
 **[DOC-M21]** F31 no toca modelos ni migraciones -- solo archivos de
 frontend (JS/HTML) y 2 archivos de codigo de produccion Python sin

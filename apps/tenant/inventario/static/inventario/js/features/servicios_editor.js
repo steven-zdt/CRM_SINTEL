@@ -325,7 +325,8 @@
         const select = form.querySelector('#historial-servicio-select');
         if (select && select.options.length <= 1) {
             try {
-                const res = await w.Sintel.Core.Http.request('GET', '/api/v1/inventario/servicios/?activo=true&page_size=200');
+                // T-9: delega a la SSoT de endpoints (inventario.api.js).
+                const res = await w.Sintel.Inventario.API.servicios.list({ activo: true, page_size: 200 });
                 if (res.ok && res.data) {
                     const items = res.data.results || res.data;
                     items.forEach(function(s) {
@@ -365,7 +366,7 @@
                 btnGuardar.disabled = true;
                 btnGuardar.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Registrando...';
 
-                const res = await w.Sintel.Core.Http.request('POST', '/api/v1/inventario/historial-servicios/', payload);
+                const res = await w.Sintel.Inventario.API.historialServicios.save(payload);
 
                 btnGuardar.disabled = false;
                 btnGuardar.innerHTML = original;

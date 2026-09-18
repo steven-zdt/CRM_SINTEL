@@ -5,9 +5,15 @@ F24.11/F24.12: aislamiento multi-tenant real del circuito completo
 2 schemas reales (tenant1/tenant2, mismo patron de F21/F22/F23). Empresa es
 singleton por schema (F21), por lo que "otro tenant" se modela como un
 schema fisico distinto, no como una segunda Empresa en el mismo schema.
+
+VENTAS-COMPRAS-FACTURAS-01 (2026-09-09): `procesar_y_facturar_venta()`
+rechaza por defecto (Fase 8). Las 2 funciones que llaman a Ventas mockean
+el flag a True -- siguen probando el aislamiento DSV/multi-tenant real
+del circuito Compra+Venta+Contabilidad, no el bloqueo de produccion.
 """
 from datetime import date
 from decimal import Decimal
+from unittest import mock
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -74,6 +80,7 @@ def _preparar_tenant(empresa, sufijo, stock="50"):
 
 
 @pytest.mark.django_db
+@mock.patch("apps.tenant.ventas.services.business_service.EMISION_FISCAL_VENTA_AUTORIZADA", True)
 def test_producto_uuid_de_otro_tenant_es_rechazado_limpiamente_en_venta(tenant1, tenant2):
     """
     F24.12 DSV: inyectar en el payload de una venta de tenant1 el UUID de un
@@ -110,6 +117,7 @@ def test_producto_uuid_de_otro_tenant_es_rechazado_limpiamente_en_venta(tenant1,
 
 
 @pytest.mark.django_db
+@mock.patch("apps.tenant.ventas.services.business_service.EMISION_FISCAL_VENTA_AUTORIZADA", True)
 def test_flujo_completo_compra_venta_asiento_independiente_por_tenant(tenant1, tenant2):
     """
     F24.11: el circuito completo (Compra->Movimiento->Kardex->Venta->

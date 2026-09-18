@@ -35,6 +35,17 @@
                     </ul>
                 </div>
                 {% endif %}
+                <!-- Asistente IA (mision SINTEL-AI-UI-01) -- abre el offcanvas global -->
+                <!-- via window.Sintel.AI (core/js/common/ai.assistant.js). Solo funcional -->
+                <!-- en paginas que cargan assets_core.html (workspace) -- inerte en el resto. -->
+                <button id="btn-asistente-ia-toggle"
+                        type="button"
+                        class="btn btn-sm btn-outline-light d-flex align-items-center gap-1"
+                        aria-controls="offcanvas-asistente-ia"
+                        aria-label="Abrir Asistente IA">
+                    <i class="bi bi-stars"></i>
+                    <span class="small d-none d-md-inline">Asistente IA</span>
+                </button>
                 <!-- Dropdown de cuenta (Bootstrap 5) -->
                 <div class="dropdown" id="account-dropdown-container">
                     <button id="account-dropdown-toggle" 
