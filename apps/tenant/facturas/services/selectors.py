@@ -185,6 +185,35 @@ class FacturaSelectors:
         return qs
 
     @staticmethod
+    def qs_pendientes_sincronizacion_venta(empresa_id: int, search: str | None = None):
+        """
+        PLAN_SINCRONIZACION_FACTURAS_VENTAS (FASE 4): Facturas de naturaleza
+        VENTA, tipo FE (nunca NC/ND -- una nota no genera Venta propia),
+        que TODAVIA no tienen ninguna Venta vinculada (`venta_origen`,
+        reverse accessor del OneToOneField `Venta.factura_asociada`).
+
+        La exclusion de vinculadas se hace aqui, en BD (`venta_origen__isnull`),
+        NUNCA solo en el frontend -- regla explicita del plan (FASE 4/25).
+        empresa_id es obligatorio (a diferencia de qs_list/qs_detail): este
+        selector nunca debe usarse sin DSV, es la base del panel de
+        sincronizacion que decide que Ventas crear.
+        """
+        qs = Factura.objects.filter(
+            empresa_id=empresa_id,
+            naturaleza=Factura.Naturaleza.VENTA,
+            tipo=Factura.TipoFactura.FE,
+            venta_origen__isnull=True,
+        ).only(*LIST_FIELDS)
+        if search:
+            qs = qs.filter(
+                Q(numero__icontains=search) |
+                Q(cufe__icontains=search) |
+                Q(receptor_razon_social__icontains=search) |
+                Q(receptor_nit__icontains=search)
+            )
+        return qs.order_by("-fecha_emision", "-id")
+
+    @staticmethod
     def qs_centros_costo(empresa_id: int | None = None):
         """
         QuerySet ligero para selección de centros de costo (v3.5 Zero Waste).

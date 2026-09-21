@@ -21,9 +21,18 @@ logger = logging.getLogger(__name__)
 
 
 class VentaTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
+    """
+    Piloto DataTables (docs/ux/TABLES_FORMS_RELEASE_GATE.md): la tabla en si
+    ahora la sirve POST /api/v1/ventas/dt/ (VentaViewSet.dt) + DataTables JS.
+    Esta vista queda viva SOLO para los KPIs (template_name apunta a
+    kpis_ventas.html, que ya no incluye {% render_table table %}) mientras
+    no se resuelvan en un endpoint de agregados propio (limpieza post-gate,
+    ver plan del piloto). No eliminar table_class/SingleTableView todavia:
+    get_context_data() sigue usando self.object_list para los agregados.
+    """
     model = Venta
     table_class = VentaTable
-    template_name = "tenant/ventas/partials/tabla_ventas.html"
+    template_name = "tenant/ventas/partials/kpis_ventas.html"
     table_pagination = {"per_page": 20}
 
     def get_queryset(self):

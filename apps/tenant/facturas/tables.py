@@ -10,6 +10,7 @@ import django_tables2 as tables
 from django.utils import timezone
 from django.utils.html import format_html
 
+from apps.tenant.core.templatetags.currency_filters import currency_cop
 from apps.tenant.facturas.models import Factura
 
 _BADGE_DIAN = {
@@ -87,7 +88,12 @@ class FacturaTable(tables.Table):
         return format_html('<span class="{}">{}{}</span>', cls, icono, val.strftime("%d %b %y"))
 
     def render_total(self, value):
-        return format_html('<span class="fw-semibold">${}</span>', f"{value:,.0f}")
+        # Bug real (2026-09-18): ",.0f" truncaba los centavos del listado de
+        # Facturas -- el valor real (con centavos) si esta correcto en BD
+        # (ver corregir_items_factura_escala_x100.py), solo la vista lo
+        # ocultaba. Se unifica con currency_cop (mismo criterio usado en el
+        # detalle de Factura y en el listado de Ventas).
+        return format_html('<span class="fw-semibold">{}</span>', currency_cop(value))
 
     def render_estado(self, value):
         cls, ico, txt = _BADGE_DIAN.get(value, ("bg-secondary", "bi-question-circle", value or "---"))

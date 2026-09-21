@@ -1,5 +1,6 @@
 {# offcanvas_crear_factura.html — v3.16 Subida masiva XML UBL 2.1 #}
 {# Mantiene modo detalle (si factura) + modo subida masiva (si no factura) #}
+{% load currency_filters %}
 
 <style>
   #offcanvas-factura { width: min(96vw, 620px) !important; }
@@ -66,7 +67,7 @@
           </div>
           <div class="col-6">
             <div class="text-muted small">Total</div>
-            <div class="fw-bold text-primary">${{ factura.total|floatformat:0|default:"0" }}</div>
+            <div class="fw-bold text-primary">{{ factura.total|default:0|currency_cop }}</div>
           </div>
           {% if factura.cufe %}
           <div class="col-12">

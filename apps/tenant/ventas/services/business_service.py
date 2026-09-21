@@ -1053,6 +1053,160 @@ class VentaBusinessService:
             logger.error("[VentaBS] anular_venta error: %s", exc, exc_info=True)
             return False, {"detail": "Error al anular la venta."}, 500
 
+    @staticmethod
+    def eliminar_venta_sincronizada(venta_uuid: str, empresa_id: int) -> tuple:
+        """PLAN_SINCRONIZACION_FACTURAS_VENTAS_FASES: permite eliminar desde
+        Ventas una Venta que fue creada/vinculada por "Sincronizar y validar
+        facturas" -- a diferencia de `anular_venta()` (bloqueada en
+        FACTURADA_DIAN, pensada para una emision fiscal real), esta accion
+        es exclusiva para Ventas con `factura_asociada` (nunca hubo emision
+        DIAN real -- EMISION_FISCAL_VENTA_AUTORIZADA=False lo bloquea
+        estructuralmente). Elimina solo la Venta; la Factura (SSoT fiscal)
+        nunca se toca y vuelve a quedar disponible para sincronizar."""
+        try:
+            venta = Venta.objects.filter(uuid=venta_uuid, empresa_id=empresa_id).first()
+            if not venta:
+                return False, {"detail": "Venta no encontrada."}, 404
+            if not venta.factura_asociada_id:
+                return False, {
+                    "detail": "Esta accion es solo para Ventas sincronizadas desde una Factura. "
+                               "Use anular para una Venta en Borrador.",
+                }, 400
+            VentaCRUDService.eliminar_venta_sincronizada(venta)
+            return True, {"detail": "Venta sincronizada eliminada. La Factura no fue modificada."}, 200
+        except Exception as exc:
+            logger.error("[VentaBS] eliminar_venta_sincronizada error: %s", exc, exc_info=True)
+            return False, {"detail": "Error al eliminar la venta sincronizada."}, 500
+
+
+class FacturaVentaSyncService:
+    """
+    apps/tenant/ventas/.agent/PLAN_SINCRONIZACION_FACTURAS_VENTAS_FASES.md:
+    "Sincronizar y validar facturas" -- descubre Facturas de naturaleza
+    VENTA sin Venta vinculada, permite revisarlas y vincularlas (unitaria o
+    masivamente) desde Ventas.
+
+    NO reimplementa nada que ya exista: compone
+    VentaBusinessService.vincular_factura_existente() (Venta candidata ya
+    existente) y VentaBusinessService.crear_venta_desde_factura() (ninguna
+    candidata), ambos ya usados por el flujo manual y por el management
+    command `migrar_facturas_a_ventas` (mismo criterio de match que este
+    servicio, ver ese comando para el CLI/backfill equivalente).
+
+    Transacciones (FASE 13): cada factura se procesa en su PROPIA
+    transaccion (`sincronizar_una`) -- un error en una factura no revierte
+    las demas de un lote masivo. Se prefirio este aislamiento porque el
+    dominio SI permite resultados parciales (cada Factura es independiente,
+    no hay invariante que abarque el lote completo).
+    """
+
+    ESTADOS = ("VINCULADA", "YA_VINCULADA", "AMBIGUA", "INVALIDA", "ERROR")
+
+    @staticmethod
+    def listar_pendientes(empresa_id: int, search: str | None = None):
+        """FASE 4/7: Facturas VENTA/FE sin Venta vinculada, filtro server-side."""
+        from apps.tenant.facturas.services.selectors import FacturaSelectors
+        return FacturaSelectors.qs_pendientes_sincronizacion_venta(empresa_id, search=search)
+
+    @staticmethod
+    def _resolver_venta_candidata(numero_factura: str, empresa_id: int):
+        """
+        FASE 9: unica senal de match soportada -- numero_factura identico en
+        una Venta AUN sin factura_asociada, dentro de la misma empresa. Si
+        hay mas de una candidata, AMBIGUA (nunca se vincula con evidencia
+        insuficiente). NUNCA se hace matching por total/cliente/fecha solos
+        (regla explicita del plan, FASE 9/18).
+
+        Returns: (venta_candidata_o_None, ambigua: bool)
+        """
+        if not numero_factura:
+            return None, False
+        candidatas = list(
+            Venta.objects.filter(
+                empresa_id=empresa_id,
+                numero_factura=numero_factura,
+                factura_asociada__isnull=True,
+            ).only("id", "uuid")
+        )
+        if len(candidatas) > 1:
+            return None, True
+        return (candidatas[0] if candidatas else None), False
+
+    @staticmethod
+    @transaction.atomic
+    def sincronizar_una(factura_uuid: str, empresa_id: int, empresa) -> dict:
+        """
+        FASE 8: valida la factura, busca una Venta candidata o crea una
+        nueva, vincula, y clasifica el resultado (FASE 14). select_for_update()
+        sobre la Factura serializa dos ejecuciones concurrentes sobre la
+        MISMA factura (FASE 16) -- la segunda ve `venta_origen` ya resuelto
+        y responde YA_VINCULADA, nunca crea una segunda Venta.
+        """
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+
+        from apps.tenant.facturas.models import Factura
+
+        factura = Factura.objects.select_for_update().filter(
+            uuid=factura_uuid, empresa_id=empresa_id,
+        ).first()
+        if not factura:
+            return {"factura_uuid": factura_uuid, "numero": None, "estado": "INVALIDA",
+                    "detalle": "Factura no encontrada o no pertenece a esta empresa."}
+
+        if factura.naturaleza != Factura.Naturaleza.VENTA or factura.tipo != Factura.TipoFactura.FE:
+            return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "INVALIDA",
+                    "detalle": "Solo Facturas electronicas (FE) de naturaleza VENTA son elegibles."}
+
+        if hasattr(factura, "venta_origen"):
+            return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "YA_VINCULADA",
+                    "venta_uuid": str(factura.venta_origen.uuid)}
+
+        candidata, ambigua = FacturaVentaSyncService._resolver_venta_candidata(factura.numero, empresa_id)
+        if ambigua:
+            return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "AMBIGUA",
+                    "detalle": "Mas de una Venta sin vincular comparte el mismo numero_factura."}
+
+        try:
+            if candidata:
+                ok, resultado, _status = VentaBusinessService.vincular_factura_existente(
+                    candidata, str(factura.uuid), empresa_id,
+                )
+                if not ok:
+                    return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "ERROR",
+                            "detalle": resultado}
+                venta = candidata
+            else:
+                venta = VentaBusinessService.crear_venta_desde_factura(factura, empresa)
+        except (ValueError, DjangoValidationError, DRFValidationError) as exc:
+            if hasattr(exc, "message_dict"):
+                detalle = exc.message_dict
+            elif hasattr(exc, "detail"):
+                detalle = str(exc.detail)
+            else:
+                detalle = str(exc)
+            return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "ERROR", "detalle": detalle}
+
+        return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "VINCULADA",
+                "venta_uuid": str(venta.uuid)}
+
+    @staticmethod
+    def sincronizar_masivo(factura_uuids: list, empresa_id: int, empresa) -> dict:
+        """
+        FASE 10/11: procesa un lote, cada factura en su propia transaccion
+        (ver docstring de la clase). Nunca confia en que el frontend diga
+        que una factura esta pendiente -- cada una se re-valida aqui
+        (naturaleza, tipo, vinculo existente) independientemente de lo que
+        el llamador haya mostrado en el panel.
+        """
+        resultados = [
+            FacturaVentaSyncService.sincronizar_una(factura_uuid, empresa_id, empresa)
+            for factura_uuid in factura_uuids
+        ]
+        resumen = {estado: 0 for estado in FacturaVentaSyncService.ESTADOS}
+        for r in resultados:
+            resumen[r["estado"]] = resumen.get(r["estado"], 0) + 1
+        return {"resultados": resultados, "resumen": resumen}
+
 
 class ResolucionFacturacionBusinessService:
     """Logica de negocio para ResolucionFacturacion."""

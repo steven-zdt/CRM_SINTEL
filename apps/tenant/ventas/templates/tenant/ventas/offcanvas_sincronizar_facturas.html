@@ -1,0 +1,107 @@
+{% load currency_filters %}
+{# offcanvas_sincronizar_facturas.html — PLAN_SINCRONIZACION_FACTURAS_VENTAS_FASES #}
+
+<style>
+  #offcanvas-sincronizar-facturas { width: 920px !important; }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1"
+     id="offcanvas-sincronizar-facturas"
+     aria-labelledby="offcanvas-sincronizar-facturas-label"
+     data-bs-backdrop="true">
+
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-sincronizar-facturas-label">
+      <i class="bi bi-arrow-repeat text-primary me-2"></i>Sincronizar y validar facturas
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body px-4 py-3">
+
+    <p class="text-muted small mb-3">
+      Facturas electronicas (naturaleza VENTA) que aun no tienen una Venta comercial
+      vinculada. Vincularlas nunca crea ni emite una Factura nueva -- la Factura sigue
+      siendo la fuente fiscal y esta accion solo asocia (o crea) la Venta comercial
+      correspondiente.
+    </p>
+
+    <div id="sincronizar-facturas-feedback" class="alert d-none mb-3" role="alert"></div>
+    <div id="sincronizar-facturas-resumen" class="d-none mb-3"></div>
+
+    {% if pendientes %}
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <span class="text-muted small">{{ total_pendientes }} factura(s) pendiente(s) de sincronizar.</span>
+      <button type="button" class="btn btn-primary btn-sm" id="btn-sincronizar-seleccionadas" disabled>
+        <i class="bi bi-arrow-repeat me-1"></i>Sincronizar seleccionadas (<span id="contador-seleccionadas">0</span>)
+      </button>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle" id="tabla-sincronizar-facturas">
+        <thead class="table-light">
+          <tr>
+            <th style="width:32px;">
+              <input type="checkbox" class="form-check-input" id="chk-seleccionar-todas">
+            </th>
+            <th>Factura</th>
+            <th>Cliente</th>
+            <th>NIT</th>
+            <th>Fecha Emision</th>
+            <th>Vencimiento</th>
+            <th class="text-end">Total</th>
+            <th class="text-center" style="width:90px;">Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in pendientes %}
+          <tr data-factura-uuid="{{ f.uuid }}" data-factura-numero="{{ f.numero }}">
+            <td>
+              <input type="checkbox" class="form-check-input chk-factura-pendiente" value="{{ f.uuid }}">
+            </td>
+            <td>
+              <span class="fw-semibold small">{{ f.numero }}</span>
+              {% if f.cufe %}
+              <div class="text-muted" style="font-size:0.68rem;" title="{{ f.cufe }}">CUFE: {{ f.cufe|slice:":16" }}...</div>
+              {% endif %}
+            </td>
+            <td class="small">{{ f.receptor_razon_social|default:"--" }}</td>
+            <td class="small">{{ f.receptor_nit|default:"--" }}</td>
+            <td class="small">{{ f.fecha_emision|date:"d/m/Y" }}</td>
+            <td class="small">{{ f.fecha_vencimiento|date:"d/m/Y"|default:"--" }}</td>
+            <td class="text-end small">{{ f.total|currency_cop }}</td>
+            <td class="text-center">
+              <button type="button" class="btn btn-outline-primary btn-sm btn-vincular-factura"
+                      data-uuid="{{ f.uuid }}" title="Vincular esta Factura">
+                <i class="bi bi-link-45deg"></i>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-check2-circle fs-1 d-block mb-3 text-success"></i>
+      <p class="mb-0">No hay facturas pendientes de sincronizar. Todas las Facturas de Venta ya tienen una Venta comercial vinculada.</p>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    var el = document.getElementById('offcanvas-sincronizar-facturas');
+    if (!el) return;
+    if (window.Sintel && window.Sintel.Ventas && window.Sintel.Ventas.SincronizarFacturas) {
+      window.Sintel.Ventas.SincronizarFacturas.onPanelLoaded();
+    } else {
+      document.addEventListener('sintel:ventas:sincronizar-facturas:ready', function () {
+        window.Sintel.Ventas.SincronizarFacturas.onPanelLoaded();
+      }, { once: true });
+    }
+  })();
+</script>

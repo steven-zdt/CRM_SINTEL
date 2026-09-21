@@ -9,6 +9,7 @@ nada al Service Layer).
 import django_tables2 as tables
 from django.utils.html import format_html
 
+from apps.tenant.core.templatetags.currency_filters import currency_cop
 from apps.tenant.ventas.models import Venta
 
 _BADGE_ESTADO = {
@@ -64,11 +65,27 @@ class VentaTable(tables.Table):
         )
 
     def render_total_neto(self, value):
-        return format_html('<div class="fw-semibold text-end">${}</div>', f"{value:,.0f}")
+        # Bug real (2026-09-18): ",.0f" truncaba los centavos en el listado
+        # -- el usuario los ve reflejados en la Factura origen (currency_cop,
+        # 2 decimales) y aqui "desaparecian". Se unifica con currency_cop.
+        return format_html('<div class="fw-semibold text-end">{}</div>', currency_cop(value))
 
     def render_acciones(self, record):
-        return format_html(
+        ver_btn = format_html(
             '<button type="button" class="btn btn-sm btn-outline-secondary btn-ver-venta" data-uuid="{0}" title="Ver detalle">'
             '<i class="bi bi-eye"></i></button>',
             record.uuid,
         )
+        if not record.factura_asociada_id:
+            return ver_btn
+        # PLAN_SINCRONIZACION_FACTURAS_VENTAS_FASES: solo Ventas creadas o
+        # vinculadas por sincronizacion (tienen factura_asociada) exponen
+        # esta accion -- eliminar_venta_sincronizada() la exige igual del
+        # lado del servicio (defensa en profundidad).
+        eliminar_btn = format_html(
+            '<button type="button" class="btn btn-sm btn-outline-danger ms-1 btn-eliminar-venta-sync" '
+            'data-uuid="{0}" data-numero="{1}" title="Eliminar Venta sincronizada (no afecta la Factura)">'
+            '<i class="bi bi-trash3"></i></button>',
+            record.uuid, record.numero_factura or "",
+        )
+        return format_html('{}{}', ver_btn, eliminar_btn)

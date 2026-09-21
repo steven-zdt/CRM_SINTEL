@@ -129,11 +129,18 @@ def test_multitenant_isolation_ventas(client, tenant1, tenant2):
 @pytest.mark.django_db
 def test_multitenant_isolation_ventas_tabla_html(client, tenant1, tenant2):
     """
-    Aislamiento multi-tenant de la vista HTML nueva (django-tables2 + HTMX,
-    PLAN_UNICO_CORRECCIONES.md Fase 5-BIS) que reemplaza la grilla Tabulator
-    de listado de Ventas. Esta vista no pasa por DRF (no es un ViewSet) --
-    usa SintelDSVMixin directamente, asi que necesita su propia verificacion,
-    no basta con la cobertura ya existente sobre /api/v1/ventas/.
+    Aislamiento multi-tenant de VentaTableView (django-tables2 + HTMX,
+    PLAN_UNICO_CORRECCIONES.md Fase 5-BIS). Esta vista no pasa por DRF (no es
+    un ViewSet) -- usa SintelDSVMixin directamente, asi que necesita su
+    propia verificacion, no basta con la cobertura ya existente sobre
+    /api/v1/ventas/.
+
+    Piloto DataTables (docs/ux/TABLES_FORMS_RELEASE_GATE.md): esta vista ya
+    NO renderiza la tabla (ver VentaViewSet.dt + apps/tenant/ventas/tests/
+    test_venta_dt.py, que cubre el aislamiento del listado real) -- sigue
+    viva solo para las KPIs (kpis_ventas.html), asi que el aislamiento se
+    verifica aqui via el conteo agregado (kpi_total_ventas), no via texto de
+    cliente en el body.
     """
     with schema_context(tenant1.schema_name):
         emp1 = Empresa.objects.first()
@@ -168,6 +175,13 @@ def test_multitenant_isolation_ventas_tabla_html(client, tenant1, tenant2):
             empresa=emp2, cliente=cliente2, fecha_emision="2026-06-01",
             numero_factura="VENTA-TABLA-T2", subtotal="200.00", total_neto="200.00",
         )
+        # Ventas extra en tenant2 para que un conteo cruzado sea detectable
+        # (si la vista de tenant1 filtrara mal, kpi_total_ventas subiria).
+        for i in range(3):
+            Venta.objects.create(
+                empresa=emp2, cliente=cliente2, fecha_emision="2026-06-01",
+                numero_factura=f"VENTA-TABLA-T2-EXTRA-{i}", subtotal="10.00", total_neto="10.00",
+            )
 
     # force_login debe escribir la sesion en el esquema del tenant: sessions
     # esta en TENANT_APPS (aislado por esquema) y la request real solo la lee
@@ -176,8 +190,9 @@ def test_multitenant_isolation_ventas_tabla_html(client, tenant1, tenant2):
         client.force_login(user1)
     resp = client.get("/ui/ventas/tabla/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     assert resp.status_code == status.HTTP_200_OK
+    assert resp.context["kpi_total_ventas"] == 1
     body = resp.content.decode()
-    assert "Cliente Tabla Tenant Uno" in body
+    assert "Cliente Tabla Tenant Uno" not in body  # ya no renderiza la tabla, solo KPIs
     assert "Cliente Tabla Tenant Dos" not in body
 
     # Sin sesion: debe redirigir a login (LoginRequiredMixin), no filtrar en silencio

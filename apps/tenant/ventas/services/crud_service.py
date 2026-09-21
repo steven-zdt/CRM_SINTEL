@@ -140,6 +140,16 @@ class VentaCRUDService:
         venta.save(update_fields=["estado"])
         return venta
 
+    @staticmethod
+    @transaction.atomic
+    def eliminar_venta_sincronizada(venta: Venta) -> None:
+        """PLAN_SINCRONIZACION_FACTURAS_VENTAS_FASES: elimina (hard delete)
+        una Venta comercial creada/vinculada por el flujo de sincronizacion.
+        Solo borra la fila Venta (y sus ItemVenta, on_delete=CASCADE) --
+        NUNCA toca la Factura (SSoT fiscal, permanece intacta y vuelve a
+        aparecer como "pendiente" en el panel de sincronizacion)."""
+        venta.delete()
+
 
 class ResolucionFacturacionCRUDService:
     """Operaciones de persistencia para ResolucionFacturacion."""

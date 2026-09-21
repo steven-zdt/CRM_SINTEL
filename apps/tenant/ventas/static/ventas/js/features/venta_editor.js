@@ -20,14 +20,21 @@
 
     function fmtMoneda(v) {
         var n = parseFloat(v);
-        if (isNaN(n)) return '$0';
-        // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
+        if (isNaN(n)) return '$0,00';
+        // Bug real (2026-09-18): forzar maximumFractionDigits=0 aqui
+        // truncaba los centavos SOLO en la vista previa de items/totales de
+        // este formulario (el valor real enviado al backend -- via
+        // parseFloat() sobre el <input> -- nunca perdia precision), pero
+        // visualmente parecia "omitir cifras despues de la coma" al
+        // comparar contra la Factura origen (que si muestra centavos via
+        // currency_cop). Se alinea con la SSoT (dom-utils.js formatCurrency,
+        // maximumFractionDigits=2 por defecto) y con currency_cop.
         if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
-            return w.DOMUtils.formatCurrency(n, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            return w.DOMUtils.formatCurrency(n, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
         return new Intl.NumberFormat('es-CO', {
             style: 'currency', currency: 'COP',
-            minimumFractionDigits: 0, maximumFractionDigits: 0
+            minimumFractionDigits: 2, maximumFractionDigits: 2
         }).format(n);
     }
 
@@ -63,8 +70,20 @@
         itemData = itemData || {};
         var cantidad    = (itemData.cantidad !== undefined && itemData.cantidad !== null) ? itemData.cantidad : 1;
         var precio      = (itemData.precio_unitario !== undefined && itemData.precio_unitario !== null) ? itemData.precio_unitario : '';
-        var iva         = (itemData.porcentaje_iva !== undefined && itemData.porcentaje_iva !== null) ? String(itemData.porcentaje_iva) : '19';
         var descripcion = itemData.descripcion || '';
+
+        // BUG (autorrelleno desde Factura): porcentaje_iva llega desde la API
+        // como string decimal ("19.00", DecimalField), pero las 3 opciones
+        // fijas del select usan enteros ("0"/"5"/"19") -- la comparacion
+        // estricta anterior (iva === '19') nunca coincidia y el select caia
+        // silenciosamente en la PRIMERA opcion (0%), perdiendo el IVA real y
+        // descuadrando el total contra la factura. Se normaliza con
+        // parseFloat antes de comparar (mismo criterio que CO-5 en Compras).
+        var ivaNum = (itemData.porcentaje_iva !== undefined && itemData.porcentaje_iva !== null)
+            ? parseFloat(itemData.porcentaje_iva) : 19;
+        if (isNaN(ivaNum)) ivaNum = 19;
+        var ivaOpciones = [0, 5, 19];
+        var ivaExtra = ivaOpciones.indexOf(ivaNum) === -1 ? ivaNum : null;
 
         var tr = d.createElement('tr');
         tr.setAttribute('data-item-idx', idx);
@@ -74,12 +93,15 @@
             '<td><input type="number" class="form-control form-control-sm item-cantidad"',
             '     value="' + _escapeHtml(cantidad) + '" min="0.0001" step="0.0001" required></td>',
             '<td><input type="number" class="form-control form-control-sm item-precio"',
-            '     placeholder="0" min="0" step="1" required value="' + _escapeHtml(precio) + '"></td>',
+            '     placeholder="0" min="0" step="any" required value="' + _escapeHtml(precio) + '"></td>',
             '<td>',
             '  <select class="form-select form-select-sm item-iva">',
-            '    <option value="0"' + (iva === '0' ? ' selected' : '') + '>0%</option>',
-            '    <option value="5"' + (iva === '5' ? ' selected' : '') + '>5%</option>',
-            '    <option value="19"' + (iva === '19' ? ' selected' : '') + '>19%</option>',
+            '    <option value="0"' + (ivaNum === 0 ? ' selected' : '') + '>0%</option>',
+            '    <option value="5"' + (ivaNum === 5 ? ' selected' : '') + '>5%</option>',
+            '    <option value="19"' + (ivaNum === 19 ? ' selected' : '') + '>19%</option>',
+            (ivaExtra !== null
+                ? '    <option value="' + ivaExtra + '" selected>' + ivaExtra + '%</option>'
+                : ''),
             '  </select>',
             '</td>',
             '<td class="text-end item-subtotal fw-semibold">$0</td>',

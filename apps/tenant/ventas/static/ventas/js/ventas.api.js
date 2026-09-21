@@ -78,6 +78,13 @@
             return _fetch('POST', API_ROOT + uuid + '/anular/', { motivo: motivo || '' });
         },
 
+        // PLAN_SINCRONIZACION_FACTURAS_VENTAS_FASES: elimina una Venta
+        // creada/vinculada por "Sincronizar y validar facturas" -- nunca
+        // toca la Factura origen (SSoT fiscal).
+        eliminarSincronizada: function (uuid) {
+            return _fetch('DELETE', API_ROOT + uuid + '/eliminar-sincronizada/');
+        },
+
         // FACTURAS-VENTAS-COMPRAS-01: asociacion MANUAL de una Factura ya
         // persistida (naturaleza VENTA) -- nunca crea/emite una Factura.
         vincularFactura: function (uuid, facturaUuid) {
@@ -126,6 +133,17 @@
 
         renderDetalle: function (uuid) {
             return API_ROOT + 'render-offcanvas/detalle/?uuid=' + uuid;
+        },
+
+        // PLAN_SINCRONIZACION_FACTURAS_VENTAS_FASES: Facturas naturaleza
+        // VENTA (FE) sin Venta comercial vinculada aun.
+        renderSincronizar: function (search) {
+            var url = API_ROOT + 'render-offcanvas/sincronizar/';
+            return search ? url + '?search=' + encodeURIComponent(search) : url;
+        },
+
+        sincronizarFacturas: function (facturaUuids) {
+            return _fetch('POST', API_ROOT + 'sincronizar-facturas/', { facturas: facturaUuids });
         },
 
         // ── Endpoints de ResolucionFacturacion ──────────────────────────

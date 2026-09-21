@@ -14,12 +14,14 @@ from typing import Any
 from lxml import etree
 
 # WARNING: REFACTOR: Eliminado normalize_encoding - solo se aplica a PDF/Excel en ingest_service.py
-# Mantenemos sanitize_text, normalize_nit, normalize_currency, normalize_numeric_to_decimal_string
-# porque son normalizaciones específicas de datos (no de encoding del archivo)
+# Mantenemos sanitize_text, normalize_nit, normalize_currency porque son
+# normalizaciones especificas de datos (no de encoding del archivo).
+# normalize_numeric_to_decimal_string ya NO se usa aqui (bug real de
+# escala x100, ver _decimal_desde_xml() mas abajo) -- los valores XML
+# UBL/DIAN se parsean directo, sin pasar por ese normalizador compartido.
 from apps.services.document_parser.normalizers import (
     normalize_currency,
     normalize_nit,
-    normalize_numeric_to_decimal_string,
     sanitize_text,
 )
 from apps.services.document_parser.xml_parser.core import (
@@ -141,6 +143,43 @@ def parse_to_dto(file_bytes: bytes, filename: str | None = None) -> dict[str, An
         raise ValueError(f"Tipo de documento XML no soportado: {root_tag}")
 
 
+def _decimal_desde_xml(texto: str | None, default: str = "0.00") -> Decimal:
+    """
+    Parsea un valor numerico crudo de un nodo XML UBL/DIAN a Decimal.
+
+    BUG REAL corregido (2026-09-18, reportado en produccion via "sincronizar
+    factura -> Venta": una Factura con InvoicedQuantity=1 y PriceAmount=582992
+    en el XML se persistio con cantidad=0.01 y valor_unitario=5829.92 --
+    ambos divididos por 100). Causa raiz:
+    `normalize_numeric_to_decimal_string()` (normalizers.py, compartida con
+    csv/excel/pdf/txt) hace `value.replace('.', '')` y LUEGO comprueba
+    `'.' not in value` para decidir si dividir por 100 -- esa comprobacion
+    es SIEMPRE True (el punto ya fue eliminado en la linea anterior), asi
+    que CUALQUIER valor sin separadores de miles (osea, cualquier numero
+    XML valido: "1", "582992", "19.00"...) se divide por 100 sin condicion.
+    Los valores con punto decimal ya presente "sobreviven" solo por
+    coincidencia (str(Decimal) siempre lo reintroduce), lo cual oculto el
+    bug en los totales de cabecera pero no en items con enteros puros.
+
+    Los valores numericos UBL/DIAN son SIEMPRE decimales canonicos (xs:decimal,
+    punto como separador decimal, NUNCA separadores de miles) -- no existe
+    ninguna ambiguedad de locale que resolver aqui, a diferencia de texto
+    extraido de CSV/Excel/PDF (que si puede traer "1.500.000" o "1,500,000").
+    Por eso este parser NO debe reutilizar `normalize_numeric_to_decimal_string()`
+    (que sigue intacta, sin tocar, para no arriesgar los otros parsers sin
+    evidencia de que tambien esten rotos) -- basta un parseo directo.
+    """
+    if texto is None:
+        return Decimal(default)
+    texto = texto.strip()
+    if not texto:
+        return Decimal(default)
+    try:
+        return Decimal(texto)
+    except Exception:
+        return Decimal(default)
+
+
 def _extract_retentions(root: etree._Element) -> dict[str, str]:
     """
     Extrae retenciones (Retefuente, ReteICA, ReteIVA) de un XML UBL.
@@ -169,10 +208,7 @@ def _extract_retentions(root: etree._Element) -> dict[str, str]:
             if not tax_scheme_id or not tax_amount_str:
                 continue
                 
-            try:
-                amount = Decimal(normalize_numeric_to_decimal_string(tax_amount_str))
-            except Exception:
-                continue
+            amount = _decimal_desde_xml(tax_amount_str)
             
             # # WARNING: SINTEL v2.62: Mantenemos mapeo legacy del proyecto (ubl_parser.py):
             # 05 -> Retefuente (DIAN dice ReteIVA)
@@ -185,7 +221,7 @@ def _extract_retentions(root: etree._Element) -> dict[str, str]:
             elif tax_scheme_id == "07":
                 retentions["reteica"] += amount
 
-    return {k: normalize_numeric_to_decimal_string(str(v)) for k, v in retentions.items()}
+    return {k: f"{v:.2f}" for k, v in retentions.items()}
 
 
 def _parse_invoice_ubl21(invoice_root: etree._Element) -> dict[str, Any]:
@@ -389,31 +425,31 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> dict[str, Any]:
         payable_amount = text(first(monetary_total, ".//*[local-name()='PayableAmount']")) or "0.00"
         currency_id = attr(first(monetary_total, ".//*[local-name()='LineExtensionAmount']"), "currencyID") or "COP"
         
-        # Normalizar valores
-        subtotal_decimal = Decimal(normalize_numeric_to_decimal_string(line_extension_amount))
-        tax_inclusive_decimal = Decimal(normalize_numeric_to_decimal_string(tax_inclusive_amount))
-        payable_decimal = Decimal(normalize_numeric_to_decimal_string(payable_amount))
-        
+        # Normalizar valores (parseo directo -- ver _decimal_desde_xml())
+        subtotal_decimal = _decimal_desde_xml(line_extension_amount)
+        tax_inclusive_decimal = _decimal_desde_xml(tax_inclusive_amount)
+        payable_decimal = _decimal_desde_xml(payable_amount)
+
         # Calcular impuestos: TaxInclusiveAmount - LineExtensionAmount
         # Esto es más preciso que PayableAmount - LineExtensionAmount porque
         # PayableAmount puede incluir descuentos/cargos adicionales
         impuestos_decimal = tax_inclusive_decimal - subtotal_decimal
         if impuestos_decimal < Decimal("0.00"):
             impuestos_decimal = Decimal("0.00")
-        
+
         # Usar PayableAmount como total (puede incluir descuentos/cargos)
         # Si PayableAmount no está disponible, usar TaxInclusiveAmount
         if payable_decimal > Decimal("0.00"):
             total_decimal = payable_decimal
         else:
             total_decimal = tax_inclusive_decimal
-        
+
         # Convertir a strings normalizados
-        subtotal_str = normalize_numeric_to_decimal_string(str(subtotal_decimal))
-        impuestos_str = normalize_numeric_to_decimal_string(str(impuestos_decimal))
-        total_str = normalize_numeric_to_decimal_string(str(total_decimal))
+        subtotal_str = f"{subtotal_decimal:.2f}"
+        impuestos_str = f"{impuestos_decimal:.2f}"
+        total_str = f"{total_decimal:.2f}"
         moneda = normalize_currency(currency_id)
-    
+
     # Construir DTO (FASE 3: incluir type base para compatibilidad)
     # --- Items (InvoiceLine) ---
     items = []
@@ -436,20 +472,11 @@ def _parse_invoice_ubl21(invoice_root: etree._Element) -> dict[str, Any]:
             tax_id = text(first(ts, ".//*[local-name()='TaxCategory']//*[local-name()='TaxScheme']//*[local-name()='ID']")) or ""
             if tax_id == "01":  # IVA
                 pct_str = text(first(ts, ".//*[local-name()='Percent']")) or "0"
-                try:
-                    porcentaje_iva = Decimal(normalize_numeric_to_decimal_string(pct_str))
-                except Exception:
-                    pass
+                porcentaje_iva = _decimal_desde_xml(pct_str)
                 break
 
-        try:
-            cantidad_dec = Decimal(normalize_numeric_to_decimal_string(cantidad_str))
-        except Exception:
-            cantidad_dec = Decimal("1")
-        try:
-            valor_unitario_dec = Decimal(normalize_numeric_to_decimal_string(valor_unitario_str))
-        except Exception:
-            valor_unitario_dec = Decimal("0")
+        cantidad_dec = _decimal_desde_xml(cantidad_str, default="1")
+        valor_unitario_dec = _decimal_desde_xml(valor_unitario_str, default="0")
 
         subtotal_item = cantidad_dec * valor_unitario_dec
         iva_item = subtotal_item * porcentaje_iva / Decimal("100")
@@ -662,31 +689,31 @@ def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> dict[str, Any]
         payable_amount = text(first(monetary_total, ".//*[local-name()='PayableAmount']")) or "0.00"
         currency_id = attr(first(monetary_total, ".//*[local-name()='LineExtensionAmount']"), "currencyID") or "COP"
         
-        # Normalizar valores
-        subtotal_decimal = Decimal(normalize_numeric_to_decimal_string(line_extension_amount))
-        tax_inclusive_decimal = Decimal(normalize_numeric_to_decimal_string(tax_inclusive_amount))
-        payable_decimal = Decimal(normalize_numeric_to_decimal_string(payable_amount))
-        
+        # Normalizar valores (parseo directo -- ver _decimal_desde_xml())
+        subtotal_decimal = _decimal_desde_xml(line_extension_amount)
+        tax_inclusive_decimal = _decimal_desde_xml(tax_inclusive_amount)
+        payable_decimal = _decimal_desde_xml(payable_amount)
+
         # Calcular impuestos: TaxInclusiveAmount - LineExtensionAmount
         # Esto es más preciso que PayableAmount - LineExtensionAmount porque
         # PayableAmount puede incluir descuentos/cargos adicionales
         impuestos_decimal = tax_inclusive_decimal - subtotal_decimal
         if impuestos_decimal < Decimal("0.00"):
             impuestos_decimal = Decimal("0.00")
-        
+
         # Usar PayableAmount como total (puede incluir descuentos/cargos)
         # Si PayableAmount no está disponible, usar TaxInclusiveAmount
         if payable_decimal > Decimal("0.00"):
             total_decimal = payable_decimal
         else:
             total_decimal = tax_inclusive_decimal
-        
+
         # Convertir a strings normalizados
-        subtotal_str = normalize_numeric_to_decimal_string(str(subtotal_decimal))
-        impuestos_str = normalize_numeric_to_decimal_string(str(impuestos_decimal))
-        total_str = normalize_numeric_to_decimal_string(str(total_decimal))
+        subtotal_str = f"{subtotal_decimal:.2f}"
+        impuestos_str = f"{impuestos_decimal:.2f}"
+        total_str = f"{total_decimal:.2f}"
         moneda = normalize_currency(currency_id)
-    
+
     # Retenciones
     retenciones = _extract_retentions(credit_note_root)
 
@@ -711,20 +738,11 @@ def _parse_credit_note_ubl21(credit_note_root: etree._Element) -> dict[str, Any]
             tax_id = text(first(ts, ".//*[local-name()='TaxCategory']//*[local-name()='TaxScheme']//*[local-name()='ID']")) or ""
             if tax_id == "01":  # IVA
                 pct_str = text(first(ts, ".//*[local-name()='Percent']")) or "0"
-                try:
-                    porcentaje_iva = Decimal(normalize_numeric_to_decimal_string(pct_str))
-                except Exception:
-                    pass
+                porcentaje_iva = _decimal_desde_xml(pct_str)
                 break
 
-        try:
-            cantidad_dec = Decimal(normalize_numeric_to_decimal_string(cantidad_str))
-        except Exception:
-            cantidad_dec = Decimal("1")
-        try:
-            valor_unitario_dec = Decimal(normalize_numeric_to_decimal_string(valor_unitario_str))
-        except Exception:
-            valor_unitario_dec = Decimal("0")
+        cantidad_dec = _decimal_desde_xml(cantidad_str, default="1")
+        valor_unitario_dec = _decimal_desde_xml(valor_unitario_str, default="0")
 
         subtotal_item = cantidad_dec * valor_unitario_dec
         iva_item = subtotal_item * porcentaje_iva / Decimal("100")

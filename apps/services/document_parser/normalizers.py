@@ -220,27 +220,74 @@ def clean_accents(text: str) -> str:
 
 def normalize_numeric_to_decimal_string(value: Any) -> str:
     """
-    Convierte valores numéricos a decimal-string.
-    
+    Convierte valores numéricos a decimal-string, detectando si un string
+    usa coma o punto como separador decimal real vs. separador de miles.
+
     WARNING: FASE 2.2: Conversión de valores numéricos.
-    
+
+    BUG REAL corregido (2026-09-18): la version anterior hacia
+    `value.replace('.', '')` y LUEGO comprobaba `'.' not in value` para
+    decidir si dividir por 100 -- esa comprobacion era SIEMPRE verdadera
+    (el punto ya se habia eliminado en la linea anterior), asi que
+    CUALQUIER valor sin separadores de miles (ej. "100", "582992") se
+    dividia por 100 sin condicion real, incluso cuando "100.5" SI tenia
+    punto decimal original (se convertia en "10.05", no "100.50"). Esto
+    corrompio cantidad/valor_unitario de ItemFactura en el pipeline XML
+    (ver apps/services/document_parser/xml_parser/parser.py, que desde
+    este fix ya NO usa esta funcion para valores UBL/DIAN -- ver
+    _decimal_desde_xml() alli, valores XML nunca llevan separadores de
+    miles y no necesitan esta heuristica).
+
+    Heuristica (para texto SI ambiguo, ej. extraido de CSV/Excel/PDF):
+    - Coma Y punto presentes: el que aparece MAS A LA DERECHA es el
+      separador decimal real (formato CO "1.500.000,50" o US
+      "1,500,000.50") -- el otro se trata como separador de miles.
+    - Solo uno de los dos presente: se asume decimal si hay 1 o 2 digitos
+      despues de su ULTIMA aparicion (ej. "100.5", "582992.00",
+      "1500000,5"); si hay una cantidad distinta (tipicamente 3, un grupo
+      de miles completo, ej. "1.500.000"), se trata como separador de
+      miles y se elimina.
+    - Ningun separador: se parsea tal cual, SIN dividir por nada.
+
     Args:
         value: Valor numérico (int, float, Decimal, str)
-        
+
     Returns:
         str: Valor como string decimal (ej: "100000.00")
     """
     if value is None:
         return "0.00"
-    
+
     try:
         if isinstance(value, str):
-            # Limpiar separadores de miles
-            value = value.replace(',', '').replace('.', '')
-            decimal = Decimal(value) / Decimal('100') if '.' not in value else Decimal(value)
+            texto = value.strip()
+            if not texto:
+                return "0.00"
+
+            tiene_coma = ',' in texto
+            tiene_punto = '.' in texto
+
+            if tiene_coma and tiene_punto:
+                if texto.rfind(',') > texto.rfind('.'):
+                    texto = texto.replace('.', '').replace(',', '.')
+                else:
+                    texto = texto.replace(',', '')
+            elif tiene_coma:
+                pos = texto.rfind(',')
+                if len(texto) - pos - 1 in (1, 2):
+                    texto = texto.replace(',', '.')
+                else:
+                    texto = texto.replace(',', '')
+            elif tiene_punto:
+                pos = texto.rfind('.')
+                if len(texto) - pos - 1 not in (1, 2):
+                    texto = texto.replace('.', '')
+            # Sin separadores: texto queda tal cual, ver docstring.
+
+            decimal = Decimal(texto)
         else:
             decimal = Decimal(str(value))
-        
+
         # Formatear a 2 decimales
         return f"{decimal:.2f}"
     except (ValueError, TypeError, Exception):

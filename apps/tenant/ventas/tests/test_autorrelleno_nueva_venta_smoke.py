@@ -110,6 +110,28 @@ class AutorrellenoNuevaVentaSmokeTests(SintelTenantTestCase):
         self.assertEqual(Decimal(str(item["valor_unitario"])), Decimal("4319257.00"))
         self.assertEqual(Decimal(str(item["porcentaje_iva"])), Decimal("19.00"))
 
+    def test_smoke_porcentaje_iva_viaja_como_string_decimal_no_entero(self):
+        """
+        Bug real reportado (2026-09-18): venta_editor.js::crearFilaItem()
+        comparaba `porcentaje_iva` con '=== "19"' (string exacto) contra las
+        3 opciones fijas del <select> ('0'/'5'/'19'). DRF serializa
+        DecimalField como STRING CON DECIMALES ("19.00", no "19" ni 19.0) --
+        ninguna comparacion coincidia nunca, el <select> caia silenciosamente
+        en la PRIMERA opcion (0%), perdiendo el IVA real y descuadrando el
+        total de la Venta contra la factura.
+
+        Este test fija el contrato exacto que rompia esa comparacion: si
+        algun dia DRF deja de serializar como string ("19.00" -> 19.0), este
+        test debe fallar y recordar revisar crearFilaItem() en
+        venta_editor.js (que ahora normaliza con parseFloat() antes de
+        comparar, sea cual sea el tipo que llegue).
+        """
+        resp = self.api_client.get(f"/api/v1/facturas/items-factura/?factura={self.factura.id}")
+        item = resp.json().get("results", resp.json())[0]
+        self.assertEqual(item["porcentaje_iva"], "19.00")
+        self.assertNotEqual(item["porcentaje_iva"], "19")
+        self.assertNotEqual(item["porcentaje_iva"], 19)
+
     def test_smoke_cliente_resoluble_por_nit_para_el_autofill_sin_cliente_uuid(self):
         """Caso factura sin cliente_uuid backfileado: el autorrelleno del JS
         cae a matching por NIT contra las <option data-doc> del select --

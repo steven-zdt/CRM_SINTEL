@@ -8,6 +8,7 @@ from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
+from apps.shared.datatable import ColumnFilter, ColumnFilterType, DataTableServer, DataTableSpec
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
@@ -21,6 +22,7 @@ from apps.tenant.ventas.services.api_mixins import (
     ResolucionFacturacionServiceMixin,
     VentaServiceMixin,
 )
+from apps.tenant.ventas.services.selectors import VentaSelector
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,51 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
             raise NotFound("Venta no encontrada en su organizacion.")
         self.check_object_permissions(self.request, obj)
         return obj
+
+    @action(detail=False, methods=["post"], url_path="dt")
+    def dt(self, request):
+        """
+        Piloto DataTables 3.x + ColumnControl (docs/ux/TABLES_FORMS_RELEASE_GATE.md).
+        Reemplaza gradualmente a VentaTableView (django-tables2) para el listado
+        de Ventas. Ver apps/shared/datatable.py para el contrato server-side.
+        """
+        empresa_id = self._get_empresa_id_seguro()
+        if not empresa_id:
+            return Response(
+                {
+                    "draw": int(request.data.get("draw", 0)) if hasattr(request, "data") else 0,
+                    "recordsTotal": 0,
+                    "recordsFiltered": 0,
+                    "data": [],
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        base_qs = VentaSelector.get_list(empresa_id=empresa_id)
+
+        spec = DataTableSpec(
+            fields_map={
+                0: "cliente__razon_social",
+                1: "fecha_emision",
+                2: "estado",
+                4: "total_neto",
+            },
+            search_fields=[
+                "cliente__razon_social",
+                "cliente__numero_documento",
+                "numero_factura",
+                "observaciones",
+            ],
+            base_qs=base_qs,
+            serializer=VentaListSerializer,
+            column_filters={
+                0: ColumnFilter("cliente__razon_social", ColumnFilterType.ICONTAINS),
+                1: ColumnFilter("fecha_emision", ColumnFilterType.DATE_RANGE),
+                2: ColumnFilter("estado", ColumnFilterType.EXACT),
+                4: ColumnFilter("total_neto", ColumnFilterType.NUMBER_RANGE),
+            },
+        )
+        return DataTableServer(spec).handle(request)
 
     # ------------------------------------------------------------------
     # CRUD
@@ -305,6 +352,58 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
             {"venta": venta},
             template_name="tenant/ventas/offcanvas_detalle_venta.html",
         )
+
+    # ------------------------------------------------------------------
+    # PLAN_SINCRONIZACION_FACTURAS_VENTAS_FASES: sincronizar Facturas VENTA
+    # (FE) sin Venta comercial vinculada.
+    # ------------------------------------------------------------------
+
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/sincronizar",
+    )
+    def render_offcanvas_sincronizar(self, request):
+        empresa_id = self._get_empresa_id_seguro()
+        search = request.query_params.get("search")
+        pendientes = self.service_listar_pendientes_sincronizacion(empresa_id, search=search)
+        return Response(
+            {"pendientes": pendientes, "total_pendientes": pendientes.count()},
+            template_name="tenant/ventas/offcanvas_sincronizar_facturas.html",
+        )
+
+    @action(detail=True, methods=["delete"], url_path="eliminar-sincronizada")
+    def eliminar_sincronizada(self, request, uuid=None):
+        """Elimina (hard delete) una Venta creada/vinculada por "Sincronizar
+        y validar facturas" -- la Factura origen (SSoT fiscal) nunca se
+        modifica; queda de nuevo disponible como pendiente de sincronizar."""
+        venta = self.get_object()
+        empresa_id = self._get_empresa_id_seguro()
+        ok, result, status_code = self.service_eliminar_venta_sincronizada(str(venta.uuid), empresa_id)
+        if not ok:
+            return Response(result, status=status_code)
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="sincronizar-facturas")
+    def sincronizar_facturas(self, request):
+        """FASE 11: sincronizacion unitaria o masiva -- misma ruta para
+        ambos casos, un solo elemento en `facturas` es el caso unitario."""
+        empresa = self._get_empresa()
+        empresa_id = self._get_empresa_id_seguro()
+        if not empresa or not empresa_id:
+            return Response(
+                {"detail": "No se pudo determinar la empresa activa."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        factura_uuids = request.data.get("facturas")
+        if not factura_uuids or not isinstance(factura_uuids, list):
+            return Response(
+                {"detail": "Debe indicar al menos una Factura (campo 'facturas', lista de UUID)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        resultado = self.service_sincronizar_facturas(factura_uuids, empresa_id, empresa)
+        return Response(resultado, status=status.HTTP_200_OK)
 
 
 class ResolucionFacturacionViewSet(OrganizationalContextMixin, ResolucionFacturacionServiceMixin, BaseTenantViewSet):

@@ -58,6 +58,13 @@ class VentaServiceMixin(BaseServiceMixin):
     def service_anular_venta(self, venta_uuid: str, empresa_id: int):
         return self.business_service_class.anular_venta(venta_uuid=venta_uuid, empresa_id=empresa_id)
 
+    def service_eliminar_venta_sincronizada(self, venta_uuid: str, empresa_id: int):
+        """PLAN_SINCRONIZACION_FACTURAS_VENTAS_FASES: elimina una Venta
+        creada/vinculada por sincronizacion (nunca la Factura origen)."""
+        return self.business_service_class.eliminar_venta_sincronizada(
+            venta_uuid=venta_uuid, empresa_id=empresa_id,
+        )
+
     def service_vincular_factura_existente(self, venta, factura_uuid: str, empresa_id: int):
         """FACTURAS-UI-CRONO-01: vinculacion manual de una Factura ya
         persistida (naturaleza VENTA) -- nunca crea/emite una Factura."""
@@ -71,6 +78,18 @@ class VentaServiceMixin(BaseServiceMixin):
         return self.business_service_class.actualizar_gestion_pago(
             venta=venta, data=data, empresa_id=empresa_id,
         )
+
+    def service_listar_pendientes_sincronizacion(self, empresa_id: int, search: str | None = None):
+        """PLAN_SINCRONIZACION_FACTURAS_VENTAS_FASES: Facturas naturaleza
+        VENTA (FE) sin Venta comercial vinculada aun."""
+        from apps.tenant.ventas.services.business_service import FacturaVentaSyncService
+        return FacturaVentaSyncService.listar_pendientes(empresa_id, search=search)
+
+    def service_sincronizar_facturas(self, factura_uuids: list, empresa_id: int, empresa):
+        """PLAN_SINCRONIZACION_FACTURAS_VENTAS_FASES: vincula (o crea) Venta
+        comercial para cada Factura pendiente, unitaria o masivamente."""
+        from apps.tenant.ventas.services.business_service import FacturaVentaSyncService
+        return FacturaVentaSyncService.sincronizar_masivo(factura_uuids, empresa_id, empresa)
 
     def get_qs_list(self):
         empresa_id = self._get_empresa_id_seguro()
