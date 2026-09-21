@@ -240,6 +240,9 @@ window.Sintel.Proveedores = window.Sintel.Proveedores || {};
     const form = document.getElementById('form-representante');
     if (!form) return false;
 
+    const btnGuardar = document.getElementById('btn-guardar-representante');
+    if (btnGuardar?.disabled) return false;
+
     if (!form.checkValidity()) {
       form.classList.add('was-validated');
       return false;
@@ -271,6 +274,7 @@ window.Sintel.Proveedores = window.Sintel.Proveedores || {};
       es_principal:      form.es_principal?.checked     || false,
     };
 
+    if (btnGuardar) btnGuardar.disabled = true;
     try {
       if (representanteUuid) {
         await api.actualizar(representanteUuid, payload);
@@ -295,6 +299,8 @@ window.Sintel.Proveedores = window.Sintel.Proveedores || {};
       console.error('[representante_editor] Error guardando:', error);
       _notify('Error: ' + (error.message || 'No se pudo guardar el encargado'), 'danger');
       return false;
+    } finally {
+      if (btnGuardar) btnGuardar.disabled = false;
     }
   };
 

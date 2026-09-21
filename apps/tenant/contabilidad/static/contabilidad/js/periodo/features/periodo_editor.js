@@ -57,10 +57,10 @@
    * Maneja el guardado de un periodo (crear o actualizar)
    * ⚠️ Error Boundary: Errores delegados a UIManager
    */
-  async function handleSave(mode) {
+  async function handleSave(mode, btn) {
     const formId = mode === 'create' ? '#form-periodo-crear' : '#form-periodo-editar';
     const offcanvasId = mode === 'create' ? '#offcanvas-periodo-crear' : '#offcanvas-periodo-editar';
-    
+
     if (!w.PeriodoAPI) {
       console.error(MOD, 'PeriodoAPI no está disponible');
       return;
@@ -69,6 +69,7 @@
     const data = collectFormData(formId);
     if (!data) return;
 
+    if (btn) btn.disabled = true;
     try {
       let result;
       if (mode === 'create') {
@@ -108,6 +109,8 @@
       } else if (w.SintelFeedback) {
         w.SintelFeedback.error('Error al guardar el periodo. Por favor, intente nuevamente.');
       }
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -213,7 +216,8 @@
       const btn = ev.target.closest('#btn-guardar-periodo-crear');
       if (btn) {
         ev.preventDefault();
-        handleSave('create');
+        if (btn.disabled) return;
+        handleSave('create', btn);
       }
     });
 
@@ -222,7 +226,8 @@
       const btn = ev.target.closest('#btn-guardar-periodo-editar');
       if (btn) {
         ev.preventDefault();
-        handleSave('update');
+        if (btn.disabled) return;
+        handleSave('update', btn);
       }
     });
   }

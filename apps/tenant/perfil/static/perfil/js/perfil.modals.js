@@ -190,6 +190,9 @@
     if (!data.email) { showFeedback('El email es requerido.'); return; }
     if (!data.first_name) { showFeedback('El nombre es requerido.'); return; }
 
+    var btnCrear = d.getElementById('btn-guardar-perfil-crear');
+    if (btnCrear) btnCrear.disabled = true;
+
     // POST al endpoint de creacion
     fetch(API_URL, {
       method: 'POST',
@@ -244,6 +247,9 @@
         feedbackEl.textContent = 'Error de conexion. Intente de nuevo.';
         feedbackEl.classList.remove('d-none');
       }
+    })
+    .finally(function() {
+      if (btnCrear) btnCrear.disabled = false;
     });
   }
 
@@ -282,6 +288,8 @@
     payload['areas_uuids'] = areasUuids;
 
     var csrfToken = getCsrfToken();
+    var btnEditar = d.getElementById('btn-guardar-perfil-editar');
+    if (btnEditar) btnEditar.disabled = true;
 
     // PATCH principal: cargo, departamento, telefono_corporativo, sedes, areas
     var mainPromise = fetch(API_URL + profileId + '/', {
@@ -335,6 +343,8 @@
         feedbackEl.textContent = 'Error de conexion. Intente de nuevo.';
         feedbackEl.classList.remove('d-none');
       }
+    }).finally(function() {
+      if (btnEditar) btnEditar.disabled = false;
     });
   }
 
@@ -344,14 +354,16 @@
     if (btnCrear) {
       e.preventDefault();
       e.stopPropagation();
+      if (btnCrear.disabled) return;
       handleSaveCreate();
       return;
     }
-    
+
     var btnEditar = e.target.closest('#btn-guardar-perfil-editar');
     if (btnEditar) {
       e.preventDefault();
       e.stopPropagation();
+      if (btnEditar.disabled) return;
       handleSaveEdit();
       return;
     }

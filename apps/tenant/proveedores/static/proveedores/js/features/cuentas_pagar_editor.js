@@ -75,9 +75,10 @@
   /**
    * Guarda un abono por API
    */
-  async function registrarAbono(uuid, monto, observaciones) {
+  async function registrarAbono(uuid, monto, observaciones, btn) {
     if (!uuid) return;
-    
+    if (btn) btn.disabled = true;
+
     const url = `${API_URL}${uuid}/registrar-abono/`;
     try {
       const response = await fetch(url, {
@@ -115,6 +116,7 @@
           }
         }
       } else {
+        if (btn) btn.disabled = false;
         if (w.UIManager?.notifyError) {
           w.UIManager.notifyError(data.error || "Error al registrar abono.");
         } else {
@@ -122,6 +124,7 @@
         }
       }
     } catch (err) {
+      if (btn) btn.disabled = false;
       console.error(`${MOD} Error de red:`, err);
       if (w.UIManager?.notifyError) {
         w.UIManager.notifyError("Error de conexion de red.");
@@ -169,16 +172,17 @@
       const btnGuardarAbono = e.target.closest('#btn-guardar-abono-cuentas-pagar');
       if (btnGuardarAbono) {
         e.preventDefault();
+        if (btnGuardarAbono.disabled) return;
         const form = d.querySelector('#form-abono-cuentas-pagar');
         if (!form) return;
-        
+
         const uuid = form.dataset.cxpUuid;
         const inputMonto = form.querySelector('#monto_abono_cuentas_pagar');
         const inputObservaciones = form.querySelector('#observaciones_abono_cuentas_pagar');
-        
+
         if (inputMonto && uuid) {
           if (!form.reportValidity()) return;
-          registrarAbono(uuid, inputMonto.value, inputObservaciones ? inputObservaciones.value : '');
+          registrarAbono(uuid, inputMonto.value, inputObservaciones ? inputObservaciones.value : '', btnGuardarAbono);
         }
       }
     });

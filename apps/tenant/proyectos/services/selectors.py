@@ -39,6 +39,17 @@ LIST_FIELDS = [
 # Traversals ORM SOLO para .only(); nunca en Meta.fields.
 _SEDE_LIST_TRAVERSALS = ('sede__nombre',)
 
+# Auditoria tablas 2026-09-18: select_related('factura_costo') sin nombrar
+# NINGUN campo suyo en .only() no causa N+1 (verificado con
+# test_qs_list_n1_factura_costo.py: Django no aplica deferred loading a un
+# modelo select_related si .only() no lo menciona -- carga TODAS sus columnas
+# via el JOIN), pero si sobre-selecciona columnas de Factura que nadie usa
+# aqui. ProyectoTable.render_documentos() solo lee
+# record.factura_costo.cotizacion_numero -- se nombra explicitamente para
+# respetar el criterio "Zero Waste" de .only() ya usado en el resto del
+# selector, no porque hubiera un bug de N+1 real.
+_FACTURA_COSTO_LIST_TRAVERSALS = ('factura_costo__cotizacion_numero',)
+
 DETAIL_FIELDS = LIST_FIELDS + [
     'responsable_comercial_id', 'responsable_comercial_nombre',
     'responsable_tecnico_id', 'responsable_tecnico_nombre',
@@ -76,6 +87,7 @@ def qs_list(empresa_id, search=None, fase=None, sede_ids=None):
     ).only(
         *LIST_FIELDS,
         *_SEDE_LIST_TRAVERSALS,
+        *_FACTURA_COSTO_LIST_TRAVERSALS,
     )
 
     if sede_ids is not None:
