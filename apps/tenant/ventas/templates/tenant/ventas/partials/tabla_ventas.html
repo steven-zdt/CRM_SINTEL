@@ -1,72 +1,27 @@
-{% load django_tables2 %}
-{# Fragmento HTMX: KPIs + tabla de Ventas. Reemplaza #ventas-panel completo. #}
-
-<div class="row mb-3 g-2" id="panel-kpis-ventas">
-
-  <div class="col-6 col-xl-3">
-    <div class="card border-0 shadow-sm h-100" style="border-left: 3px solid #198754 !important;">
-      <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
-        <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
-             style="width:38px;height:38px;">
-          <i class="bi bi-bag-check-fill text-success" style="font-size:1.1rem;"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Total Ventas</div>
-          <div class="fw-bold lh-1 mt-1" style="font-size:1.15rem;">{{ kpi_total_ventas }}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-6 col-xl-3">
-    <div class="card border-0 shadow-sm h-100" style="border-left: 3px solid #0d6efd !important;">
-      <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
-        <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
-             style="width:38px;height:38px;">
-          <i class="bi bi-cash-stack text-primary" style="font-size:1.1rem;"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Monto Total</div>
-          <div class="fw-bold lh-1 mt-1" style="font-size:1.15rem;">${{ kpi_monto_total|floatformat:0 }}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-6 col-xl-3">
-    <div class="card border-0 shadow-sm h-100" style="border-left: 3px solid #6c757d !important;">
-      <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
-        <div class="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
-             style="width:38px;height:38px;">
-          <i class="bi bi-pencil-square text-secondary" style="font-size:1.1rem;"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Borradores</div>
-          <div class="fw-bold lh-1 mt-1" style="font-size:1.15rem;">{{ kpi_borradores }}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-6 col-xl-3">
-    <div class="card border-0 shadow-sm h-100" style="border-left: 3px solid #20c997 !important;">
-      <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
-        <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
-             style="width:38px;height:38px;">
-          <i class="bi bi-receipt-cutoff text-success" style="font-size:1.1rem;"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Facturadas DIAN</div>
-          <div class="fw-bold lh-1 mt-1" style="font-size:1.15rem;">{{ kpi_facturadas }}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-</div>
+{# tabla_ventas.html — Piloto DataTables 3.x + ColumnControl (docs/ux/TABLES_FORMS_RELEASE_GATE.md) #}
+{# Esqueleto ESTATICO: ya no se sirve via HTMX/django-tables2 -- se incluye  #}
+{# una sola vez en list_ventas.html y datatables.factory.js puebla <tbody>  #}
+{# via ajax contra POST /api/v1/ventas/dt/. Indices de columna deben        #}
+{# coincidir 1:1 con fields_map/column_filters de VentaViewSet.dt().        #}
+{# La fila de filtros por columna (#fila-filtros-ventas) NO va aqui como   #}
+{# HTML estatico: DataTables reescribe el <thead> completo al iniciarse y  #}
+{# la destruiria. venta_list.js la construye e inserta en JS despues de    #}
+{# crear el DataTable (ver insertarFilaFiltros()).                        #}
 
 <div class="border rounded shadow-sm bg-white">
   <div class="w-100" style="max-width:100%; overflow-x:auto;">
-    {% render_table table %}
+    <table id="tabla-ventas" class="table table-hover align-middle mb-0 w-100">
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>Fecha</th>
+          <th>Estado</th>
+          <th>Factura DIAN</th>
+          <th class="text-end">Total</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
 </div>
