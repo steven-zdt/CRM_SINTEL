@@ -1,0 +1,16 @@
+{# assets_ventas_datatables.html — Piloto DataTables 3.x + ColumnControl (solo Ventas) #}
+{# docs/ux/TABLES_FORMS_RELEASE_GATE.md -- NO cargar globalmente en workspace.html/base.html: #}
+{# mientras el piloto no este validado, ninguna otra app debe pagar el peso de esta libreria. #}
+{# Build vanilla (sin jQuery) -- base.html ya elimino jQuery explicitamente en v3.3. #}
+{# Rutas CDN verificadas contra el indice real de cdn.datatables.net (2026-09-19). #}
+
+<link rel="stylesheet" href="https://cdn.datatables.net/3.0.4/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/columncontrol/2.0.2/css/columnControl.bootstrap5.min.css">
+
+<script src="https://cdn.datatables.net/3.0.4/js/dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/3.0.4/js/dataTables.bootstrap5.min.js"
+        onerror="console.error('[ventas] No se pudo cargar dataTables.bootstrap5.js -- estilos de tabla degradados.');"></script>
+<script src="https://cdn.datatables.net/columncontrol/2.0.2/js/dataTables.columnControl.min.js"
+        onerror="console.error('[ventas] No se pudo cargar ColumnControl.');"></script>
+<script src="https://cdn.datatables.net/columncontrol/2.0.2/js/columnControl.bootstrap5.min.js"
+        onerror="console.warn('[ventas] ColumnControl bootstrap5 styling no disponible.');"></script>

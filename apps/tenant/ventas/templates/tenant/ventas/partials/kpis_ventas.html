@@ -1,0 +1,67 @@
+{% load currency_filters %}
+{# Fragmento HTMX: solo KPIs de Ventas (piloto DataTables -- la tabla ya no #}
+{# vive aqui, ver partials/tabla_ventas.html + datatables.factory.js).      #}
+
+<div class="row mb-3 g-2" id="panel-kpis-ventas">
+
+  <div class="col-6 col-xl-3">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 3px solid #198754 !important;">
+      <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
+             style="width:38px;height:38px;">
+          <i class="bi bi-bag-check-fill text-success" style="font-size:1.1rem;"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Total Ventas</div>
+          <div class="fw-bold lh-1 mt-1" style="font-size:1.15rem;">{{ kpi_total_ventas }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 3px solid #0d6efd !important;">
+      <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
+             style="width:38px;height:38px;">
+          <i class="bi bi-cash-stack text-primary" style="font-size:1.1rem;"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Monto Total</div>
+          <div class="fw-bold lh-1 mt-1" style="font-size:1.15rem;">{{ kpi_monto_total|currency_cop }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 3px solid #6c757d !important;">
+      <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
+             style="width:38px;height:38px;">
+          <i class="bi bi-pencil-square text-secondary" style="font-size:1.1rem;"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Borradores</div>
+          <div class="fw-bold lh-1 mt-1" style="font-size:1.15rem;">{{ kpi_borradores }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="card border-0 shadow-sm h-100" style="border-left: 3px solid #20c997 !important;">
+      <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-success bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0"
+             style="width:38px;height:38px;">
+          <i class="bi bi-receipt-cutoff text-success" style="font-size:1.1rem;"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="text-muted" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Facturadas DIAN</div>
+          <div class="fw-bold lh-1 mt-1" style="font-size:1.15rem;">{{ kpi_facturadas }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

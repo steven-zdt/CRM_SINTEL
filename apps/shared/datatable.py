@@ -8,12 +8,44 @@ Referencias:
 - DataTables server-side: https://datatables.net/manual/server-side
 - Seguridad whitelist: https://webdevservices.in/secure-datatables-implementation/
 """
+import contextlib
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from django.db.models import Q, QuerySet
+from django.utils.dateparse import parse_date
 from rest_framework import status
 from rest_framework.response import Response
+
+
+class ColumnFilterType:
+    """
+    Tipos de filtro por columna soportados por ColumnFilter.
+
+    RANGE_SEPARATOR: los tipos DATE_RANGE/NUMBER_RANGE no tienen un formato de
+    rango nativo en el protocolo DataTables (columns[i][search][value] es
+    siempre un string simple -- ver https://datatables.net/manual/server-side).
+    Se define aqui la codificacion propia "min~max" (ambos lados opcionales,
+    ej. "2026-01-01~", "~2026-12-31", "100~500"), producida y parseada
+    exclusivamente por este modulo y por datatables.factory.js -- no depende
+    de ningun widget nativo de ColumnControl para rangos.
+    """
+
+    ICONTAINS = "icontains"
+    EXACT = "exact"
+    DATE_RANGE = "date_range"
+    NUMBER_RANGE = "number_range"
+
+    RANGE_SEPARATOR = "~"
+
+
+class ColumnFilter:
+    """Filtro declarativo para una columna: campo ORM + tipo de filtro."""
+
+    def __init__(self, field: str, filter_type: str):
+        self.field = field
+        self.filter_type = filter_type
 
 
 class DataTableSpec:
@@ -45,12 +77,14 @@ class DataTableSpec:
         base_qs: QuerySet,
         serializer,
         extra_filter: Callable | None = None,
+        column_filters: Mapping[int, "ColumnFilter"] | None = None,
     ):
         self.fields_map = dict(fields_map)
         self.search_fields = list(search_fields)
         self.base_qs = base_qs
         self.serializer = serializer
         self.extra_filter = extra_filter
+        self.column_filters = dict(column_filters or {})
 
 
 class DataTableServer:
@@ -139,7 +173,74 @@ class DataTableServer:
             return qs.order_by(*ordering)
         
         return qs
-    
+
+    def _apply_column_filters(self, qs: QuerySet, columns_raw: Iterable[Mapping]) -> QuerySet:
+        """
+        Aplica filtros por columna (ColumnControl) solo sobre columnas whitelisted.
+
+        Args:
+            qs: QuerySet a filtrar
+            columns_raw: Lista de dicts `columns[i]` tal como los envia DataTables
+                (incluye `search.value` por columna)
+
+        Returns:
+            QuerySet filtrado -- cualquier indice no declarado en
+            spec.column_filters se ignora silenciosamente (whitelist), y
+            cualquier valor que no parsee para date_range/number_range se
+            ignora sin lanzar error (nunca 500 por input de usuario).
+        """
+        if not columns_raw or not self.spec.column_filters:
+            return qs
+
+        for idx, col in enumerate(columns_raw):
+            column_filter = self.spec.column_filters.get(idx)
+            if not column_filter or not isinstance(col, Mapping):
+                continue
+
+            search = col.get("search", {})
+            value = str(search.get("value", "")).strip() if isinstance(search, Mapping) else ""
+            if not value:
+                continue
+
+            field = column_filter.field
+            filter_type = column_filter.filter_type
+
+            if filter_type == ColumnFilterType.ICONTAINS:
+                qs = qs.filter(**{f"{field}__icontains": value})
+            elif filter_type == ColumnFilterType.EXACT:
+                qs = qs.filter(**{field: value})
+            elif filter_type == ColumnFilterType.DATE_RANGE:
+                qs = self._apply_range_filter(qs, field, value, self._parse_date_strict)
+            elif filter_type == ColumnFilterType.NUMBER_RANGE:
+                qs = self._apply_range_filter(qs, field, value, self._parse_decimal)
+
+        return qs
+
+    @staticmethod
+    def _parse_decimal(raw: str) -> Decimal:
+        return Decimal(raw)
+
+    @staticmethod
+    def _parse_date_strict(raw: str):
+        parsed = parse_date(raw)
+        if parsed is None:
+            raise ValueError(f"Fecha invalida: {raw!r}")
+        return parsed
+
+    def _apply_range_filter(self, qs: QuerySet, field: str, value: str, parse: Callable) -> QuerySet:
+        """Parsea "min~max" (cualquier lado opcional) y aplica __gte/__lte."""
+        min_raw, _, max_raw = value.partition(ColumnFilterType.RANGE_SEPARATOR)
+        min_raw = min_raw.strip()
+        max_raw = max_raw.strip()
+
+        if min_raw:
+            with contextlib.suppress(InvalidOperation, ValueError, TypeError):
+                qs = qs.filter(**{f"{field}__gte": parse(min_raw)})
+        if max_raw:
+            with contextlib.suppress(InvalidOperation, ValueError, TypeError):
+                qs = qs.filter(**{f"{field}__lte": parse(max_raw)})
+        return qs
+
     def _parse_request(self, request) -> dict[str, Any]:
         """
         Parsea parámetros DataTables desde request.data (POST).
@@ -173,13 +274,19 @@ class DataTableServer:
             for order_rule in order_data:
                 if isinstance(order_rule, dict):
                     order_rules.append(order_rule)
-        
+
+        # Filtros por columna (ColumnControl): columns[i][search][value]
+        columns_raw = data.get("columns", [])
+        if not isinstance(columns_raw, list):
+            columns_raw = []
+
         return {
             "draw": draw,
             "start": start,
             "length": length,
             "search_value": search_value,
             "order_rules": order_rules,
+            "columns_raw": columns_raw,
         }
     
     def handle(self, request) -> Response:
@@ -216,12 +323,13 @@ class DataTableServer:
         # 4. Contar total sin búsqueda
         records_total = qs.count()
         
-        # 5. Aplicar búsqueda global
+        # 5. Aplicar búsqueda global + filtros por columna
         qs_filtered = self._apply_search(qs, params["search_value"])
-        
-        # 6. Contar después de búsqueda
+        qs_filtered = self._apply_column_filters(qs_filtered, params["columns_raw"])
+
+        # 6. Contar después de búsqueda/filtros
         records_filtered = qs_filtered.count()
-        
+
         # 7. Aplicar orden
         qs_ordered = self._apply_order(qs_filtered, params["order_rules"])
         
