@@ -25,6 +25,21 @@ shell:
 logs:
 	docker compose logs -f web
 
+# ── Modo "contenedor unico" de desarrollo (docker-compose.single.yaml) ──────
+# Alternativa nueva y separada al flujo normal de arriba (make up/down) --
+# ver docker-compose.single.yaml y docker/supervisord.conf.
+up-single:
+	docker compose -f docker-compose.single.yaml up --build -d
+
+down-single:
+	docker compose -f docker-compose.single.yaml down
+
+shell-single:
+	docker compose -f docker-compose.single.yaml exec app bash
+
+logs-single:
+	docker compose -f docker-compose.single.yaml logs -f app
+
 makemigrations:
 	docker compose exec web python manage.py makemigrations
 

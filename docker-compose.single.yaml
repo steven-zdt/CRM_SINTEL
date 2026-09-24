@@ -1,0 +1,107 @@
+# docker-compose.single.yaml -- modo "contenedor unico" de desarrollo.
+#
+# Alternativa NUEVA y SEPARADA a docker-compose.yaml (que sigue siendo el flujo
+# normal de `make up`, y la base sobre la que se apila docker-compose.prod.yaml
+# en produccion -- ninguno de los dos se toca aqui). Un solo servicio con los 9
+# procesos (postgres, redis, django, celery, celery-beat, neo4j, n8n, nginx,
+# cloudflared) corriendo dentro de la MISMA imagen via supervisord (ver
+# Dockerfile.single y docker/supervisord.conf).
+#
+# USO:
+#   docker compose -f docker-compose.single.yaml up --build -d
+#   docker compose -f docker-compose.single.yaml exec app bash
+#   docker compose -f docker-compose.single.yaml logs -f app
+#
+# Todos los procesos comparten el mismo namespace de red (localhost) --
+# DATABASE_HOST/REDIS_URL/NEO4J_URI/N8N_* se sobreescriben abajo respecto a
+# los valores de .env (que apuntan a nombres DNS de Compose: db/redis/neo4j/n8n,
+# validos solo en docker-compose.yaml multi-contenedor).
+#
+# ⚠️ `name:` explicito abajo es INTENCIONAL y critico: sin el, Compose deriva
+# el nombre de proyecto del directorio (mismo default que docker-compose.yaml,
+# ambos vivos en el mismo repo) -- un `down`/`down --remove-orphans` corrido
+# contra ESTE archivo terminaria operando sobre el stack multi-contenedor real
+# (confirmado en vivo: penso que asi paso durante la construccion de este
+# archivo, un `down --remove-orphans` sin `name:` elimino los 9 contenedores
+# del stack multi-contenedor que seguian corriendo sanos -- los volumenes con
+# los datos no se tocaron, pero fue un susto real, no hipotetico).
+name: crm_sintel_single
+
+services:
+  app:
+    container_name: crm_sintel_single-app-1
+    build:
+      context: .
+      dockerfile: Dockerfile.single
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - SERVICE_ROLE=web
+      - DATABASE_HOST=localhost
+      - DATABASE_PORT=5432
+      - REDIS_URL=redis://localhost:6379/0
+      - NEO4J_URI=bolt://localhost:7687
+      - FASTEMBED_CACHE_PATH=/app/.fastembed_cache
+      # n8n lee estas variables directamente (no via DATABASE_*/REDIS_URL de
+      # arriba -- misma separacion N8N-SINTEL-02 del servicio n8n en
+      # docker-compose.yaml, base de datos propia y aislada).
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=localhost
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${N8N_DB_NAME:-n8n}
+      - DB_POSTGRESDB_USER=${N8N_DB_USER:-n8n}
+      - DB_POSTGRESDB_PASSWORD=${N8N_DB_PASSWORD:?N8N_DB_PASSWORD debe estar definido en .env}
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+      - WEBHOOK_URL=${N8N_PROTOCOL:-http}://${N8N_HOST:-localhost}:5678/
+      - GENERIC_TIMEZONE=America/Bogota
+      - TZ=America/Bogota
+      - N8N_RUNNERS_ENABLED=true
+    volumes:
+      - .:/app
+      - postgres_data_single:/var/lib/postgresql/data
+      - neo4j_data_single:/var/lib/neo4j/data
+      - n8n_data_single:/home/appuser/.n8n
+      - nginx_certs_single:/etc/nginx/certs
+      - fastembed_cache_single:/app/.fastembed_cache
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+      - "127.0.0.1:5678:5678"
+    extra_hosts:
+      - "home.sintel.net.co:192.168.2.200"
+      - "host.docker.internal:host-gateway"
+    dns:
+      - 192.168.2.15
+      - 8.8.8.8
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 180s
+
+volumes:
+  postgres_data_single:
+    name: crm_sintel_postgres_data_single
+    driver: local
+  neo4j_data_single:
+    name: crm_sintel_neo4j_data_single
+    driver: local
+  n8n_data_single:
+    name: crm_sintel_n8n_data_single
+    driver: local
+  nginx_certs_single:
+    name: crm_sintel_nginx_certs_single
+    driver: local
+  fastembed_cache_single:
+    name: crm_sintel_fastembed_cache_single
+    driver: local
