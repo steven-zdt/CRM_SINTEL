@@ -113,6 +113,14 @@ services:
       # Alta local de tenants (ver apps/public/tenants/management/commands/ensure_tenant_dns.py).
       # Registro local en desarrollo -- NO usar Cloudflare todavia (aun en desarrollo).
       - "home.sintel.net.co:192.168.2.200"
+      # LM Studio local (Fase 5, docs/adk/ADK_STATUS.md) -- el `dns:` custom
+      # de arriba (servidor Windows para *.sintel.net.co) reemplaza el
+      # resolver embebido de Docker, que es quien normalmente provee
+      # `host.docker.internal` automaticamente. Sin esta entrada explicita,
+      # ese hostname no resuelve dentro del contenedor (verificado: DNS
+      # error real). `host-gateway` es el valor especial de Compose que
+      # apunta al host real, funciona igual en Docker Desktop y Linux.
+      - "host.docker.internal:host-gateway"
     # DEVOPS-M3: usa el endpoint /health ya existente (config/urls_public.py)
     # DEVOPS-M5: start_period=30s (retries=5*interval=10s -> 80s de margen
     # total) resultaba insuficiente frente al arranque REAL observado
