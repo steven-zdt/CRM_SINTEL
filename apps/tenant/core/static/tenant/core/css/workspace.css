@@ -36,9 +36,18 @@
   box-shadow: 1px 0 3px rgba(0,0,0,0.05);
 }
 
-.ws-main { 
-  padding: 24px; 
-  background: var(--bg-soft); 
+.ws-main {
+  padding: 24px;
+  background: var(--bg-soft);
+  /* Causa real (2026-09-24, verificado con Playwright): .ws-shell es un
+     grid de 2 columnas (260px 1fr) -- por spec, un item de grid tiene
+     min-width:auto implicito, asi que contenido ancho (tablas/filas de
+     KPIs) empujaba TODA la pagina mas ancha que el viewport en vez de
+     scrollear solo dentro de si mismo (overflow-x:auto en
+     .dataTables_wrapper, ver assets_datatables_cdn.html, nunca llegaba a
+     activarse porque el contenedor padre nunca se comprimia). min-width:0
+     hace que .ws-main respete el ancho real de la columna 1fr. */
+  min-width: 0;
 }
 
 /* Header lateral */

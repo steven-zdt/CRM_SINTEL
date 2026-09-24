@@ -1,0 +1,46 @@
+{# assets_datatables_cdn.html — DataTables 3.x + ColumnControl via CDN. #}
+{# NO incluir globalmente en workspace.html/base.html: solo los modulos que #}
+{# ya migraron a DataTables lo cargan, via su propio assets_<app>_datatables.html #}
+{# (ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Build vanilla  #}
+{# (sin jQuery) -- base.html ya elimino jQuery explicitamente en v3.3.      #}
+{# Rutas CDN verificadas contra el indice real de cdn.datatables.net (2026-09-19). #}
+
+<link rel="stylesheet" href="https://cdn.datatables.net/3.0.4/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/columncontrol/2.0.2/css/columnControl.bootstrap5.min.css">
+
+<script src="https://cdn.datatables.net/3.0.4/js/dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/3.0.4/js/dataTables.bootstrap5.min.js"
+        onerror="console.error('[datatables] No se pudo cargar dataTables.bootstrap5.js -- estilos de tabla degradados.');"></script>
+<script src="https://cdn.datatables.net/columncontrol/2.0.2/js/dataTables.columnControl.min.js"
+        onerror="console.error('[datatables] No se pudo cargar ColumnControl.');"></script>
+<script src="https://cdn.datatables.net/columncontrol/2.0.2/js/columnControl.bootstrap5.min.js"
+        onerror="console.warn('[datatables] ColumnControl bootstrap5 styling no disponible.');"></script>
+
+<style>
+/* Fix compartido (2026-09-24): la columna de acciones se envolvia en 2
+   lineas cuando la celda se comprimia en pantallas angostas. Dos patrones
+   reales distintos entre apps (verificado con Playwright real, no
+   supuesto): la mayoria envuelve los botones en
+   '<div class="btn-group btn-group-sm">' (ver clientes.list.js,
+   proyectos_list.js, etc.), pero Ventas (venta_list.js::renderAcciones)
+   concatena '<button>' sueltos como hermanos, sin .btn-group -- el
+   selector original (:has(> .btn-group)) no cubria ese segundo caso.
+   `td:has(button)` cubre ambos patrones sin depender de como cada app
+   envuelva sus botones; aplica una sola vez aqui porque todas las apps
+   migradas ya cargan este mismo partial compartido. */
+table.dataTable td:has(button) {
+    white-space: nowrap;
+}
+table.dataTable .btn-group {
+    flex-wrap: nowrap;
+}
+
+/* Responsive: el build vanilla de DataTables (sin el modulo Responsive,
+   deliberadamente no cargado -- ver comentario de arriba) no colapsa
+   columnas en pantallas angostas por si solo; scroll horizontal del
+   contenedor evita que las columnas se compriman/rompan en vez de romper
+   el layout de la pagina. */
+.dataTables_wrapper {
+    overflow-x: auto;
+}
+</style>

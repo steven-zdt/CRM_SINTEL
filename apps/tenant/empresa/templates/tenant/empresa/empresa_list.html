@@ -177,19 +177,18 @@
         </div>
         <div class="card-body">
           <div class="mb-3">
-            <input type="text" id="search-sede" class="form-control" placeholder="Buscar por nombre, dirección, ciudad o encargado..."
-                   hx-get="{% url 'empresa_ui:sede-tabla' %}"
-                   hx-trigger="keyup changed delay:400ms, search"
-                   hx-target="#sedes-panel"
-                   name="q">
+            <input type="text" id="search-sede" class="form-control" placeholder="Buscar por nombre, dirección, ciudad o encargado...">
           </div>
+          {# DataTables 3.x client-side (2026-09-24, ver sede_datatable.js) -- #}
+          {# esqueleto estatico, init perezoso en el primer shown.bs.tab de #}
+          {# abajo. id="sedes-panel" se preserva: la delegacion de eventos #}
+          {# de sede_list.js (.btn-edit-sede/.btn-delete-sede en ese div) #}
+          {# sigue funcionando sin cambios. #}
           <div class="card shadow-sm border-0">
             <div class="card-body p-0">
-              <div id="sedes-panel"
-                   hx-get="{% url 'empresa_ui:sede-tabla' %}"
-                   hx-trigger="load, sede-updated from:body"
-                   hx-target="this"
-                   style="min-height: 300px; min-width: 0;"></div>
+              <div id="sedes-panel" style="min-height: 300px; min-width: 0;">
+                <table id="tabla-sedes" class="table table-hover align-middle mb-0" style="width:100%"></table>
+              </div>
             </div>
           </div>
         </div>
@@ -213,19 +212,15 @@
         </div>
         <div class="card-body">
           <div class="mb-3">
-            <input type="text" id="search-area" class="form-control" placeholder="Buscar por nombre, código o sede..."
-                   hx-get="{% url 'empresa_ui:area-tabla' %}"
-                   hx-trigger="keyup changed delay:400ms, search"
-                   hx-target="#areas-panel"
-                   name="q">
+            <input type="text" id="search-area" class="form-control" placeholder="Buscar por nombre, código o sede...">
           </div>
+          {# DataTables 3.x client-side (2026-09-24, ver area_datatable.js) -- #}
+          {# ver comentario equivalente en el tab de Sedes de arriba. #}
           <div class="card shadow-sm border-0">
             <div class="card-body p-0">
-              <div id="areas-panel"
-                   hx-get="{% url 'empresa_ui:area-tabla' %}"
-                   hx-trigger="load, area-updated from:body"
-                   hx-target="this"
-                   style="min-height: 300px;"></div>
+              <div id="areas-panel" style="min-height: 300px;">
+                <table id="tabla-areas" class="table table-hover align-middle mb-0" style="width:100%"></table>
+              </div>
             </div>
           </div>
         </div>
@@ -250,25 +245,25 @@ window.sintelAbrirOffcanvasEmpresa = function(id) {
 };
 </script>
 
-{# Redraw Tabulator al activar sub-tab — evita columnas mal renderizadas en contenedor oculto #}
+{# Init perezoso de las DataTables de Sedes/Areas en el primer shown.bs.tab #}
+{# (2026-09-24) -- ver el comentario "Init perezoso" en sede_datatable.js/ #}
+{# area_datatable.js para el porque: ambas pestañas empiezan ocultas #}
+{# (display:none), DataTables calcula mal los anchos de columna si se #}
+{# inicializa asi. Llamadas posteriores al mismo evento solo reajustan #}
+{# anchos -- SedeDataTableModule.init()/AreaDataTableModule.init() son #}
+{# idempotentes, ver esos archivos. #}
 <script>
 (function() {
     var sedesTab = document.getElementById('empresa-sedes-tab');
     var areasTab = document.getElementById('empresa-areas-tab');
     if (sedesTab) {
         sedesTab.addEventListener('shown.bs.tab', function() {
-            requestAnimationFrame(function() {
-                var t = window.SedeListModule && window.SedeListModule.getTable && window.SedeListModule.getTable();
-                if (t) { t.redraw(true); } else if (window.SedeListModule) { window.SedeListModule.init(); }
-            });
+            if (window.SedeDataTableModule) window.SedeDataTableModule.init();
         });
     }
     if (areasTab) {
         areasTab.addEventListener('shown.bs.tab', function() {
-            requestAnimationFrame(function() {
-                var t = window.AreaListModule && window.AreaListModule.getTable && window.AreaListModule.getTable();
-                if (t) { t.redraw(true); } else if (window.AreaListModule) { window.AreaListModule.init(); }
-            });
+            if (window.AreaDataTableModule) window.AreaDataTableModule.init();
         });
     }
 })();

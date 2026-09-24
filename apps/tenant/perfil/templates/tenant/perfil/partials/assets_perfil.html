@@ -1,6 +1,10 @@
 {% load static %}
+{# DataTables 3.x (solo grilla "Perfiles" -- 2026-09-24, ver perfil.list.js) #}
+{% include 'tenant/perfil/partials/assets_perfil_datatables.html' %}
+
 {# Assets perfil - orden critico: api.js debe cargarse primero (Gateway SSoT) #}
 <script src="{% static 'perfil/js/perfil.api.js' %}"></script>
 <script src="{% static 'perfil/js/perfil.ui.js' %}"></script>
 <script src="{% static 'perfil/js/perfil.modals.js' %}"></script>
 <script src="{% static 'perfil/js/perfil.page.js' %}"></script>
+<script src="{% static 'perfil/js/perfil.list.js' %}"></script>

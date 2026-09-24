@@ -1,7 +1,9 @@
 {% load static %}
 {# assets_empresa.html - Assets del módulo Empresa #}
-{# Fase 5-BIS: las 4 grillas (Empresa, Sede, Area, MailInboxConfig) usan #}
-{# django-tables2 + HTMX -- sin Tabulator. #}
+{# Fase 5-BIS: Empresa/MailInboxConfig siguen en django-tables2 + HTMX. #}
+{# Sede/Area migradas a DataTables 3.x client-side (2026-09-24, solo UI -- #}
+{# ver sede_datatable.js/area_datatable.js). #}
+{% include 'tenant/empresa/assets_empresa_datatables.html' %}
 {# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
 {# 1. assets_core.html (incluye DOMUtils, http(), etc.) - ya cargado en workspace.html #}
 {# 2. empresa.api.js (define window.empresaAPI) - Capa de Datos (opcional, legacy) #}
@@ -18,10 +20,12 @@
 {# Feature 3: Sede #}
 <script src="{% static 'empresa/js/features/sede_list.js' %}"></script>
 <script src="{% static 'empresa/js/features/sede_editor.js' %}"></script>
+<script src="{% static 'empresa/js/features/sede_datatable.js' %}"></script>
 
 {# Feature 4: Area #}
 <script src="{% static 'empresa/js/features/area_list.js' %}"></script>
 <script src="{% static 'empresa/js/features/area_editor.js' %}"></script>
+<script src="{% static 'empresa/js/features/area_datatable.js' %}"></script>
 
 {# Feature 5: MailInboxConfig (FSD §7.2 — modulo independiente) #}
 <script src="{% static 'empresa/js/features/mailinboxconfig_list.js' %}"></script>

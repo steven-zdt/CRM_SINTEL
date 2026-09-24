@@ -24,23 +24,22 @@
         <div id="perfil-list-feedback" class="small fw-bold text-end"></div>
     </div>
 
-    {# Busqueda server-side (django-tables2 + HTMX) #}
+    {# Busqueda client-side DataTables (2026-09-24, ver perfil.list.js) #}
     <div class="mb-3">
-        <input type="text" id="search-perfil" class="form-control" placeholder="Buscar por nombre, cargo o departamento..."
-               hx-get="{% url 'perfil_ui:perfil-tabla' %}"
-               hx-trigger="keyup changed delay:400ms, search"
-               hx-target="#perfiles-panel"
-               name="q">
+        <input type="text" id="search-perfil" class="form-control" placeholder="Buscar por nombre, cargo o departamento...">
     </div>
 
-    {# Tabla server-rendered (django-tables2 + HTMX) — Fase 5-BIS #}
+    {% comment %}
+    Tabla DataTables 3.x client-side (2026-09-24) -- esqueleto estatico,
+    poblado via ajax por perfil.list.js. id="perfiles-panel" se preserva
+    a proposito: la delegacion de eventos de perfil.page.js
+    (#perfiles-panel button[data-action]) sigue funcionando sin cambios.
+    {% endcomment %}
     <div class="card shadow-sm border-0">
         <div class="card-body p-0">
-            <div id="perfiles-panel"
-                 hx-get="{% url 'perfil_ui:perfil-tabla' %}"
-                 hx-trigger="load, perfil-updated from:body"
-                 hx-target="this"
-                 style="min-height: 400px;"></div>
+            <div id="perfiles-panel" style="min-height: 400px;">
+                <table id="tabla-perfiles" class="table table-hover align-middle mb-0" style="width:100%"></table>
+            </div>
         </div>
     </div>
 
