@@ -17,8 +17,18 @@ pytestmark = pytest.mark.django_db
 
 DIM = 768
 _VOCAB = [
-    "tornillo", "perno", "acero", "metalico", "sujetador", "galvanizado",
-    "cliente", "credito", "mayorista", "ferreteria", "descuento", "politica",
+    "tornillo",
+    "perno",
+    "acero",
+    "metalico",
+    "sujetador",
+    "galvanizado",
+    "cliente",
+    "credito",
+    "mayorista",
+    "ferreteria",
+    "descuento",
+    "politica",
 ]
 
 
@@ -122,14 +132,19 @@ def test_index_text_crea_doc_chunks_y_embeddings(tenant_a, fake_provider):
         assert res.n_chunks >= 1
         assert res.embedded == res.n_chunks
         assert res.skipped is False
-        assert AIKnowledgeChunk.objects.filter(empresa=emp, embedding__isnull=False).count() == res.n_chunks
+        assert (
+            AIKnowledgeChunk.objects.filter(empresa=emp, embedding__isnull=False).count()
+            == res.n_chunks
+        )
 
 
 def test_index_text_idempotente_por_source_version(tenant_a, fake_provider):
     svc = EmbeddingService(provider=fake_provider)
     with schema_context(tenant_a.schema_name):
         emp = _empresa(tenant_a.schema_name)
-        kw = dict(empresa=emp, source_type="producto_descripcion", source_id="11", text="Perno acero.")
+        kw = dict(
+            empresa=emp, source_type="producto_descripcion", source_id="11", text="Perno acero."
+        )
         svc.index_text(**kw, source_version="v1")
         again = svc.index_text(**kw, source_version="v1")
         assert again.skipped is True
@@ -147,7 +162,9 @@ def test_deindex_borra_el_origen(tenant_a, fake_provider):
     svc = EmbeddingService(provider=fake_provider)
     with schema_context(tenant_a.schema_name):
         emp = _empresa(tenant_a.schema_name)
-        svc.index_text(empresa=emp, source_type="producto_descripcion", source_id="12", text="Acero.")
+        svc.index_text(
+            empresa=emp, source_type="producto_descripcion", source_id="12", text="Acero."
+        )
         svc.deindex(empresa=emp, source_type="producto_descripcion", source_id="12")
         assert AIKnowledgeDocument.objects.filter(empresa=emp, source_id="12").count() == 0
 
@@ -165,10 +182,14 @@ def test_search_rankea_por_similitud(tenant_a, fake_provider):
     ret = RetrievalService(provider=fake_provider)
     with schema_context(tenant_a.schema_name):
         emp = _empresa(tenant_a.schema_name)
-        _seed(emb, emp, [
-            ("A", "tornillo perno acero metalico sujetador"),
-            ("B", "cliente mayorista credito descuento politica"),
-        ])
+        _seed(
+            emb,
+            emp,
+            [
+                ("A", "tornillo perno acero metalico sujetador"),
+                ("B", "cliente mayorista credito descuento politica"),
+            ],
+        )
         hits = ret.search(empresa=emp, query="sujetador metalico de acero", k=2)
         assert hits, "deberia haber resultados"
         assert hits[0].source_id == "A"
@@ -189,8 +210,12 @@ def test_search_filtra_por_source_type(tenant_a, fake_provider):
     ret = RetrievalService(provider=fake_provider)
     with schema_context(tenant_a.schema_name):
         emp = _empresa(tenant_a.schema_name)
-        emb.index_text(empresa=emp, source_type="producto_descripcion", source_id="P1", text="acero tornillo")
-        emb.index_text(empresa=emp, source_type="cliente_observaciones", source_id="C1", text="acero cliente")
+        emb.index_text(
+            empresa=emp, source_type="producto_descripcion", source_id="P1", text="acero tornillo"
+        )
+        emb.index_text(
+            empresa=emp, source_type="cliente_observaciones", source_id="C1", text="acero cliente"
+        )
         hits = ret.search(empresa=emp, query="acero", k=10, source_types=["cliente_observaciones"])
         assert {h.source_type for h in hits} == {"cliente_observaciones"}
 
@@ -221,7 +246,9 @@ def test_search_no_cruza_tenants(tenant_a, tenant_b, fake_provider):
     with schema_context(tenant_a.schema_name):
         emp_a = _empresa(tenant_a.schema_name)
         emb.index_text(
-            empresa=emp_a, source_type="producto_descripcion", source_id="SECRET",
+            empresa=emp_a,
+            source_type="producto_descripcion",
+            source_id="SECRET",
             text="tornillo acero confidencial de A",
         )
     with schema_context(tenant_b.schema_name):

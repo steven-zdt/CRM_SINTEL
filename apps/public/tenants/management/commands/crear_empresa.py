@@ -117,4 +117,4 @@ class Command(BaseCommand):
             import traceback
 
             self.stdout.write(self.style.ERROR(traceback.format_exc()))
-            raise CommandError(f"Error al crear empresa: {e}")
+            raise CommandError(f"Error al crear empresa: {e}") from e

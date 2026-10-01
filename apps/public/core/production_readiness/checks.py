@@ -8,6 +8,7 @@ verificacion requiere infraestructura que no existe en este entorno
 (TLS real, DNS publico, staging, carga), el check retorna
 NOT_APPLICABLE con la razon explicita, nunca un PASS fingido.
 """
+
 from __future__ import annotations
 
 import os
@@ -24,6 +25,7 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..",
 # ---------------------------------------------------------------------------
 # APPLICATION
 # ---------------------------------------------------------------------------
+
 
 @register_check("APP-01-debug", "APPLICATION", Severity.P0, "core")
 def check_debug():
@@ -43,7 +45,10 @@ def check_secret_key():
     insecure_markers = ("django-insecure", "changeme", "CHANGE_ME", "secret-key")
     if any(m in key for m in insecure_markers):
         return CheckStatus.BLOCKER, "SECRET_KEY contiene un marcador de valor por defecto/inseguro."
-    return CheckStatus.PASS, f"SECRET_KEY definida, {len(key)} caracteres, sin marcadores inseguros."
+    return (
+        CheckStatus.PASS,
+        f"SECRET_KEY definida, {len(key)} caracteres, sin marcadores inseguros.",
+    )
 
 
 @register_check("APP-03-allowed-hosts", "APPLICATION", Severity.P0, "core")
@@ -52,7 +57,10 @@ def check_allowed_hosts():
     if not hosts:
         return CheckStatus.BLOCKER, "ALLOWED_HOSTS vacio -- Django rechazaria todas las requests."
     if "*" in hosts:
-        return CheckStatus.BLOCKER, "ALLOWED_HOSTS contiene '*' -- acepta cualquier Host header (riesgo de cache poisoning / host header injection)."
+        return (
+            CheckStatus.BLOCKER,
+            "ALLOWED_HOSTS contiene '*' -- acepta cualquier Host header (riesgo de cache poisoning / host header injection).",
+        )
     return CheckStatus.PASS, f"ALLOWED_HOSTS definido explicitamente: {hosts}"
 
 
@@ -62,16 +70,25 @@ def check_django_deploy_check():
     try:
         result = subprocess.run(
             ["python", "manage.py", "check", "--deploy"],
-            cwd=_REPO_ROOT, capture_output=True, text=True, timeout=60,
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
     except Exception as exc:
         return CheckStatus.WARN, f"No se pudo ejecutar 'manage.py check --deploy': {exc}"
     output = (result.stdout + result.stderr).strip()
     if result.returncode != 0 and "System check identified" not in output:
-        return CheckStatus.BLOCKER, f"'manage.py check --deploy' fallo (exit {result.returncode}):\n{output[-2000:]}"
+        return (
+            CheckStatus.BLOCKER,
+            f"'manage.py check --deploy' fallo (exit {result.returncode}):\n{output[-2000:]}",
+        )
     warning_count = output.count("(security.")
     if warning_count:
-        return CheckStatus.WARN, f"'manage.py check --deploy' reporta {warning_count} security warning(s) (esperado en DEBUG=True dev):\n{output[-2000:]}"
+        return (
+            CheckStatus.WARN,
+            f"'manage.py check --deploy' reporta {warning_count} security warning(s) (esperado en DEBUG=True dev):\n{output[-2000:]}",
+        )
     return CheckStatus.PASS, output[-500:] or "Sin warnings."
 
 
@@ -79,20 +96,32 @@ def check_django_deploy_check():
 # SECURITY
 # ---------------------------------------------------------------------------
 
+
 @register_check("SEC-01-secret-scanning", "SECURITY", Severity.P0, "core")
 def check_hardcoded_secrets():
     """Fase 6: grep de patrones de secretos hardcodeados en codigo
     fuente real (.py/.js), excluyendo tests/migrations/settings (donde
     referenciar el NOMBRE de una env var es normal) y el propio .env."""
-    patterns = re.compile(
-        r"(AWS_SECRET|BEGIN (RSA |EC )?PRIVATE KEY|-----BEGIN CERTIFICATE-----)"
-    )
+    patterns = re.compile(r"(AWS_SECRET|BEGIN (RSA |EC )?PRIVATE KEY|-----BEGIN CERTIFICATE-----)")
     hits = []
     search_dirs = ["apps", "config"]
     for base in search_dirs:
         base_path = os.path.join(_REPO_ROOT, base)
         for root, dirs, files in os.walk(base_path):
-            dirs[:] = [d for d in dirs if d not in ("__pycache__", "migrations", "tests", "node_modules", "static", "staticfiles", "production_readiness")]
+            dirs[:] = [
+                d
+                for d in dirs
+                if d
+                not in (
+                    "__pycache__",
+                    "migrations",
+                    "tests",
+                    "node_modules",
+                    "static",
+                    "staticfiles",
+                    "production_readiness",
+                )
+            ]
             for fname in files:
                 if not fname.endswith((".py", ".js")):
                     continue
@@ -105,8 +134,14 @@ def check_hardcoded_secrets():
                 if patterns.search(content):
                     hits.append(os.path.relpath(fpath, _REPO_ROOT))
     if hits:
-        return CheckStatus.BLOCKER, f"Posibles secretos/claves privadas hardcodeadas en: {hits[:10]}"
-    return CheckStatus.PASS, "Sin patrones de secretos hardcodeados (AWS_SECRET/PRIVATE KEY/CERTIFICATE) en apps/config."
+        return (
+            CheckStatus.BLOCKER,
+            f"Posibles secretos/claves privadas hardcodeadas en: {hits[:10]}",
+        )
+    return (
+        CheckStatus.PASS,
+        "Sin patrones de secretos hardcodeados (AWS_SECRET/PRIVATE KEY/CERTIFICATE) en apps/config.",
+    )
 
 
 @register_check("SEC-02-cors-csrf", "SECURITY", Severity.P1, "core")
@@ -120,8 +155,13 @@ def check_cors_csrf():
     if "*" in (csrf_trusted or []):
         problems.append("CSRF_TRUSTED_ORIGINS contiene '*'")
     if problems:
-        return CheckStatus.WARN, "; ".join(problems) + " -- revisar antes de producción (puede ser deliberado para dev multi-dominio)."
-    return CheckStatus.PASS, f"CORS_ALLOWED_ORIGINS={cors!r}, CSRF_TRUSTED_ORIGINS acotado (sin '*')."
+        return CheckStatus.WARN, "; ".join(
+            problems
+        ) + " -- revisar antes de producción (puede ser deliberado para dev multi-dominio)."
+    return (
+        CheckStatus.PASS,
+        f"CORS_ALLOWED_ORIGINS={cors!r}, CSRF_TRUSTED_ORIGINS acotado (sin '*').",
+    )
 
 
 @register_check("SEC-03-mock-transport-guard", "SECURITY", Severity.P0, "facturas")
@@ -130,9 +170,15 @@ def check_fiscal_mock_guard():
     defecto y NUNCA activable por el cliente (querystring/cookie/body)."""
     allow_mock = getattr(settings, "FISCAL_ALLOW_MOCK_TRANSPORT", False)
     if allow_mock and not settings.DEBUG:
-        return CheckStatus.BLOCKER, "FISCAL_ALLOW_MOCK_TRANSPORT=True fuera de DEBUG -- el mock de DIAN podria activarse en producción."
+        return (
+            CheckStatus.BLOCKER,
+            "FISCAL_ALLOW_MOCK_TRANSPORT=True fuera de DEBUG -- el mock de DIAN podria activarse en producción.",
+        )
     if allow_mock:
-        return CheckStatus.WARN, "FISCAL_ALLOW_MOCK_TRANSPORT=True (esperado en DEBUG=True dev) -- DEBE ser False antes de exponer a producción."
+        return (
+            CheckStatus.WARN,
+            "FISCAL_ALLOW_MOCK_TRANSPORT=True (esperado en DEBUG=True dev) -- DEBE ser False antes de exponer a producción.",
+        )
     return CheckStatus.PASS, "FISCAL_ALLOW_MOCK_TRANSPORT=False (default seguro)."
 
 
@@ -159,7 +205,20 @@ def check_localhost_leaks():
     for base in ("apps",):
         base_path = os.path.join(_REPO_ROOT, base)
         for root, dirs, files in os.walk(base_path):
-            dirs[:] = [d for d in dirs if d not in ("__pycache__", "tests", "test", "node_modules", "static", "staticfiles", "migrations")]
+            dirs[:] = [
+                d
+                for d in dirs
+                if d
+                not in (
+                    "__pycache__",
+                    "tests",
+                    "test",
+                    "node_modules",
+                    "static",
+                    "staticfiles",
+                    "migrations",
+                )
+            ]
             if "/tests/" in root.replace("\\", "/") or root.replace("\\", "/").endswith("/tests"):
                 continue
             for fname in files:
@@ -171,7 +230,11 @@ def check_localhost_leaks():
                 try:
                     with open(fpath, encoding="utf-8", errors="ignore") as fh:
                         for lineno, line in enumerate(fh, 1):
-                            if pattern.search(line) and "getenv" not in line and "os.environ" not in line:
+                            if (
+                                pattern.search(line)
+                                and "getenv" not in line
+                                and "os.environ" not in line
+                            ):
                                 hits.append(f"{os.path.relpath(fpath, _REPO_ROOT)}:{lineno}")
                 except OSError:
                     continue
@@ -196,17 +259,24 @@ def check_localhost_leaks():
 # DATABASE
 # ---------------------------------------------------------------------------
 
+
 @register_check("DB-01-pending-migrations", "DATABASE", Severity.P0, "core")
 def check_pending_migrations():
     try:
         result = subprocess.run(
             ["python", "manage.py", "makemigrations", "--check", "--dry-run"],
-            cwd=_REPO_ROOT, capture_output=True, text=True, timeout=90,
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=90,
         )
     except Exception as exc:
         return CheckStatus.WARN, f"No se pudo ejecutar makemigrations --check: {exc}"
     if result.returncode != 0:
-        return CheckStatus.BLOCKER, f"Hay cambios de modelo sin migracion generada:\n{(result.stdout + result.stderr)[-1500:]}"
+        return (
+            CheckStatus.BLOCKER,
+            f"Hay cambios de modelo sin migracion generada:\n{(result.stdout + result.stderr)[-1500:]}",
+        )
     return CheckStatus.PASS, "Sin migraciones pendientes de generar."
 
 
@@ -216,11 +286,15 @@ def check_pending_migrations():
 # referencia la evidencia real y su fecha).
 # ---------------------------------------------------------------------------
 
+
 @register_check("TEN-01-isolation-evidence", "TENANT", Severity.P0, "tenants")
 def check_tenant_isolation_evidence():
     ref = os.path.join(_REPO_ROOT, "docs", "e2e", "ONBOARDING_E2E_REPORT.md")
     if not os.path.exists(ref):
-        return CheckStatus.WARN, "Sin evidencia documentada de aislamiento cross-tenant en docs/e2e/."
+        return (
+            CheckStatus.WARN,
+            "Sin evidencia documentada de aislamiento cross-tenant en docs/e2e/.",
+        )
     return CheckStatus.PASS, (
         "Aislamiento cross-tenant verificado en vivo (2026-08-31, docs/e2e/ONBOARDING_E2E_REPORT.md, "
         "Fase 19): sesion de un tenant contra otro -> 401 + invalidacion forzada de cookie. "
@@ -238,13 +312,19 @@ def check_privilege_escalation_fixed():
 
         field = OnboardTenantWithOwnerSerializer().fields["owner_is_staff"]
     except Exception as exc:
-        return CheckStatus.BLOCKER, f"No se pudo inspeccionar OnboardTenantWithOwnerSerializer: {exc}"
+        return (
+            CheckStatus.BLOCKER,
+            f"No se pudo inspeccionar OnboardTenantWithOwnerSerializer: {exc}",
+        )
     if field.default is not False:
         return CheckStatus.BLOCKER, (
             f"REGRESION CRITICA: owner_is_staff.default={field.default!r} (debe ser False). "
             "Ver docs/e2e/ONBOARDING_E2E_REPORT.md hallazgo E2E-03 -- escalacion de privilegios real."
         )
-    return CheckStatus.PASS, "owner_is_staff.default=False -- fix de escalacion de privilegios (E2E-03) vigente."
+    return (
+        CheckStatus.PASS,
+        "owner_is_staff.default=False -- fix de escalacion de privilegios (E2E-03) vigente.",
+    )
 
 
 @register_check("TEN-03-trial-enforcement", "TENANT", Severity.P0, "tenants")
@@ -260,20 +340,30 @@ def check_trial_enforcement_wired():
     except Exception as exc:
         return CheckStatus.BLOCKER, f"No se pudo inspeccionar TenantSecurityMiddleware: {exc}"
     if "reconcile_tenant_lifecycle" not in src:
-        return CheckStatus.BLOCKER, "TenantSecurityMiddleware ya no invoca reconcile_tenant_lifecycle() -- el bloqueo por trial vencido podria haberse desconectado."
-    return CheckStatus.PASS, "TenantSecurityMiddleware invoca reconcile_tenant_lifecycle() en cada request (verificado en vivo, docs/console/TENANT_E2E_TEST.md)."
+        return (
+            CheckStatus.BLOCKER,
+            "TenantSecurityMiddleware ya no invoca reconcile_tenant_lifecycle() -- el bloqueo por trial vencido podria haberse desconectado.",
+        )
+    return (
+        CheckStatus.PASS,
+        "TenantSecurityMiddleware invoca reconcile_tenant_lifecycle() en cada request (verificado en vivo, docs/console/TENANT_E2E_TEST.md).",
+    )
 
 
 # ---------------------------------------------------------------------------
 # INFRA
 # ---------------------------------------------------------------------------
 
+
 @register_check("INFRA-01-services-up", "INFRA", Severity.P1, "devops")
 def check_docker_services():
     try:
         result = subprocess.run(
             ["docker", "compose", "ps", "--format", "json"],
-            cwd=_REPO_ROOT, capture_output=True, text=True, timeout=30,
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
     except FileNotFoundError:
         return CheckStatus.WARN, (
@@ -287,7 +377,8 @@ def check_docker_services():
     if result.returncode != 0:
         return CheckStatus.WARN, f"docker compose ps fallo: {result.stderr[-500:]}"
     import json as _json
-    lines = [l for l in result.stdout.strip().splitlines() if l.strip()]
+
+    lines = [line for line in result.stdout.strip().splitlines() if line.strip()]
     unhealthy = []
     for line in lines:
         try:
@@ -328,6 +419,7 @@ def check_tls_dns():
 # ---------------------------------------------------------------------------
 # BACKUP
 # ---------------------------------------------------------------------------
+
 
 @register_check("BAK-01-commands-exist", "BACKUP", Severity.P1, "devops")
 def check_backup_commands_exist():
@@ -391,7 +483,10 @@ def check_pg_client_server_version_match():
     asumir que coinciden."""
     try:
         result = subprocess.run(
-            ["pg_dump", "--version"], capture_output=True, text=True, timeout=10,
+            ["pg_dump", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
     except FileNotFoundError:
         return CheckStatus.WARN, (
@@ -424,12 +519,16 @@ def check_pg_client_server_version_match():
             "major). Fijar postgresql-client-{server_major} en el Dockerfile de la imagen que "
             "ejecuta backup_tenant/restore_tenant. Ver docs/production/BACKUP_RESTORE_RUNBOOK.md."
         )
-    return CheckStatus.PASS, f"pg_dump/pg_restore cliente v{client_major} coincide con servidor Postgres v{server_major}."
+    return (
+        CheckStatus.PASS,
+        f"pg_dump/pg_restore cliente v{client_major} coincide con servidor Postgres v{server_major}.",
+    )
 
 
 # ---------------------------------------------------------------------------
 # OBSERVABILITY
 # ---------------------------------------------------------------------------
+
 
 @register_check("OBS-01-health-endpoint", "OBSERVABILITY", Severity.P1, "core")
 def check_health_endpoint():
@@ -459,6 +558,7 @@ def check_liveness_readiness_split():
 # DOCUMENTATION
 # ---------------------------------------------------------------------------
 
+
 @register_check("DOC-01-core-docs-exist", "DOCUMENTATION", Severity.P2, "core")
 def check_core_docs_exist():
     required = ["AGENTS.md", "MEMORY.md", "CLAUDE.md"]
@@ -471,6 +571,7 @@ def check_core_docs_exist():
 # ---------------------------------------------------------------------------
 # FISCAL / EXTERNAL
 # ---------------------------------------------------------------------------
+
 
 @register_check("FISCAL-01-dian-transmission", "FISCAL", Severity.P0, "facturas")
 def check_dian_transmission():

@@ -9,10 +9,10 @@ Caso de PARIDAD (no divergencia), igual que compras/bancos: toda la app ya
 hereda SintelDSVMixin y usa self.get_empresa_id() directamente - la misma
 SSoT que OrganizationalContext.resolve() duplica (Fase 2).
 """
+
 from apps.tenant.contabilidad.api.viewsets import CuentaContableViewSet
 from apps.tenant.contabilidad.models import CuentaContable
 from apps.tenant.contabilidad.services.selectors import CuentaContableSelector
-from apps.tenant.core.services.organizational_context import OrganizationalContext
 from apps.tenant.perfil.models import TenantProfile
 from tests.tenant.base_test import SintelTenantTestCase
 
@@ -23,14 +23,23 @@ class ContabilidadOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9 Contabilidad", nit="900000990", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9 Contabilidad",
+            nit="900000990",
+            direccion="Calle 1",
         )
         self.cuenta = CuentaContable.objects.create(
-            empresa=self.empresa, codigo="1105-F9", nombre="Caja Fase9", tipo="ACTIVO",
+            empresa=self.empresa,
+            codigo="1105-F9",
+            nombre="Caja Fase9",
+            tipo="ACTIVO",
         )
 
-    def test_cuentacontableviewset_get_organizational_context_matches_the_ssot_it_already_used(self):
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+    def test_cuentacontableviewset_get_organizational_context_matches_the_ssot_it_already_used(
+        self,
+    ):
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         from rest_framework.test import APIRequestFactory
         from rest_framework_simplejwt.authentication import JWTAuthentication

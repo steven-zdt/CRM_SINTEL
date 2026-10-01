@@ -24,6 +24,7 @@ en vez de eliminar la cobertura. El bloqueo real (flag en False, el
 comportamiento que corre hoy en produccion) tiene su propio test en
 `test_bloqueo_emision_fiscal.py`.
 """
+
 from decimal import Decimal
 from unittest import mock
 
@@ -37,7 +38,8 @@ from apps.tenant.ventas.services.crud_service import VentaCRUDService
 from tests.tenant.base_test import SintelTenantTestCase
 
 _EMISION_HABILITADA = mock.patch(
-    "apps.tenant.ventas.services.business_service.EMISION_FISCAL_VENTA_AUTORIZADA", True,
+    "apps.tenant.ventas.services.business_service.EMISION_FISCAL_VENTA_AUTORIZADA",
+    True,
 )
 
 
@@ -45,23 +47,36 @@ class VentaFacturaIdempotenciaComercial04Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Comercial-04", nit="900000902", direccion="Calle C04",
+            razon_social="Empresa Comercial-04",
+            nit="900000902",
+            direccion="Calle C04",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Sede C04")
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="C04-CLI-1", razon_social="Cliente C04 SAS",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="C04-CLI-1",
+            razon_social="Cliente C04 SAS",
             regimen_tributario="ORDINARIO",
         )
         self.producto = Producto.objects.create(
-            empresa=self.empresa, codigo="PROD-C04", nombre="Producto C04",
-            stock_actual=Decimal("0"), costo_promedio=Decimal("10.00"), precio_venta=Decimal("40.00"),
+            empresa=self.empresa,
+            codigo="PROD-C04",
+            nombre="Producto C04",
+            stock_actual=Decimal("0"),
+            costo_promedio=Decimal("10.00"),
+            precio_venta=Decimal("40.00"),
         )
         from apps.tenant.inventario.services.business_service import KardexService
+
         KardexService.registrar_movimiento(
-            empresa_id=self.empresa.id, producto_id=self.producto.id,
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
             tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
-            cantidad=Decimal("50"), costo_unitario=Decimal("10.00"), sede_id=self.sede.id,
+            cantidad=Decimal("50"),
+            costo_unitario=Decimal("10.00"),
+            sede_id=self.sede.id,
         )
 
     def _crear_venta_borrador(self, cantidad="3"):
@@ -71,13 +86,15 @@ class VentaFacturaIdempotenciaComercial04Tests(SintelTenantTestCase):
             empresa=self.empresa,
             cliente=self.cliente,
             data={"fecha_emision": "2026-06-10"},
-            items_data=[{
-                "descripcion": "Producto C04",
-                "cantidad": cantidad,
-                "precio_unitario": "40.00",
-                "porcentaje_iva": "19",
-                "producto_id": self.producto.id,
-            }],
+            items_data=[
+                {
+                    "descripcion": "Producto C04",
+                    "cantidad": cantidad,
+                    "precio_unitario": "40.00",
+                    "porcentaje_iva": "19",
+                    "producto_id": self.producto.id,
+                }
+            ],
         )
 
     def _payload_desde_venta(self, venta):
@@ -113,10 +130,16 @@ class VentaFacturaIdempotenciaComercial04Tests(SintelTenantTestCase):
 
         self.assertTrue(ok, venta_resultado)
         self.assertEqual(code, 201)
-        self.assertEqual(venta_resultado.id, venta_id_original, "debe ser la MISMA fila, no una nueva")
+        self.assertEqual(
+            venta_resultado.id, venta_id_original, "debe ser la MISMA fila, no una nueva"
+        )
         self.assertEqual(venta_resultado.estado, Venta.Estado.FACTURADA_DIAN)
         self.assertIsNotNone(venta_resultado.factura_asociada_id)
-        self.assertEqual(Venta.objects.filter(empresa=self.empresa).count(), 1, "no debe quedar una segunda Venta huerfana")
+        self.assertEqual(
+            Venta.objects.filter(empresa=self.empresa).count(),
+            1,
+            "no debe quedar una segunda Venta huerfana",
+        )
         self.assertEqual(Factura.objects.filter(empresa=self.empresa).count(), 1)
 
     @_EMISION_HABILITADA
@@ -144,10 +167,15 @@ class VentaFacturaIdempotenciaComercial04Tests(SintelTenantTestCase):
         self.assertEqual(code2, 200, "reintento debe responder 200 (replay), no 201 (creacion)")
         self.assertEqual(venta2.id, venta1.id)
         self.assertEqual(Venta.objects.filter(empresa=self.empresa).count(), 1)
-        self.assertEqual(Factura.objects.filter(empresa=self.empresa).count(), 1, "no debe crear una segunda Factura")
+        self.assertEqual(
+            Factura.objects.filter(empresa=self.empresa).count(),
+            1,
+            "no debe crear una segunda Factura",
+        )
         self.assertEqual(
             MovimientoInventario.objects.filter(
-                empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
+                empresa=self.empresa,
+                tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
             ).count(),
             1,
             "no debe generar un segundo movimiento de salida de inventario",

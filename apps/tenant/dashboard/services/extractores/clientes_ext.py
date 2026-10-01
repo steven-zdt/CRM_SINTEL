@@ -2,6 +2,7 @@
 Extractor de Clientes para Dashboard — Pull Model.
 Usa ClienteSelector, no importa models.py directamente.
 """
+
 import logging
 
 from django.utils import timezone
@@ -12,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 class ClientesExtractor:
-
     @staticmethod
     def extraer_metricas(empresa_id: int) -> WidgetClientesDTO:
         try:
@@ -21,7 +21,7 @@ class ClientesExtractor:
             qs = ClienteSelector.get_cliente_list(empresa_id)
             total_clientes = qs.count()
             clientes_activos = qs.filter(activo=True).count()
-            personas_juridicas = qs.filter(tipo_persona='JURIDICA').count()
+            personas_juridicas = qs.filter(tipo_persona="JURIDICA").count()
             retenedores = qs.filter(es_retenedor=True).count()
 
             inicio_mes = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -39,5 +39,7 @@ class ClientesExtractor:
             # Hallazgo DASH-02 (mision UI/UX): un fallo real era indistinguible
             # de "0 clientes reales" en el KPI -- ahora queda en logs (ERROR
             # REAL -> ERROR EXPLICITO, nunca $0/0 silencioso).
-            logger.exception("ClientesExtractor: fallo calculando metricas (empresa_id=%s)", empresa_id)
+            logger.exception(
+                "ClientesExtractor: fallo calculando metricas (empresa_id=%s)", empresa_id
+            )
             return WidgetClientesDTO(0, 0, 0, 0, 0)

@@ -11,6 +11,7 @@ Arquitectura API-First:
 - Swagger UI: /api/docs/ (documentación interactiva)
 - ReDoc: /api/redoc/ (documentación alternativa)
 """
+
 from django.contrib import admin
 from django.contrib.auth import logout as auth_logout
 from django.http import HttpResponse, JsonResponse
@@ -61,76 +62,79 @@ def admin_logout_view(request):
     auth_logout(request)
     return redirect("/admin/login/")
 
+
 def health_view(request):
     """
     Endpoint de health check para Docker/Kubernetes.
-    
+
     Retorna 200 OK si la aplicación está funcionando correctamente.
     """
     from django.db import connection
+
     try:
         # Verificar conexión a BD
         connection.ensure_connection()
-        db_status = 'ok'
+        db_status = "ok"
     except Exception:
-        db_status = 'error'
-    
-    return JsonResponse({
-        'status': 'ok' if db_status == 'ok' else 'degraded',
-        'database': db_status,
-        'version': '1.0',
-    }, status=200 if db_status == 'ok' else 503)
+        db_status = "error"
+
+    return JsonResponse(
+        {
+            "status": "ok" if db_status == "ok" else "degraded",
+            "database": db_status,
+            "version": "1.0",
+        },
+        status=200 if db_status == "ok" else 503,
+    )
 
 
 urlpatterns = [
     # Health check (para Docker/Kubernetes)
-    path('health', health_view, name='health'),
-    
+    path("health", health_view, name="health"),
     # Ruta raíz
-    path('', root_view, name='root'),
-
+    path("", root_view, name="root"),
     # Override de logout de admin para permitir GET en /admin/logout/
     # (debe ir ANTES de path('admin/', ...))
-    path('admin/logout/', admin_logout_view, name='admin-logout-safe'),
-    
+    path("admin/logout/", admin_logout_view, name="admin-logout-safe"),
     # .well-known routes (deben ir antes de otras rutas)
-    path('.well-known/appspecific/com.chrome.devtools.json', chrome_devtools, name='chrome-devtools'),
-    
+    path(
+        ".well-known/appspecific/com.chrome.devtools.json", chrome_devtools, name="chrome-devtools"
+    ),
     # Silenciar errores 404 comunes
-    path('robots.txt', lambda r: HttpResponse('User-agent: *\nDisallow:', content_type='text/plain')),
-    path('sitemap.xml', lambda r: HttpResponse('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>', content_type='application/xml')),
-    
+    path(
+        "robots.txt", lambda r: HttpResponse("User-agent: *\nDisallow:", content_type="text/plain")
+    ),
+    path(
+        "sitemap.xml",
+        lambda r: HttpResponse(
+            '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>',
+            content_type="application/xml",
+        ),
+    ),
     # Login: redirigir al admin login
-    path('login/', lambda request: redirect('admin:login'), name='login'),
-    path('logout/', lambda request: redirect('admin:logout'), name='logout'),
-    
-    path('admin/', admin.site.urls),
-    
+    path("login/", lambda request: redirect("admin:login"), name="login"),
+    path("logout/", lambda request: redirect("admin:logout"), name="logout"),
+    path("admin/", admin.site.urls),
     # Autenticación JWT (disponible en todos los esquemas)
     # Endpoints: /api/token/ (login), /api/token/refresh/ (refresh), /api/token/verify/ (verify)
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('api/token/verify/', LoggedTokenVerifyView.as_view(), name='token_verify'),
-    
+    path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("api/token/verify/", LoggedTokenVerifyView.as_view(), name="token_verify"),
     # APIs REST (por tenant)
     # Las rutas de API se registran automáticamente desde cada app/api/urls.py
-    path('api/v1/', include(('config.api_urls', 'api'), namespace='v1')),
-    
+    path("api/v1/", include(("config.api_urls", "api"), namespace="v1")),
     # APIs REST públicas (solo en esquema public)
-    path('api/public/v1/', include('config.public_api_urls')),
+    path("api/public/v1/", include("config.public_api_urls")),
     # Landing page y tenants (esquema público)
-    path('', include('apps.public.tenants.urls')),
-    
+    path("", include("apps.public.tenants.urls")),
     # Core público (rutas básicas como workspace/, favicon.ico)
-    path('', include('apps.public.core.urls')),
-    
+    path("", include("apps.public.core.urls")),
     # Consola de administración pública (solo en esquema public, requiere staff)
-    path('console/', include('apps.public.console.urls')),
-    path('console/impuestos/', include('apps.public.impuestos.dashboard.urls_dashboard')),
-    
+    path("console/", include("apps.public.console.urls")),
+    path("console/impuestos/", include("apps.public.impuestos.dashboard.urls_dashboard")),
     # OpenAPI Schema y Documentación (drf-spectacular)
     # Docs: https://drf-spectacular.readthedocs.io/
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 ]

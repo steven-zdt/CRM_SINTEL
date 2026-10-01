@@ -12,6 +12,7 @@ No duplica el parser UBL ni el pipeline de mail existentes: reutiliza
 apps.services.document_ingest (deteccion/normalizacion) y
 apps.services.maildigester (canal MAIL) tal como estan.
 """
+
 from apps.services.document_intake.contracts import (
     DocumentHandler,
     DocumentSource,

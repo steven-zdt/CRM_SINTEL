@@ -18,6 +18,7 @@ no un usuario humano -- y el POST tiene efecto de escritura real
 (persistir una Factura), asi que ademas de status_code se verifica que
 NO se cree ningun registro en el tenant equivocado.
 """
+
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -34,7 +35,7 @@ UPLOAD_URL = "/api/v1/core/_apps/facturas/upload-document/"
 
 # Mismo XML minimo valido que test_documentos_upload_api.py -- probado
 # contra el pipeline real (document_ingest_validation_failed lo acepta).
-XML_VALIDO = b'''
+XML_VALIDO = b"""
 <Invoice xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2">
   <cbc:ID>N8N-SEC-001</cbc:ID>
   <cbc:UUID>N8NSEC0001ABCDEFGHIJKLMN</cbc:UUID>
@@ -81,7 +82,7 @@ XML_VALIDO = b'''
     </cac:Price>
   </cac:InvoiceLine>
 </Invoice>
-'''
+"""
 
 
 def _crear_identidad_n8n(tenant):

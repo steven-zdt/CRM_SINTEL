@@ -15,6 +15,7 @@ que el pipeline DIAN + salida de inventario sigue funcionando
 correctamente internamente, no el comportamiento de produccion actual
 (ver `test_bloqueo_emision_fiscal.py` para ese).
 """
+
 from datetime import date
 from decimal import Decimal
 from unittest import mock
@@ -37,46 +38,66 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa F23", nit="900000901", direccion="Calle F23",
+            razon_social="Empresa F23",
+            nit="900000901",
+            direccion="Calle F23",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Sede F23")
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="F23-CLI-1", razon_social="Cliente F23 SAS",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="F23-CLI-1",
+            razon_social="Cliente F23 SAS",
             regimen_tributario="ORDINARIO",
         )
         self.producto = Producto.objects.create(
-            empresa=self.empresa, codigo="PROD-F23", nombre="Producto F23",
-            stock_actual=Decimal("0"), costo_promedio=Decimal("15.00"), precio_venta=Decimal("50.00"),
+            empresa=self.empresa,
+            codigo="PROD-F23",
+            nombre="Producto F23",
+            stock_actual=Decimal("0"),
+            costo_promedio=Decimal("15.00"),
+            precio_venta=Decimal("50.00"),
         )
         self.servicio = Servicio.objects.create(
-            empresa=self.empresa, codigo="SERV-F23", nombre="Servicio F23", precio_venta=Decimal("30.00"),
+            empresa=self.empresa,
+            codigo="SERV-F23",
+            nombre="Servicio F23",
+            precio_venta=Decimal("30.00"),
         )
         # Stock inicial real via KardexService (mismo mecanismo ya probado en F21/F22).
         from apps.tenant.inventario.services.business_service import KardexService
+
         KardexService.registrar_movimiento(
-            empresa_id=self.empresa.id, producto_id=self.producto.id,
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
             tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
-            cantidad=Decimal("100"), costo_unitario=Decimal("15.00"), sede_id=self.sede.id,
+            cantidad=Decimal("100"),
+            costo_unitario=Decimal("15.00"),
+            sede_id=self.sede.id,
         )
         self.producto.refresh_from_db()
 
     def _payload(self, cantidad_producto="5", incluir_servicio=False, cantidad_servicio="1"):
-        items = [{
-            "descripcion": "Venta Producto F23",
-            "cantidad": cantidad_producto,
-            "precio_unitario": "50.00",
-            "porcentaje_iva": "19",
-            "producto_id": str(self.producto.uuid),
-        }]
+        items = [
+            {
+                "descripcion": "Venta Producto F23",
+                "cantidad": cantidad_producto,
+                "precio_unitario": "50.00",
+                "porcentaje_iva": "19",
+                "producto_id": str(self.producto.uuid),
+            }
+        ]
         if incluir_servicio:
-            items.append({
-                "descripcion": "Venta Servicio F23",
-                "cantidad": cantidad_servicio,
-                "precio_unitario": "30.00",
-                "porcentaje_iva": "0",
-                "servicio_id": str(self.servicio.uuid),
-            })
+            items.append(
+                {
+                    "descripcion": "Venta Servicio F23",
+                    "cantidad": cantidad_servicio,
+                    "precio_unitario": "30.00",
+                    "porcentaje_iva": "0",
+                    "servicio_id": str(self.servicio.uuid),
+                }
+            )
         return {
             "cliente": str(self.cliente.uuid),
             "fecha_emision": "2026-06-05",
@@ -86,7 +107,9 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
     def _facturar(self, **payload_kwargs):
         payload = self._payload(**payload_kwargs)
         return VentaBusinessService.procesar_y_facturar_venta(
-            empresa=self.empresa, payload=payload, sede_id=self.sede.id,
+            empresa=self.empresa,
+            payload=payload,
+            sede_id=self.sede.id,
         )
 
     # ---- Movimiento real ----
@@ -100,7 +123,8 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
 
         item = venta.items.get(producto=self.producto)
         mov = MovimientoInventario.objects.get(
-            empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
+            empresa=self.empresa,
+            tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
         )
         self.assertEqual(mov.cantidad, Decimal("5.000"))
         self.assertEqual(mov.documento_origen_app, "ventas")
@@ -115,7 +139,8 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
         ok, venta, code = self._facturar(cantidad_producto="2")
         self.assertTrue(ok, venta)
         mov = MovimientoInventario.objects.get(
-            empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
+            empresa=self.empresa,
+            tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
         )
         # costo_promedio=15.00, NO precio_unitario=50.00 ni precio_venta=50.00
         self.assertEqual(mov.costo_unitario, Decimal("15.00"))
@@ -129,7 +154,8 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
         # generar SALIDA_VENTA, el de servicio ninguno.
         self.assertEqual(
             MovimientoInventario.objects.filter(
-                empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
+                empresa=self.empresa,
+                tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
             ).count(),
             1,
         )
@@ -156,29 +182,43 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
 
     def test_multi_item_genera_un_movimiento_por_cada_producto_y_ninguno_para_servicio(self):
         producto_b = Producto.objects.create(
-            empresa=self.empresa, codigo="PROD-F23-B", nombre="Producto F23 B",
-            stock_actual=Decimal("0"), costo_promedio=Decimal("8.00"),
+            empresa=self.empresa,
+            codigo="PROD-F23-B",
+            nombre="Producto F23 B",
+            stock_actual=Decimal("0"),
+            costo_promedio=Decimal("8.00"),
         )
         from apps.tenant.inventario.services.business_service import KardexService
+
         KardexService.registrar_movimiento(
-            empresa_id=self.empresa.id, producto_id=producto_b.id,
+            empresa_id=self.empresa.id,
+            producto_id=producto_b.id,
             tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
-            cantidad=Decimal("50"), costo_unitario=Decimal("8.00"),
+            cantidad=Decimal("50"),
+            costo_unitario=Decimal("8.00"),
         )
 
         payload = self._payload(cantidad_producto="4", incluir_servicio=True)
-        payload["items"].append({
-            "descripcion": "Producto B", "cantidad": "6", "precio_unitario": "20.00",
-            "porcentaje_iva": "19", "producto_id": str(producto_b.uuid),
-        })
+        payload["items"].append(
+            {
+                "descripcion": "Producto B",
+                "cantidad": "6",
+                "precio_unitario": "20.00",
+                "porcentaje_iva": "19",
+                "producto_id": str(producto_b.uuid),
+            }
+        )
         ok, venta, code = VentaBusinessService.procesar_y_facturar_venta(
-            empresa=self.empresa, payload=payload, sede_id=self.sede.id,
+            empresa=self.empresa,
+            payload=payload,
+            sede_id=self.sede.id,
         )
         self.assertTrue(ok, venta)
         self.assertEqual(venta.items.count(), 3)  # producto A, servicio, producto B
         self.assertEqual(
             MovimientoInventario.objects.filter(
-                empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
+                empresa=self.empresa,
+                tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
             ).count(),
             2,
         )
@@ -189,13 +229,16 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
         ok, venta, code = self._facturar(cantidad_producto="3")
         self.assertTrue(ok, venta)
         qs_salida = MovimientoInventario.objects.filter(
-            empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
+            empresa=self.empresa,
+            tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
         )
         self.assertEqual(qs_salida.count(), 1)
         # Reintento directo del paso interno (simula timeout/retry/reprocesamiento
         # sobre la misma Venta ya facturada) -- no debe duplicar el movimiento.
         VentaBusinessService._generar_salida_inventario(
-            venta=venta, empresa_id=self.empresa.id, sede_id=self.sede.id,
+            venta=venta,
+            empresa_id=self.empresa.id,
+            sede_id=self.sede.id,
         )
         self.assertEqual(qs_salida.count(), 1)
 
@@ -212,7 +255,8 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
         venta.refresh_from_db()
         self.assertEqual(venta.estado, Venta.Estado.FACTURADA_DIAN)  # no cambio a ANULADA
         self.assertEqual(
-            MovimientoInventario.objects.filter(empresa=self.empresa).count(), movimientos_antes,
+            MovimientoInventario.objects.filter(empresa=self.empresa).count(),
+            movimientos_antes,
         )  # ningun movimiento compensatorio se genero (no hay mecanismo, y no debe haberlo)
 
     # ---- E2E: Venta -> SALIDA_VENTA -> ExtractorInventario (F22) -> AsientoContable ----
@@ -220,8 +264,11 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
     def test_e2e_venta_facturada_hasta_asiento_contable_via_extractor_f22(self):
         hoy = timezone.localdate()
         PeriodoContable.objects.create(
-            empresa=self.empresa, periodo=hoy.strftime("%Y-%m"),
-            fecha_inicio=date(hoy.year, 1, 1), fecha_fin=date(hoy.year, 12, 31), estado="ABIERTO",
+            empresa=self.empresa,
+            periodo=hoy.strftime("%Y-%m"),
+            fecha_inicio=date(hoy.year, 1, 1),
+            fecha_fin=date(hoy.year, 12, 31),
+            estado="ABIERTO",
         )
         # Reglas para SALIDA_INVENTARIO_VENTA (lo que este test ejercita) y
         # tambien para AJUSTE_INVENTARIO (el ENTRADA_AJUSTE que setUp() ya
@@ -237,8 +284,11 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
             ("AJUSTE_INVENTARIO", "INGRESO_AJUSTE_INVENTARIO", "425050"),
         ):
             ReglaContable.objects.create(
-                empresa=self.empresa, tipo_transaccion=tipo_tx, concepto=concepto,
-                cuenta_codigo=cuenta, activo=True,
+                empresa=self.empresa,
+                tipo_transaccion=tipo_tx,
+                concepto=concepto,
+                cuenta_codigo=cuenta,
+                activo=True,
             )
 
         ok, venta, code = self._facturar(cantidad_producto="4")
@@ -251,9 +301,11 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
         self.assertEqual(resultado["errores"], [])
 
         asiento = AsientoContable.objects.get(
-            empresa=self.empresa, documento_origen_app="inventario",
+            empresa=self.empresa,
+            documento_origen_app="inventario",
             documento_origen_id=MovimientoInventario.objects.get(
-                empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
+                empresa=self.empresa,
+                tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
             ).id,
         )
         self.assertEqual(asiento.documento_origen_modelo, "MovimientoInventario")
@@ -261,6 +313,7 @@ class VentaInventarioF23Tests(SintelTenantTestCase):
         self.assertEqual(asiento.debe_total, Decimal("60.00"))  # 4 unidades * costo_promedio 15.00
 
         mov = MovimientoInventario.objects.get(
-            empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
+            empresa=self.empresa,
+            tipo=MovimientoInventario.TipoMovimiento.SALIDA_VENTA,
         )
         self.assertEqual(asiento.documento_origen_id, mov.id)

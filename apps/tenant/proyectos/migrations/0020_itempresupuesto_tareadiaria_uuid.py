@@ -4,24 +4,24 @@
 # default=uuid.uuid4 (callable) Django genera un valor unico por fila existente.
 
 import uuid
+
 from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('tenant_proyectos', '0019_proyecto_sede'),
+        ("tenant_proyectos", "0019_proyecto_sede"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='itempresupuestoproyecto',
-            name='uuid',
+            model_name="itempresupuestoproyecto",
+            name="uuid",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
         migrations.AddField(
-            model_name='tareadiariaproyecto',
-            name='uuid',
+            model_name="tareadiariaproyecto",
+            name="uuid",
             field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True),
         ),
     ]

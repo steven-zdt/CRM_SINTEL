@@ -17,6 +17,7 @@ del usuario autenticado (nunca de un valor arbitrario), que la tool
 usa ese empresa_id (no otro) al consultar, y que el enforcement de
 flags/permisos del AIEngine es real, no solo documentado.
 """
+
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 
@@ -43,19 +44,27 @@ class BuscarClienteToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA UNICA S.A.S.", nit="900111111", direccion="Calle 1",
+            razon_social="EMPRESA UNICA S.A.S.",
+            nit="900111111",
+            direccion="Calle 1",
         )
         self.user = User.objects.create_user(email="user@test.local", password="testpass123")
         self.profile = TenantProfile.objects.create(user=self.user, empresa=self.empresa)
         # tenant_profile es un related_name real (OneToOne) -- disponible en self.user.tenant_profile.
 
         Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="800000001", razon_social="Cliente Real Uno",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="800000001",
+            razon_social="Cliente Real Uno",
         )
         Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="800000002", razon_social="Cliente Real Dos",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="800000002",
+            razon_social="Cliente Real Dos",
         )
 
     @override_settings(**AI_FLAGS_ON)
@@ -97,8 +106,13 @@ class BuscarClienteToolTests(SintelTenantTestCase):
 
         assert result.status == "VALIDATION_ERROR"
 
+    @override_settings(AI_ENABLED=False)
     def test_buscar_cliente_bloqueado_si_ai_engine_deshabilitado(self):
-        """Fase 63: sin AI_ENABLED, ninguna tool corre, sin importar permisos del usuario."""
+        """Fase 63: sin AI_ENABLED, ninguna tool corre, sin importar permisos
+        del usuario. Hallazgo real (2026-09-25): antes de este override, el
+        test dependia de que AI_ENABLED sea False por defecto -- falla en
+        cualquier entorno con AI_ENABLED=true en .env (este mismo). Ver
+        docs/mcp/MCP_RELEASE_GATE.md."""
         request = _FakeRequest(user=self.user, tenant=self.tenant)
 
         result = run_tool("buscar_cliente", request)

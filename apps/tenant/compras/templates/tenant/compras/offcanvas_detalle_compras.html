@@ -153,6 +153,47 @@
         </div>
         {% endif %}
 
+        {# ── Sección: Requisiciones de origen vinculadas ────────────── #}
+        {# Vinculacion MANUAL de Requisiciones existentes (con saldo       #}
+        {# disponible) ADICIONALES a las exigidas al crear la Orden --     #}
+        {# nunca reutiliza una Requisicion ya sin saldo (consumida por     #}
+        {# otra Orden) ni permite duplicar el vinculo en esta misma Orden. #}
+        <div class="section-divider" id="compra-requisicion-widget" data-compra-uuid="{{ instance.uuid }}">
+            <p class="section-title">Requisiciones de Origen</p>
+
+            <div id="compra-requisicion-lista">
+                {% for vinculo in instance.requisiciones_vinculadas.all %}
+                <div class="d-flex align-items-center justify-content-between border rounded p-2 mb-2">
+                    <div>
+                        <div class="fw-semibold">{{ vinculo.requisicion.numero_documento }}</div>
+                        <div class="text-muted small">Monto asignado: ${{ vinculo.monto_asignado }}</div>
+                    </div>
+                    {% if instance.estado == 'BORRADOR' or instance.estado == 'PENDIENTE' %}
+                    <button type="button" class="btn btn-outline-danger btn-sm" data-compra-requisicion-action="quitar" data-requisicion-uuid="{{ vinculo.requisicion.uuid }}" data-requisicion-numero="{{ vinculo.requisicion.numero_documento }}">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <div class="text-muted small mb-2">Sin requisiciones vinculadas.</div>
+                {% endfor %}
+            </div>
+
+            {% if instance.estado == 'BORRADOR' or instance.estado == 'PENDIENTE' %}
+            <div id="compra-requisicion-buscador">
+                <button type="button" class="btn btn-outline-primary btn-sm mb-2" data-compra-requisicion-action="mostrar-buscador">
+                    <i class="bi bi-search me-1"></i>Vincular requisición existente
+                </button>
+                <div id="compra-requisicion-buscador-panel" class="d-none border rounded p-2 bg-light">
+                    <input type="text" class="form-control form-control-sm mb-2"
+                           id="compra-requisicion-buscar-input"
+                           placeholder="Buscar por numero de requisición...">
+                    <div id="compra-requisicion-buscar-resultados" class="small"></div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
         {# ── Sección: Factura de compra asociada (FACTURAS-VENTAS-COMPRAS-01) #}
         {# Asociacion MANUAL de una Factura ya persistida en el modulo        #}
         {# Facturas -- nunca crea ni emite una Factura nueva.                 #}
@@ -171,6 +212,18 @@
                         </div>
                         <span class="badge bg-success">Vinculada</span>
                     </div>
+                    {# PLAN_VINCULAR_FACTURA_COMPRA_COMPRAS Fase 32: solo informativo -- nunca corrige nada automaticamente. #}
+                    {% with diferencia=instance.factura_diferencia %}
+                    {% if diferencia is not None and diferencia != 0 %}
+                    <div class="mt-2 small {% if diferencia < 0 %}text-warning-emphasis{% else %}text-danger-emphasis{% endif %}">
+                        {% if diferencia < 0 %}
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>Factura inferior a la Orden (diferencia: ${{ diferencia }})
+                        {% else %}
+                            <i class="bi bi-exclamation-octagon-fill me-1"></i>Factura supera el total de la Orden (diferencia: +${{ diferencia }})
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% endwith %}
                 </div>
                 {% if instance.estado != 'ANULADA' %}
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-compra-factura-action="cambiar">
@@ -188,7 +241,7 @@
                 <div id="compra-factura-buscador-panel" class="d-none border rounded p-2 bg-light">
                     <input type="text" class="form-control form-control-sm mb-2"
                            id="compra-factura-buscar-input"
-                           placeholder="Buscar por numero, CUFE o proveedor...">
+                           placeholder="Buscar por numero de factura o proveedor...">
                     <div id="compra-factura-buscar-resultados" class="small"></div>
                 </div>
             </div>

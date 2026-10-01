@@ -10,13 +10,14 @@ Cada tag renderiza EXACTAMENTE el markup ya identificado en
 documentacion/F33_SHARED_UI_INVENTORY.md -- no se cambia ningun pixel de
 lo que ya funciona, solo se deja de copiar-pegar.
 """
+
 from django import template
 
 register = template.Library()
 
 
-@register.inclusion_tag('tenant/core/partials/ui/kpi_card.html')
-def sintel_kpi_card(icon, color, value, label, col_class='col-6 col-md-4 col-xl-2', value_id=None):
+@register.inclusion_tag("tenant/core/partials/ui/kpi_card.html")
+def sintel_kpi_card(icon, color, value, label, col_class="col-6 col-md-4 col-xl-2", value_id=None):
     """
     Card de metrica (icono en circulo + numero + label), F33.0 §1 --
     copiada verbatim en 7 archivos antes de esta consolidacion.
@@ -29,16 +30,16 @@ def sintel_kpi_card(icon, color, value, label, col_class='col-6 col-md-4 col-xl-
     recibirlo ya resuelto en el context del render server-side.
     """
     return {
-        'icon': icon,
-        'color': color,
-        'value': value,
-        'label': label,
-        'col_class': col_class,
-        'value_id': value_id,
+        "icon": icon,
+        "color": color,
+        "value": value,
+        "label": label,
+        "col_class": col_class,
+        "value_id": value_id,
     }
 
 
-@register.inclusion_tag('tenant/core/partials/ui/empty_state.html')
+@register.inclusion_tag("tenant/core/partials/ui/empty_state.html")
 def sintel_empty_state(entity_label, data_attr=None):
     """
     Estado vacio (icono bi-inbox + texto), F33.0 §3b -- patron hand-rolled
@@ -47,6 +48,6 @@ def sintel_empty_state(entity_label, data_attr=None):
     Uso: {% sintel_empty_state "No hay contactos registrados" data_attr="contactos" %}
     """
     return {
-        'entity_label': entity_label,
-        'data_attr': data_attr,
+        "entity_label": entity_label,
+        "data_attr": data_attr,
     }

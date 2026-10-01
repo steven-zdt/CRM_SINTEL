@@ -2,6 +2,7 @@
 FISCAL-02A: MockTransportAdapter -- simulacion controlada, CERO conexion
 externa. Puro Python, sin DB (unittest.TestCase sin pytest.mark.django_db).
 """
+
 import unittest
 
 from apps.tenant.core.dian import ElectronicDocument, MockTransportAdapter
@@ -9,8 +10,11 @@ from apps.tenant.core.dian import ElectronicDocument, MockTransportAdapter
 
 def _documento(tracking_key="cufe-mock-1") -> ElectronicDocument:
     return ElectronicDocument(
-        document_type="Invoice", numero="FE-MOCK-1", tracking_key=tracking_key,
-        signed_xml=b"<Invoice/>", attached_document=b"<AttachedDocument/>",
+        document_type="Invoice",
+        numero="FE-MOCK-1",
+        tracking_key=tracking_key,
+        signed_xml=b"<Invoice/>",
+        attached_document=b"<AttachedDocument/>",
     )
 
 

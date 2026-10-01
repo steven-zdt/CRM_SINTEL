@@ -5,6 +5,7 @@ generacion dinamica de tools desde el ORM (eso violaria Regla
 Absoluta 1/4: cada tool se declara a mano, semantica, con metadata de
 riesgo explicita).
 """
+
 from __future__ import annotations
 
 from .base import BaseTool

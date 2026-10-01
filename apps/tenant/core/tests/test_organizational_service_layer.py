@@ -4,13 +4,20 @@ Tests de Organizational Service Layer (Fase 8, proyecto OCF).
 Prueba los helpers de resolucion y el adaptador de demostracion contra
 OrdenCompraBusinessService real (compras, ADR-003) - no mocks.
 """
+
+from datetime import date, timedelta
+
 from apps.tenant.compras.models import PlantillaOrdenCompra
+from apps.tenant.compras.requisiciones.services.business_service import (
+    RequisicionCompraBusinessService,
+)
 from apps.tenant.core.services.organizational_context import OrganizationalContext
 from apps.tenant.core.services.organizational_service_layer import (
     crear_orden_compra_desde_contexto,
     resolve_empresa_and_sede,
     resolve_perfil,
 )
+from apps.tenant.cotizaciones.models import Cotizacion
 from apps.tenant.empresa.models import Empresa, Sede
 from apps.tenant.perfil.models import TenantProfile
 from apps.tenant.proveedores.models import Proveedor
@@ -21,25 +28,46 @@ class OrganizationalServiceLayerTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase8", nit="900000888", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase8",
+            nit="900000888",
+            direccion="Calle 1",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Principal")
         self.perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
         )
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor Fase8", numero_documento="321", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor Fase8",
+            numero_documento="321",
+            tipo_documento="NIT",
         )
         self.plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla Fase8", prefijo="OC8",
-            rango_desde=1, rango_hasta=100, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla Fase8",
+            prefijo="OC8",
+            rango_desde=1,
+            rango_hasta=100,
+            consecutivo_actual=1,
+            vigente=True,
         )
 
     def _context(self) -> OrganizationalContext:
         return OrganizationalContext(
-            tenant_schema="test", tenant_id=1, empresa_id=self.empresa.id, sede_id=self.sede.id,
-            area_id=None, user_id=self.user.id, perfil_id=self.perfil.id, rol="ADMIN",
-            alcance="EMPRESA", timezone="UTC", configuracion={},
+            tenant_schema="test",
+            tenant_id=1,
+            empresa_id=self.empresa.id,
+            sede_id=self.sede.id,
+            area_id=None,
+            user_id=self.user.id,
+            perfil_id=self.perfil.id,
+            rol="ADMIN",
+            alcance="EMPRESA",
+            timezone="UTC",
+            configuracion={},
         )
 
     def test_resolve_empresa_and_sede_returns_real_instances(self):
@@ -49,9 +77,17 @@ class OrganizationalServiceLayerTests(SintelTenantTestCase):
 
     def test_resolve_empresa_and_sede_returns_none_sede_when_context_has_none(self):
         context = OrganizationalContext(
-            tenant_schema="test", tenant_id=1, empresa_id=self.empresa.id, sede_id=None,
-            area_id=None, user_id=self.user.id, perfil_id=None, rol="ADMIN",
-            alcance="EMPRESA", timezone="UTC", configuracion={},
+            tenant_schema="test",
+            tenant_id=1,
+            empresa_id=self.empresa.id,
+            sede_id=None,
+            area_id=None,
+            user_id=self.user.id,
+            perfil_id=None,
+            rol="ADMIN",
+            alcance="EMPRESA",
+            timezone="UTC",
+            configuracion={},
         )
         empresa, sede = resolve_empresa_and_sede(context)
         self.assertEqual(empresa.id, self.empresa.id)
@@ -62,15 +98,59 @@ class OrganizationalServiceLayerTests(SintelTenantTestCase):
         self.assertEqual(perfil.id, self.perfil.id)
         self.assertEqual(perfil.rol, "ADMIN")
 
-    def test_crear_orden_compra_desde_contexto_creates_real_order_via_existing_business_service(self):
+    def test_crear_orden_compra_desde_contexto_creates_real_order_via_existing_business_service(
+        self,
+    ):
         """Prueba end-to-end: el adaptador de Fase 8 llama al Business
         Service YA EXISTENTE de compras (ADR-003) sin modificarlo, y el
         resultado es una OrdenCompra real, indistinguible de una creada
         llamando directamente crear_orden_compra()."""
+        # Toda OrdenCompra ahora requiere >= 1 Requisicion, sin excepcion
+        # posible (PLAN_CENTRO_APROBACIONES_DASHBOARD_COMPRAS.md #3) -- este
+        # test no es especifico de Requisiciones, pero ya no existe una via
+        # de excepcion para evitar fabricar esta cadena.
+        cotizacion = Cotizacion.objects.create(
+            empresa=self.empresa,
+            numero_cotizacion="COT-OCF-FASE8",
+            fecha_vencimiento=date.today() + timedelta(days=30),
+        )
+        ok, req, _code = RequisicionCompraBusinessService.crear_requisicion(
+            {
+                "fecha_necesidad": date.today() + timedelta(days=5),
+                "tipo": "BIEN",
+                "prioridad": "MEDIA",
+                "justificacion": "Requisicion de soporte para test OCF Fase8",
+                "observaciones": "",
+                "proyecto": None,
+                "responsable_aprobacion": None,
+                "cotizacion": cotizacion,
+            },
+            [
+                {
+                    "tipo_item": "BIEN",
+                    "descripcion": "Item req Fase8",
+                    "cantidad_solicitada": "2",
+                    "valor_unitario_estimado": "5000",
+                    "porcentaje_iva": "0",
+                    "unidad_medida": "UND",
+                }
+            ],
+            self.empresa,
+            self.sede,
+            self.perfil,
+        )
+        assert ok, req
+        RequisicionCompraBusinessService.enviar_a_aprobacion(str(req.uuid), self.empresa.id)
+        ok, req, _code = RequisicionCompraBusinessService.aprobar_requisicion(
+            str(req.uuid), self.empresa.id
+        )
+        assert ok, req
+
         order_data = {
             "plantilla_uuid": str(self.plantilla.uuid),
             "proveedor_uuid": str(self.proveedor.uuid),
             "fecha": "2026-08-07",
+            "requisiciones": [str(req.uuid)],
             "items": [{"descripcion": "Item Fase8", "cantidad": 2, "valor_unitario": 5000}],
         }
         success, orden, status_code = crear_orden_compra_desde_contexto(

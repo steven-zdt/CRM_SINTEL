@@ -6,28 +6,36 @@ Patron: 1-a-N items sobre Proyecto, con recalculo automatico de totales en cache
 
 Sigue patron de cotizaciones.services.item_service.
 """
+
 from decimal import Decimal
-from django.db import models, transaction
-from django.db.models import F, Sum
+
+from django.db import transaction
+from django.db.models import Sum
 from rest_framework.exceptions import ValidationError
 
-from apps.tenant.empresa.models import Empresa
-from ..models import Proyecto, ItemPresupuestoProyecto
-
+from ..models import ItemPresupuestoProyecto
 
 # ==============================================================================
 # SSoT: ITEM_FIELDS para Zero Waste (LIST/DETAIL)
 # ==============================================================================
 
 ITEM_FIELDS = [
-    'id', 'uuid', 'proyecto_id', 'empresa_id', 'categoria',
-    'descripcion', 'cantidad', 'valor_unitario', 'subtotal'
+    "id",
+    "uuid",
+    "proyecto_id",
+    "empresa_id",
+    "categoria",
+    "descripcion",
+    "cantidad",
+    "valor_unitario",
+    "subtotal",
 ]
 
 
 # ==============================================================================
 # CRUD SERVICE - Persistencia (v3.5.2)
 # ==============================================================================
+
 
 class PresupuestoCRUDService:
     """
@@ -52,6 +60,7 @@ class PresupuestoCRUDService:
 # BUSINESS SERVICE - Logica de Negocio (v3.5.2)
 # ==============================================================================
 
+
 class PresupuestoBusinessService:
     """
     Logica de negocio: validacion, calculos, y orquestacion.
@@ -68,7 +77,9 @@ class PresupuestoBusinessService:
         Calcula subtotal = cantidad x valor_unitario.
         Modifica item en memoria (no persiste).
         """
-        item.subtotal = (item.cantidad or Decimal('0.00')) * (item.valor_unitario or Decimal('0.00'))
+        item.subtotal = (item.cantidad or Decimal("0.00")) * (
+            item.valor_unitario or Decimal("0.00")
+        )
 
     @staticmethod
     def _recalcular_proyecto(proyecto):
@@ -81,26 +92,23 @@ class PresupuestoBusinessService:
         Persiste los 3 campos cache en BD.
         """
         total = ItemPresupuestoProyecto.objects.filter(
-            proyecto=proyecto,
-            empresa_id=proyecto.empresa_id
-        ).aggregate(
-            total=Sum('subtotal')
-        )['total'] or Decimal('0.00')
+            proyecto=proyecto, empresa_id=proyecto.empresa_id
+        ).aggregate(total=Sum("subtotal"))["total"] or Decimal("0.00")
 
         proyecto.costo_planeado_total = total
 
-        valor_contrato = proyecto.valor_contrato_proyectado or Decimal('0.00')
+        valor_contrato = proyecto.valor_contrato_proyectado or Decimal("0.00")
         utilidad = valor_contrato - total
         proyecto.utilidad_planeada = utilidad
 
-        if valor_contrato > Decimal('0.00'):
-            proyecto.margen_planeado = (utilidad / valor_contrato) * Decimal('100.00')
+        if valor_contrato > Decimal("0.00"):
+            proyecto.margen_planeado = (utilidad / valor_contrato) * Decimal("100.00")
         else:
-            proyecto.margen_planeado = Decimal('0.00')
+            proyecto.margen_planeado = Decimal("0.00")
 
-        proyecto.save(update_fields=[
-            'costo_planeado_total', 'utilidad_planeada', 'margen_planeado'
-        ])
+        proyecto.save(
+            update_fields=["costo_planeado_total", "utilidad_planeada", "margen_planeado"]
+        )
 
     @staticmethod
     @transaction.atomic
@@ -128,16 +136,10 @@ class PresupuestoBusinessService:
                 "La empresa del item no coincide con la empresa del proyecto (DSV fallo)"
             )
 
-        if proyecto.fase_actual == 'CIERRE':
-            raise ValidationError(
-                "No se puede agregar items de presupuesto en fase Cierre"
-            )
+        if proyecto.fase_actual == "CIERRE":
+            raise ValidationError("No se puede agregar items de presupuesto en fase Cierre")
 
-        item = ItemPresupuestoProyecto(
-            empresa=empresa,
-            proyecto=proyecto,
-            **data
-        )
+        item = ItemPresupuestoProyecto(empresa=empresa, proyecto=proyecto, **data)
 
         PresupuestoBusinessService._calcular_subtotal(item)
         PresupuestoCRUDService.save_item(item)
@@ -162,10 +164,8 @@ class PresupuestoBusinessService:
         - Persiste
         - Recalcula proyecto padre
         """
-        if item.proyecto.fase_actual == 'CIERRE':
-            raise ValidationError(
-                "No se puede editar items de presupuesto en fase Cierre"
-            )
+        if item.proyecto.fase_actual == "CIERRE":
+            raise ValidationError("No se puede editar items de presupuesto en fase Cierre")
 
         for key, value in data.items():
             setattr(item, key, value)
@@ -192,10 +192,8 @@ class PresupuestoBusinessService:
         - Persiste eliminacion
         - Recalcula proyecto padre
         """
-        if item.proyecto.fase_actual == 'CIERRE':
-            raise ValidationError(
-                "No se puede eliminar items de presupuesto en fase Cierre"
-            )
+        if item.proyecto.fase_actual == "CIERRE":
+            raise ValidationError("No se puede eliminar items de presupuesto en fase Cierre")
 
         proyecto = item.proyecto
         PresupuestoCRUDService.delete_item(item)

@@ -5,6 +5,7 @@ register() conecta PurchaseDocumentHandler al dispatcher compartido,
 demostrando que agregar un segundo dominio consumidor no requiere tocar
 IMAP/ZIP/detector/pipeline/Celery ni el handler de Facturas.
 """
+
 from __future__ import annotations
 
 

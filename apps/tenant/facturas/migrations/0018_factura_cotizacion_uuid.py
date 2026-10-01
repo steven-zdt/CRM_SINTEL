@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("facturas", "0017_remove_factura_cotizacion_remove_itemfactura_uuid_and_more"),
     ]

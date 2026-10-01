@@ -1,22 +1,27 @@
 """
 Business Service for Proveedores v3.5 - Business Logic & orchestration.
 """
-import re
 
+import re
 from decimal import Decimal
+
 from django.apps import apps
-from django.db import transaction, IntegrityError
+from django.db import transaction
 from rest_framework.exceptions import ValidationError
+
+from apps.tenant.empresa.models import Empresa
+
+from ..models import Proveedor, Representante
 from .crud_service import ProveedorCRUDService, RepresentanteCRUDService
 from .selectors import ProveedorSelector, RepresentanteSelector
-from apps.tenant.empresa.models import Empresa
-from ..models import Proveedor, Representante
+
 
 class ProveedorBusinessService:
     """
     Orchestration layer for Proveedor v3.5.
     Handles business rules, validations, financial calculations and complex flows.
     """
+
     def __init__(self):
         self.crud = ProveedorCRUDService()
 
@@ -48,9 +53,17 @@ class ProveedorBusinessService:
         razon_social = str(emisor_razon_social or "").strip()
 
         if not numero_documento:
-            raise ValidationError({"emisor_nit": "La factura de compra requiere NIT de emisor para vincular proveedor."})
+            raise ValidationError(
+                {
+                    "emisor_nit": "La factura de compra requiere NIT de emisor para vincular proveedor."
+                }
+            )
         if not razon_social:
-            raise ValidationError({"emisor_razon_social": "La factura de compra requiere razon social de emisor para vincular proveedor."})
+            raise ValidationError(
+                {
+                    "emisor_razon_social": "La factura de compra requiere razon social de emisor para vincular proveedor."
+                }
+            )
 
         existing = ProveedorSelector.get_by_documento(
             empresa_id=empresa_id,
@@ -114,9 +127,12 @@ class ProveedorBusinessService:
         el caller efectivamente envio alguno (ruta legacy de `services.py`).
         """
         campos_retencion = (
-            "aplica_retefuente", "retefuente_porcentaje",
-            "aplica_reteica", "reteica_porcentaje",
-            "aplica_reteiva", "reteiva_porcentaje",
+            "aplica_retefuente",
+            "retefuente_porcentaje",
+            "aplica_reteica",
+            "reteica_porcentaje",
+            "aplica_reteiva",
+            "reteiva_porcentaje",
         )
         if "es_retenedor" not in payload and not any(c in payload for c in campos_retencion):
             return payload
@@ -138,7 +154,7 @@ class ProveedorBusinessService:
                 payload["reteica_porcentaje"] = 0
             if not payload.get("aplica_reteiva", False):
                 payload["reteiva_porcentaje"] = 0
-                
+
         return payload
 
     # ==============================================================================
@@ -146,7 +162,9 @@ class ProveedorBusinessService:
     # ==============================================================================
 
     @staticmethod
-    def _construir_payload_representante(representante_data: dict, usuario, tipo_persona: str) -> dict:
+    def _construir_payload_representante(
+        representante_data: dict, usuario, tipo_persona: str
+    ) -> dict:
         """
         Arma el payload final del Representante principal a crear junto con
         el Proveedor. Para NATURAL, precarga nombre/email/telefono/cargo
@@ -164,15 +182,21 @@ class ProveedorBusinessService:
         if tipo_persona == "NATURAL" and usuario is not None:
             user_obj = getattr(usuario, "user", usuario)
             nombre = f"{getattr(user_obj, 'first_name', '') or ''} {getattr(user_obj, 'last_name', '') or ''}".strip()
-            payload.setdefault("nombre_completo", nombre or getattr(user_obj, "email", "") or "Representante")
+            payload.setdefault(
+                "nombre_completo", nombre or getattr(user_obj, "email", "") or "Representante"
+            )
             payload.setdefault("email_contacto", getattr(user_obj, "email", "") or "")
-            payload.setdefault("telefono_contacto", getattr(usuario, "telefono_corporativo", "") or "")
+            payload.setdefault(
+                "telefono_contacto", getattr(usuario, "telefono_corporativo", "") or ""
+            )
             payload.setdefault("cargo", getattr(usuario, "cargo", "") or "Representante Legal")
 
         return payload
 
     @transaction.atomic
-    def crear_proveedor(self, empresa_id, data, representante_data=None, usuario=None, exigir_representante=True):
+    def crear_proveedor(
+        self, empresa_id, data, representante_data=None, usuario=None, exigir_representante=True
+    ):
         """
         Orquesta la creación de un proveedor con validaciones.
 
@@ -203,39 +227,55 @@ class ProveedorBusinessService:
         data = self._sanitize_retenciones(data)
 
         # Defensa-en-profundidad (FASE 3): valida ANTES del CRUD para error claro
-        num_doc  = ProveedorBusinessService.normalize_document_number(data.get("numero_documento", ""))
+        num_doc = ProveedorBusinessService.normalize_document_number(
+            data.get("numero_documento", "")
+        )
         tipo_doc = data.get("tipo_documento", "")
-        if num_doc and tipo_doc and ProveedorSelector.existe_documento(empresa_id, tipo_doc, num_doc):
-            raise ValidationError({
-                "numero_documento": [
-                    f"Ya existe un Proveedor registrado con el documento "
-                    f"{tipo_doc} {num_doc} en su organización."
-                ]
-            })
+        if (
+            num_doc
+            and tipo_doc
+            and ProveedorSelector.existe_documento(empresa_id, tipo_doc, num_doc)
+        ):
+            raise ValidationError(
+                {
+                    "numero_documento": [
+                        f"Ya existe un Proveedor registrado con el documento "
+                        f"{tipo_doc} {num_doc} en su organización."
+                    ]
+                }
+            )
 
         tipo_persona = data.get("tipo_persona", "JURIDICA")
         if not exigir_representante:
             pass
         elif tipo_persona == "JURIDICA":
-            if not representante_data or not str(representante_data.get("numero_documento", "")).strip():
-                raise ValidationError({
-                    "representante": [
-                        "Un Proveedor Persona Jurídica requiere un Representante Legal "
-                        "con número de documento."
-                    ]
-                })
+            if (
+                not representante_data
+                or not str(representante_data.get("numero_documento", "")).strip()
+            ):
+                raise ValidationError(
+                    {
+                        "representante": [
+                            "Un Proveedor Persona Jurídica requiere un Representante Legal "
+                            "con número de documento."
+                        ]
+                    }
+                )
             if not str(representante_data.get("nombre_completo", "")).strip():
-                raise ValidationError({
-                    "representante": ["El Representante Legal requiere nombre completo."]
-                })
-        elif tipo_persona == "NATURAL":
-            if not str((representante_data or {}).get("numero_documento", "")).strip():
-                raise ValidationError({
+                raise ValidationError(
+                    {"representante": ["El Representante Legal requiere nombre completo."]}
+                )
+        elif tipo_persona == "NATURAL" and not str(
+            (representante_data or {}).get("numero_documento", "")
+        ).strip():
+            raise ValidationError(
+                {
                     "representante": [
                         "Falta el número de documento del representante principal "
                         "(no existe en el sistema para el usuario actual, indíquelo)."
                     ]
-                })
+                }
+            )
 
         proveedor = self.crud.create(empresa_id, data)
 
@@ -252,26 +292,31 @@ class ProveedorBusinessService:
         data = self._sanitize_retenciones(data)
 
         # Defensa-en-profundidad (FASE 3): excluye el UUID actual para evitar falso positivo
-        num_doc  = ProveedorBusinessService.normalize_document_number(
+        num_doc = ProveedorBusinessService.normalize_document_number(
             data.get("numero_documento", str(proveedor.numero_documento))
         )
         tipo_doc = data.get("tipo_documento", proveedor.tipo_documento)
-        if num_doc and tipo_doc and ProveedorSelector.existe_documento(
-            proveedor.empresa_id, tipo_doc, num_doc, exclude_uuid=str(proveedor.uuid)
+        if (
+            num_doc
+            and tipo_doc
+            and ProveedorSelector.existe_documento(
+                proveedor.empresa_id, tipo_doc, num_doc, exclude_uuid=str(proveedor.uuid)
+            )
         ):
-            raise ValidationError({
-                "numero_documento": [
-                    f"Ya existe un Proveedor registrado con el documento "
-                    f"{tipo_doc} {num_doc} en su organización."
-                ]
-            })
+            raise ValidationError(
+                {
+                    "numero_documento": [
+                        f"Ya existe un Proveedor registrado con el documento "
+                        f"{tipo_doc} {num_doc} en su organización."
+                    ]
+                }
+            )
 
         return self.crud.update(proveedor, data)
 
-
     def inactivar_proveedor(self, proveedor):
         """Cambia el estado del proveedor a inactivo."""
-        return self.crud.update(proveedor, {'activo': False})
+        return self.crud.update(proveedor, {"activo": False})
 
     def eliminar_proveedor(self, proveedor):
         """
@@ -284,10 +329,12 @@ class ProveedorBusinessService:
         """
         # Paso 1: Validar que no esté activo
         if proveedor.activo:
-            raise ValidationError({
-                "error": "active_record",
-                "message": "No se puede eliminar un proveedor activo. Márquelo como 'Inactivo' primero."
-            })
+            raise ValidationError(
+                {
+                    "error": "active_record",
+                    "message": "No se puede eliminar un proveedor activo. Márquelo como 'Inactivo' primero.",
+                }
+            )
 
         # Paso 2: Hard delete (CASCADE automático de DocumentoSoporte)
         return self.crud.delete(proveedor)
@@ -299,23 +346,25 @@ class ProveedorBusinessService:
         """
         empresa_id = datos_proveedor.get("empresa") or datos_proveedor.get("empresa_id")
         if not empresa_id:
-             raise ValidationError({"empresa": ["La empresa es obligatoria."]})
+            raise ValidationError({"empresa": ["La empresa es obligatoria."]})
 
         if not Empresa.objects.filter(id=empresa_id).exists():
             raise ValidationError({"empresa": ["La empresa no existe."]})
-        
+
         # Normalizar numero_documento / nit
         nit = datos_proveedor.get("nit") or datos_proveedor.get("numero_documento")
         nit = (nit or "").strip().upper()
         if not nit:
-            raise ValidationError({"numero_documento": ["La identificacion tributaria es obligatoria."]})
-        
+            raise ValidationError(
+                {"numero_documento": ["La identificacion tributaria es obligatoria."]}
+            )
+
         datos_proveedor["numero_documento"] = nit
-        
+
         # Usar update_or_create via CRUD (SSoT)
         proveedor_instancia, creado = self.crud.update_or_create(
             empresa_id=empresa_id,
-            filter_data={'numero_documento': nit},
+            filter_data={"numero_documento": nit},
             defaults=datos_proveedor,
         )
 
@@ -335,9 +384,11 @@ class ProveedorBusinessService:
 
         return proveedor_instancia, creado
 
+
 # ==============================================================================
 # CuentasPagar Business Service (Control de Deudas y Abonos)
 # ==============================================================================
+
 
 class CuentasPagarBusinessService:
     """
@@ -356,8 +407,8 @@ class CuentasPagarBusinessService:
         Crea o recupera un registro de CuentasPagar para una factura de compra.
         Idempotente: si ya existe para (empresa, proveedor, numero_factura), la retorna.
         """
-        from apps.tenant.proveedores.models import CuentasPagar
         from apps.tenant.empresa.models import Empresa
+        from apps.tenant.proveedores.models import CuentasPagar
 
         empresa = Empresa.objects.only("id").get(pk=empresa_id)
         numero_factura = datos_cuenta_pagar.get("numero_factura")
@@ -369,6 +420,9 @@ class CuentasPagarBusinessService:
             "valor_total": Decimal(str(datos_cuenta_pagar.get("valor_total", 0))),
             "observaciones": datos_cuenta_pagar.get("observaciones", ""),
             "orden_compra_uuid": datos_cuenta_pagar.get("orden_compra_uuid"),
+            # PLAN_VINCULAR_FACTURA_COMPRA_COMPRAS Fase 20: soft reference
+            # opcional a la Factura de compra real, cuando ya se conoce.
+            "factura_uuid": datos_cuenta_pagar.get("factura_uuid"),
         }
 
         cuenta_pagar_obj, created = CuentasPagar.objects.get_or_create(
@@ -377,7 +431,7 @@ class CuentasPagarBusinessService:
             numero_factura=numero_factura,
             defaults=defaults,
         )
-        
+
         return cuenta_pagar_obj
 
     @staticmethod
@@ -401,17 +455,23 @@ class CuentasPagarBusinessService:
         from apps.tenant.proveedores.models import CuentasPagar, Proveedor
 
         factura = (
-            Factura.objects
-            .filter(empresa_id=empresa_id, uuid=factura_uuid, naturaleza="COMPRA")
-            .only("id", "uuid", "numero", "proveedor_uuid", "total", "fecha_emision", "payment_due_date")
+            Factura.objects.filter(empresa_id=empresa_id, uuid=factura_uuid, naturaleza="COMPRA")
+            .only(
+                "id",
+                "uuid",
+                "numero",
+                "proveedor_uuid",
+                "total",
+                "fecha_emision",
+                "payment_due_date",
+            )
             .first()
         )
         if not factura or not factura.proveedor_uuid:
             return None
 
         proveedor = (
-            Proveedor.objects
-            .filter(empresa_id=empresa_id, uuid=factura.proveedor_uuid)
+            Proveedor.objects.filter(empresa_id=empresa_id, uuid=factura.proveedor_uuid)
             .only("id")
             .first()
         )
@@ -420,7 +480,9 @@ class CuentasPagarBusinessService:
 
         fecha_emision = factura.fecha_emision.date() if factura.fecha_emision else None
         cuenta_pagar_obj, _created = CuentasPagar.objects.get_or_create(
-            empresa_id=empresa_id, proveedor=proveedor, numero_factura=factura.numero,
+            empresa_id=empresa_id,
+            proveedor=proveedor,
+            numero_factura=factura.numero,
             defaults={
                 "factura_uuid": factura.uuid,
                 "fecha_emision": fecha_emision or factura.payment_due_date,
@@ -449,11 +511,14 @@ class CuentasPagarBusinessService:
         from apps.tenant.proveedores.models import CuentasPagar
 
         cuenta_pagar_obj = CuentasPagar.objects.filter(
-            uuid=cuenta_pagar_uuid, empresa_id=empresa_id,
+            uuid=cuenta_pagar_uuid,
+            empresa_id=empresa_id,
         ).first()
         if cuenta_pagar_obj:
             return cuenta_pagar_obj
-        return CuentasPagarBusinessService._materializar_desde_factura(empresa_id, cuenta_pagar_uuid)
+        return CuentasPagarBusinessService._materializar_desde_factura(
+            empresa_id, cuenta_pagar_uuid
+        )
 
     @staticmethod
     @transaction.atomic
@@ -467,16 +532,19 @@ class CuentasPagarBusinessService:
         resuelta = CuentasPagarBusinessService.resolver_cuenta_pagar(cuenta_pagar_uuid, empresa_id)
         cuenta_pagar_obj = (
             CuentasPagar.objects.select_for_update().filter(pk=resuelta.pk).first()
-            if resuelta else None
+            if resuelta
+            else None
         )
 
         if not cuenta_pagar_obj:
-            raise ValidationError(f"Registro de Cuentas por Pagar con UUID {cuenta_pagar_uuid} no encontrado.")
+            raise ValidationError(
+                f"Registro de Cuentas por Pagar con UUID {cuenta_pagar_uuid} no encontrado."
+            )
 
         monto_dec = Decimal(str(monto))
         if monto_dec <= Decimal("0"):
             raise ValidationError("El monto del abono debe ser mayor a cero.")
-            
+
         if monto_dec > cuenta_pagar_obj.saldo:
             raise ValidationError(
                 f"El abono ({monto_dec}) supera el saldo pendiente de la factura ({cuenta_pagar_obj.saldo})."
@@ -484,7 +552,7 @@ class CuentasPagarBusinessService:
 
         # Sumamos el nuevo abono al acumulado de pagos
         cuenta_pagar_obj.valor_pagado += monto_dec
-        
+
         # Anexamos la observacion si se provee alguna
         if observaciones:
             separador = " | " if cuenta_pagar_obj.observaciones else ""
@@ -519,15 +587,12 @@ class CuentasPagarBusinessService:
         from apps.tenant.proveedores.models import CuentasPagar
 
         cuenta_pagar_obj = (
-            CuentasPagar.objects
-            .select_for_update()
+            CuentasPagar.objects.select_for_update()
             .filter(uuid=cuenta_pagar_uuid, empresa_id=empresa_id)
             .first()
         )
         if not cuenta_pagar_obj:
-            raise ValidationError(
-                "Registro de Cuentas por Pagar no encontrado en su organizacion."
-            )
+            raise ValidationError("Registro de Cuentas por Pagar no encontrado en su organizacion.")
         if cuenta_pagar_obj.factura_uuid:
             raise ValidationError(
                 "Esta obligacion proviene de una Factura registrada -- "
@@ -540,9 +605,11 @@ class CuentasPagarBusinessService:
             )
         cuenta_pagar_obj.delete()
 
+
 # ==============================================================================
 # Representante Business Service (DSV + Validaciones)
 # ==============================================================================
+
 
 class RepresentanteBusinessService:
     """
@@ -597,10 +664,7 @@ class RepresentanteBusinessService:
 
         # DSV 2: Proveedor existe y pertenece a la empresa
         proveedor = (
-            Proveedor.objects
-            .filter(empresa_id=empresa_id, uuid=proveedor_uuid)
-            .only("id")
-            .first()
+            Proveedor.objects.filter(empresa_id=empresa_id, uuid=proveedor_uuid).only("id").first()
         )
         if not proveedor:
             raise ValidationError({"proveedor": ["El proveedor no existe en su empresa."]})
@@ -610,27 +674,26 @@ class RepresentanteBusinessService:
         if numero_documento and self._existe_documento_representante(
             empresa_id, proveedor.id, numero_documento
         ):
-            raise ValidationError({
-                "numero_documento": [
-                    "Ya existe un representante con este documento para este proveedor."
-                ]
-            })
+            raise ValidationError(
+                {
+                    "numero_documento": [
+                        "Ya existe un representante con este documento para este proveedor."
+                    ]
+                }
+            )
 
         if data.get("es_principal", True):
             Representante.objects.filter(
-                empresa_id=empresa_id, proveedor_id=proveedor.id, es_principal=True,
+                empresa_id=empresa_id,
+                proveedor_id=proveedor.id,
+                es_principal=True,
             ).update(es_principal=False)
 
         # CRUD: Crear con empresa_id y proveedor_id (DSV)
         return self.crud.create(empresa_id, proveedor.id, data)
 
     @transaction.atomic
-    def actualizar_representante(
-        self,
-        empresa_id: int,
-        representante_uuid: str,
-        data: dict
-    ):
+    def actualizar_representante(self, empresa_id: int, representante_uuid: str, data: dict):
         """
         Orquesta la actualización de un representante con validaciones DSV.
 
@@ -646,17 +709,24 @@ class RepresentanteBusinessService:
         # Validación 2: Unicidad de documento (excluyendo el registro actual)
         numero_documento = data.get("numero_documento", representante.numero_documento).strip()
         if numero_documento and self._existe_documento_representante(
-            empresa_id, representante.proveedor_id, numero_documento, exclude_uuid=representante_uuid
+            empresa_id,
+            representante.proveedor_id,
+            numero_documento,
+            exclude_uuid=representante_uuid,
         ):
-            raise ValidationError({
-                "numero_documento": [
-                    "Ya existe otro representante con este documento para este proveedor."
-                ]
-            })
+            raise ValidationError(
+                {
+                    "numero_documento": [
+                        "Ya existe otro representante con este documento para este proveedor."
+                    ]
+                }
+            )
 
         if data.get("es_principal") is True:
             Representante.objects.filter(
-                empresa_id=empresa_id, proveedor_id=representante.proveedor_id, es_principal=True,
+                empresa_id=empresa_id,
+                proveedor_id=representante.proveedor_id,
+                es_principal=True,
             ).exclude(uuid=representante_uuid).update(es_principal=False)
 
         # CRUD: Actualizar
@@ -672,19 +742,23 @@ class RepresentanteBusinessService:
             raise ValidationError({"representante": ["El representante no existe en su empresa."]})
 
         # Validación: No eliminar el único representante principal
-        otros_principales = Representante.objects.filter(
-            empresa_id=empresa_id,
-            proveedor_id=representante.proveedor_id,
-            es_principal=True
-        ).exclude(uuid=representante_uuid).exists()
+        otros_principales = (
+            Representante.objects.filter(
+                empresa_id=empresa_id, proveedor_id=representante.proveedor_id, es_principal=True
+            )
+            .exclude(uuid=representante_uuid)
+            .exists()
+        )
 
         if representante.es_principal and not otros_principales:
-            raise ValidationError({
-                "error": [
-                    "No se puede eliminar el único representante principal. "
-                    "Asigne primero otro representante como principal."
-                ]
-            })
+            raise ValidationError(
+                {
+                    "error": [
+                        "No se puede eliminar el único representante principal. "
+                        "Asigne primero otro representante como principal."
+                    ]
+                }
+            )
 
         # CRUD: Eliminar
         return self.crud.delete(representante)

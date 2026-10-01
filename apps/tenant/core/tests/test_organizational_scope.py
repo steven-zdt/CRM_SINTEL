@@ -10,6 +10,7 @@ Cubren, en este orden:
      activa en OrganizationalContext.filter() - esto es lo que justifica que
      ambos conceptos existan por separado (ver docstring del modulo).
 """
+
 from django.test import RequestFactory
 
 from apps.tenant.core.services.organizational_context import OrganizationalContext
@@ -38,14 +39,19 @@ class OrganizationalScopeTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OSF", nit="900000222", direccion="Calle 1",
+            razon_social="Empresa Test OSF",
+            nit="900000222",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B")
 
     def test_alcance_empresa_no_restringe(self):
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
         )
         request = _build_request(self.user, self.tenant)
 
@@ -60,7 +66,10 @@ class OrganizationalScopeTests(SintelTenantTestCase):
 
     def test_alcance_sede_resuelve_conjunto_completo_no_una_sola_activa(self):
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a, self.sede_b])
         request = _build_request(self.user, self.tenant)
@@ -73,7 +82,10 @@ class OrganizationalScopeTests(SintelTenantTestCase):
 
     def test_alcance_sede_sin_asignaciones_restringe_a_nada_no_a_todo(self):
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         request = _build_request(self.user, self.tenant)
 
@@ -92,24 +104,43 @@ class OrganizationalScopeTests(SintelTenantTestCase):
         from apps.tenant.proveedores.models import Proveedor
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a, self.sede_b])
 
         proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor Test F2", numero_documento="F2-1", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor Test F2",
+            numero_documento="F2-1",
+            tipo_documento="NIT",
         )
         plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla F2", prefijo="OSF2",
-            rango_desde=1, rango_hasta=100, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla F2",
+            prefijo="OSF2",
+            rango_desde=1,
+            rango_hasta=100,
+            consecutivo_actual=1,
+            vigente=True,
         )
         orden_a = OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede_a, proveedor=proveedor,
-            plantilla=plantilla, fecha="2026-06-01", consecutivo=1,
+            empresa=self.empresa,
+            sede=self.sede_a,
+            proveedor=proveedor,
+            plantilla=plantilla,
+            fecha="2026-06-01",
+            consecutivo=1,
         )
         orden_b = OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede_b, proveedor=proveedor,
-            plantilla=plantilla, fecha="2026-06-01", consecutivo=2,
+            empresa=self.empresa,
+            sede=self.sede_b,
+            proveedor=proveedor,
+            plantilla=plantilla,
+            fecha="2026-06-01",
+            consecutivo=2,
         )
 
         request = _build_request(self.user, self.tenant)
@@ -138,7 +169,10 @@ class OrganizationalScopeTests(SintelTenantTestCase):
         alcance organizacional del usuario (antes de F8 solo validaban
         'pertenece a la empresa', nunca 'esta dentro de mi alcance')."""
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a])
         request = _build_request(self.user, self.tenant)
@@ -152,6 +186,7 @@ class OrganizationalScopeTests(SintelTenantTestCase):
         self.assertTrue(sede_esta_en_alcance(self.sede_a.id, None))
 
         from django.contrib.auth.models import AnonymousUser
+
         request = _build_request(AnonymousUser(), self.tenant)
         self.assertTrue(sede_esta_en_alcance(self.sede_a.id, request))
 
@@ -159,13 +194,22 @@ class OrganizationalScopeTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Area
 
         area_x = Area.objects.create(
-            empresa=self.empresa, sede=self.sede_a, nombre="Area X F8", codigo_funcionamiento="AXF8",
+            empresa=self.empresa,
+            sede=self.sede_a,
+            nombre="Area X F8",
+            codigo_funcionamiento="AXF8",
         )
         area_y = Area.objects.create(
-            empresa=self.empresa, sede=self.sede_a, nombre="Area Y F8", codigo_funcionamiento="AYF8",
+            empresa=self.empresa,
+            sede=self.sede_a,
+            nombre="Area Y F8",
+            codigo_funcionamiento="AYF8",
         )
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="AREA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="AREA",
         )
         perfil.sedes_asignadas.set([self.sede_a])
         perfil.areas_asignadas.set([area_x])

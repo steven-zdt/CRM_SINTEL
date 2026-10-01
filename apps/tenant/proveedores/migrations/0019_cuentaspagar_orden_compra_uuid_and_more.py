@@ -4,20 +4,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('empresa', '0009_sedes_areas_explicit_fk'),
-        ('tenant_proveedores', '0018_representante_and_more'),
+        ("empresa", "0009_sedes_areas_explicit_fk"),
+        ("tenant_proveedores", "0018_representante_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='cuentaspagar',
-            name='orden_compra_uuid',
-            field=models.UUIDField(blank=True, db_index=True, help_text='UUID de la Orden de Compra de origen (soft reference, sin FK).', null=True),
+            model_name="cuentaspagar",
+            name="orden_compra_uuid",
+            field=models.UUIDField(
+                blank=True,
+                db_index=True,
+                help_text="UUID de la Orden de Compra de origen (soft reference, sin FK).",
+                null=True,
+            ),
         ),
         migrations.AddIndex(
-            model_name='cuentaspagar',
-            index=models.Index(fields=['orden_compra_uuid'], name='tenant_prov_orden_c_537c1e_idx'),
+            model_name="cuentaspagar",
+            index=models.Index(fields=["orden_compra_uuid"], name="tenant_prov_orden_c_537c1e_idx"),
         ),
     ]

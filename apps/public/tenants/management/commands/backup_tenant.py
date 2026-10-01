@@ -52,7 +52,7 @@ class Command(BaseCommand):
         try:
             tenant = Client.objects.get(schema_name=schema_name)
         except Client.DoesNotExist:
-            raise CommandError(f'Tenant con schema_name "{schema_name}" no existe')
+            raise CommandError(f'Tenant con schema_name "{schema_name}" no existe') from None
 
         self.stdout.write(
             self.style.SUCCESS(f"🔄 Iniciando backup del tenant: {tenant.nombre} ({schema_name})")
@@ -136,7 +136,7 @@ class Command(BaseCommand):
             # Ejecutar pg_dump y redirigir salida al archivo
             self.stdout.write(f"💾 Ejecutando pg_dump para esquema: {schema_name}")
             with open(backup_path, "wb") as backup_file:
-                result = subprocess.run(
+                subprocess.run(
                     cmd, env=env, stdout=backup_file, stderr=subprocess.PIPE, check=True
                 )
 
@@ -148,9 +148,9 @@ class Command(BaseCommand):
             self._save_backup_metadata(schema_name, backup_path, format_type, incremental)
 
         except subprocess.CalledProcessError as e:
-            raise CommandError(f"Error al ejecutar pg_dump: {e.stderr}")
+            raise CommandError(f"Error al ejecutar pg_dump: {e.stderr}") from e
         except Exception as e:
-            raise CommandError(f"Error inesperado: {str(e)}")
+            raise CommandError(f"Error inesperado: {str(e)}") from e
 
     def _find_last_backup(self, output_dir, schema_name):
         """Encuentra el último backup del tenant."""

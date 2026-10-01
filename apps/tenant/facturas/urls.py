@@ -3,25 +3,23 @@ URLs de UI para la app facturas.
 
 WARNING: v3.5: UI URLs para HTMX y templates.
 """
+
 from django.urls import path
 
 from apps.tenant.facturas.api.viewsets import FacturaViewSet
-from apps.tenant.facturas.views import FacturaTableView
 
-app_name = 'facturas'
+app_name = "facturas"
 
 urlpatterns = [
     # Offcanvas para crear/editar facturas
-    path('gestor-offcanvas/',
-         FacturaViewSet.as_view({'get': 'gestor_offcanvas'}),
-         name='factura-gestor-offcanvas'),
+    path(
+        "gestor-offcanvas/",
+        FacturaViewSet.as_view({"get": "gestor_offcanvas"}),
+        name="factura-gestor-offcanvas",
+    ),
     # Lista de facturas (UI)
-    path('',
-         FacturaViewSet.as_view({'get': 'list', 'post': 'create'}),
-         name='factura-list'),
-    # Tabla server-rendered (django-tables2 + HTMX) — Fase 5-BIS, reemplaza
-    # la inicializacion de Tabulator en facturas_list.js. naturaleza: venta|compra.
-    path('tabla/<str:naturaleza>/',
-         FacturaTableView.as_view(),
-         name='tabla'),
+    path("", FacturaViewSet.as_view({"get": "list", "post": "create"}), name="factura-list"),
+    # La grilla (Ventas/Compras) migro a DataTables -- POST /api/v1/facturas/dt/
+    # (FacturaViewSet.dt()), ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md.
+    # FacturaTable/FacturaTableView (django-tables2) retirados.
 ]

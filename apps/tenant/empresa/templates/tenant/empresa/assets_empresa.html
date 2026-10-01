@@ -1,8 +1,8 @@
 {% load static %}
 {# assets_empresa.html - Assets del módulo Empresa #}
-{# Fase 5-BIS: Empresa/MailInboxConfig siguen en django-tables2 + HTMX. #}
-{# Sede/Area migradas a DataTables 3.x client-side (2026-09-24, solo UI -- #}
-{# ver sede_datatable.js/area_datatable.js). #}
+{# Fase 5-BIS: MailInboxConfig sigue en django-tables2 + HTMX. #}
+{# Empresa/Sede/Area migradas a DataTables 3.x client-side (2026-09-24, #}
+{# solo UI -- ver empresa_datatable.js/sede_datatable.js/area_datatable.js). #}
 {% include 'tenant/empresa/assets_empresa_datatables.html' %}
 {# ⚠️ ORDEN CRÍTICO: Los scripts DEBEN cargarse en este orden exacto (sin async/defer) #}
 {# 1. assets_core.html (incluye DOMUtils, http(), etc.) - ya cargado en workspace.html #}
@@ -13,6 +13,7 @@
 {# BLOQUE 1: Feature-Sliced Architecture #}
 {# Feature 1: Listado #}
 <script src="{% static 'empresa/js/features/empresa_list.js' %}"></script>
+<script src="{% static 'empresa/js/features/empresa_datatable.js' %}"></script>
 
 {# Feature 2: Editor y Offcanvas #}
 <script src="{% static 'empresa/js/features/empresa_editor.js' %}"></script>

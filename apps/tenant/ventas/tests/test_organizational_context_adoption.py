@@ -9,6 +9,7 @@ _get_empresa_id_seguro() nunca llega a intentar el perfil - cae directo al
 singleton Empresa.objects.only('id').first() via _get_empresa(), sin exigir
 TenantProfile, mientras OrganizationalContext.resolve() si lo exige.
 """
+
 from apps.tenant.clientes.models import Cliente
 from apps.tenant.core.services.organizational_context import (
     OrganizationalContext,
@@ -27,19 +28,31 @@ class VentaOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9 Ventas", nit="900000994", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9 Ventas",
+            nit="900000994",
+            direccion="Calle 1",
         )
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="9201", razon_social="Cliente Fase9 Ventas", regimen_tributario="ORDINARIO",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="9201",
+            razon_social="Cliente Fase9 Ventas",
+            regimen_tributario="ORDINARIO",
         )
         self.venta = Venta.objects.create(
-            empresa=self.empresa, cliente=self.cliente, fecha_emision="2026-06-01",
-            numero_factura="VENTA-F9-TEST", subtotal="100.00", total_neto="100.00",
+            empresa=self.empresa,
+            cliente=self.cliente,
+            fecha_emision="2026-06-01",
+            numero_factura="VENTA-F9-TEST",
+            subtotal="100.00",
+            total_neto="100.00",
         )
 
     def test_ventaviewset_exposes_get_organizational_context_with_a_real_profile(self):
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         from rest_framework.test import APIRequestFactory
         from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -63,7 +76,9 @@ class VentaOrganizationalContextAdoptionTests(SintelTenantTestCase):
         self.assertEqual(ids_context, ids_selector)
         self.assertIn(self.venta.id, ids_context)
 
-    def test_get_empresa_singleton_fallback_and_organizational_context_diverge_without_a_profile(self):
+    def test_get_empresa_singleton_fallback_and_organizational_context_diverge_without_a_profile(
+        self,
+    ):
         from django.contrib.sessions.backends.db import SessionStore
         from django.test import RequestFactory
 

@@ -15,6 +15,7 @@ Tipos de documentos soportados:
 - recibo: Recibo de pago
 - orden_compra: Orden de compra
 """
+
 from dataclasses import asdict, dataclass
 from decimal import Decimal
 from typing import Any, Literal
@@ -33,10 +34,11 @@ DocumentTypeBase = Literal[
 @dataclass
 class IdentificadoresDTO:
     """Identificadores legales del documento (CUFE, UUID, etc.)."""
+
     cufe: str | None = None
     uuid: str | None = None
     numero: str | None = None
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         return {k: v for k, v in asdict(self).items() if v is not None}
@@ -45,12 +47,13 @@ class IdentificadoresDTO:
 @dataclass
 class PartyDTO:
     """Datos de una parte (emisor o receptor)."""
+
     nit: str | None = None
     razon_social: str | None = None
     direccion: str | None = None
     email: str | None = None
     telefono: str | None = None
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         return {k: v for k, v in asdict(self).items() if v is not None}
@@ -59,11 +62,12 @@ class PartyDTO:
 @dataclass
 class TotalesDTO:
     """Totales monetarios del documento."""
+
     moneda: str = "COP"
-    subtotal: Decimal = Decimal('0.00')
-    impuestos: Decimal = Decimal('0.00')
-    total: Decimal = Decimal('0.00')
-    
+    subtotal: Decimal = Decimal("0.00")
+    impuestos: Decimal = Decimal("0.00")
+    total: Decimal = Decimal("0.00")
+
     def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         return {
@@ -77,10 +81,11 @@ class TotalesDTO:
 @dataclass
 class ReferenciaDTO:
     """Referencia a documento relacionado (para Notas Crédito)."""
+
     numero: str | None = None
     cufe: str | None = None
     tipo: str | None = None  # "invoice", "creditnote", etc.
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         return {k: v for k, v in asdict(self).items() if v is not None}
@@ -90,7 +95,7 @@ class ReferenciaDTO:
 class DocumentoDTO:
     """
     DTO unificado para documentos (FASE 3).
-    
+
     Soporta múltiples tipos de documentos:
     - invoice: Factura electrónica
     - creditnote: Nota crédito
@@ -98,13 +103,14 @@ class DocumentoDTO:
     - inventario: Documento de inventario
     - recibo: Recibo de pago
     - orden_compra: Orden de compra
-    
+
     WARNING: CONTRATO ESTABLE: Esta estructura es la única representación de intercambio
     entre el pipeline y las capas de dominio para materializar documentos.
-    
+
     WARNING: FASE 3: El campo "type" permite que el router de validaciones dirija
     correctamente según el tipo de documento, sin depender del formato completo.
     """
+
     # Campos requeridos (sin default)
     document_type: str  # "invoice.ubl21", "creditnote.ubl21", "gasto", etc.
     numero: str
@@ -113,42 +119,44 @@ class DocumentoDTO:
     emisor: PartyDTO
     receptor: PartyDTO
     totales: TotalesDTO
-    
+
     # Campos opcionales (con default)
-    type: str | None = None  # Tipo base para router: "invoice", "creditnote", "gasto", etc. (FASE 3)
-    
+    type: str | None = (
+        None  # Tipo base para router: "invoice", "creditnote", "gasto", etc. (FASE 3)
+    )
+
     # Referencia (solo para Notas Crédito, OrdenCompra)
     referencia: ReferenciaDTO | None = None
-    
+
     # Motivo (solo para Notas Crédito)
     motivo: str | None = None
-    
+
     # Campos específicos para Gasto (FASE 3)
     categoria: str | None = None
     centro_costo: str | None = None
-    
+
     # Campos específicos para Inventario (FASE 3)
     items: list | None = None
     almacen: str | None = None
-    
+
     # Campos específicos para Recibo (FASE 3)
     metodo_pago: str | None = None
     banco: str | None = None
-    
+
     # Campos específicos para OrdenCompra (FASE 3)
     proveedor: PartyDTO | None = None
     fecha_entrega: str | None = None
     condiciones_pago: str | None = None
-    
+
     # Metadata del parsing
     formato_origen: str | None = None  # "xml", "pdf", "xlsx", etc.
     parser_usado: str | None = None  # Clase del parser que procesó el documento
     sha256: str | None = None  # Hash SHA-256 del documento original
-    
+
     def to_dict(self) -> dict[str, Any]:
         """
         Convierte a dict JSON-serializable (FASE 3).
-        
+
         Returns:
             Dict compatible con DRF Serializer
         """
@@ -161,22 +169,26 @@ class DocumentoDTO:
             "receptor": self.receptor.to_dict(),
             "totales": self.totales.to_dict(),
         }
-        
+
         # Incluir type si está definido (FASE 3)
         if self.type:
             result["type"] = self.type
         else:
             # Auto-generar type desde document_type si no está definido
-            type_base = self.document_type.split('.')[0] if '.' in self.document_type else self.document_type
+            type_base = (
+                self.document_type.split(".")[0]
+                if "." in self.document_type
+                else self.document_type
+            )
             result["type"] = type_base
-        
+
         # Campos opcionales
         if self.referencia:
             result["referencia"] = self.referencia.to_dict()
-        
+
         if self.motivo:
             result["motivo"] = self.motivo
-        
+
         # Campos específicos por tipo (FASE 3)
         if self.categoria:
             result["categoria"] = self.categoria
@@ -191,12 +203,14 @@ class DocumentoDTO:
         if self.banco:
             result["banco"] = self.banco
         if self.proveedor:
-            result["proveedor"] = self.proveedor.to_dict() if hasattr(self.proveedor, 'to_dict') else self.proveedor
+            result["proveedor"] = (
+                self.proveedor.to_dict() if hasattr(self.proveedor, "to_dict") else self.proveedor
+            )
         if self.fecha_entrega:
             result["fecha_entrega"] = self.fecha_entrega
         if self.condiciones_pago:
             result["condiciones_pago"] = self.condiciones_pago
-        
+
         # Metadata
         if self.formato_origen:
             result["formato_origen"] = self.formato_origen
@@ -204,5 +218,5 @@ class DocumentoDTO:
             result["parser_usado"] = self.parser_usado
         if self.sha256:
             result["sha256"] = self.sha256
-        
+
         return result

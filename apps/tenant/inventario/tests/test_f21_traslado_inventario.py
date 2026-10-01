@@ -3,6 +3,7 @@ F21: Traslado de Inventario entre Sedes. SOLICITADO -> APROBADO -> EN_TRANSITO
 -> RECIBIDO, generando TRASLADO_SALIDA/TRASLADO_ENTRADA via KardexService
 (nunca modificando MovimientoInventario.sede directamente).
 """
+
 from decimal import Decimal
 
 import pytest
@@ -24,25 +25,37 @@ class TrasladoInventarioF21TestsBase(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa F21 Traslado", nit="900000701", direccion="Calle T1",
+            razon_social="Empresa F21 Traslado",
+            nit="900000701",
+            direccion="Calle T1",
         )
         self.bogota = Sede.objects.create(empresa=self.empresa, nombre="Bogota F21")
         self.barranquilla = Sede.objects.create(empresa=self.empresa, nombre="Barranquilla F21")
         self.perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
         )
         self.producto = Producto.objects.create(
-            empresa=self.empresa, codigo="PROD-TRASLADO", nombre="Producto Traslado", stock_actual=Decimal("0"),
+            empresa=self.empresa,
+            codigo="PROD-TRASLADO",
+            nombre="Producto Traslado",
+            stock_actual=Decimal("0"),
         )
         # Stock inicial: Bogota=100, Barranquilla=20 (via entradas de ajuste directas).
         KardexService.registrar_movimiento(
-            empresa_id=self.empresa.id, producto_id=self.producto.id,
-            tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE, cantidad=Decimal("100"),
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
+            tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
+            cantidad=Decimal("100"),
             sede_id=self.bogota.id,
         )
         KardexService.registrar_movimiento(
-            empresa_id=self.empresa.id, producto_id=self.producto.id,
-            tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE, cantidad=Decimal("20"),
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
+            tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
+            cantidad=Decimal("20"),
             sede_id=self.barranquilla.id,
         )
 
@@ -57,18 +70,26 @@ class TrasladoHappyPathTests(TrasladoInventarioF21TestsBase):
         self.assertEqual(self.producto.stock_actual, Decimal("0"))  # aun no recalculado en memoria
 
         traslado = TrasladoInventarioService.solicitar(
-            empresa_id=self.empresa.id, producto_id=self.producto.id, cantidad=Decimal("30"),
-            sede_origen_id=self.bogota.id, sede_destino_id=self.barranquilla.id,
-            usuario_id=self.perfil.id, motivo="Reabastecimiento",
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
+            cantidad=Decimal("30"),
+            sede_origen_id=self.bogota.id,
+            sede_destino_id=self.barranquilla.id,
+            usuario_id=self.perfil.id,
+            motivo="Reabastecimiento",
         )
         self.assertEqual(traslado.estado, TrasladoInventario.Estado.SOLICITADO)
 
         traslado = TrasladoInventarioService.aprobar(
-            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id, usuario_id=self.perfil.id,
+            traslado_uuid=traslado.uuid,
+            empresa_id=self.empresa.id,
+            usuario_id=self.perfil.id,
         )
         self.assertEqual(traslado.estado, TrasladoInventario.Estado.APROBADO)
 
-        traslado = TrasladoInventarioService.enviar(traslado_uuid=traslado.uuid, empresa_id=self.empresa.id)
+        traslado = TrasladoInventarioService.enviar(
+            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id
+        )
         self.assertEqual(traslado.estado, TrasladoInventario.Estado.EN_TRANSITO)
 
         # Durante el transito: Bogota=70, en_transito=30, Barranquilla=20 (total=120, sin doble conteo).
@@ -82,7 +103,9 @@ class TrasladoHappyPathTests(TrasladoInventarioF21TestsBase):
         self.assertEqual(self.producto.stock_actual, Decimal("120"))
 
         traslado = TrasladoInventarioService.recibir(
-            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id, usuario_id=self.perfil.id,
+            traslado_uuid=traslado.uuid,
+            empresa_id=self.empresa.id,
+            usuario_id=self.perfil.id,
         )
         self.assertEqual(traslado.estado, TrasladoInventario.Estado.RECIBIDO)
 
@@ -93,10 +116,12 @@ class TrasladoHappyPathTests(TrasladoInventarioF21TestsBase):
         self.assertEqual(en_transito, Decimal("0"))
 
         salidas = MovimientoInventario.objects.filter(
-            empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.TRASLADO_SALIDA,
+            empresa=self.empresa,
+            tipo=MovimientoInventario.TipoMovimiento.TRASLADO_SALIDA,
         )
         entradas = MovimientoInventario.objects.filter(
-            empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.TRASLADO_ENTRADA,
+            empresa=self.empresa,
+            tipo=MovimientoInventario.TipoMovimiento.TRASLADO_ENTRADA,
         )
         self.assertEqual(salidas.count(), 1)
         self.assertEqual(entradas.count(), 1)
@@ -108,25 +133,38 @@ class TrasladoValidacionesTests(TrasladoInventarioF21TestsBase):
     def test_sede_origen_igual_destino_es_rechazado(self):
         with self.assertRaises(ValidationError):
             TrasladoInventarioService.solicitar(
-                empresa_id=self.empresa.id, producto_id=self.producto.id, cantidad=Decimal("10"),
-                sede_origen_id=self.bogota.id, sede_destino_id=self.bogota.id, usuario_id=self.perfil.id,
+                empresa_id=self.empresa.id,
+                producto_id=self.producto.id,
+                cantidad=Decimal("10"),
+                sede_origen_id=self.bogota.id,
+                sede_destino_id=self.bogota.id,
+                usuario_id=self.perfil.id,
             )
 
     def test_cantidad_mayor_a_stock_disponible_en_origen_es_rechazado_al_enviar(self):
         traslado = TrasladoInventarioService.solicitar(
-            empresa_id=self.empresa.id, producto_id=self.producto.id, cantidad=Decimal("500"),
-            sede_origen_id=self.bogota.id, sede_destino_id=self.barranquilla.id, usuario_id=self.perfil.id,
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
+            cantidad=Decimal("500"),
+            sede_origen_id=self.bogota.id,
+            sede_destino_id=self.barranquilla.id,
+            usuario_id=self.perfil.id,
         )
         traslado = TrasladoInventarioService.aprobar(
-            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id, usuario_id=self.perfil.id,
+            traslado_uuid=traslado.uuid,
+            empresa_id=self.empresa.id,
+            usuario_id=self.perfil.id,
         )
         with self.assertRaises(ValidationError):
-            TrasladoInventarioService.enviar(traslado_uuid=traslado.uuid, empresa_id=self.empresa.id)
+            TrasladoInventarioService.enviar(
+                traslado_uuid=traslado.uuid, empresa_id=self.empresa.id
+            )
 
         # No debe haber generado ningun movimiento de salida.
         self.assertEqual(
             MovimientoInventario.objects.filter(
-                empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.TRASLADO_SALIDA,
+                empresa=self.empresa,
+                tipo=MovimientoInventario.TipoMovimiento.TRASLADO_SALIDA,
             ).count(),
             0,
         )
@@ -138,51 +176,84 @@ class TrasladoValidacionesTests(TrasladoInventarioF21TestsBase):
 
     def test_enviar_sin_aprobar_es_rechazado(self):
         traslado = TrasladoInventarioService.solicitar(
-            empresa_id=self.empresa.id, producto_id=self.producto.id, cantidad=Decimal("10"),
-            sede_origen_id=self.bogota.id, sede_destino_id=self.barranquilla.id, usuario_id=self.perfil.id,
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
+            cantidad=Decimal("10"),
+            sede_origen_id=self.bogota.id,
+            sede_destino_id=self.barranquilla.id,
+            usuario_id=self.perfil.id,
         )
         with self.assertRaises(ValidationError):
-            TrasladoInventarioService.enviar(traslado_uuid=traslado.uuid, empresa_id=self.empresa.id)
+            TrasladoInventarioService.enviar(
+                traslado_uuid=traslado.uuid, empresa_id=self.empresa.id
+            )
 
     def test_cancelar_en_transito_es_rechazado(self):
         traslado = TrasladoInventarioService.solicitar(
-            empresa_id=self.empresa.id, producto_id=self.producto.id, cantidad=Decimal("10"),
-            sede_origen_id=self.bogota.id, sede_destino_id=self.barranquilla.id, usuario_id=self.perfil.id,
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
+            cantidad=Decimal("10"),
+            sede_origen_id=self.bogota.id,
+            sede_destino_id=self.barranquilla.id,
+            usuario_id=self.perfil.id,
         )
         traslado = TrasladoInventarioService.aprobar(
-            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id, usuario_id=self.perfil.id,
+            traslado_uuid=traslado.uuid,
+            empresa_id=self.empresa.id,
+            usuario_id=self.perfil.id,
         )
-        traslado = TrasladoInventarioService.enviar(traslado_uuid=traslado.uuid, empresa_id=self.empresa.id)
+        traslado = TrasladoInventarioService.enviar(
+            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id
+        )
         with self.assertRaises(ValidationError):
-            TrasladoInventarioService.cancelar(traslado_uuid=traslado.uuid, empresa_id=self.empresa.id)
+            TrasladoInventarioService.cancelar(
+                traslado_uuid=traslado.uuid, empresa_id=self.empresa.id
+            )
 
     def test_cancelar_en_solicitado_es_permitido(self):
         traslado = TrasladoInventarioService.solicitar(
-            empresa_id=self.empresa.id, producto_id=self.producto.id, cantidad=Decimal("10"),
-            sede_origen_id=self.bogota.id, sede_destino_id=self.barranquilla.id, usuario_id=self.perfil.id,
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
+            cantidad=Decimal("10"),
+            sede_origen_id=self.bogota.id,
+            sede_destino_id=self.barranquilla.id,
+            usuario_id=self.perfil.id,
         )
-        traslado = TrasladoInventarioService.cancelar(traslado_uuid=traslado.uuid, empresa_id=self.empresa.id)
+        traslado = TrasladoInventarioService.cancelar(
+            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id
+        )
         self.assertEqual(traslado.estado, TrasladoInventario.Estado.CANCELADO)
 
 
 class TrasladoIdempotenciaTests(TrasladoInventarioF21TestsBase):
     def _traslado_en_transito(self):
         traslado = TrasladoInventarioService.solicitar(
-            empresa_id=self.empresa.id, producto_id=self.producto.id, cantidad=Decimal("15"),
-            sede_origen_id=self.bogota.id, sede_destino_id=self.barranquilla.id, usuario_id=self.perfil.id,
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
+            cantidad=Decimal("15"),
+            sede_origen_id=self.bogota.id,
+            sede_destino_id=self.barranquilla.id,
+            usuario_id=self.perfil.id,
         )
         traslado = TrasladoInventarioService.aprobar(
-            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id, usuario_id=self.perfil.id,
+            traslado_uuid=traslado.uuid,
+            empresa_id=self.empresa.id,
+            usuario_id=self.perfil.id,
         )
-        return TrasladoInventarioService.enviar(traslado_uuid=traslado.uuid, empresa_id=self.empresa.id)
+        return TrasladoInventarioService.enviar(
+            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id
+        )
 
     def test_enviar_dos_veces_no_duplica_movimiento_salida(self):
         traslado = self._traslado_en_transito()
-        traslado2 = TrasladoInventarioService.enviar(traslado_uuid=traslado.uuid, empresa_id=self.empresa.id)
+        traslado2 = TrasladoInventarioService.enviar(
+            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id
+        )
         self.assertEqual(traslado2.estado, TrasladoInventario.Estado.EN_TRANSITO)
         self.assertEqual(
             MovimientoInventario.objects.filter(
-                empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.TRASLADO_SALIDA,
+                empresa=self.empresa,
+                tipo=MovimientoInventario.TipoMovimiento.TRASLADO_SALIDA,
             ).count(),
             1,
         )
@@ -190,15 +261,20 @@ class TrasladoIdempotenciaTests(TrasladoInventarioF21TestsBase):
     def test_recibir_dos_veces_no_duplica_movimiento_entrada(self):
         traslado = self._traslado_en_transito()
         traslado = TrasladoInventarioService.recibir(
-            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id, usuario_id=self.perfil.id,
+            traslado_uuid=traslado.uuid,
+            empresa_id=self.empresa.id,
+            usuario_id=self.perfil.id,
         )
         traslado2 = TrasladoInventarioService.recibir(
-            traslado_uuid=traslado.uuid, empresa_id=self.empresa.id, usuario_id=self.perfil.id,
+            traslado_uuid=traslado.uuid,
+            empresa_id=self.empresa.id,
+            usuario_id=self.perfil.id,
         )
         self.assertEqual(traslado2.estado, TrasladoInventario.Estado.RECIBIDO)
         self.assertEqual(
             MovimientoInventario.objects.filter(
-                empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.TRASLADO_ENTRADA,
+                empresa=self.empresa,
+                tipo=MovimientoInventario.TipoMovimiento.TRASLADO_ENTRADA,
             ).count(),
             1,
         )
@@ -232,6 +308,10 @@ def test_no_se_puede_trasladar_a_sede_de_otro_tenant(tenant1, tenant2):
     # persistir el traslado (donde usuario_id se usaria de verdad).
     with schema_context(tenant1.schema_name), pytest.raises(ValidationError):
         TrasladoInventarioService.solicitar(
-            empresa_id=empresa1_id, producto_id=producto1_id, cantidad=Decimal("5"),
-            sede_origen_id=sede_origen_id, sede_destino_id=sede_destino_id, usuario_id=None,
+            empresa_id=empresa1_id,
+            producto_id=producto1_id,
+            cantidad=Decimal("5"),
+            sede_origen_id=sede_origen_id,
+            sede_destino_id=sede_destino_id,
+            usuario_id=None,
         )

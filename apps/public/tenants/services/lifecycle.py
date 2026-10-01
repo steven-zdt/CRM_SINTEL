@@ -20,6 +20,7 @@ Este módulo es el único lugar que decide si un trial expiró. El
 middleware y la tarea periódica de Celery llaman a la MISMA función
 (`reconcile_tenant_lifecycle`) -- nunca se duplica la regla de negocio.
 """
+
 from __future__ import annotations
 
 import logging
@@ -126,7 +127,9 @@ def reconcile_tenant_lifecycle(client, *, save: bool = True) -> bool:
     logger.warning(
         "[LIFECYCLE] Trial expirado -- tenant desactivado automaticamente: "
         "schema=%s paid_until=%s hoy=%s",
-        client.schema_name, client.paid_until, timezone.localdate(),
+        client.schema_name,
+        client.paid_until,
+        timezone.localdate(),
     )
     return True
 
@@ -154,7 +157,9 @@ def reconcile_all_tenants(*, exclude_public: bool = True) -> dict[str, Any]:
         except Exception as exc:  # noqa: BLE001 -- un tenant no debe abortar el resto
             logger.error(
                 "[LIFECYCLE] Error reconciliando tenant schema=%s: %s",
-                client.schema_name, exc, exc_info=True,
+                client.schema_name,
+                exc,
+                exc_info=True,
             )
             errors.append({"schema_name": client.schema_name, "error": str(exc)})
 

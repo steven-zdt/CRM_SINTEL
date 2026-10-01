@@ -49,4 +49,3 @@ class FacturaServiceMixin:
     def service_obtener_xml(self, factura, tipo):
         """Retorna el XML de un anexo."""
         return FacturaBusinessService.obtener_xml(factura, tipo)
-

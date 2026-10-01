@@ -18,6 +18,7 @@ Nota: get_libro_diario_periodo() solo agrega ExtractorFacturas/Gastos/Nomina
 separado en la auditoria (.agent/AUDITORIA_COMPLETA_CONTABILIDAD.md), no
 cubierto por este archivo.
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -52,57 +53,97 @@ class CuentaCodigoReportesBugfixTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa F27", nit="900000927", direccion="Calle F27",
+            razon_social="Empresa F27",
+            nit="900000927",
+            direccion="Calle F27",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Sede F27")
         self.perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
         )
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor F27", numero_documento="F27-PROV-1", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor F27",
+            numero_documento="F27-PROV-1",
+            tipo_documento="NIT",
         )
         self.plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla F27", prefijo="F27",
-            rango_desde=1, rango_hasta=1000, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla F27",
+            prefijo="F27",
+            rango_desde=1,
+            rango_hasta=1000,
+            consecutivo_actual=1,
+            vigente=True,
         )
         self.hoy = timezone.localdate()
         self.periodo = PeriodoContable.objects.create(
-            empresa=self.empresa, periodo=self.hoy.strftime("%Y-%m"),
-            fecha_inicio=date(self.hoy.year, 1, 1), fecha_fin=date(self.hoy.year, 12, 31), estado="ABIERTO",
+            empresa=self.empresa,
+            periodo=self.hoy.strftime("%Y-%m"),
+            fecha_inicio=date(self.hoy.year, 1, 1),
+            fecha_fin=date(self.hoy.year, 12, 31),
+            estado="ABIERTO",
         )
         for tipo_tx, concepto, cuenta in _REGLAS_INVENTARIO:
             ReglaContable.objects.create(
-                empresa=self.empresa, tipo_transaccion=tipo_tx, concepto=concepto,
-                cuenta_codigo=cuenta, activo=True,
+                empresa=self.empresa,
+                tipo_transaccion=tipo_tx,
+                concepto=concepto,
+                cuenta_codigo=cuenta,
+                activo=True,
             )
 
     def _comprar_y_contabilizar(self):
         producto = Producto.objects.create(
-            empresa=self.empresa, codigo="F27-A", nombre="Producto F27 A", stock_actual=Decimal("0"),
+            empresa=self.empresa,
+            codigo="F27-A",
+            nombre="Producto F27 A",
+            stock_actual=Decimal("0"),
         )
         orden = OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede, proveedor=self.proveedor, plantilla=self.plantilla,
-            fecha="2026-06-01", consecutivo=self.plantilla.consecutivo_actual, numero_documento="F27-OC-1",
+            empresa=self.empresa,
+            sede=self.sede,
+            proveedor=self.proveedor,
+            plantilla=self.plantilla,
+            fecha="2026-06-01",
+            consecutivo=self.plantilla.consecutivo_actual,
+            numero_documento="F27-OC-1",
             estado="APROBADA",
         )
         item = ItemOrdenCompra.objects.create(
-            empresa=self.empresa, orden_compra=orden, descripcion="Compra F27-A",
-            item_inventario_uuid=producto.uuid, cantidad=Decimal("10"), valor_unitario=Decimal("100.00"),
-            subtotal=Decimal("1000.00"), total=Decimal("1000.00"),
+            empresa=self.empresa,
+            orden_compra=orden,
+            descripcion="Compra F27-A",
+            item_inventario_uuid=producto.uuid,
+            cantidad=Decimal("10"),
+            valor_unitario=Decimal("100.00"),
+            subtotal=Decimal("1000.00"),
+            total=Decimal("1000.00"),
         )
         data = {"orden_compra": orden, "fecha": "2026-06-02"}
         items_data = [{"item_orden_compra": item, "cantidad_recibida": Decimal("10")}]
         ok, recepcion, code = RecepcionCompraBusinessService.crear_recepcion(
-            data, items_data, self.empresa, self.sede, self.perfil,
+            data,
+            items_data,
+            self.empresa,
+            self.sede,
+            self.perfil,
         )
         assert ok, recepcion
-        ok, recepcion, code = RecepcionCompraBusinessService.confirmar_recepcion(recepcion.uuid, self.empresa.id)
+        ok, recepcion, code = RecepcionCompraBusinessService.confirmar_recepcion(
+            recepcion.uuid, self.empresa.id
+        )
         assert ok, recepcion
 
         resultado = ExtractorInventario(empresa_id=self.empresa.id).contabilizar_pendientes()
         assert resultado["contabilizados"] == 1, resultado
 
-        asiento = AsientoContable.objects.get(empresa=self.empresa, documento_origen_app="inventario")
+        asiento = AsientoContable.objects.get(
+            empresa=self.empresa, documento_origen_app="inventario"
+        )
         return asiento
 
     def test_contabilizador_solo_llena_cuenta_codigo_nunca_el_fk_legacy(self):
@@ -113,7 +154,6 @@ class CuentaCodigoReportesBugfixTests(SintelTenantTestCase):
         for mov in movimientos:
             self.assertIsNone(mov.cuenta_id)
             self.assertTrue(mov.cuenta_codigo)
-
 
     def test_balance_prueba_y_estado_resultados_incluyen_asiento_aprobado(self):
         asiento = self._comprar_y_contabilizar()
@@ -147,6 +187,8 @@ class CuentaCodigoReportesBugfixTests(SintelTenantTestCase):
         """No-regresion: el filtro estado='APROBADO' sigue siendo respetado."""
         self._comprar_y_contabilizar()  # queda en BORRADOR (default del Contabilizador)
         filas = balance_prueba_selector(
-            self.empresa.id, date(self.hoy.year, 1, 1), date(self.hoy.year, 12, 31),
+            self.empresa.id,
+            date(self.hoy.year, 1, 1),
+            date(self.hoy.year, 12, 31),
         )
         self.assertEqual(filas, [])

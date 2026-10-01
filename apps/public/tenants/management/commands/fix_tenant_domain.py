@@ -64,7 +64,7 @@ class Command(BaseCommand):
             return
 
         # Crear dominio con puerto
-        domain_new = Domain.objects.create(domain=domain_with_port, tenant=tenant, is_primary=False)
+        Domain.objects.create(domain=domain_with_port, tenant=tenant, is_primary=False)
 
         self.stdout.write(
             self.style.SUCCESS(

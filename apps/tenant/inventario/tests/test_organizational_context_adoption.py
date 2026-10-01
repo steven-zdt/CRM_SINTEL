@@ -11,6 +11,7 @@ TenantProfile, mientras OrganizationalContext.resolve() si lo exige - un
 QUINTO mecanismo de resolucion de empresa, distinto del de las apps ya
 auditadas, con el mismo comportamiento de fondo.
 """
+
 from apps.tenant.core.services.organizational_context import (
     OrganizationalContext,
     OrganizationalContextError,
@@ -28,14 +29,20 @@ class InventarioOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9 Inventario", nit="900000995", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9 Inventario",
+            nit="900000995",
+            direccion="Calle 1",
         )
         self.producto = Producto.objects.create(
-            empresa=self.empresa, codigo="SKU-F9", nombre="Producto Fase9",
+            empresa=self.empresa,
+            codigo="SKU-F9",
+            nombre="Producto Fase9",
         )
 
     def test_productoviewset_exposes_get_organizational_context_with_a_real_profile(self):
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         from rest_framework.test import APIRequestFactory
         from rest_framework_simplejwt.authentication import JWTAuthentication

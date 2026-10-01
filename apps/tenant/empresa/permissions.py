@@ -4,6 +4,7 @@ La SSoT de permisos basados en rol es `apps.tenant.api.permissions`.
 Este modulo reexporta IsTenantAdmin desde la fuente central.
 Todo nuevo codigo DEBE importar desde `apps.tenant.api.permissions`.
 """
+
 import logging
 import warnings
 

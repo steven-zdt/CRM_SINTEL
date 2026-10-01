@@ -6,6 +6,7 @@ unico que consume el resto del sistema (validacion de balance,
 bulk_create de TransaccionBancaria) -- ningun consumidor debe conocer si
 el origen fue XLSX, CSV o XML.
 """
+
 import hashlib
 from dataclasses import dataclass, field
 from datetime import date
@@ -32,8 +33,15 @@ class StatementBalanceError(Exception):
     silencio si esta validacion falla.
     """
 
-    def __init__(self, mensaje, saldo_inicial=None, total_creditos=None,
-                 total_debitos=None, saldo_final_declarado=None, saldo_final_calculado=None):
+    def __init__(
+        self,
+        mensaje,
+        saldo_inicial=None,
+        total_creditos=None,
+        total_debitos=None,
+        saldo_final_declarado=None,
+        saldo_final_calculado=None,
+    ):
         super().__init__(mensaje)
         self.saldo_inicial = saldo_inicial
         self.total_creditos = total_creditos
@@ -74,13 +82,18 @@ class NormalizedBankTransaction:
         """Fase 25: fingerprint de deduplicacion. No depende solo de
         fecha+valor (pueden existir movimientos legitimos iguales) -- combina
         fecha, valor, saldo, descripcion, dcto y numero de fila de origen."""
-        base = "|".join([
-            str(self.fecha), str(self.valor), str(self.saldo),
-            (self.descripcion or "").strip().upper(),
-            (self.dcto or "").strip().upper(),
-            str(self.source_row_number or ""),
-            currency, source_file_hash,
-        ])
+        base = "|".join(
+            [
+                str(self.fecha),
+                str(self.valor),
+                str(self.saldo),
+                (self.descripcion or "").strip().upper(),
+                (self.dcto or "").strip().upper(),
+                str(self.source_row_number or ""),
+                currency,
+                source_file_hash,
+            ]
+        )
         return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
 
@@ -97,7 +110,7 @@ class NormalizedBankStatement:
     total_creditos_declarado: Decimal | None = None
     total_debitos_declarado: Decimal | None = None
 
-    source_format: str = ""          # "XLSX" | "CSV" | "XML"
+    source_format: str = ""  # "XLSX" | "CSV" | "XML"
     source_file_name: str = ""
     source_file_hash: str = ""
     currency: str = "COP"
@@ -105,7 +118,7 @@ class NormalizedBankStatement:
     filas_leidas: int = 0
     filas_importadas: int = 0
     filas_omitidas: int = 0
-    errores: list = field(default_factory=list)      # list[str]
+    errores: list = field(default_factory=list)  # list[str]
     advertencias: list = field(default_factory=list)  # list[str]
 
     def resumen(self) -> dict:

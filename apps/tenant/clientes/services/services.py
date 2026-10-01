@@ -13,8 +13,9 @@ en este archivo (sombra sin consumidores de las reales en
 api_mixins.py/business_service.py) fueron eliminadas -- confirmado
 via grep repo-wide que nada las importaba desde este modulo especifico.
 """
-from .business_service import ClienteBusinessService
+
 from ..models import Cliente
+from .business_service import ClienteBusinessService
 
 
 def crear_cliente(empresa, data):
@@ -26,13 +27,10 @@ def crear_cliente(empresa, data):
     num_doc = data.get("numero_documento")
 
     existing = Cliente.objects.filter(
-        empresa_id=empresa.id,
-        tipo_documento=tipo_doc,
-        numero_documento=num_doc
+        empresa_id=empresa.id, tipo_documento=tipo_doc, numero_documento=num_doc
     ).exists()
 
     creado = not existing
     service = ClienteBusinessService()
     cliente, _ = service.registrar_cliente_completo(empresa.id, data)
     return cliente, creado
-

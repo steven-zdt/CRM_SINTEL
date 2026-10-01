@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("tenant_gastos", "0011_alter_documentosoporte_retefuente_porcentaje_and_more"),
         ("tenant_proveedores", "0005_alter_proveedor_nombre_comercial"),

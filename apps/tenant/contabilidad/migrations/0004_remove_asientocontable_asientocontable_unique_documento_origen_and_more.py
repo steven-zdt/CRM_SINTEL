@@ -4,18 +4,17 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('contabilidad', '0003_integracion_v3_preparacion'),
+        ("contabilidad", "0003_integracion_v3_preparacion"),
     ]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='asientocontable',
-            name='asientocontable_unique_documento_origen',
+            model_name="asientocontable",
+            name="asientocontable_unique_documento_origen",
         ),
         migrations.RemoveField(
-            model_name='asientocontable',
-            name='factura',
+            model_name="asientocontable",
+            name="factura",
         ),
     ]

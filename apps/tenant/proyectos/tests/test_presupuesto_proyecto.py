@@ -7,13 +7,15 @@ Tests para validar:
 3. Bloqueo de edicion en Fase CIERRE - crear item
 4. Bloqueo de edicion en Fase CIERRE - eliminar item
 """
+
 from decimal import Decimal
+
 import pytest
 from django_tenants.utils import schema_context
 from rest_framework.exceptions import ValidationError
 
 from apps.tenant.empresa.models import Empresa
-from apps.tenant.proyectos.models import Proyecto, ItemPresupuestoProyecto
+from apps.tenant.proyectos.models import Proyecto
 from apps.tenant.proyectos.services import PresupuestoBusinessService
 
 
@@ -34,10 +36,10 @@ class TestPresupuestoProyecto:
             self.empresa1 = Empresa.objects.first()
             self.proyecto = Proyecto.objects.create(
                 empresa=self.empresa1,
-                nombre='Proyecto Test',
-                tipo_servicio='PROYECTO_INTEGRAL',
-                valor_contrato_proyectado=Decimal('1000000.00'),
-                fase_actual='PLANEACION'
+                nombre="Proyecto Test",
+                tipo_servicio="PROYECTO_INTEGRAL",
+                valor_contrato_proyectado=Decimal("1000000.00"),
+                fase_actual="PLANEACION",
             )
             yield
 
@@ -57,30 +59,30 @@ class TestPresupuestoProyecto:
             empresa=self.empresa1,
             proyecto=self.proyecto,
             data={
-                'categoria': 'MANO_OBRA',
-                'descripcion': 'Instalacion tecnica',
-                'cantidad': Decimal('2'),
-                'valor_unitario': Decimal('100000.00')
-            }
+                "categoria": "MANO_OBRA",
+                "descripcion": "Instalacion tecnica",
+                "cantidad": Decimal("2"),
+                "valor_unitario": Decimal("100000.00"),
+            },
         )
 
         PresupuestoBusinessService.crear_item(
             empresa=self.empresa1,
             proyecto=self.proyecto,
             data={
-                'categoria': 'MATERIALES',
-                'descripcion': 'Materiales varios',
-                'cantidad': Decimal('10'),
-                'valor_unitario': Decimal('30000.00')
-            }
+                "categoria": "MATERIALES",
+                "descripcion": "Materiales varios",
+                "cantidad": Decimal("10"),
+                "valor_unitario": Decimal("30000.00"),
+            },
         )
 
         # Recargar proyecto para obtener valores calculados
         self.proyecto.refresh_from_db()
 
-        assert self.proyecto.costo_planeado_total == Decimal('500000.00')
-        assert self.proyecto.utilidad_planeada == Decimal('500000.00')
-        assert self.proyecto.margen_planeado == Decimal('50.00')
+        assert self.proyecto.costo_planeado_total == Decimal("500000.00")
+        assert self.proyecto.utilidad_planeada == Decimal("500000.00")
+        assert self.proyecto.margen_planeado == Decimal("50.00")
 
     def test_dsv_item_otro_empresa_rechazado(self):
         """
@@ -103,11 +105,11 @@ class TestPresupuestoProyecto:
                 empresa=empresa_otra,  # <- Diferente empresa (id distinto)
                 proyecto=self.proyecto,  # <- Proyecto pertenece a empresa1
                 data={
-                    'categoria': 'EQUIPOS',
-                    'descripcion': 'Test',
-                    'cantidad': Decimal('1'),
-                    'valor_unitario': Decimal('10000.00')
-                }
+                    "categoria": "EQUIPOS",
+                    "descripcion": "Test",
+                    "cantidad": Decimal("1"),
+                    "valor_unitario": Decimal("10000.00"),
+                },
             )
 
     def test_cierre_bloquea_crear_item(self):
@@ -119,19 +121,19 @@ class TestPresupuestoProyecto:
         - Intentar crear item
         - Debe lanzar ValidationError con mensaje sobre CIERRE
         """
-        self.proyecto.fase_actual = 'CIERRE'
+        self.proyecto.fase_actual = "CIERRE"
         self.proyecto.save()
 
-        with pytest.raises(ValidationError, match='Cierre'):
+        with pytest.raises(ValidationError, match="Cierre"):
             PresupuestoBusinessService.crear_item(
                 empresa=self.empresa1,
                 proyecto=self.proyecto,
                 data={
-                    'categoria': 'EQUIPOS',
-                    'descripcion': 'Test',
-                    'cantidad': Decimal('1'),
-                    'valor_unitario': Decimal('10000.00')
-                }
+                    "categoria": "EQUIPOS",
+                    "descripcion": "Test",
+                    "cantidad": Decimal("1"),
+                    "valor_unitario": Decimal("10000.00"),
+                },
             )
 
     def test_cierre_bloquea_eliminar_item(self):
@@ -148,21 +150,21 @@ class TestPresupuestoProyecto:
             empresa=self.empresa1,
             proyecto=self.proyecto,
             data={
-                'categoria': 'MATERIALES',
-                'descripcion': 'Item test',
-                'cantidad': Decimal('5'),
-                'valor_unitario': Decimal('20000.00')
-            }
+                "categoria": "MATERIALES",
+                "descripcion": "Item test",
+                "cantidad": Decimal("5"),
+                "valor_unitario": Decimal("20000.00"),
+            },
         )
 
         # Cambiar fase a CIERRE
-        self.proyecto.fase_actual = 'CIERRE'
+        self.proyecto.fase_actual = "CIERRE"
         self.proyecto.save()
 
         # Recargar item para que tenga la relacion actualizada
         item.refresh_from_db()
 
-        with pytest.raises(ValidationError, match='Cierre'):
+        with pytest.raises(ValidationError, match="Cierre"):
             PresupuestoBusinessService.eliminar_item(item)
 
     def test_recalculo_automatico_al_eliminar_item(self):
@@ -179,28 +181,28 @@ class TestPresupuestoProyecto:
             empresa=self.empresa1,
             proyecto=self.proyecto,
             data={
-                'categoria': 'MANO_OBRA',
-                'cantidad': Decimal('2'),
-                'valor_unitario': Decimal('100000.00')
-            }
+                "categoria": "MANO_OBRA",
+                "cantidad": Decimal("2"),
+                "valor_unitario": Decimal("100000.00"),
+            },
         )
 
-        item2 = PresupuestoBusinessService.crear_item(
+        PresupuestoBusinessService.crear_item(
             empresa=self.empresa1,
             proyecto=self.proyecto,
             data={
-                'categoria': 'MATERIALES',
-                'cantidad': Decimal('10'),
-                'valor_unitario': Decimal('30000.00')
-            }
+                "categoria": "MATERIALES",
+                "cantidad": Decimal("10"),
+                "valor_unitario": Decimal("30000.00"),
+            },
         )
 
         self.proyecto.refresh_from_db()
-        assert self.proyecto.costo_planeado_total == Decimal('500000.00')
+        assert self.proyecto.costo_planeado_total == Decimal("500000.00")
 
         # Eliminar primer item
         PresupuestoBusinessService.eliminar_item(item1)
 
         self.proyecto.refresh_from_db()
-        assert self.proyecto.costo_planeado_total == Decimal('300000.00')
-        assert self.proyecto.utilidad_planeada == Decimal('700000.00')
+        assert self.proyecto.costo_planeado_total == Decimal("300000.00")
+        assert self.proyecto.utilidad_planeada == Decimal("700000.00")

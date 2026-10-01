@@ -6,6 +6,7 @@ ViewSets DRF) y por el context processor de UI
 un solo lugar para no duplicar el orden de resolucion en dos capas que
 podrian desincronizarse.
 """
+
 from __future__ import annotations
 
 
@@ -19,17 +20,17 @@ def resolve_sede_activa_id(request, empresa_id: int, perfil) -> int | None:
     """
     from apps.tenant.empresa.models import Sede
 
-    session = getattr(request, 'session', None)
-    sesion_sede_id = session.get('sede_activa_id') if session is not None else None
+    session = getattr(request, "session", None)
+    sesion_sede_id = session.get("sede_activa_id") if session is not None else None
     if sesion_sede_id:
         if Sede.objects.filter(id=sesion_sede_id, empresa_id=empresa_id).exists():
             return sesion_sede_id
-        del session['sede_activa_id']
+        del session["sede_activa_id"]
 
     if perfil is not None:
-        primera_asignada = perfil.sedes_asignadas.order_by('nombre').first()
+        primera_asignada = perfil.sedes_asignadas.order_by("nombre").first()
         if primera_asignada:
             return primera_asignada.id
 
-    principal = Sede.objects.filter(empresa_id=empresa_id).order_by('nombre').first()
+    principal = Sede.objects.filter(empresa_id=empresa_id).order_by("nombre").first()
     return principal.id if principal else None

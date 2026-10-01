@@ -32,10 +32,8 @@
       <div class="tab-pane fade show active" id="tab-pane-cuentas" role="tabpanel" 
            aria-labelledby="tab-cuentas" tabindex="0">
         
-        {# Toolbar #}
-        <div class="d-flex justify-content-between align-items-center mb-3" data-module="cuentas">
-          {% url 'bancos:cuenta-tabla' as cuentas_search_url %}
-          {% include 'tenant/core/partials/ui/filter_bar.html' with search_id="search-cuenta" placeholder="Buscar cuenta..." module="cuentas" search_url=cuentas_search_url target="#cuentas-panel" %}
+        {# Toolbar -- sin buscador propio: DataTables trae su buscador nativo #}
+        <div class="d-flex justify-content-end align-items-center mb-3" data-module="cuentas">
           <button class="btn btn-primary btn-sm"
                   hx-get="/api/v1/bancos/cuentas/render-offcanvas/crear/"
                   hx-target="#offcanvas-container-bancos"
@@ -46,24 +44,16 @@
           </button>
         </div>
 
-        {# Tabla server-rendered (django-tables2 + HTMX) #}
-        <div id="cuentas-panel"
-             hx-get="{% url 'bancos:cuenta-tabla' %}"
-             hx-trigger="load, cuenta-updated from:body"
-             hx-target="this"
-             hx-swap="innerHTML"
-             hx-boost="true">
-        </div>
+        {# Tabla -- esqueleto estatico, poblado via ajax por datatables.factory.js #}
+        {% include 'tenant/bancos/partials/tabla_cuentas.html' %}
       </div>
 
       {# TAB 2: EXTRACTOS BANCARIOS #}
       <div class="tab-pane fade" id="tab-pane-extractos" role="tabpanel" 
            aria-labelledby="tab-extractos" tabindex="0">
         
-        {# Toolbar #}
-        <div class="d-flex justify-content-between align-items-center mb-3" data-module="extractos">
-          {% url 'bancos:extracto-tabla' as extractos_search_url %}
-          {% include 'tenant/core/partials/ui/filter_bar.html' with search_id="search-extracto" placeholder="Buscar extracto..." module="extractos" search_url=extractos_search_url target="#extractos-panel" %}
+        {# Toolbar -- sin buscador propio: DataTables trae su buscador nativo #}
+        <div class="d-flex justify-content-end align-items-center mb-3" data-module="extractos">
           <button class="btn btn-primary btn-sm"
                   hx-get="/api/v1/bancos/extractos/render-offcanvas/crear/"
                   hx-target="#offcanvas-container-bancos"
@@ -74,14 +64,15 @@
           </button>
         </div>
 
-        {# Tabla server-rendered (django-tables2 + HTMX) #}
-        <div id="extractos-panel"
+        {# KPIs de conciliacion (BAN-09) -- siguen server-rendered via HTMX #}
+        <div id="extractos-kpis-panel"
              hx-get="{% url 'bancos:extracto-tabla' %}"
              hx-trigger="load, extracto-updated from:body"
              hx-target="this"
-             hx-swap="innerHTML"
-             hx-boost="true">
-        </div>
+             hx-swap="innerHTML"></div>
+
+        {# Tabla -- esqueleto estatico, poblado via ajax por extracto_list.js #}
+        {% include 'tenant/bancos/partials/tabla_extractos.html' %}
       </div>
     </div>
   </div>

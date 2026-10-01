@@ -30,8 +30,14 @@ class ResolucionFacturacionSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = (
-            "id", "uuid", "consecutivo_actual", "numero_formado", "agotada",
-            "tipo_display", "created_at", "updated_at",
+            "id",
+            "uuid",
+            "consecutivo_actual",
+            "numero_formado",
+            "agotada",
+            "tipo_display",
+            "created_at",
+            "updated_at",
         )
 
     def get_numero_formado(self, obj):

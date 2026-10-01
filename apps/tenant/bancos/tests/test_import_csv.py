@@ -1,5 +1,6 @@
 """Fase 2 y Fase 33 (mision Bancos v3.0): importador CSV -- separadores,
 BOM, decimales colombianos/americanos, fechas con y sin año."""
+
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -15,12 +16,19 @@ class ImportCSVTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa CSV", nit="900000901", direccion="Calle 1",
+            razon_social="Empresa CSV",
+            nit="900000901",
+            direccion="Calle 1",
         )
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
         self.cuenta = CuentaBancaria.objects.create(
-            empresa=self.empresa, nombre="Cuenta CSV", banco="Banco Test",
-            tipo="AHORROS", numero="CSV-1",
+            empresa=self.empresa,
+            nombre="Cuenta CSV",
+            banco="Banco Test",
+            tipo="AHORROS",
+            numero="CSV-1",
         )
 
     def _crear_extracto(self, mes=1, anio=2026):
@@ -52,9 +60,14 @@ class ImportCSVTests(SintelTenantTestCase):
         self.assertEqual(resp.data["formato"], "CSV")
 
         tx = TransaccionBancaria.objects.filter(extracto__uuid=extracto_uuid).order_by("fecha")
-        self.assertEqual(list(tx.values_list("valor", flat=True)), [
-            Decimal("100000.00"), Decimal("50000.00"), Decimal("-30000.00"),
-        ])
+        self.assertEqual(
+            list(tx.values_list("valor", flat=True)),
+            [
+                Decimal("100000.00"),
+                Decimal("50000.00"),
+                Decimal("-30000.00"),
+            ],
+        )
 
     def test_import_csv_comma_decimal_americano(self):
         extracto_uuid = self._crear_extracto(mes=2)

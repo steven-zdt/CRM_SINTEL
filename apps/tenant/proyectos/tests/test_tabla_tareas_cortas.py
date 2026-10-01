@@ -11,6 +11,7 @@ Verifica:
    (table.setFilter en nueva_tarea_list.js).
 4. Los botones de accion usan data-uuid (uuid lookup, AGENTS.md).
 """
+
 from datetime import date, timedelta
 
 import pytest
@@ -24,31 +25,43 @@ from apps.tenant.proyectos.models import TareaCorta
 @pytest.fixture
 def _tareas_cortas(tenant):
     with schema_context(tenant.schema_name):
-        empresa = Empresa.objects.only('id').first()
+        empresa = Empresa.objects.only("id").first()
         hoy = date.today()
         TareaCorta.objects.create(
-            empresa=empresa, titulo='Instalar router',
-            fecha_inicio=hoy, fecha_fin=hoy + timedelta(days=1),
-            estado='PENDIENTE', prioridad='ALTA',
+            empresa=empresa,
+            titulo="Instalar router",
+            fecha_inicio=hoy,
+            fecha_fin=hoy + timedelta(days=1),
+            estado="PENDIENTE",
+            prioridad="ALTA",
         )
         TareaCorta.objects.create(
-            empresa=empresa, titulo='Revisar cableado',
-            fecha_inicio=hoy, fecha_fin=hoy + timedelta(days=2),
-            estado='EN_PROCESO', prioridad='NORMAL',
+            empresa=empresa,
+            titulo="Revisar cableado",
+            fecha_inicio=hoy,
+            fecha_fin=hoy + timedelta(days=2),
+            estado="EN_PROCESO",
+            prioridad="NORMAL",
         )
         TareaCorta.objects.create(
-            empresa=empresa, titulo='Configurar firewall',
-            fecha_inicio=hoy, fecha_fin=hoy + timedelta(days=1),
-            estado='COMPLETADA', prioridad='BAJA',
+            empresa=empresa,
+            titulo="Configurar firewall",
+            fecha_inicio=hoy,
+            fecha_fin=hoy + timedelta(days=1),
+            estado="COMPLETADA",
+            prioridad="BAJA",
         )
     return empresa
 
 
 def _login(client, django_user_model, tenant, empresa, username):
-    admin_user = django_user_model.objects.create(username=username, email=f"{username}@example.com")
+    admin_user = django_user_model.objects.create(
+        username=username, email=f"{username}@example.com"
+    )
     TenantMembership.objects.create(client=tenant, user=admin_user, is_active=True, rol="ADMIN")
     with schema_context(tenant.schema_name):
         from apps.tenant.perfil.models import TenantProfile
+
         TenantProfile.objects.create(user=admin_user, empresa=empresa, rol="ADMIN")
         # django.contrib.sessions esta en TENANT_APPS -- force_login() debe
         # ejecutarse dentro del schema del tenant (ver test_tabla_view.py).
@@ -56,10 +69,14 @@ def _login(client, django_user_model, tenant, empresa, username):
 
 
 @pytest.mark.django_db
-def test_tabla_tareas_cortas_renderiza_y_calcula_kpis(client, django_user_model, tenant, _tareas_cortas):
+def test_tabla_tareas_cortas_renderiza_y_calcula_kpis(
+    client, django_user_model, tenant, _tareas_cortas
+):
     _login(client, django_user_model, tenant, _tareas_cortas, "admin_tc1")
 
-    r = client.get("/ui/proyectos/tareas-cortas/tabla/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+    r = client.get(
+        "/ui/proyectos/tareas-cortas/tabla/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
 
     assert r.status_code == 200, f"Status inesperado: {r.status_code}: {r.content[:500]}"
     assert r.context["kpi_total"] == 3
@@ -108,11 +125,15 @@ def test_tabla_tareas_cortas_filtra_por_busqueda(client, django_user_model, tena
 
 
 @pytest.mark.django_db
-def test_tabla_tareas_cortas_boton_acciones_usa_uuid(client, django_user_model, tenant, _tareas_cortas):
+def test_tabla_tareas_cortas_boton_acciones_usa_uuid(
+    client, django_user_model, tenant, _tareas_cortas
+):
     _login(client, django_user_model, tenant, _tareas_cortas, "admin_tc4")
 
     with schema_context(tenant.schema_name):
-        tarea = TareaCorta.objects.get(titulo='Instalar router')
-    r = client.get("/ui/proyectos/tareas-cortas/tabla/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+        tarea = TareaCorta.objects.get(titulo="Instalar router")
+    r = client.get(
+        "/ui/proyectos/tareas-cortas/tabla/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
 
     assert f'data-uuid="{tarea.uuid}"' in r.content.decode("utf-8")

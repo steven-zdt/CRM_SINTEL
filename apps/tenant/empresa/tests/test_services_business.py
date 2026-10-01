@@ -7,19 +7,21 @@ def test_crear_empresa_calls_db(monkeypatch):
     created = {}
 
     def _crear(data):
-        created['ok'] = True
+        created["ok"] = True
+
         class E:
             id = 1
+
         return E()
 
     # Patch the underlying crud primitive
-    monkeypatch.setattr(biz, 'crear_empresa_db', _crear, raising=False)
+    monkeypatch.setattr(biz, "crear_empresa_db", _crear, raising=False)
 
     # Call business API
-    empresa = biz.crear_empresa({'razon_social': 'X'})
+    empresa = biz.crear_empresa({"razon_social": "X"})
 
     assert empresa.id == 1
-    assert created.get('ok') is True
+    assert created.get("ok") is True
 
 
 def test_update_empresa_when_missing_raises(monkeypatch):
@@ -29,10 +31,10 @@ def test_update_empresa_when_missing_raises(monkeypatch):
         def first(self):
             return None
 
-    monkeypatch.setattr(biz, 'Empresa', types.SimpleNamespace(objects=_Mgr()))
+    monkeypatch.setattr(biz, "Empresa", types.SimpleNamespace(objects=_Mgr()))
 
     try:
-        biz.actualizar_empresa({'razon_social': 'X'})
+        biz.actualizar_empresa({"razon_social": "X"})
         raised = False
     except Exception:
         raised = True

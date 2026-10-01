@@ -1,12 +1,16 @@
 /**
- * Feature: Listado de Gastos y Resoluciones v4.0.0
- * - Tablas server-rendered via django-tables2 + HTMX (#gastos-panel / #gastos-resoluciones-panel,
- *   cargadas por atributos hx-get/hx-trigger declarados en gastos_list.html).
- * - Este archivo solo maneja: acciones de fila (ver/editar/anular/eliminar/desactivar),
- *   apertura de offcanvas, y disparo de los eventos que hacen que HTMX vuelva a pedir
- *   la tabla al backend tras una mutacion.
- * - PLAN_UNICO_CORRECCIONES.md Fase 5-BIS: reemplazo de Tabulator, no reimplementar
- *   aqui logica de columnas/paginacion/orden — eso vive en tables.py (server-side).
+ * Feature: Listado de Gastos y Resoluciones v5.1.0
+ * - Tabla "Gastos" (Documentos Soporte) es DataTables 3.x (#tabla-gastos,
+ *   mismo patron ya validado en Ventas/Bancos/Facturas/Clientes/Proveedores/
+ *   Compras -- ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md),
+ *   poblada via ajax contra POST /api/v1/gastos/dt/. DocumentoSoporteTable/
+ *   DocumentoSoporteTableView (django-tables2) retirados.
+ * - Tabla "Resoluciones DIAN" (#tabla-resoluciones) tambien migrada a
+ *   DataTables 3.x, poblada via ajax contra
+ *   POST /api/v1/gastos/resoluciones/dt/ (ResolucionDIANViewSet.dt()).
+ *   ResolucionDIANTable/ResolucionDIANTableView (django-tables2) retirados.
+ * - Este archivo maneja: init de ambas tablas, acciones de fila
+ *   (ver/editar/anular/eliminar/desactivar), y apertura de offcanvas.
  */
 (function(w, d) {
     'use strict';
@@ -19,6 +23,10 @@
 
     const GastoList = {
         refresh: function() {
+            if (w.Sintel.Core && w.Sintel.Core.DataTablesFactory) {
+                w.Sintel.Core.DataTablesFactory.reload('#tabla-gastos');
+            }
+            // Los KPIs siguen server-rendered via HTMX (kpis_gastos.html).
             d.body.dispatchEvent(new CustomEvent('gasto-updated'));
         },
 
@@ -132,7 +140,9 @@
 
     const ResolucionList = {
         reload: function() {
-            d.body.dispatchEvent(new CustomEvent('resolucion-created'));
+            if (w.Sintel.Core && w.Sintel.Core.DataTablesFactory) {
+                w.Sintel.Core.DataTablesFactory.reload(TABLA_RESOLUCIONES_SELECTOR);
+            }
         },
 
         desactivar: async function(uuid) {
@@ -156,15 +166,202 @@
         }
     };
 
+    // ─── DataTables (tabla "Gastos" / Documentos Soporte) ──────────────────
+
+    var TABLA_GASTOS_SELECTOR = '#tabla-gastos';
+    var TABLA_GASTOS_URL = '/api/v1/gastos/dt/';
+    var _gastosTablaInicializada = false;
+
+    function escapeHtmlGasto(str) {
+        var div = d.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
+
+    function renderDocumentoGasto(data, type, row) {
+        var numero = row.ds_numero_documento_proveedor || row.ds_numero_documento;
+        return '<span class="fw-semibold text-primary" style="font-size:0.85rem;">' + escapeHtmlGasto(numero) + '</span>';
+    }
+
+    function renderFechaGasto(data, type, row) {
+        return escapeHtmlGasto(row.ds_fecha);
+    }
+
+    function renderTotalGasto(data, type, row) {
+        var formatted = (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+            ? w.DOMUtils.formatCurrency(row.ds_total) : row.ds_total;
+        return '<span class="fw-bold">' + formatted + '</span>';
+    }
+
+    function renderEstadoGasto(data, type, row) {
+        if (row.ds_anulado) {
+            return '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-20 px-2 py-1">Anulado</span>';
+        }
+        return '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-20 px-2 py-1">Activo</span>';
+    }
+
+    function renderAccionesGasto(data, type, row) {
+        var anulado = row.ds_anulado;
+        var editCls = anulado ? 'btn-light disabled' : 'btn-outline-primary';
+        var cancelCls = anulado ? 'btn-light disabled' : 'btn-outline-warning';
+        return '<div class="btn-group btn-group-sm">' +
+            '<button type="button" class="btn btn-outline-info btn-view-gasto" data-uuid="' + escapeHtmlGasto(row.uuid) + '" title="Ver Detalle"><i class="bi bi-eye"></i></button>' +
+            '<button type="button" class="btn ' + editCls + ' btn-edit-gasto" data-uuid="' + escapeHtmlGasto(row.uuid) + '" title="Editar"><i class="bi bi-pencil"></i></button>' +
+            '<button type="button" class="btn ' + cancelCls + ' btn-cancel-gasto" data-uuid="' + escapeHtmlGasto(row.uuid) + '" title="Anular"><i class="bi bi-x-circle"></i></button>' +
+            '<button type="button" class="btn btn-outline-danger btn-delete-gasto" data-uuid="' + escapeHtmlGasto(row.uuid) + '" data-anulado="' + (anulado ? 'true' : 'false') + '" title="Eliminar"><i class="bi bi-trash"></i></button>' +
+            '</div>';
+    }
+
+    var GASTOS_COLUMNS = [
+        { data: null, title: 'Documento', render: renderDocumentoGasto },
+        { data: null, title: 'Fecha', render: renderFechaGasto },
+        { data: 'ds_vendedor', title: 'Vendedor / Proveedor' },
+        { data: 'categoria_contable_display', title: 'Clasificación' },
+        { data: null, title: 'Total', className: 'text-end', render: renderTotalGasto },
+        { data: null, title: 'Estado', orderable: false, render: renderEstadoGasto },
+        { data: null, title: '', orderable: false, searchable: false, render: renderAccionesGasto },
+    ];
+
+    function initGastosTabla() {
+        if (_gastosTablaInicializada) return;
+        if (typeof DataTable === 'undefined' || !w.Sintel.Core || !w.Sintel.Core.DataTablesFactory) return;
+        w.Sintel.Core.DataTablesFactory.create(TABLA_GASTOS_SELECTOR, TABLA_GASTOS_URL, GASTOS_COLUMNS, {
+            pageLength: 20,
+            order: [[1, 'desc']],
+        });
+        _gastosTablaInicializada = true;
+    }
+
+    // ─── DataTables (tabla "Resoluciones DIAN") ─────────────────────────────
+
+    var TABLA_RESOLUCIONES_SELECTOR = '#tabla-resoluciones';
+    var TABLA_RESOLUCIONES_URL = '/api/v1/gastos/resoluciones/dt/';
+    var _resolucionesTablaInicializada = false;
+
+    function renderResolucion(data, type, row) {
+        return '<div style="line-height:1.35;">' +
+            '<div class="fw-semibold text-dark" style="font-size:0.85rem;">' + escapeHtmlGasto(row.numero_resolucion || '—') + '</div>' +
+            '<div class="mt-1" style="font-size:0.72rem;"><span class="text-muted">Prefijo:</span> ' +
+            '<code class="text-secondary">' + escapeHtmlGasto(row.prefijo || '—') + '</code></div>' +
+            '</div>';
+    }
+
+    function renderRango(data, type, row) {
+        return '<div style="font-size:0.78rem;"><span class="text-muted">Desde:</span> ' + escapeHtmlGasto(row.rango_desde) +
+            ' &nbsp;<span class="text-muted">Hasta:</span> ' + escapeHtmlGasto(row.rango_hasta) + '</div>';
+    }
+
+    function renderEstadoResolucion(data, type, row) {
+        if (row.vigente) {
+            return '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-20 px-2 py-1">Vigente</span>';
+        }
+        return '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-20 px-2 py-1">Vencida/Inactiva</span>';
+    }
+
+    function renderAccionesResolucion(data, type, row) {
+        var desactivarBtn = '';
+        if (row.vigente) {
+            desactivarBtn = '<button type="button" class="btn btn-outline-warning btn-deactivate-resolucion" data-uuid="' +
+                escapeHtmlGasto(row.uuid) + '" title="Desactivar"><i class="bi bi-slash-circle"></i></button>';
+        }
+        return '<div class="btn-group btn-group-sm">' +
+            '<button type="button" class="btn btn-outline-primary btn-edit-resolucion" data-uuid="' + escapeHtmlGasto(row.uuid) +
+            '" title="Editar Resolución"><i class="bi bi-pencil"></i></button>' + desactivarBtn + '</div>';
+    }
+
+    var RESOLUCIONES_COLUMNS = [
+        { data: null, title: 'Resolución', render: renderResolucion },
+        { data: null, title: 'Rango Autorizado', orderable: false, render: renderRango },
+        { data: 'fecha_fin', title: 'Vencimiento' },
+        { data: null, title: 'Estado', render: renderEstadoResolucion },
+        { data: null, title: '', orderable: false, searchable: false, render: renderAccionesResolucion },
+    ];
+
+    function initResolucionesTabla() {
+        if (_resolucionesTablaInicializada) return;
+        if (typeof DataTable === 'undefined' || !w.Sintel.Core || !w.Sintel.Core.DataTablesFactory) return;
+        w.Sintel.Core.DataTablesFactory.create(TABLA_RESOLUCIONES_SELECTOR, TABLA_RESOLUCIONES_URL, RESOLUCIONES_COLUMNS, {
+            pageLength: 20,
+            order: [[2, 'desc']],
+        });
+        insertarFilaFiltrosResoluciones();
+        bindFiltrosResoluciones();
+        _resolucionesTablaInicializada = true;
+    }
+
+    // DataTables reescribe el <thead> completo al inicializarse -- la fila de
+    // filtros se construye e inserta en JS DESPUES de crear el DataTable (ver
+    // el mismo patron ya documentado en venta_list.js/insertarFilaFiltros()).
+
+    function filaFiltrosResolucionesHtml() {
+        return '<tr id="fila-filtros-resoluciones" class="table-light">' +
+            '<th><input type="text" class="form-control form-control-sm" id="filtro-resolucion-numero" placeholder="Filtrar resolución..."></th>' +
+            '<th></th>' +
+            '<th><div class="d-flex gap-1">' +
+            '<input type="date" class="form-control form-control-sm" id="filtro-resolucion-fecha-desde" title="Desde">' +
+            '<input type="date" class="form-control form-control-sm" id="filtro-resolucion-fecha-hasta" title="Hasta">' +
+            '</div></th>' +
+            '<th><select class="form-select form-select-sm" id="filtro-resolucion-estado">' +
+            '<option value="">Todas</option>' +
+            '<option value="true">Vigente</option>' +
+            '<option value="false">Vencida/Inactiva</option>' +
+            '</select></th>' +
+            '<th></th>' +
+            '</tr>';
+    }
+
+    function insertarFilaFiltrosResoluciones() {
+        var thead = d.querySelector(TABLA_RESOLUCIONES_SELECTOR + ' thead');
+        if (!thead || d.getElementById('filtro-resolucion-numero')) return;
+        thead.insertAdjacentHTML('beforeend', filaFiltrosResolucionesHtml());
+    }
+
+    function debounceResoluciones(fn, delay) {
+        var timer = null;
+        return function () {
+            var args = arguments;
+            clearTimeout(timer);
+            timer = setTimeout(function () { fn.apply(null, args); }, delay);
+        };
+    }
+
+    function bindFiltrosResoluciones() {
+        var Factory = w.Sintel.Core.DataTablesFactory;
+
+        var inputNumero = d.getElementById('filtro-resolucion-numero');
+        if (inputNumero) {
+            inputNumero.addEventListener('keyup', debounceResoluciones(function () {
+                Factory.columnSearch(TABLA_RESOLUCIONES_SELECTOR, 0, inputNumero.value);
+            }, 400));
+        }
+
+        var fechaDesde = d.getElementById('filtro-resolucion-fecha-desde');
+        var fechaHasta = d.getElementById('filtro-resolucion-fecha-hasta');
+        function aplicarRangoFecha() {
+            Factory.columnRangeSearch(TABLA_RESOLUCIONES_SELECTOR, 2, fechaDesde.value, fechaHasta.value);
+        }
+        if (fechaDesde) fechaDesde.addEventListener('change', aplicarRangoFecha);
+        if (fechaHasta) fechaHasta.addEventListener('change', aplicarRangoFecha);
+
+        var selectEstado = d.getElementById('filtro-resolucion-estado');
+        if (selectEstado) {
+            selectEstado.addEventListener('change', function () {
+                Factory.columnSearch(TABLA_RESOLUCIONES_SELECTOR, 3, selectEstado.value);
+            });
+        }
+    }
+
     // ─── Event Delegation (Acciones de la Grilla) ─────────────────────────────
     // Los botones son server-rendered por tables.py (render_acciones) y conservan
     // las mismas clases/data-uuid que antes, por eso esta delegacion no cambia.
 
     function initListEvents() {
-        // Gastos Panel Events (delegado sobre el contenedor HTMX, sobrevive a los swaps)
-        const panelGastos = d.querySelector('#gastos-panel');
-        if (panelGastos) {
-            panelGastos.addEventListener('click', async (e) => {
+        // Gastos: acciones de fila de la tabla DataTables (#tabla-gastos).
+        // Delegado sobre document.body (persistente -- la tabla se recrea
+        // via ajax.reload(), nunca via innerHTML swap de un contenedor).
+        {
+            d.body.addEventListener('click', async (e) => {
+                if (!e.target.closest('#tabla-gastos')) return;
                 const btnView = e.target.closest('.btn-view-gasto');
                 const btnEdit = e.target.closest('.btn-edit-gasto');
                 const btnCancel = e.target.closest('.btn-cancel-gasto');
@@ -207,10 +404,12 @@
             });
         }
 
-        // Resoluciones Panel Events
-        const panelResoluciones = d.querySelector('#gastos-resoluciones-panel');
-        if (panelResoluciones) {
-            panelResoluciones.addEventListener('click', async (e) => {
+        // Resoluciones: acciones de fila de la tabla DataTables (#tabla-resoluciones).
+        // Delegado sobre document.body (persistente -- la tabla se recrea via
+        // ajax.reload(), nunca via innerHTML swap de un contenedor).
+        {
+            d.body.addEventListener('click', async (e) => {
+                if (!e.target.closest('#tabla-resoluciones')) return;
                 const btnEdit = e.target.closest('.btn-edit-resolucion');
                 const btnDeactivate = e.target.closest('.btn-deactivate-resolucion');
 
@@ -241,15 +440,24 @@
                 }
             });
         }
+
+        // 'resolucion-created' lo dispara resolucion_editor.js tras crear/editar
+        // (ver document.body.dispatchEvent en handleSubmit) -- antes disparaba
+        // el hx-trigger del panel HTMX retirado; ahora recarga la tabla directo.
+        d.body.addEventListener('resolucion-created', function () {
+            ResolucionList.reload();
+        });
     }
 
     // ─── Setup e Inicializacion Segura ────────────────────────────────────────
-    // Este script se re-ejecuta completo cada vez que HTMX vuelve a insertar el
-    // modulo "gastos" (nuevo <script> = nuevo closure = nuevos #gastos-panel/
-    // #gastos-resoluciones-panel), asi que no hace falta un guard "ya inicializado":
-    // no hay riesgo de doble-listener porque los contenedores tambien son nuevos.
+    // #tabla-gastos y #tabla-resoluciones son esqueletos estaticos que no se
+    // reinsertan via HTMX -- initGastosTabla()/initResolucionesTabla() tienen
+    // su propio guard (_gastosTablaInicializada/_resolucionesTablaInicializada)
+    // por eso, y este script no se re-ejecuta completo como antes.
 
     function setup() {
+        initGastosTabla();
+        initResolucionesTabla();
         initListEvents();
     }
 

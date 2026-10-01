@@ -27,9 +27,9 @@ from apps.public.tenants.utils import normalize_domain, validate_fqdn
 
 
 def _is_valid_ipv4(host: str) -> bool:
-    if not re.match(r'^(\d{1,3}\.){3}\d{1,3}$', host):
+    if not re.match(r"^(\d{1,3}\.){3}\d{1,3}$", host):
         return False
-    return all(0 <= int(p) <= 255 for p in host.split('.'))
+    return all(0 <= int(p) <= 255 for p in host.split("."))
 
 
 class Command(BaseCommand):

@@ -152,17 +152,29 @@ class UserAdminViewSet(
         """
         user = self.get_object()
         logger = logging.getLogger(__name__)
-        logger.info("UserAdminViewSet.destroy: requested delete user_id=%s by=%s", user.pk, getattr(request.user, 'pk', None))
+        logger.info(
+            "UserAdminViewSet.destroy: requested delete user_id=%s by=%s",
+            user.pk,
+            getattr(request.user, "pk", None),
+        )
         try:
             delete_user_service(user.pk, cascade=True, deleted_by_id=request.user.pk)
-            logger.info("UserAdminViewSet.destroy: delete_user_service completed for user_id=%s", user.pk)
+            logger.info(
+                "UserAdminViewSet.destroy: delete_user_service completed for user_id=%s", user.pk
+            )
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Exception:
-            logger.exception("UserAdminViewSet.destroy: delete_user_service failed for user_id=%s, falling back to super().destroy", user.pk)
+            logger.exception(
+                "UserAdminViewSet.destroy: delete_user_service failed for user_id=%s, falling back to super().destroy",
+                user.pk,
+            )
             try:
                 return super().destroy(request, *args, **kwargs)
             except Exception:
-                logger.exception("UserAdminViewSet.destroy: fallback ORM destroy also failed for user_id=%s", user.pk)
+                logger.exception(
+                    "UserAdminViewSet.destroy: fallback ORM destroy also failed for user_id=%s",
+                    user.pk,
+                )
                 return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

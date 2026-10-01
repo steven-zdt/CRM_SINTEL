@@ -17,6 +17,7 @@ Verifica:
 - DELETE: DELETE /api/v1/proveedores/{uuid}/ (regla real: solo inactivo)
 - Negativos: campos requeridos vacios, documento duplicado, UUID inexistente
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa
@@ -29,12 +30,15 @@ class ProveedoresCrudWorkspaceTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test Proveedores CRUD", nit="900555000", direccion="Calle 1",
+            razon_social="Empresa Test Proveedores CRUD",
+            nit="900555000",
+            direccion="Calle 1",
         )
         # IsTenantAdminOrReadOnly lee TenantProfile.rol (SSoT v2.61.8), no
         # TenantMembership.rol -- SintelTenantTestCase solo crea el segundo.
         TenantProfile.objects.get_or_create(
-            user=self.user, empresa=self.empresa,
+            user=self.user,
+            empresa=self.empresa,
             defaults={"rol": "ADMIN", "alcance": "EMPRESA", "cargo": "Gerente de Compras"},
         )
 
@@ -64,7 +68,9 @@ class ProveedoresCrudWorkspaceTests(SintelTenantTestCase):
         initial_count = len(data.get("results", data))
 
         # 2. CREATE
-        resp = self.api_client.post("/api/v1/proveedores/", data=self._payload_valido(), format="json")
+        resp = self.api_client.post(
+            "/api/v1/proveedores/", data=self._payload_valido(), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content)
         created = resp.json()
         self.assertEqual(created["razon_social"], "PROVEEDOR TEST S.A.S.")
@@ -84,7 +90,10 @@ class ProveedoresCrudWorkspaceTests(SintelTenantTestCase):
         # 4. UPDATE (partial)
         resp = self.api_client.patch(
             f"/api/v1/proveedores/{proveedor_uuid}/",
-            data={"razon_social": "PROVEEDOR TEST ACTUALIZADO S.A.S.", "telefono_contacto": "3009998888"},
+            data={
+                "razon_social": "PROVEEDOR TEST ACTUALIZADO S.A.S.",
+                "telefono_contacto": "3009998888",
+            },
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
@@ -120,10 +129,14 @@ class ProveedoresCrudWorkspaceTests(SintelTenantTestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.content)
 
     def test_proveedor_create_documento_duplicado_es_rechazado(self):
-        resp = self.api_client.post("/api/v1/proveedores/", data=self._payload_valido(), format="json")
+        resp = self.api_client.post(
+            "/api/v1/proveedores/", data=self._payload_valido(), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content)
 
-        resp = self.api_client.post("/api/v1/proveedores/", data=self._payload_valido(), format="json")
+        resp = self.api_client.post(
+            "/api/v1/proveedores/", data=self._payload_valido(), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.content)
         self.assertIn("numero_documento", resp.json())
 

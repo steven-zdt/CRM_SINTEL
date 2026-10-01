@@ -116,7 +116,7 @@ def crear_tenant_con_owner(
         raise ValidationError(
             f"El usuario con ID {admin_user_id} no existe o no esta activo. "
             f"No se puede crear un tenant sin un administrador valido."
-        )
+        ) from None
 
     logger.info("Creando tenant '%s' (schema=%s)", nombre, schema_normalized)
 
@@ -181,7 +181,11 @@ def crear_tenant_con_owner(
 
     # 6. Construir login_url
     tenant_domain = domain.domain
-    protocol = "https" if (not settings.DEBUG and getattr(settings, "SECURE_SSL_REDIRECT", False)) else "http"
+    protocol = (
+        "https"
+        if (not settings.DEBUG and getattr(settings, "SECURE_SSL_REDIRECT", False))
+        else "http"
+    )
     login_url = f"{protocol}://{tenant_domain}/login/"
 
     logger.info("Tenant creado: %s (%s) -> %s", client.nombre, client.schema_name, login_url)

@@ -32,9 +32,16 @@ modelo obliga a que `areas_asignadas` sea consistente con `sedes_asignadas`
 -- aqui se construyen consistentes a proposito, para que el Caso 3 funcione
 como el plan maestro lo describe.
 """
+
+from datetime import date, timedelta
+
 from rest_framework import status
 
 from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra
+from apps.tenant.compras.requisiciones.services.business_service import (
+    RequisicionCompraBusinessService,
+)
+from apps.tenant.cotizaciones.models import Cotizacion
 from apps.tenant.empresa.models import Area, Empresa, Sede
 from apps.tenant.perfil.models import TenantProfile
 from apps.tenant.proveedores.models import Proveedor
@@ -45,30 +52,52 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa A F7", nit="900000777", direccion="Calle 1",
+            razon_social="Empresa A F7",
+            nit="900000777",
+            direccion="Calle 1",
         )
         self.bogota = Sede.objects.create(empresa=self.empresa, nombre="Bogota F7")
         self.barranquilla = Sede.objects.create(empresa=self.empresa, nombre="Barranquilla F7")
 
         self.comercial_bog = Area.objects.create(
-            empresa=self.empresa, sede=self.bogota, nombre="Comercial F7", codigo_funcionamiento="COM-BOG-F7",
+            empresa=self.empresa,
+            sede=self.bogota,
+            nombre="Comercial F7",
+            codigo_funcionamiento="COM-BOG-F7",
         )
         self.tecnica_bog = Area.objects.create(
-            empresa=self.empresa, sede=self.bogota, nombre="Tecnica F7", codigo_funcionamiento="TEC-BOG-F7",
+            empresa=self.empresa,
+            sede=self.bogota,
+            nombre="Tecnica F7",
+            codigo_funcionamiento="TEC-BOG-F7",
         )
         self.comercial_bar = Area.objects.create(
-            empresa=self.empresa, sede=self.barranquilla, nombre="Comercial F7", codigo_funcionamiento="COM-BAR-F7",
+            empresa=self.empresa,
+            sede=self.barranquilla,
+            nombre="Comercial F7",
+            codigo_funcionamiento="COM-BAR-F7",
         )
         self.tecnica_bar = Area.objects.create(
-            empresa=self.empresa, sede=self.barranquilla, nombre="Tecnica F7", codigo_funcionamiento="TEC-BAR-F7",
+            empresa=self.empresa,
+            sede=self.barranquilla,
+            nombre="Tecnica F7",
+            codigo_funcionamiento="TEC-BAR-F7",
         )
 
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor F7", numero_documento="F7-1", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor F7",
+            numero_documento="F7-1",
+            tipo_documento="NIT",
         )
         self.plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla F7", prefijo="F7",
-            rango_desde=1, rango_hasta=1000, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla F7",
+            prefijo="F7",
+            rango_desde=1,
+            rango_hasta=1000,
+            consecutivo_actual=1,
+            vigente=True,
         )
 
         self.orden_bog_com = self._crear_orden(self.bogota, self.comercial_bog, consecutivo=1)
@@ -78,8 +107,13 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
 
     def _crear_orden(self, sede, area, consecutivo):
         return OrdenCompra.objects.create(
-            empresa=self.empresa, sede=sede, area=area, proveedor=self.proveedor,
-            plantilla=self.plantilla, fecha="2026-06-01", consecutivo=consecutivo,
+            empresa=self.empresa,
+            sede=sede,
+            area=area,
+            proveedor=self.proveedor,
+            plantilla=self.plantilla,
+            fecha="2026-06-01",
+            consecutivo=consecutivo,
         )
 
     def _consecutivos(self, resp):
@@ -91,7 +125,10 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
 
     def test_caso1_empresa_list_ve_las_4_ordenes(self):
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
         )
         resp = self.api_client.get("/api/v1/compras/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
@@ -99,11 +136,21 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
 
     def test_caso1_empresa_retrieve_cualquier_orden_permitido(self):
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="EMPRESA",
         )
-        for orden in (self.orden_bog_com, self.orden_bog_tec, self.orden_bar_com, self.orden_bar_tec):
+        for orden in (
+            self.orden_bog_com,
+            self.orden_bog_tec,
+            self.orden_bar_com,
+            self.orden_bar_tec,
+        ):
             resp = self.api_client.get(f"/api/v1/compras/{orden.uuid}/")
-            self.assertEqual(resp.status_code, status.HTTP_200_OK, f"orden {orden.consecutivo}: {resp.content}")
+            self.assertEqual(
+                resp.status_code, status.HTTP_200_OK, f"orden {orden.consecutivo}: {resp.content}"
+            )
 
     # ------------------------------------------------------------------
     # Caso 2: alcance=SEDE, sede=Bogota -> ve/opera solo Bogota
@@ -111,7 +158,10 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
 
     def test_caso2_sede_bogota_list_ve_solo_bogota(self):
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.bogota])
 
@@ -122,7 +172,10 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
 
     def test_caso2_sede_bogota_retrieve_orden_bogota_permitido(self):
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.bogota])
 
@@ -136,7 +189,10 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
         directo. Sin este test, este mecanismo llevaba desde ADR-003
         (2026-08-07) sin ninguna cobertura."""
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.bogota])
 
@@ -154,7 +210,10 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
         antes del fix (verificado con el assert de `observaciones` sin
         cambiar), solo el codigo de estado era incorrecto."""
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.bogota])
 
@@ -173,7 +232,10 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
         """[Bug de FASE 7, corregido] Mismo caso que el test anterior para
         `OrdenCompraViewSet.destroy()`. La orden NO se elimina."""
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.bogota])
 
@@ -184,7 +246,10 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
 
     def test_caso2_sede_bogota_delete_orden_bogota_permitido(self):
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.bogota])
 
@@ -200,7 +265,10 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
 
     def test_caso3_area_comercial_list_ve_las_2_ordenes_comercial_de_ambas_sedes(self):
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="AREA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="AREA",
         )
         perfil.sedes_asignadas.set([self.bogota, self.barranquilla])
         perfil.areas_asignadas.set([self.comercial_bog, self.comercial_bar])
@@ -212,7 +280,10 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
 
     def test_caso3_area_comercial_retrieve_tecnica_bogota_denegado(self):
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="AREA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="AREA",
         )
         perfil.sedes_asignadas.set([self.bogota, self.barranquilla])
         perfil.areas_asignadas.set([self.comercial_bog, self.comercial_bar])
@@ -223,7 +294,10 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
 
     def test_caso3_area_comercial_retrieve_comercial_barranquilla_permitido(self):
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="AREA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="AREA",
         )
         perfil.sedes_asignadas.set([self.bogota, self.barranquilla])
         perfil.areas_asignadas.set([self.comercial_bog, self.comercial_bar])
@@ -246,7 +320,10 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
         """La API JSON y la accion HTMX de offcanvas ahora coinciden: ambas
         deniegan (403) el mismo recurso fuera del alcance del perfil."""
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.bogota])
 
@@ -271,9 +348,53 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
         al Business Service. La sede real se resuelve SIEMPRE server-side
         (self._get_sede(), la sede activa del usuario) -- ver
         OrdenCompraServiceMixin.service_crear_orden_compra()."""
-        TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="SEDE",
+        perfil = TenantProfile.objects.create(
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="SEDE",
         )
+        # Toda OrdenCompra ahora requiere >= 1 Requisicion, sin excepcion
+        # posible (PLAN_CENTRO_APROBACIONES_DASHBOARD_COMPRAS.md #3) -- este
+        # test es de aislamiento organizacional, no de Requisiciones, pero ya
+        # no existe una via de excepcion para evitar fabricar esta cadena.
+        cotizacion = Cotizacion.objects.create(
+            empresa=self.empresa,
+            numero_cotizacion="COT-F19-TEST",
+            fecha_vencimiento=date.today() + timedelta(days=30),
+        )
+        ok, req, _code = RequisicionCompraBusinessService.crear_requisicion(
+            {
+                "fecha_necesidad": date.today() + timedelta(days=5),
+                "tipo": "BIEN",
+                "prioridad": "MEDIA",
+                "justificacion": "Requisicion de soporte para test F19",
+                "observaciones": "",
+                "proyecto": None,
+                "responsable_aprobacion": None,
+                "cotizacion": cotizacion,
+            },
+            [
+                {
+                    "tipo_item": "BIEN",
+                    "descripcion": "Item F19 req",
+                    "cantidad_solicitada": "1",
+                    "valor_unitario_estimado": "50.00",
+                    "porcentaje_iva": "19",
+                    "unidad_medida": "UND",
+                }
+            ],
+            self.empresa,
+            self.barranquilla,
+            perfil,
+        )
+        assert ok, req
+        RequisicionCompraBusinessService.enviar_a_aprobacion(str(req.uuid), self.empresa.id)
+        ok, req, _code = RequisicionCompraBusinessService.aprobar_requisicion(
+            str(req.uuid), self.empresa.id
+        )
+        assert ok, req
+
         # No hay sede_activa en sesion y el perfil no tiene sedes_asignadas ->
         # resolve_sede_activa_id() cae a la Sede "Principal" por nombre: Barranquilla F7
         # (alfabeticamente antes que "Bogota F7").
@@ -282,9 +403,15 @@ class OrganizationalIsolationEmpresaATests(SintelTenantTestCase):
             "proveedor": str(self.proveedor.uuid),
             "fecha": "2026-06-15",
             "sede": str(self.bogota.uuid),  # intento de inyeccion - debe ser ignorado
-            "sede_id": self.bogota.id,       # idem, otra forma comun de intentarlo
+            "sede_id": self.bogota.id,  # idem, otra forma comun de intentarlo
+            "requisiciones": [str(req.uuid)],
             "items": [
-                {"descripcion": "Item F19", "cantidad": "1", "valor_unitario": "50.00", "porcentaje_iva": "19"},
+                {
+                    "descripcion": "Item F19",
+                    "cantidad": "1",
+                    "valor_unitario": "50.00",
+                    "porcentaje_iva": "19",
+                },
             ],
         }
 

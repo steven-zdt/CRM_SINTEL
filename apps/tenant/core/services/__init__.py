@@ -9,8 +9,8 @@ WARNING: POLÍTICA v3.5:
 """
 
 # Nuevo Service Layer modular
-from apps.tenant.core.services.selectors import CoreSelector
 from apps.tenant.core.services.api_mixins import CoreServiceMixin
+from apps.tenant.core.services.selectors import CoreSelector
 
 # Legacy services (mantener compatibilidad)
 from .activation_service import ActivationService
@@ -20,11 +20,11 @@ from .password_reset import PasswordResetService
 
 __all__ = [
     # Nuevo Service Layer
-    'CoreSelector',
-    'CoreServiceMixin',
+    "CoreSelector",
+    "CoreServiceMixin",
     # Legacy
-    'ActivationService',
-    'AuthService',
-    'OrchestrationService',
-    'PasswordResetService',
+    "ActivationService",
+    "AuthService",
+    "OrchestrationService",
+    "PasswordResetService",
 ]

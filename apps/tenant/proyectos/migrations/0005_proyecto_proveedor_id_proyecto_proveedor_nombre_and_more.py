@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("empresa", "0007_empresa_owner_email"),
         (
@@ -37,8 +36,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="proyecto",
-            index=models.Index(
-                fields=["proveedor_id"], name="tenant_proy_proveed_16354d_idx"
-            ),
+            index=models.Index(fields=["proveedor_id"], name="tenant_proy_proveed_16354d_idx"),
         ),
     ]

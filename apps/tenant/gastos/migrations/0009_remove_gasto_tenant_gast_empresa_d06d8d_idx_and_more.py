@@ -4,28 +4,27 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('empresa', '0007_empresa_owner_email'),
-        ('tenant_gastos', '0008_remove_documentosoporte_unique_ds_vendedor_documento_and_more'),
+        ("empresa", "0007_empresa_owner_email"),
+        ("tenant_gastos", "0008_remove_documentosoporte_unique_ds_vendedor_documento_and_more"),
     ]
 
     operations = [
         migrations.RemoveIndex(
-            model_name='gasto',
-            name='tenant_gast_empresa_d06d8d_idx',
+            model_name="gasto",
+            name="tenant_gast_empresa_d06d8d_idx",
         ),
         migrations.RemoveField(
-            model_name='gasto',
-            name='periodo',
+            model_name="gasto",
+            name="periodo",
         ),
         migrations.AlterField(
-            model_name='gasto',
-            name='descripcion',
-            field=models.TextField(blank=True, null=True, verbose_name='Descripcion'),
+            model_name="gasto",
+            name="descripcion",
+            field=models.TextField(blank=True, null=True, verbose_name="Descripcion"),
         ),
         migrations.AddIndex(
-            model_name='gasto',
-            index=models.Index(fields=['empresa'], name='tenant_gast_empresa_1ed92b_idx'),
+            model_name="gasto",
+            index=models.Index(fields=["empresa"], name="tenant_gast_empresa_1ed92b_idx"),
         ),
     ]

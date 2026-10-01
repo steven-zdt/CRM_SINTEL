@@ -11,6 +11,7 @@ rechaza por defecto (Fase 8). Las 2 funciones que llaman a Ventas mockean
 el flag a True -- siguen probando el aislamiento DSV/multi-tenant real
 del circuito Compra+Venta+Contabilidad, no el bloqueo de produccion.
 """
+
 from datetime import date
 from decimal import Decimal
 from unittest import mock
@@ -44,7 +45,9 @@ def _crear_perfil(empresa, sufijo):
     User = get_user_model()
     with schema_context(get_public_schema_name()):
         user = User.objects.create_user(
-            username=f"f24-{sufijo}@sintel.test", email=f"f24-{sufijo}@sintel.test", password="testpass123",
+            username=f"f24-{sufijo}@sintel.test",
+            email=f"f24-{sufijo}@sintel.test",
+            password="testpass123",
         )
     return TenantProfile.objects.create(user=user, empresa=empresa, rol="ADMIN", alcance="EMPRESA")
 
@@ -52,28 +55,44 @@ def _crear_perfil(empresa, sufijo):
 def _preparar_tenant(empresa, sufijo, stock="50"):
     sede = Sede.objects.create(empresa=empresa, nombre=f"Sede {sufijo}")
     cliente = Cliente.objects.create(
-        empresa=empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-        numero_documento=f"F24-MT-{sufijo}", razon_social=f"Cliente MT F24 {sufijo}",
+        empresa=empresa,
+        tipo_persona="JURIDICA",
+        tipo_documento="NIT",
+        numero_documento=f"F24-MT-{sufijo}",
+        razon_social=f"Cliente MT F24 {sufijo}",
         regimen_tributario="ORDINARIO",
     )
     producto = Producto.objects.create(
-        empresa=empresa, codigo=f"PROD-MT-F24-{sufijo}", nombre=f"Producto MT F24 {sufijo}",
-        stock_actual=Decimal("0"), costo_promedio=Decimal("10.00"),
+        empresa=empresa,
+        codigo=f"PROD-MT-F24-{sufijo}",
+        nombre=f"Producto MT F24 {sufijo}",
+        stock_actual=Decimal("0"),
+        costo_promedio=Decimal("10.00"),
     )
     if Decimal(stock) > 0:
         KardexService.registrar_movimiento(
-            empresa_id=empresa.id, producto_id=producto.id,
+            empresa_id=empresa.id,
+            producto_id=producto.id,
             tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
-            cantidad=Decimal(stock), costo_unitario=Decimal("10.00"), sede_id=sede.id,
+            cantidad=Decimal(stock),
+            costo_unitario=Decimal("10.00"),
+            sede_id=sede.id,
         )
     hoy = timezone.localdate()
     PeriodoContable.objects.get_or_create(
-        empresa=empresa, periodo=hoy.strftime("%Y-%m"),
-        defaults={"fecha_inicio": date(hoy.year, 1, 1), "fecha_fin": date(hoy.year, 12, 31), "estado": "ABIERTO"},
+        empresa=empresa,
+        periodo=hoy.strftime("%Y-%m"),
+        defaults={
+            "fecha_inicio": date(hoy.year, 1, 1),
+            "fecha_fin": date(hoy.year, 12, 31),
+            "estado": "ABIERTO",
+        },
     )
     for tipo_tx, concepto, cuenta in _REGLAS_INVENTARIO:
         ReglaContable.objects.get_or_create(
-            empresa=empresa, tipo_transaccion=tipo_tx, concepto=concepto,
+            empresa=empresa,
+            tipo_transaccion=tipo_tx,
+            concepto=concepto,
             defaults={"cuenta_codigo": cuenta, "activo": True},
         )
     return sede, cliente, producto
@@ -99,21 +118,34 @@ def test_producto_uuid_de_otro_tenant_es_rechazado_limpiamente_en_venta(tenant1,
         sede1, cliente1, _producto1 = _preparar_tenant(emp1, "T1-DSV")
 
         payload = {
-            "cliente": str(cliente1.uuid), "fecha_emision": "2026-06-05",
-            "items": [{
-                "descripcion": "Venta con UUID ajeno", "cantidad": "1", "precio_unitario": "20.00",
-                "porcentaje_iva": "19", "producto_id": producto_ajeno_uuid,
-            }],
+            "cliente": str(cliente1.uuid),
+            "fecha_emision": "2026-06-05",
+            "items": [
+                {
+                    "descripcion": "Venta con UUID ajeno",
+                    "cantidad": "1",
+                    "precio_unitario": "20.00",
+                    "porcentaje_iva": "19",
+                    "producto_id": producto_ajeno_uuid,
+                }
+            ],
         }
         ok, resultado, code = VentaBusinessService.procesar_y_facturar_venta(
-            empresa=emp1, payload=payload, sede_id=sede1.id,
+            empresa=emp1,
+            payload=payload,
+            sede_id=sede1.id,
         )
         assert not ok
         assert code in (400, 404, 422)
         # Nada debe haberse creado en tenant1 a partir de un UUID que no le pertenece.
-        assert MovimientoInventario.objects.filter(empresa=emp1).exclude(
-            tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
-        ).count() == 0
+        assert (
+            MovimientoInventario.objects.filter(empresa=emp1)
+            .exclude(
+                tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
+            )
+            .count()
+            == 0
+        )
 
 
 @pytest.mark.django_db
@@ -128,40 +160,71 @@ def test_flujo_completo_compra_venta_asiento_independiente_por_tenant(tenant1, t
         emp1 = Empresa.objects.first()
         sede1, cliente1, producto1 = _preparar_tenant(emp1, "T1-E2E", stock="0")
         proveedor1 = Proveedor.objects.create(
-            empresa=emp1, razon_social="Proveedor T1", numero_documento="T1-PROV", tipo_documento="NIT",
+            empresa=emp1,
+            razon_social="Proveedor T1",
+            numero_documento="T1-PROV",
+            tipo_documento="NIT",
         )
         plantilla1 = PlantillaOrdenCompra.objects.create(
-            empresa=emp1, nombre="Plantilla T1", prefijo="T1",
-            rango_desde=1, rango_hasta=1000, consecutivo_actual=1, vigente=True,
+            empresa=emp1,
+            nombre="Plantilla T1",
+            prefijo="T1",
+            rango_desde=1,
+            rango_hasta=1000,
+            consecutivo_actual=1,
+            vigente=True,
         )
         orden1 = OrdenCompra.objects.create(
-            empresa=emp1, sede=sede1, proveedor=proveedor1, plantilla=plantilla1,
-            fecha="2026-06-01", consecutivo=1, numero_documento="T1-OC-1", estado="APROBADA",
+            empresa=emp1,
+            sede=sede1,
+            proveedor=proveedor1,
+            plantilla=plantilla1,
+            fecha="2026-06-01",
+            consecutivo=1,
+            numero_documento="T1-OC-1",
+            estado="APROBADA",
         )
         item_oc1 = ItemOrdenCompra.objects.create(
-            empresa=emp1, orden_compra=orden1, descripcion="Compra T1",
-            item_inventario_uuid=producto1.uuid, cantidad=Decimal("20"), valor_unitario=Decimal("10.00"),
-            subtotal=Decimal("200.00"), total=Decimal("200.00"),
+            empresa=emp1,
+            orden_compra=orden1,
+            descripcion="Compra T1",
+            item_inventario_uuid=producto1.uuid,
+            cantidad=Decimal("20"),
+            valor_unitario=Decimal("10.00"),
+            subtotal=Decimal("200.00"),
+            total=Decimal("200.00"),
         )
         perfil1 = _crear_perfil(emp1, "T1-E2E")
         ok, recepcion1, code = RecepcionCompraBusinessService.crear_recepcion(
             {"orden_compra": orden1, "fecha": "2026-06-02"},
             [{"item_orden_compra": item_oc1, "cantidad_recibida": Decimal("20")}],
-            emp1, sede1, perfil1,
+            emp1,
+            sede1,
+            perfil1,
         )
         assert ok, recepcion1
-        ok, recepcion1, code = RecepcionCompraBusinessService.confirmar_recepcion(recepcion1.uuid, emp1.id)
+        ok, recepcion1, code = RecepcionCompraBusinessService.confirmar_recepcion(
+            recepcion1.uuid, emp1.id
+        )
         assert ok, recepcion1
 
         payload1 = {
-            "cliente": str(cliente1.uuid), "fecha_emision": "2026-06-05",
-            "items": [{
-                "descripcion": "Venta T1", "cantidad": "5", "precio_unitario": "20.00",
-                "porcentaje_iva": "19", "producto_id": str(producto1.uuid),
-            }],
+            "cliente": str(cliente1.uuid),
+            "fecha_emision": "2026-06-05",
+            "items": [
+                {
+                    "descripcion": "Venta T1",
+                    "cantidad": "5",
+                    "precio_unitario": "20.00",
+                    "porcentaje_iva": "19",
+                    "producto_id": str(producto1.uuid),
+                }
+            ],
         }
         ok, venta1, code = VentaBusinessService.procesar_y_facturar_venta(
-            empresa=emp1, payload=payload1, sede_id=sede1.id,
+            empresa=emp1,
+            payload=payload1,
+            sede_id=sede1.id,
         )
         assert ok, venta1
 

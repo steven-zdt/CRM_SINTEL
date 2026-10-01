@@ -1,124 +1,191 @@
 # Tables & Forms — Auditoría Global (Estado)
 
-**Fecha:** 2026-09-18
+**Fecha creación:** 2026-09-18
+**Fecha de este cierre:** 2026-09-22
 **Fuente:** `PROMPT_IA_EDITORA_AUDITORIA_GLOBAL_TABLAS_FILTROS_BUSQUEDAS_FORMULARIOS.md` (raíz del repo)
-**Decisión de alcance (usuario, vía AskUserQuestion):** "Solo auditar y corregir bugs reales" sobre la arquitectura EXISTENTE (`django-tables2` + HTMX + DRF `SearchFilter`/`OrderingFilter`) — se descartó explícitamente adoptar `DataTables 3.x + ColumnControl` como nuevo estándar transversal.
 
-## Por qué se descartó la opción DataTables del prompt original
+STATUS GLOBAL: **DataTables 3.x adoptado como estándar transversal — 12/12 apps del prompt migradas. Suite completa de tests ejecutada en las 12/12 apps (2026-09-21/22): PASS. Ver `docs/ux/TABLES_FORMS_RELEASE_GATE.md` para el detalle de resultados por app y los 2 bugs reales encontrados y corregidos en esta corrida final.**
 
-El prompt fuente asume que las tablas están sistémicamente rotas y propone un reemplazo total de librería. La inspección del código real (FASE 0, antes de tocar nada) mostró lo contrario:
+---
 
-- **13 apps ya tienen `tables.py` (django-tables2) en producción**: bancos, clientes, compras, contabilidad, empleados, empresa, facturas, gastos, inventario, perfil, proveedores, proyectos, ventas.
-- **Tabulator está prácticamente retirado**: solo 2 usos reales quedan (`contabilidad/reporte.ui.js`, un factory compartido) — confirma que la migración "Tabulator → django-tables2 + HTMX" que documenta `CLAUDE.md` es real y está casi terminada, no es histórica/muerta.
-- **DataTables tiene 0 usos actuales** en el repo — adoptarlo sería una dependencia nueva, no una continuación de trabajo existente.
-- La regla propia del prompt (#38, "no mantener dos librerías de tablas activas sin justificación") se hubiera violado al introducir una TERCERA (Tabulator residual + django-tables2 + DataTables).
+## Historial de la decisión de alcance (importante para entender este documento)
 
-Por tanto: `CÓDIGO REAL ACTUAL > documento de prompt`, siguiendo la propia regla del documento fuente (sección 1).
+Este documento tuvo dos fases con conclusiones OPUESTAS. Se documentan ambas para trazabilidad — la sección "Estado final" al fondo es la que aplica hoy.
 
-STATUS: DONE — auditoría completa (tablas/filtros/URLs/formularios); sin evidencia de los defectos sistémicos reportados; 2 bugs reales de formularios corregidos (ver sección "Formularios" abajo). Cierre formal: `docs/ux/TABLES_FORMS_RELEASE_GATE.md`.
+### Fase A (2026-09-18): alcance reducido
 
-## FASE 0/2/3 — Resultado de la auditoría (búsqueda, ordenamiento, URLs)
+La primera pasada de auditoría (FASE 0/2/3 del prompt) no encontró evidencia de los defectos sistémicos reportados ("tablas rotas", "filtros rotos", "URLs erróneas") sobre la arquitectura existente (`django-tables2` + HTMX + DRF `SearchFilter`/`OrderingFilter`). Con esa evidencia, el usuario decidió explícitamente (vía `AskUserQuestion`) **descartar** la adopción de DataTables 3.x y limitar el alcance a auditar + corregir bugs reales. Se corrigieron 2 bugs reales de doble-submit en formularios (uno con impacto financiero real en Cuentas por Pagar de Proveedores) y se cerró la tarea como DONE con ese alcance reducido.
 
-Auditoría read-only sobre las 13 apps con `tables.py`: `tables.py` (columnas orderable/`Meta.order_by`), ViewSet (`filter_backends`/`search_fields`/`ordering_fields`), vista que sirve el fragmento HTMX, template de listado/tabla (`href=`/`hx-get=`/`{% url`/`data-url` dentro de `<th>`), y el JS de lista correspondiente.
+### Fase B (2026-09-19 en adelante): reversión — adopción real de DataTables
 
-| App | Búsqueda | Ordenamiento | URLs en cabeceras | Notas |
+En una sesión posterior el usuario retomó la línea original del prompt (Sección 3: DataTables 3.x + ColumnControl como estándar transversal) y pidió cerrar primero el **piloto de Ventas** (que ya existía con backend/tests en PASS pero el **gate visual pendiente** por falta de navegador). Con Playwright disponible, se cerró ese gate — y el proceso encontró **2 bugs reales de DOM** (no detectables sin navegador real):
+
+1. DataTables reescribe el `<thead>` completo al inicializarse — una fila de filtros por columna puesta como HTML estático quedaba destruida. Fix: la fila de filtros se construye e inserta en JS **después** de `DataTablesFactory.create()`.
+2. La opción `layout` de DataTables hace *merge parcial* sobre el default (`topStart:'pageLength', topEnd:'search', ...`) — sin anular `topEnd` explícitamente quedaban 2 buscadores duplicados en pantalla.
+
+Con el piloto de Ventas validado end-to-end (backend + visual), el usuario decidió **extender el patrón a todas las apps restantes del prompt original**, con una instrucción explícita de ejecución: *"aplicar DataTables a nivel de UI/backend en todas las apps, dejando el paso de tests para el final"* (no ejecutar la suite completa después de cada app — testing progresivo/diferido, ver `CLAUDE.md §24.0`, aplicado aquí a nivel de todo un lote de trabajo, no solo un cambio puntual).
+
+---
+
+## Infraestructura compartida (Fase 5/6/16 del prompt)
+
+- **Backend:** `apps/shared/datatable.py` — `DataTableSpec`/`DataTableServer`/`ColumnFilter`/`ColumnFilterType`. Contrato: cada endpoint declara `fields_map` (whitelist de columnas ordenables), `search_fields` (whitelist de búsqueda global), `column_filters` (whitelist de filtro por columna con tipo: `ICONTAINS`/`EXACT`/`DATE_RANGE`/`NUMBER_RANGE`). Nunca permite ordering/filtro arbitrario sobre campos no declarados (cumple la regla de la Sección 5 del prompt).
+- **Frontend:** `apps/tenant/core/static/core/js/common/datatables.factory.js` — `Sintel.Core.DataTablesFactory.create/get/reload/search/columnSearch/columnRangeSearch`. Encapsula la config DataTables 3.0.4 + ColumnControl 2.0.2 + Bootstrap 5, con el fix de `layout` ya aplicado.
+- **CDN:** `apps/tenant/core/templates/tenant/core/partials/assets_datatables_cdn.html`, incluido una vez por app (primer módulo con tabla migrada la carga; el resto de módulos de la misma app la reutilizan si comparten página).
+
+### Bug real encontrado y corregido en el helper compartido (2026-09-21)
+
+`_apply_column_filters()` (`ColumnFilterType.EXACT`) pasaba el valor crudo del filtro directo a `qs.filter(campo=valor)`. Para campos `BooleanField` (activo, reversada, anulado, etc.), Django `BooleanField.to_python()` solo acepta literales `("t","True","1")`/`("f","False","0")` — un `<select value="false">` (el patrón más común en todo el frontend de esta migración) manda `"false"` en minúscula, que **no calza** y levantaba `ValidationError` sin capturar (500 real). Confirmado por 2 tests reales que fallaron en la suite de Bancos (`test_cuenta_dt_filtro_columna_estado_exact`, `test_cuenta_dt_whitelist_columna_y_orden_no_declarados`).
+
+Fix: `_coerce_exact_value()` normaliza `"true"/"american false"` (cualquier capitalización) y `"1"/"0"` antes de filtrar; el resto de valores se pasan tal cual (no afecta filtros `EXACT` sobre `CharField`/choices). Envuelto además en el mismo `contextlib.suppress` que ya protegía `DATE_RANGE`/`NUMBER_RANGE` — ningún valor de filtro inválido puede devolver 500 ahora.
+
+**Impacto:** al vivir en código compartido, este fix beneficia a TODOS los endpoints `dt()` de las 12 apps que declaran un `ColumnFilter(..., ColumnFilterType.EXACT)` sobre un campo booleano (Cuentas Bancarias, Productos, Servicios, Plantillas Contables, Retenciones, Gastos, y otros). Verificado con los 2 tests que habían fallado — ambos pasan ahora (7/7 en `test_cuenta_dt.py`).
+
+---
+
+## Apps migradas (12/12 según el listado del prompt — Secciones 4, 8, 41, 43)
+
+| # | App | Unidades migradas | KPIs extraídos | Notas |
 |---|---|---|---|---|
-| Bancos | OK | OK | OK | Sin links custom en `<th>`; usa los links de orden nativos de django-tables2. |
-| Clientes | OK | OK | OK | `search_fields` alineado con la UI. |
-| Compras | OK | OK | OK | `ordering_fields` verificados contra campos reales del modelo. |
-| Contabilidad | OK | OK | OK | Los 5 listados (cuentas, asientos, periodos, plantillas, retenciones) tienen `name="q"` correctamente cableado en `partials/list_*.html`. |
-| Empleados | OK | OK | OK | — |
-| Empresa | OK | OK | OK | — |
-| Facturas | OK | OK | OK | — |
-| Gastos | OK | OK | OK | — |
-| Inventario | OK | OK | OK | — |
-| Perfil | OK | OK | OK | — |
-| Proveedores | OK | OK | OK | Búsqueda implementada vía override manual de `list()` (`viewsets.py`) en vez de `SearchFilter` declarativo — funciona correctamente, es solo una diferencia de estilo respecto al resto de apps (no es un bug). |
-| Proyectos | OK | OK | OK | — |
-| Ventas | OK | OK | OK | Extendido esta sesión (panel de sincronización); regresión completa: 67 passed, 1 skipped. |
+| 1 | **Ventas** | Ventas | No (no tenía) | Piloto — gate visual cerrado con Playwright, 2 bugs de DOM corregidos. Columna "Factura DIAN" retirada después por redundante con "Núm. Factura" (pedido explícito del usuario). |
+| 2 | **Bancos** | Cuentas Bancarias, Extractos Bancarios | Sí (Extractos: conciliación BAN-09) | — |
+| 3 | **Facturas** | Facturas (tabs Ventas/Compras, 2 DataTables en la misma página) | No | `naturaleza` viaja por query string en la URL del ajax, no por el body DataTables. |
+| 4 | **Clientes** | Directorio | Sí (cartera, vía `serializer_context` sin N+1) | Contactos/Historial/Cartera (sub-vistas del detalle) siguen en Tabulator — no son la grilla principal. |
+| 5 | **Proveedores** | Directorio, Cuentas por Pagar, Representantes | Cuentas por Pagar: sí (KPIs propios ya existentes) | **Cuentas por Pagar** usa un endpoint `dt()` MANUAL (no `DataTableServer`) — su fuente (`qs_list_unificado()`) mezcla Factura+CuentasPagar en una lista Python, no un QuerySet real. |
+| 6 | **Compras** | Órdenes de Compra, Plantillas de Numeración | Sí (Órdenes) | — |
+| 7 | **Cotizaciones** | Cotizaciones (listado principal) | Sí | Productos/Servicios/Configuración (catálogos dentro del offcanvas) siguen en Tabulator — no son la grilla principal. App que faltaba del lote original; cerrada en este pase. |
+| 8 | **Inventario** | Productos, Servicios, Activos Fijos | Productos y Activos Fijos: sí | Categorías y "Movimientos Recientes" (Kardex, vista agregada cross-model) fuera de alcance deliberadamente. |
+| 9 | **Gastos** | Documentos Soporte, Resoluciones DIAN | Sí (Documentos Soporte) | — |
+| 10 | **Empleados** | Directorio, Contratos, Resoluciones DIAN, Períodos de Nómina, Nóminas (Master), Liquidaciones (Master) | No | Nóminas/Liquidaciones son split-pane Master-Detail: el Master migró a DataTables (con `createdRow` para click-en-fila), el Detail (historial de UN empleado seleccionado) queda en django-tables2 + HTMX — no es un listado plano independiente. |
+| 11 | **Proyectos** | Proyectos | Sí | TareaCorta (sub-tabla) sigue en django-tables2. |
+| 12 | **Contabilidad** | Cuentas Contables, Períodos, Asientos, Retenciones, Plantillas, Pendientes, Libro Diario | Activos Fijos-style: Libro Diario sí (resumen embebido en la misma respuesta) | **Pendientes**: endpoint manual (mezcla Factura+DocumentoSoporte+Devengo+movimientos de Inventario, 4 apps). **Libro Diario**: además de migrar, se corrigió un bug real preexistente (ver abajo). Reportes (Balance/Estado de Resultados) fuera de alcance. |
 
-**Cabeceras de tabla:** ningún `LinkColumn`/href custom encontrado en ningún `<th>` de ninguna app — el 100% de los encabezados ordenables usa los links de orden nativos de django-tables2 (`?sort=-campo`, conserva querystring). El mecanismo que causaría "URLs erróneas en cabeceras" (un link hardcodeado o un `reverse()` a un endpoint muerto) **no existe** en este código — el síntoma reportado en el prompt no tiene base estructural aquí.
+### Patrón "endpoint manual" (2 casos, documentados explícitamente en el código)
 
-**Búsqueda/ordenamiento/filtros de estado:** funcionan en las 13 apps, ya sea vía `SearchFilter`/`ordering_fields` declarativos o (Proveedores) un override manual equivalente.
+`apps/shared/datatable.py::DataTableServer` asume un `QuerySet` real de un solo modelo. Dos fuentes de datos en el ERP mezclan varios modelos/apps en una lista Python ya materializada:
 
-## Bugs reales confirmados (y corregidos)
+- **Proveedores → Cuentas por Pagar** (`CuentasPagarSelector.qs_list_unificado()`): Factura(COMPRA) + CuentasPagar.
+- **Contabilidad → Pendientes** (`DocumentosPendientesViewSet._construir_pendientes()`): Factura + DocumentoSoporte + Devengo + movimientos de Inventario.
 
-Ninguno de los defectos "sistémicos" descritos en el prompt (tablas rotas, filtros rotos, búsqueda inconsistente, URLs erróneas) se confirmó en la auditoría. Los ÚNICOS bugs reales encontrados en esta sesión, todos ya corregidos, salieron de pruebas con datos reales (no de este barrido genérico) y quedan documentados en `docs/remediation/FACTURAS_VENTAS_SYNC_STATUS.md`:
+Para ambos se escribió un `dt()` que habla el mismo contrato JSON `{draw, recordsTotal, recordsFiltered, data}` pero pagina/ordena/filtra en Python sobre la lista ya construida — sin tocar el helper compartido ni forzarlo a soportar algo que no es su responsabilidad.
 
-1. Truncamiento visual de centavos en los listados de Facturas y Ventas (`,.0f` en vez de `currency_cop`).
-2. Bug de escala x100 en el parser XML universal (no relacionado con tablas/filtros).
-3. Falta de una acción para eliminar una Venta sincronizada.
+### Bug real preexistente encontrado y corregido: Libro Diario (Contabilidad)
 
-## Brecha real identificada (no es un bug — es una funcionalidad que nunca existió)
+Al migrar se descubrió que la integración `libro_diario_list.js` ↔ `LibroDiarioViewSet.list()` ya estaba rota en producción:
 
-Ninguna tabla del ERP tiene **filtro por columna individual** (rango de fecha, rango numérico, dropdown de estado embebido en el header) — todas dependen de: búsqueda global + pills de filtro de estado predefinidos + ordenamiento por click de cabecera. Esto coincide con el diagnóstico de la sección 2 del prompt original, pero construir esa capa (contrato `searchable_fields`/`filterable_fields`/`orderable_fields` + widgets de filtro por columna con `django-filter`) es una FUNCIONALIDAD NUEVA, no la corrección de un defecto — y quedó fuera de alcance por la decisión explícita del usuario de esta sesión ("solo corregir bugs reales", no construir infraestructura nueva de filtrado).
+1. El JS (comentario propio: *"v3.7.7: Fuente de datos cambiada a AsientoContable"*) definía columnas alineadas con `AsientoContableListSerializer`, pero el backend seguía devolviendo documentos de 3 extractores cross-app (Factura/Gastos/Nómina) con una forma completamente distinta — el listado nunca mostró los campos correctos.
+2. El JS mandaba `periodo_uuid` al elegir un período del dropdown; el backend solo leía `periodo` (`YYYY-MM`) o `fecha_inicio`/`fecha_fin` — la selección de período se ignoraba en silencio y la vista caía al mes en curso.
 
-## FASE 3 (continuación) — URLs de acciones por fila
+Fix (con autorización explícita del usuario, ver conversación): se agregó `LibroDiarioViewSet.dt()`, que consulta `AsientoContable` directo (la fuente que el JS siempre esperó) y resuelve `periodo_uuid` correctamente vía `PeriodoContable`. `list()`/`get_libro_diario_periodo()` (los extractores cross-app) **no se tocaron** — siguen activos para otros consumidores (`apps/tenant/contabilidad/reporting/provider.py`) y mantienen su cobertura de tests existente (`test_api_contabilidad.py`).
 
-Auditoría de `render_acciones`/`render_*` en `tables.py` + JS de lista + `<app>.api.js`, las 13 apps:
+---
 
-- Ningún botón de acción apunta a un endpoint inexistente — todos usan `data-uuid`/`data-id` + delegación de eventos por clase (`btn-edit-x`, `btn-delete-x`, etc.), consistente en las 13 apps.
-- Único hallazgo de estilo (no bug): `apps/tenant/compras/tables.py:141` embebe una URL absoluta (`hx-get="/api/v1/compras/plantillas/render-offcanvas/editar/?uuid={0}"`) en vez de construirla desde `data-uuid` + JS, a diferencia del resto de apps. Verificado contra `compras/api/urls.py` y `compras/api/viewsets.py:367-368` — la ruta existe y resuelve correctamente. Es una inconsistencia de estilo, no un defecto funcional.
-- `parseInt()` sobre UUID: **0 ocurrencias reales** en código (`apps/tenant/`) — las 2 únicas coincidencias son la documentación de la propia prohibición en archivos `.agent/*.md`.
-- Sin contaminación de namespace entre apps (patrón "boton copiado de otra app y nunca re-cableado") — el único caso que parecía serlo (`Sintel.Reporting.API` usado en `ventas/reportes_ventas.js`) es un módulo compartido legítimo (`core/static/core/js/common/reporting.api.js`).
+## Deliberadamente NO migrado (secundario, documentado en cada `tables.py`/JS)
 
-STATUS FASE 3: PASS.
+| App | Tabla/vista | Por qué |
+|---|---|---|
+| Ventas | Resolución DIAN (selector de numeración) | Picker pequeño, no una grilla de listado — no solicitado. |
+| Clientes | Contactos, Historial, Cartera (sub-vistas del detalle de un cliente) | Drill-down de UN registro, no un listado independiente. |
+| Proveedores | Historial de compras (offcanvas de detalle) | Idem. |
+| Cotizaciones | Productos, Servicios, Configuración (catálogo, offcanvas) | Catálogos reutilizables, no el listado principal. |
+| Inventario | Categorías | No solicitado. |
+| Inventario | Movimientos Recientes (Kardex) | Vista agregada cross-model (`get_movimientos_timeline()`, MovimientoInventario + HistorialServicio en Python), mismo criterio que Pendientes/Contabilidad pero no priorizada. |
+| Empleados | Historial de Nóminas/Liquidaciones (Detail del Master-Detail) | Depende de la selección hecha en el Master, no es un listado independiente. |
+| Proyectos | TareaCorta | No solicitado. |
+| Contabilidad | Reportes (Balance de Prueba, Estado de Resultados) | Vista de reporte, no un listado CRUD. |
 
-## FASE 11 — Seguridad y tenant (búsqueda/filtro/ordenamiento)
+Ninguna de estas coexiste con DataTables como "segunda librería activa sin justificación" (regla Sección 38) — siguen en `django-tables2`/HTMX o Tabulator porque son sub-vistas de detalle o vistas agregadas, un caso distinto al de un listado principal.
 
-- `ordering_fields = '__all__'` (o allow-list sin restricción): **0 ocurrencias** en todo `apps/tenant/`.
-- Revisado `get_queryset()`/selector `.get_list()` de Ventas, Facturas (`ItemFactura`), Compras y el override manual de Proveedores: en los 4 casos el filtro `empresa_id` se aplica en el queryset base, antes/junto con cualquier encadenamiento de búsqueda u ordenamiento. Los `.filter()` de Django se combinan con AND sin importar el orden de llamada, por lo que no existe una ruta donde un `?search=` o `?ordering=` manipulado amplíe el resultado más allá del tenant — el aislamiento es estructural, no depende del orden.
+---
 
-STATUS FASE 11: PASS (verificado en 4 apps representativas; el patrón es uniforme con lo ya confirmado por FASE 0/2 en las 13 apps).
+## Fase 9 — Formularios
 
-## FASE 12 — N+1 en listados (auditoría estática + verificación empírica)
+**Estado: parcial, heredado de la Fase A.** Se corrigieron 2 bugs reales de doble-submit (uno con impacto financiero real, Cuentas por Pagar de Proveedores) en la auditoría original. La modernización visual transversal (Secciones 29-33 del prompt: `form-section`/`form-grid`/`form-actions` como sistema de diseño compartido) **no se ejecutó** — los formularios (offcanvas HTMX) no se tocaron en la migración de tablas a DataTables, por diseño (la migración fue de listados, no de formularios).
 
-Para las 13 apps: se leyeron los métodos `render_*` de `tables.py` en busca de traversales FK/relación (`record.<fk>.<campo>`) y se verificó que el `get_list()`/`qs_list()` del selector correspondiente cubriera esa relación con `select_related()`/`prefetch_related()` y que `.only()` incluyera el campo específico accedido.
+## Fase 10/19 — Tests
 
-**Resultado: sin N+1 reales confirmados.** Todas las traversales encontradas ya estaban cubiertas:
+**Estado: PASS.** Patrón de test establecido y aplicado en cada migración (contrato básico, aislamiento multi-tenant, filtro por columna, búsqueda global — mismo patrón que `test_venta_dt.py`); suite completa ejecutada en las 12/12 apps el 2026-09-21/22 (paso que el usuario había diferido deliberadamente al final del lote de trabajo, no cancelado — ejecutado tal como se acordó).
 
-| App | Traversal FK en render_* | select_related/prefetch cubre | Resultado |
-|---|---|---|---|
-| Bancos | `record.cuenta.nombre/numero` (ExtractoBancarioTable) | `select_related("cuenta", "sede")` | OK |
-| Compras | `record.proveedor.*`, `record.proyecto.nombre` | `select_related('proveedor','proyecto','documento_soporte','plantilla','sede','area')` | OK |
-| Contabilidad | `str(record.cerrado_por)` (PeriodoContableTable) | `select_related("cerrado_por")` | OK |
-| Empleados | `record.empleado.nombre_completo` (ContratoTable) | `select_related('empleado')` + ambos campos en `.only()` | OK |
-| Empresa | `record.sede.nombre` (AreaTable) | `select_related('sede')` | OK |
-| Facturas | `record.nota_credito` (FacturaTable) | `select_related("nota_credito", "sede")` | OK |
-| Gastos | `record.proveedor.*` (DocumentoSoporteTable, accessor) | `select_related('resolucion_dian','proveedor')` | OK |
-| Inventario | `record.categoria.nombre` (Producto/Servicio/ActivoFijo) | `select_related('categoria')` en los 3 selectores | OK |
-| Perfil | `record.user.*`, `record.departamento.nombre` | `select_related('user','departamento')` | OK |
-| Proveedores | ninguna (todo denormalizado o dict pre-calculado) | N/A | OK |
-| Proyectos | `record.factura_costo.cotizacion_numero` (ProyectoTable); `record.cliente.*`/`record.empleado.*` (TareaCortaTable) | `select_related('factura_costo',...)` / `select_related('cliente','empleado',...)` | Ver nota abajo |
-| Ventas | `record.cliente.*`, `record.factura_asociada.numero` | `select_related("cliente","proyecto","factura_asociada","resolucion")` | OK |
+Resultado por app (detalle completo en `docs/ux/TABLES_FORMS_RELEASE_GATE.md`):
 
-**Nota Proyectos:** `qs_list()` tenía `select_related('factura_costo')` sin nombrar ningún campo de `Factura` en `.only()`. La hipótesis inicial fue que esto causaba una query extra por fila (N+1) — **se verificó empíricamente con un test dedicado (`test_qs_list_n1_factura_costo.py`, revirtiendo el cambio y re-corriendo) que esto era FALSO**: Django no aplica deferred loading a un modelo `select_related()` si `.only()` no lo menciona en absoluto, así que ya cargaba todas las columnas de `Factura` vía el JOIN — 0 queries extra tanto antes como después. Se agregó igualmente `factura_costo__cotizacion_numero` a `.only()` (commit ya aplicado) por el criterio "Zero Waste" del propio selector (evita traer columnas de `Factura` que nadie usa en el listado), pero se documenta aquí explícitamente como una mejora de eficiencia menor, NO como la corrección de un bug de N+1 real — para no reportar un hallazgo más grave de lo que el código real demostró ser.
+| App | Resultado |
+|---|---|
+| Ventas | 92 passed, 4 skipped, 2 errors (infra conocida) |
+| Bancos | 100 passed (tras corregir el bug #7 de `_coerce_exact_value`) |
+| Facturas | 207 passed, 12 skipped |
+| Clientes | 52 passed, 1 error (infra conocida) |
+| Proveedores | 58 passed (tras corregir un test obsoleto, ver bug nuevo abajo) |
+| Compras | 58 passed (tras corregir un bug real de permisos, ver bug nuevo abajo) |
+| Cotizaciones | 70 passed |
+| Inventario | 58 passed |
+| Gastos | 44 passed |
+| Empleados | 98 passed |
+| Proyectos | 128 passed, 2 skipped, 1 error (infra conocida) |
+| Contabilidad | 126 passed, 2 errors (infra conocida) |
 
-STATUS FASE 12: PASS (sin N+1 reales; una mejora menor de `.only()` aplicada y verificada con test).
+**Total: ~1091 tests passed, 0 fallos reales sin resolver.** Los 6 "errors" (Ventas x2, Clientes x1, Proyectos x1, Contabilidad x2) son la misma causa raíz en los 4 archivos: `@pytest.mark.django_db(transaction=True)` + hilos reales para probar condiciones de carrera (`select_for_update`), donde el `flush()` automático de pytest-django en el teardown falla (`Database test_sintel couldn't be flushed`) — patrón de infraestructura de tests preexistente a esta migración (esos tests no tocan tablas/DataTables), no bloqueante: la aserción de negocio del test ya había pasado antes de que el teardown fallara.
 
-## Formularios (FASE 9/29-31)
+**2 bugs reales adicionales encontrados y corregidos durante esta corrida final:**
 
-Auditados en esta sesión (cierre de la tarea), acotado igual que el resto: solo bugs funcionales reales, no modernización visual/estética.
+- **Proveedores — test obsoleto:** `test_tabla_cuentas_pagar_view.py` seguía apuntando a `/ui/proveedores/cuentas-pagar/tabla/`, la URL HTMX vieja retirada al migrar esa grilla (4 tests fallaban con 404). No era un bug de producción, pero sí una brecha real de cobertura — el endpoint `dt()` de Cuentas por Pagar no tenía ningún test dedicado hasta ahora. Reescrito para probar `POST /api/v1/proveedores/cuentas-pagar/dt/`, misma cobertura funcional que antes (render, filtro por estado, búsqueda, CxP sin factura).
+- **Compras — bug real de permisos:** `IsTenantAdminOrReadOnly` (usada por las 14 apps con ViewSets DRF) trata cualquier método fuera de `SAFE_METHODS` como escritura reservada a ADMIN. Como `dt()` usa POST por convención de DataTables (aunque es 100% lectura), un usuario no-ADMIN con alcance SEDE que antes SÍ veía el listado de Órdenes de Compra (vía GET/HTMX) quedó bloqueado con 403 tras migrar — regresión real de UX/permisos, encontrada por `test_scope_pilot_f5.py`. Corregida en la fuente compartida (`apps/tenant/api/permissions.py::IsTenantAdminOrReadOnly.has_permission()`): `view.action == "dt"` ahora se trata como lectura, igual que `SAFE_METHODS`. Fix único, beneficia a las 12 apps sin tocar cada ViewSet.
 
-**Hallazgo transversal de estilo (no bug):** 12 archivos JS usan `alert()` como fallback de error y solo 2 templates usan el patrón Bootstrap `is-invalid`/`invalid-feedback`. Se investigó cada uno de los 12 casos — en todos, el mensaje mostrado (por `alert()` o por el manejo real vía `UIManager`/`error_injector.js`) refleja la causa real del error del backend; no hay pérdida de información. Queda registrado como deuda técnica de estilo (consistente con la decisión de alcance ya tomada para tablas/URLs), no como defecto a corregir en esta pasada.
+**Cada app, sin excepción:** `node --check` (JS) y `python -c "import ast; ast.parse(...)"` (Python) sin errores; `docker compose exec web python manage.py check` limpio después de cada tanda de cambios, incluida la corrida final tras el fix de permisos.
 
-**Bugs reales confirmados y corregidos (doble-submit):**
+## Fase 11 — Seguridad/tenant
 
-1. **`apps/tenant/proveedores/static/proveedores/js/features/cuentas_pagar_editor.js`** — el botón "Guardar" del offcanvas de abono no se deshabilitaba durante la petición. Un doble clic aplicaba el mismo abono dos veces sobre el saldo real (`valor_pagado`), sin protección de idempotencia en backend (`registrar_abono` solo serializa con `select_for_update()`, no deduplica). **Impacto: financiero real.** Corregido: el botón se deshabilita antes de `registrarAbono()` y se reactiva solo en caso de error (éxito cierra el offcanvas).
-2. **`apps/tenant/proveedores/static/proveedores/js/features/representante_editor.js`**, **`apps/tenant/perfil/static/perfil/js/perfil.modals.js`** (crear y editar perfil), **`apps/tenant/contabilidad/static/contabilidad/js/periodo/features/periodo_editor.js`** (crear y editar periodo) — mismo patrón: sin protección de doble-submit. Aquí no se duplicaban registros (constraints `unique_together`/`unique` en backend lo impiden), pero un doble clic disparaba una 2ª petición que fallaba por violación de unicidad, mostrando un error justo después del mensaje de éxito y confundiendo al usuario sobre si su dato quedó guardado. Corregido con el mismo patrón ya usado en `venta_editor.js`/`compras_editor.js`/`gasto_editor.js`: deshabilitar el botón al iniciar la petición, reactivar en `finally`/`catch`.
+Verificado exhaustivamente en Ventas y Bancos (tests de aislamiento multi-tenant dedicados, `force_login` cruzado entre 2 tenants, verificación de 401/403 sin sesión). Cada `dt()` reutiliza el selector/scoping ya existente de la app (`get_qs_list()`, `OrganizationalScope`, `SintelDSVMixin`) — nunca reimplementa el filtrado por `empresa_id`. Test de aislamiento multi-tenant escrito para cada app migrada (mismo patrón). **No se hizo un barrido de seguridad ofensivo adicional** (manipulación de `ordering`/`search`/`page` más allá de lo que ya cubren los tests de whitelist) — el diseño del helper compartido (whitelist explícita de campos ordenables/filtrables) hace estructuralmente imposible el vector descrito en la Sección 11 del prompt (`ordering_fields='__all__'` nunca se usa; confirmado en la auditoría de Fase A y no reintroducido).
 
-Verificación: `node --check` sobre los 4 archivos modificados — sin errores de sintaxis. No se tocó lógica de negocio ni Service Layer; el fix vive enteramente en el listener del botón (frontend).
+## Fase 12 — Performance
 
-STATUS FASE 9: PASS (2 bugs reales, uno de impacto financiero, corregidos; resto es deuda técnica de estilo documentada, fuera de alcance).
+**No ejecutado a escala (50/500/5.000/50.000+ registros).** El diseño (server-side, `.only()` heredado de los selectors existentes, sin `SELECT *`, agregados server-side para KPIs) sigue los mismos principios que ya pasaron la auditoría N+1 de la Fase A, pero no se generó dataset de prueba a gran escala ni se midió tiempo de respuesta/queries bajo carga en esta pasada.
 
-## Conclusión
+## Fase 13 — Visual QA responsive
 
-No se encontró evidencia de que "las tablas dinámicas no funcionan", "los filtros no funcionan" o "las cabeceras generan URLs erróneas" como problemas sistémicos — la arquitectura actual (django-tables2 + HTMX + DRF) funciona correctamente en las 13 apps auditadas. Si el usuario tiene una pantalla/tabla específica donde observó uno de estos síntomas en vivo, ese caso puntual debe reportarse con el detalle exacto (app, tabla, acción realizada, resultado esperado vs. obtenido) para poder reproducirlo y corregirlo — la auditoría genérica de código no lo reprodujo.
+**Solo Ventas tiene gate visual formal con Playwright** (desktop + mobile, encontrando y corrigiendo los 2 bugs de DOM documentados arriba). Las otras 11 apps se migraron siguiendo el mismo patrón ya validado visualmente en Ventas (misma factory compartida, mismo CSS de Bootstrap 5), pero **no se verificaron visualmente una por una** en esta pasada.
 
-En formularios sí se confirmaron y corrigieron 2 bugs reales de doble-submit (uno de impacto financiero en Cuentas por Pagar), documentados arriba (FASE 9). El resto de la brecha reportada por el prompt original (columnas sin filtro individual, formularios sin modernizar visualmente) es deuda técnica real pero deliberadamente fuera de alcance por la decisión explícita del usuario de esta sesión.
+## Fase 14 — Documentation drift
 
-## Cierre de la tarea
+Este documento reemplaza la versión de la Fase A. `docs/ux/TABLES_FORMS_RELEASE_GATE.md` se actualiza en conjunto. Comentarios `WARNING: v2.61: DataTables eliminado / migrado a Tabulator` encontrados como código muerto/histórico en `apps/tenant/contabilidad/api/urls.py` — no se tocaron (son comentarios, no código activo, y documentan una decisión de una versión anterior no relacionada con esta migración).
 
-STATUS GLOBAL: **DONE (alcance reducido a "auditoría + corrección de bugs reales")**
+---
 
-Ver `docs/ux/TABLES_FORMS_RELEASE_GATE.md` para el cierre formal (Fase 15 del prompt original) con el checklist de aceptación de la Sección 37.
+## Checklist de aceptación (Sección 37) — releído contra el estado real
+
+```text
+[x] Todas las tablas fueron inventariadas (12 apps del prompt + secundarias documentadas).
+[x] Todas las tablas activas (listado principal) tienen backend de filtros/búsqueda/ordenamiento vía DataTableServer o endpoint manual equivalente.
+[x] Todas las tablas migradas tienen búsqueda global (search_fields explícito).
+[x] Columnas filtrables tienen filtro individual por columna (ColumnFilter: ICONTAINS/EXACT/DATE_RANGE/NUMBER_RANGE) -- a diferencia de la Fase A, esto SÍ se construyó (era la brecha identificada entonces).
+[x] Fechas/números/choices tienen filtro individual (DATE_RANGE/NUMBER_RANGE/EXACT).
+[~] Relaciones (selector remoto) -- no se construyó un selector remoto de catálogo grande nuevo; los filtros relacionales existentes (cliente__razon_social, etc.) usan ICONTAINS sobre el campo denormalizado, no un autocomplete remoto dedicado.
+[x] Ordenamiento funciona (whitelist explícita por endpoint, sin ordering libre).
+[x] Paginación funciona (server-side, contrato DataTables estándar).
+[x] URLs de acciones son correctas (data-uuid + JS, sin hardcodear).
+[x] No se introdujeron rutas hardcodeadas nuevas.
+[x] Tenant isolation funciona (reutiliza selectors/scoping existente en las 12 apps; tests dedicados ejecutados en las 12 apps).
+[x] Permisos funcionan -- 1 bug real encontrado y corregido (dt() bloqueado para usuarios no-ADMIN via POST), resto heredado de cada ViewSet sin relajar/endurecer.
+[x] Loading/Empty/Error state -- provistos por DataTables nativo (processing indicator, "No se encontraron registros").
+[~] "Limpiar filtros" -- no se agregó un botón dedicado nuevo; el buscador nativo de DataTables y los selects de columna se limpian manualmente (gap real frente a la Sección 23 del prompt).
+[x] Backend sigue siendo fuente de verdad (todo filtro/orden pasa por whitelist server-side).
+[x] Service Layer no fue violado (cada dt() reutiliza selectors/servicios existentes).
+[x] Selectors no fueron bypassed.
+[x] No existen N+1 nuevos conocidos (KPIs con serializer_context sin N+1, movimientos_count/lineas_count vía SerializerMethodField consistente con el patrón ya auditado en Fase A).
+[x] No se rompe HTMX (offcanvas/formularios intactos, solo se tocó la capa de listado).
+[x] No se rompe Facturas/Ventas/Compras/Inventario/Contabilidad (verificado con manage.py check en cada tanda; suite completa verificada en Ventas y Bancos).
+[x] Tests: patrón establecido, aplicado y EJECUTADO en 12/12 apps -- ~1091 passed, 0 fallos reales sin resolver.
+[x] Documentación actualizada (este documento + RELEASE_GATE).
+```
+
+## Reglas absolutas (Sección 38) — verificación de no-violación
+
+No se migraron todas las apps simultáneamente (se hizo secuencial, app por app, con `manage.py check` entre cada una). No se creó una tabla diferente por módulo — un solo helper compartido (`apps/shared/datatable.py`) y una sola factory JS (`datatables.factory.js`) para las 12 apps. No se duplicó código de filtros/paginadores/resolvers de URL. No se filtró solo en JavaScript (`serverSide: true` en las 12 apps). No se permitió ordering libre (whitelist `fields_map` en cada endpoint). No se crearon URLs hardcodeadas nuevas. No se usó UUID como entero (`data-uuid`, sin `parseInt()`). No se eliminó DSV ni se bypasseó ningún Selector. No se puso lógica de negocio/fiscal en JS. No se rompió HTMX. **Sí se mantienen 2 librerías de tabla activas** (`django-tables2` para las sub-vistas de detalle/Master-Detail documentadas arriba, Tabulator residual en 6 sub-vistas de catálogo/detalle) — con justificación explícita en cada caso (sub-vista de UN registro, no un listado principal), consistente con la Sección 40 del prompt ("puede mantenerse si existe justificación técnica"). No se declaró PASS sin evidencia — cada fila de este documento enlaza a un hallazgo, un test o una verificación de `manage.py check` real.
+
+---
+
+## Pendiente, no bloqueante (mejoras futuras, no iniciar sin que el usuario lo pida)
+
+1. Validación visual (Playwright) de una muestra representativa de las 11 apps no-piloto, replicando el rigor aplicado a Ventas (único gate visual formal hasta ahora).
+2. Performance a escala (Fase 12, 50k+ registros) — no hay evidencia de que sea necesario, pero tampoco se midió.
+3. Botón "Limpiar filtros" transversal (gap real identificado arriba) y selector remoto para relaciones sobre catálogos grandes (Sección 7 del prompt) — mejoras incrementales.
+4. Investigar de raíz el patrón de infraestructura `transaction=True`+threads+teardown `flush()` (6 ocurrencias en 4 apps, ninguna relacionada con esta migración) si se prioriza dejar la suite en 0 errores reportados.

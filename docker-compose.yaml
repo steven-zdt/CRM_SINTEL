@@ -107,6 +107,13 @@ services:
       - SERVICE_ROLE=web
       - DATABASE_HOST=db
       - FASTEMBED_CACHE_PATH=/app/.fastembed_cache  # AI-VECTOR-04
+      # STATIC-AUTOWATCH (2026-09-28): solo dev, ver entrypoint.sh -- corre
+      # collectstatic automaticamente (polling, watchmedo) al editar
+      # cualquier */static/*.js|.css en vivo, sin reiniciar el contenedor.
+      # NUNCA replicar en docker-compose.prod.yaml (ahi el codigo viene
+      # COPY'd en la imagen sin bind-mount, y los estaticos los sirve
+      # WhiteNoise -- este watcher no aplica ni tiene sentido).
+      - STATIC_AUTOWATCH=1
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     restart: unless-stopped
     extra_hosts:
@@ -284,6 +291,45 @@ services:
       retries: 10
       start_period: 30s
 
+  # Ollama -- FASE 1 de documentacion/PLAN_MAESTRO_OLLAMA_QWEN35_SINTEL_AI_ENGINE_RAG_20260924.md
+  # (docs/ai/OLLAMA_BASELINE.md / OLLAMA_MIGRATION_GAPS.md / OLLAMA_DEPENDENCY_MAP.md).
+  # SOLO infraestructura en esta fase -- el modelo (qwen3.5:9b) se instala en
+  # Fase 2, por separado (descarga real de varios GB, no se agrupa con el
+  # arranque del servicio). Ningun otro servicio depende de `ollama` todavia
+  # -- AIEngine/AIContext/AIToolRegistry/RAG siguen sin tocar (regla absoluta
+  # del plan, ver OLLAMA_DEPENDENCY_MAP.md "Quien se ve afectado").
+  # CPU-only por decision explicita del usuario (2026-09-24) -- sin
+  # deploy.resources.reservations.devices para GPU; agregar despues si se
+  # confirma GPU passthrough real en Docker Desktop.
+  ollama:
+    container_name: crm_sintel-ollama-1
+    image: ollama/ollama:latest
+    # Limite duro de memoria (2026-09-24, incidente real): sin este limite,
+    # una inferencia CPU-only satura la VM de WSL2 completa y ahoga al
+    # propio motor de Docker Desktop (500 Internal Server Error en TODOS
+    # los contenedores, no solo este) -- confirmado en vivo, requirio
+    # `wsl --shutdown` para recuperar. Con mem_limit, el kernel mata SOLO
+    # este contenedor si se pasa, protegiendo al resto del stack. Host real:
+    # 12GB fisicos, WSL2 limitado a 7GB (ver %UserProfile%\.wslconfig) --
+    # 3g deja margen real para web/db/redis/celery/neo4j/n8n/nginx.
+    mem_limit: 3g
+    cpus: 4
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      # DEVOPS-M2: mismo patron que db/redis/neo4j -- solo accesible desde
+      # el propio host (debug/CLI), nunca desde la red local. El AI Engine
+      # (contenedor web) accede via el nombre DNS interno de Compose
+      # (http://ollama:11434), no via este puerto publicado.
+      - "127.0.0.1:11434:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     name: crm_sintel_postgres_data
@@ -299,4 +345,7 @@ volumes:
     driver: local
   fastembed_cache:
     name: crm_sintel_fastembed_cache
+    driver: local
+  ollama_models:
+    name: crm_sintel_ollama_models
     driver: local

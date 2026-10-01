@@ -10,6 +10,7 @@ expone implementando ReportProvider en su propio paquete
 
 Reporting NO es dueño de los datos (ver docs/reporting/REPORTING_BASELINE.md).
 """
+
 from __future__ import annotations
 
 import enum
@@ -22,6 +23,7 @@ class FieldType(str, enum.Enum):
     """Tipo declarado de una dimension/medida/filtro -- usado para validar
     el ReportRequest contra el catalogo antes de ejecutar nada (Regla
     Absoluta #4: el frontend nunca envia SQL/campo/tabla libre)."""
+
     STRING = "STRING"
     INTEGER = "INTEGER"
     DECIMAL = "DECIMAL"
@@ -32,6 +34,7 @@ class FieldType(str, enum.Enum):
 
 class Aggregation(str, enum.Enum):
     """Funcion de agregacion declarada de una medida."""
+
     SUM = "SUM"
     COUNT = "COUNT"
     AVG = "AVG"
@@ -45,6 +48,7 @@ class ReportField:
     interno que el Provider usa para resolverla contra su propio queryset --
     Reporting nunca interpreta `source`, solo lo pasa de vuelta al Provider
     dueño del dataset."""
+
     name: str
     label: str
     field_type: FieldType
@@ -55,6 +59,7 @@ class ReportField:
 @dataclass(frozen=True)
 class ReportMeasure:
     """Medida declarada de un dataset (FASE 6)."""
+
     name: str
     label: str
     field_type: FieldType
@@ -67,6 +72,7 @@ class ReportMeasure:
 class ReportFilterSpec:
     """Filtro declarado que el catalogo permite solicitar para un dataset.
     Solo metadata -- el VALOR del filtro llega en ReportRequest.filters."""
+
     name: str
     label: str
     field_type: FieldType
@@ -83,6 +89,7 @@ class ReportDataset:
     organizacionales aplican a este dataset (ej. un dataset sin campo sede no
     debe intentar filtrar por sede).
     """
+
     dataset_id: str
     owner_app: str
     name: str
@@ -109,6 +116,7 @@ class ReportRequest:
     """Solicitud de ejecucion de un reporte (FASE 9). Solo admite lo que el
     Dataset declara -- ReportQueryEngine valida cada campo contra el
     catalogo antes de llamar al Provider (Regla Absoluta #4)."""
+
     dataset_id: str
     filters: dict[str, Any] = field(default_factory=dict)
     group_by: tuple[str, ...] = ()
@@ -123,6 +131,7 @@ class ReportResult:
     """Resultado estandar de una ejecucion (FASE 13). No incluye nada que el
     usuario no tenga permiso de ver -- el Provider es responsable de eso
     dentro del scope recibido."""
+
     dataset_id: str
     columns: tuple[str, ...]
     rows: list[dict[str, Any]]
@@ -158,11 +167,9 @@ class ReportProvider(Protocol):
     conoce los modelos internos de ningun Provider -- solo llama estos tres
     metodos."""
 
-    def list_datasets(self) -> list[ReportDataset]:
-        ...
+    def list_datasets(self) -> list[ReportDataset]: ...
 
-    def get_dataset(self, dataset_id: str) -> ReportDataset | None:
-        ...
+    def get_dataset(self, dataset_id: str) -> ReportDataset | None: ...
 
     def execute(self, request: ReportRequest, scope: Any) -> ReportResult:
         """`scope` es un apps.tenant.core.services.organizational_scope.

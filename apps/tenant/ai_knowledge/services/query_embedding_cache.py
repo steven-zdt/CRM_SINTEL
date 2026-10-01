@@ -16,6 +16,7 @@ docker-compose.yaml) -- inaceptable en un hot path como retrieval, a
 diferencia de un reset de password (raro). Un cliente reutilizado paga ese
 costo una sola vez por proceso.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -36,6 +37,7 @@ def _redis():
     global _client
     if _client is None:
         import redis as _redis_lib
+
         _client = _redis_lib.from_url(
             getattr(settings, "REDIS_URL", "redis://redis:6379/0"),
             socket_connect_timeout=2,
@@ -69,7 +71,9 @@ def get_cached_embedding(query: str, model: str) -> list[float] | None:
         return None
 
 
-def set_cached_embedding(query: str, model: str, vector: list[float], ttl_s: int | None = None) -> None:
+def set_cached_embedding(
+    query: str, model: str, vector: list[float], ttl_s: int | None = None
+) -> None:
     """Guarda el vector en cache. Fail-open: nunca propaga un fallo de Redis."""
     try:
         _redis().set(
@@ -78,4 +82,6 @@ def set_cached_embedding(query: str, model: str, vector: list[float], ttl_s: int
             ex=ttl_s or getattr(settings, "AI_EMBED_CACHE_TTL_S", _DEFAULT_TTL_S),
         )
     except Exception:
-        logger.warning("[QueryEmbeddingCache] redis set fallo, no bloquea la busqueda", exc_info=True)
+        logger.warning(
+            "[QueryEmbeddingCache] redis set fallo, no bloquea la busqueda", exc_info=True
+        )

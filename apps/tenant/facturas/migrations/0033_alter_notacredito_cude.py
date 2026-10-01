@@ -4,15 +4,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('facturas', '0032_remove_factura_xml_file_path'),
+        ("facturas", "0032_remove_factura_xml_file_path"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='notacredito',
-            name='cude',
-            field=models.CharField(blank=True, help_text='Código Único de Documento Electrónico (identificador legal de la nota)', max_length=200, null=True, unique=True, verbose_name='CUDE'),
+            model_name="notacredito",
+            name="cude",
+            field=models.CharField(
+                blank=True,
+                help_text="Código Único de Documento Electrónico (identificador legal de la nota)",
+                max_length=200,
+                null=True,
+                unique=True,
+                verbose_name="CUDE",
+            ),
         ),
     ]

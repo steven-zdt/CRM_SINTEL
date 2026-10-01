@@ -4,14 +4,13 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('tenant_gastos', '0013_add_cuenta_contable_uuid_fields'),
+        ("tenant_gastos", "0013_add_cuenta_contable_uuid_fields"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='documentosoporte',
-            name='cuenta_contrapartida_uuid',
+            model_name="documentosoporte",
+            name="cuenta_contrapartida_uuid",
         ),
     ]

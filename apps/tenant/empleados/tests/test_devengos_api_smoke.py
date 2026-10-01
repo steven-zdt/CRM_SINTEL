@@ -4,6 +4,7 @@ Pruebas de humo para API de devengos (DRF + multitenancy).
 Verifica que los endpoints respondan correctamente y que el aislamiento
 por esquema funcione correctamente.
 """
+
 from decimal import Decimal
 
 import pytest
@@ -16,13 +17,14 @@ from apps.tenant.empleados.models import Devengo, Empleado
 def test_devengos_list_smoke(client, admin_user, tenant):
     """
     Smoke test: lista de devengos.
-    
+
     Inserta un registro en el esquema del tenant y verifica que el endpoint
     responda correctamente (200 o 404 si aún no se incluyó el router).
     """
     # Insertar registro en el esquema del tenant
     with schema_context(tenant.schema_name):
         from apps.tenant.empresa.models import Empresa
+
         empresa = Empresa.objects.first()
         e = Empleado.objects.create(
             tipo_documento="CC",
@@ -35,16 +37,17 @@ def test_devengos_list_smoke(client, admin_user, tenant):
             empresa=empresa,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
         from apps.tenant.empleados.models import Contrato
+
         c = Contrato.objects.create(
             empresa=empresa,
             empleado=e,
             tipo="INDEF",
             fecha_inicio="2024-01-01",
             salario_mensual=Decimal("2000000.00"),
-            cargo="Desarrollador"
+            cargo="Desarrollador",
         )
         # Crear devengo
         Devengo.objects.create(
@@ -57,15 +60,15 @@ def test_devengos_list_smoke(client, admin_user, tenant):
             auxilio_transporte=Decimal("140000.00"),
             salud_empleado=Decimal("80000.00"),
             pension_empleado=Decimal("80000.00"),
-            neto_pagar=Decimal("1980000.00")
+            neto_pagar=Decimal("1980000.00"),
         )
-    
+
     # Autenticar usuario global (según fixtures)
     client.force_login(admin_user)
-    
+
     # La ruta se incluirá más adelante en TENANT_URLCONF (/api/v1/devengos/)
     resp = client.get("/api/v1/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
-    
+
     # 200 si el router está incluido, 404 si aún no se incluyó
     assert resp.status_code in (200, 404), f"Expected 200 or 404, got {resp.status_code}"
 
@@ -74,13 +77,14 @@ def test_devengos_list_smoke(client, admin_user, tenant):
 def test_devengos_create_smoke(client, admin_user, tenant):
     """
     Smoke test: crear devengo.
-    
+
     Verifica que el endpoint de creación responda correctamente y que
     los totales se calculen automáticamente.
     """
     # Crear empleado en el esquema del tenant
     with schema_context(tenant.schema_name):
         from apps.tenant.empresa.models import Empresa
+
         empresa = Empresa.objects.first()
         e = Empleado.objects.create(
             tipo_documento="CC",
@@ -93,22 +97,23 @@ def test_devengos_create_smoke(client, admin_user, tenant):
             empresa=empresa,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
         from apps.tenant.empleados.models import Contrato
+
         c = Contrato.objects.create(
             empresa=empresa,
             empleado=e,
             tipo="INDEF",
             fecha_inicio="2024-01-01",
             salario_mensual=Decimal("2000000.00"),
-            cargo="Desarrollador"
+            cargo="Desarrollador",
         )
         empleado_id = e.id
         contrato_id = c.id
-    
+
     client.force_login(admin_user)
-    
+
     payload = {
         "empresa": str(empresa.id),
         "empleado": empleado_id,
@@ -124,17 +129,17 @@ def test_devengos_create_smoke(client, admin_user, tenant):
         "prestamos": "0.00",
         "descuentos_operativos": "0.00",
     }
-    
+
     resp = client.post(
         "/api/v1/devengos/",
         data=payload,
         content_type="application/json",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
-    
+
     # 201 si el router está incluido y funciona, 404 si aún no se incluyó
     assert resp.status_code in (201, 404), f"Expected 201 or 404, got {resp.status_code}"
-    
+
     # Si se creó, verificar que existe en el esquema correcto y que los totales se calcularon
     if resp.status_code == 201:
         data = resp.json()
@@ -144,27 +149,25 @@ def test_devengos_create_smoke(client, admin_user, tenant):
         assert data["total_devengado"] == "2140000.00"  # 2000000 + 140000
         assert data["total_deducciones"] == "160000.00"  # 80000 + 80000
         assert data["neto_pagar"] == "1980000.00"  # 2140000 - 160000
-        
+
         with schema_context(tenant.schema_name):
-            assert Devengo.objects.filter(
-                empleado_id=empleado_id,
-                periodo_mes="2026-02"
-            ).exists()
+            assert Devengo.objects.filter(empleado_id=empleado_id, periodo_mes="2026-02").exists()
 
 
 @pytest.mark.django_db
 def test_devengos_multitenancy_isolation(client, admin_user, tenant, tenant_factory):
     """
     Smoke test: aislamiento multitenant.
-    
+
     Verifica que los devengos de un tenant no sean visibles desde otro tenant.
     """
     # Crear segundo tenant
     tenant2 = tenant_factory(schema_name="tenant2")
-    
+
     # Crear devengo en tenant1
     with schema_context(tenant.schema_name):
         from apps.tenant.empresa.models import Empresa
+
         empresa1 = Empresa.objects.first()
         e1 = Empleado.objects.create(
             tipo_documento="CC",
@@ -176,11 +179,17 @@ def test_devengos_multitenancy_isolation(client, admin_user, tenant, tenant_fact
             empresa=empresa1,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
         from apps.tenant.empleados.models import Contrato
+
         c1 = Contrato.objects.create(
-            empresa=empresa1, empleado=e1, tipo="FIJO", fecha_inicio="2024-01-01", salario_mensual=Decimal("1000000.00"), cargo="Analista"
+            empresa=empresa1,
+            empleado=e1,
+            tipo="FIJO",
+            fecha_inicio="2024-01-01",
+            salario_mensual=Decimal("1000000.00"),
+            cargo="Analista",
         )
         Devengo.objects.create(
             empresa=empresa1,
@@ -191,20 +200,21 @@ def test_devengos_multitenancy_isolation(client, admin_user, tenant, tenant_fact
             salario_base=Decimal("1000000.00"),
             salud_empleado=Decimal("0.00"),
             pension_empleado=Decimal("0.00"),
-            neto_pagar=Decimal("1000000.00")
+            neto_pagar=Decimal("1000000.00"),
         )
-    
+
     # Crear devengo en tenant2
     with schema_context(tenant2.schema_name):
         from apps.tenant.empresa.models import Empresa
+
         empresa2 = Empresa.objects.first()
         # Ensure Empresa exists in tenant2 as tenant_factory might not run the migrations.
         if not empresa2:
             empresa2 = Empresa.objects.create(
-                razon_social='EMPRESA TEST 2',
-                nit='901234568',
-                direccion='Dir test 2',
-                telefono='3000000001'
+                razon_social="EMPRESA TEST 2",
+                nit="901234568",
+                direccion="Dir test 2",
+                telefono="3000000001",
             )
         e2 = Empleado.objects.create(
             tipo_documento="CC",
@@ -216,11 +226,17 @@ def test_devengos_multitenancy_isolation(client, admin_user, tenant, tenant_fact
             empresa=empresa2,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
         from apps.tenant.empleados.models import Contrato
+
         c2 = Contrato.objects.create(
-            empresa=empresa2, empleado=e2, tipo="FIJO", fecha_inicio="2024-01-01", salario_mensual=Decimal("2000000.00"), cargo="Senior"
+            empresa=empresa2,
+            empleado=e2,
+            tipo="FIJO",
+            fecha_inicio="2024-01-01",
+            salario_mensual=Decimal("2000000.00"),
+            cargo="Senior",
         )
         Devengo.objects.create(
             empresa=empresa2,
@@ -231,25 +247,22 @@ def test_devengos_multitenancy_isolation(client, admin_user, tenant, tenant_fact
             salario_base=Decimal("2000000.00"),
             salud_empleado=Decimal("0.00"),
             pension_empleado=Decimal("0.00"),
-            neto_pagar=Decimal("2000000.00")
+            neto_pagar=Decimal("2000000.00"),
         )
-    
+
     from apps.public.tenants.models import TenantMembership
     from apps.tenant.perfil.models import TenantProfile
+
     TenantMembership.objects.get_or_create(
-        client=tenant2,
-        user=admin_user,
-        defaults={'is_active': True, 'rol': 'ADMIN'}
+        client=tenant2, user=admin_user, defaults={"is_active": True, "rol": "ADMIN"}
     )
     with schema_context(tenant2.schema_name):
         TenantProfile.objects.get_or_create(
-            user=admin_user,
-            empresa=empresa2,
-            defaults={'rol': 'ADMIN'}
+            user=admin_user, empresa=empresa2, defaults={"rol": "ADMIN"}
         )
 
     client.force_login(admin_user)
-    
+
     # Verificar que tenant1 solo ve su devengo (si el router está incluido)
     resp1 = client.get("/api/v1/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     if resp1.status_code == 200:
@@ -260,7 +273,7 @@ def test_devengos_multitenancy_isolation(client, admin_user, tenant, tenant_fact
             with schema_context(tenant.schema_name):
                 empleado1 = Empleado.objects.get(numero_documento="1111111111")
                 assert empleado1.id in empleado_ids or len(empleado_ids) == 0
-    
+
     # Verificar que tenant2 solo ve su devengo
     resp2 = client.get("/api/v1/devengos/", HTTP_HOST=f"{tenant2.schema_name}.sintel.net.co")
     if resp2.status_code == 200:
@@ -280,6 +293,7 @@ def test_devengo_totales_calculados(client, django_user_model, tenant):
     """
     with schema_context(tenant.schema_name):
         from apps.tenant.empresa.models import Empresa
+
         empresa = Empresa.objects.first()
         e = Empleado.objects.create(
             tipo_documento="CC",
@@ -291,12 +305,18 @@ def test_devengo_totales_calculados(client, django_user_model, tenant):
             empresa=empresa,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
-        
+
         from apps.tenant.empleados.models import Contrato
+
         c = Contrato.objects.create(
-            empresa=empresa, empleado=e, tipo="FIJO", fecha_inicio="2024-01-01", salario_mensual=Decimal("2000000.00"), cargo="QA"
+            empresa=empresa,
+            empleado=e,
+            tipo="FIJO",
+            fecha_inicio="2024-01-01",
+            salario_mensual=Decimal("2000000.00"),
+            cargo="QA",
         )
         # El modelo actual delega el cálculo de neto_pagar a service layer, pero la prueba
         # lo intenta verificar en el save.
@@ -313,9 +333,9 @@ def test_devengo_totales_calculados(client, django_user_model, tenant):
             pension_empleado=Decimal("80000.00"),
             prestamos=Decimal("20000.00"),
             descuentos_operativos=Decimal("0.00"),
-            neto_pagar=Decimal("2110000.00"), # Service layer actually does this.
+            neto_pagar=Decimal("2110000.00"),  # Service layer actually does this.
         )
-        
+
         # Como los totales son parte del payload o calculados por el service layer, el neto_pagar es seteado arriba o es none.
         assert devengo.neto_pagar == Decimal("2110000.00")
 
@@ -327,10 +347,11 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
     """
     # 1. Crear empleados y contratos en el tenant 1
     with schema_context(tenant.schema_name):
-        from apps.tenant.empresa.models import Empresa
         from apps.tenant.empleados.models import Contrato
+        from apps.tenant.empresa.models import Empresa
+
         empresa1 = Empresa.objects.first()
-        
+
         # Empleado 1: Disponible (sin devengos en el periodo)
         e1 = Empleado.objects.create(
             tipo_documento="CC",
@@ -342,12 +363,17 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
             empresa=empresa1,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
-        c1 = Contrato.objects.create(
-            empresa=empresa1, empleado=e1, tipo="INDEF", fecha_inicio="2024-01-01", salario_mensual=Decimal("1500000.00"), cargo="Analista"
+        Contrato.objects.create(
+            empresa=empresa1,
+            empleado=e1,
+            tipo="INDEF",
+            fecha_inicio="2024-01-01",
+            salario_mensual=Decimal("1500000.00"),
+            cargo="Analista",
         )
-        
+
         # Empleado 2: Ocupado (con devengo en el periodo)
         e2 = Empleado.objects.create(
             tipo_documento="CC",
@@ -359,12 +385,17 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
             empresa=empresa1,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
         c2 = Contrato.objects.create(
-            empresa=empresa1, empleado=e2, tipo="INDEF", fecha_inicio="2024-01-01", salario_mensual=Decimal("2500000.00"), cargo="Senior"
+            empresa=empresa1,
+            empleado=e2,
+            tipo="INDEF",
+            fecha_inicio="2024-01-01",
+            salario_mensual=Decimal("2500000.00"),
+            cargo="Senior",
         )
-        
+
         # Crear devengo para e2 en Febrero 2026
         Devengo.objects.create(
             empresa=empresa1,
@@ -376,7 +407,7 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
             auxilio_transporte=Decimal("0.00"),
             salud_empleado=Decimal("100000.00"),
             pension_empleado=Decimal("100000.00"),
-            neto_pagar=Decimal("2300000.00")
+            neto_pagar=Decimal("2300000.00"),
         )
 
     # 2. Login y peticion al endpoint
@@ -389,23 +420,23 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
     # 2a. Validacion de parametros requeridos
     resp = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
     assert resp.status_code == 400
     assert "fecha_inicio y fecha_fin son requeridos" in resp.json()["error"]
-    
+
     # 2b. Validacion de fechas invalidas
     resp = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=invalid-date&fecha_fin=2026-02-28",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
     assert resp.status_code == 400
     assert "Formato de fecha invalido" in resp.json()["error"]
-    
+
     # 2c. Validacion de rango de fecha incorrecto
     resp = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=2026-02-28&fecha_fin=2026-02-01",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
     assert resp.status_code == 400
     assert "fecha_inicio no puede ser mayor que fecha_fin" in resp.json()["error"]
@@ -413,7 +444,7 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
     # 2d. Peticion valida - Deben retornar Juan y no Pedro
     resp = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=2026-02-01&fecha_fin=2026-02-28",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -425,15 +456,16 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
     tenant2 = tenant_factory(schema_name="tenant2")
     with schema_context(tenant2.schema_name):
         from apps.tenant.empresa.models import Empresa
+
         empresa2 = Empresa.objects.first()
         if not empresa2:
             empresa2 = Empresa.objects.create(
                 razon_social="EMPRESA TEST 2",
                 nit="901234568",
                 direccion="Dir test 2",
-                telefono="3000000001"
+                telefono="3000000001",
             )
-        
+
         # Empleado en Tenant 2
         e3 = Empleado.objects.create(
             tipo_documento="CC",
@@ -445,25 +477,27 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
             empresa=empresa2,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
         Contrato.objects.create(
-            empresa=empresa2, empleado=e3, tipo="INDEF", fecha_inicio="2024-01-01", salario_mensual=Decimal("1500000.00"), cargo="Analista"
+            empresa=empresa2,
+            empleado=e3,
+            tipo="INDEF",
+            fecha_inicio="2024-01-01",
+            salario_mensual=Decimal("1500000.00"),
+            cargo="Analista",
         )
 
     # Configurar membresias y perfiles para tenant2
     from apps.public.tenants.models import TenantMembership
     from apps.tenant.perfil.models import TenantProfile
+
     TenantMembership.objects.get_or_create(
-        client=tenant2,
-        user=admin_user,
-        defaults={"is_active": True, "rol": "ADMIN"}
+        client=tenant2, user=admin_user, defaults={"is_active": True, "rol": "ADMIN"}
     )
     with schema_context(tenant2.schema_name):
         TenantProfile.objects.get_or_create(
-            user=admin_user,
-            empresa=empresa2,
-            defaults={"rol": "ADMIN"}
+            user=admin_user, empresa=empresa2, defaults={"rol": "ADMIN"}
         )
         # Las sesiones estan aisladas por esquema (TENANT_APPS): la sesion
         # creada para tenant1 no es visible al cambiar de host a tenant2, asi
@@ -474,12 +508,14 @@ def test_empleados_disponibles_api(client, admin_user, tenant, tenant_factory):
     # Peticion desde tenant2 no debe ver empleados de tenant1
     resp_tenant2 = client.get(
         "/api/v1/empleados/devengos/empleados-disponibles/?fecha_inicio=2026-02-01&fecha_fin=2026-02-28",
-        HTTP_HOST=f"{tenant2.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant2.schema_name}.sintel.net.co",
     )
     assert resp_tenant2.status_code == 200
     data2 = resp_tenant2.json()
     assert len(data2) == 1
-    assert data2[0]["numero_documento"] == "3333333333"  # Solo Carlos de Tenant 2, no Juan de Tenant 1
+    assert (
+        data2[0]["numero_documento"] == "3333333333"
+    )  # Solo Carlos de Tenant 2, no Juan de Tenant 1
 
 
 @pytest.mark.django_db
@@ -496,18 +532,30 @@ def test_info_empleado_acepta_pk_entero_y_uuid(client, admin_user, tenant):
     empleado ya fallaba antes.
     """
     with schema_context(tenant.schema_name):
-        from apps.tenant.empresa.models import Empresa
         from apps.tenant.empleados.models import Contrato
+        from apps.tenant.empresa.models import Empresa
+
         empresa = Empresa.objects.first()
         emp = Empleado.objects.create(
-            tipo_documento="CC", numero_documento="900111222",
-            primer_nombre="Con", primer_apellido="Contrato",
-            email="con.contrato@example.com", fecha_ingreso="2024-01-01",
-            empresa=empresa, estado="ACTIVO", eps="EPS004", afp="AFP001", arl="ARL002",
+            tipo_documento="CC",
+            numero_documento="900111222",
+            primer_nombre="Con",
+            primer_apellido="Contrato",
+            email="con.contrato@example.com",
+            fecha_ingreso="2024-01-01",
+            empresa=empresa,
+            estado="ACTIVO",
+            eps="EPS004",
+            afp="AFP001",
+            arl="ARL002",
         )
         Contrato.objects.create(
-            empresa=empresa, empleado=emp, tipo="INDEF", fecha_inicio="2024-01-01",
-            salario_mensual=Decimal("3000000.00"), cargo="Auditor",
+            empresa=empresa,
+            empleado=emp,
+            tipo="INDEF",
+            fecha_inicio="2024-01-01",
+            salario_mensual=Decimal("3000000.00"),
+            cargo="Auditor",
         )
         emp_id, emp_uuid = emp.id, str(emp.uuid)
         client.force_login(admin_user)
@@ -515,7 +563,7 @@ def test_info_empleado_acepta_pk_entero_y_uuid(client, admin_user, tenant):
     # PK entero (flujo dropdown clasico) -- antes del fix, 500.
     resp_pk = client.get(
         f"/api/v1/empleados/devengos/info-empleado/?empleado={emp_id}",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
     assert resp_pk.status_code == 200, resp_pk.content
     assert resp_pk.json()["contrato"]["salario_mensual"] == "3000000.00"
@@ -523,7 +571,7 @@ def test_info_empleado_acepta_pk_entero_y_uuid(client, admin_user, tenant):
     # UUID (flujo preseleccionado / periodo) -- ya funcionaba, no debe romperse.
     resp_uuid = client.get(
         f"/api/v1/empleados/devengos/info-empleado/?empleado={emp_uuid}",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
     assert resp_uuid.status_code == 200, resp_uuid.content
     assert resp_uuid.json()["empleado"]["numero_documento"] == "900111222"
@@ -531,7 +579,7 @@ def test_info_empleado_acepta_pk_entero_y_uuid(client, admin_user, tenant):
     # PK inexistente -> 404, no 500.
     resp_404 = client.get(
         "/api/v1/empleados/devengos/info-empleado/?empleado=999999",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
     assert resp_404.status_code == 404
 
@@ -546,24 +594,41 @@ def test_devengo_detalle_y_pdf(client, admin_user, tenant):
     (solo LiquidacionPrestacion lo tenia).
     """
     with schema_context(tenant.schema_name):
-        from apps.tenant.empresa.models import Empresa
         from apps.tenant.empleados.models import Contrato
+        from apps.tenant.empresa.models import Empresa
+
         empresa = Empresa.objects.first()
         emp = Empleado.objects.create(
-            tipo_documento="CC", numero_documento="900222333",
-            primer_nombre="Pdf", primer_apellido="Test",
-            email="pdf.test@example.com", fecha_ingreso="2024-01-01",
-            empresa=empresa, estado="ACTIVO", eps="EPS004", afp="AFP001", arl="ARL002",
+            tipo_documento="CC",
+            numero_documento="900222333",
+            primer_nombre="Pdf",
+            primer_apellido="Test",
+            email="pdf.test@example.com",
+            fecha_ingreso="2024-01-01",
+            empresa=empresa,
+            estado="ACTIVO",
+            eps="EPS004",
+            afp="AFP001",
+            arl="ARL002",
         )
         contrato = Contrato.objects.create(
-            empresa=empresa, empleado=emp, tipo="INDEF", fecha_inicio="2024-01-01",
-            salario_mensual=Decimal("2000000.00"), cargo="Tester",
+            empresa=empresa,
+            empleado=emp,
+            tipo="INDEF",
+            fecha_inicio="2024-01-01",
+            salario_mensual=Decimal("2000000.00"),
+            cargo="Tester",
         )
         devengo = Devengo.objects.create(
-            empresa=empresa, empleado=emp, contrato=contrato,
-            periodo_mes="2026-01", fecha_pago="2026-01-31",
-            salario_base=Decimal("2000000.00"), salud_empleado=Decimal("80000.00"),
-            pension_empleado=Decimal("80000.00"), neto_pagar=Decimal("1840000.00"),
+            empresa=empresa,
+            empleado=emp,
+            contrato=contrato,
+            periodo_mes="2026-01",
+            fecha_pago="2026-01-31",
+            salario_base=Decimal("2000000.00"),
+            salud_empleado=Decimal("80000.00"),
+            pension_empleado=Decimal("80000.00"),
+            neto_pagar=Decimal("1840000.00"),
         )
         devengo_uuid = devengo.uuid
         client.force_login(admin_user)
@@ -573,7 +638,7 @@ def test_devengo_detalle_y_pdf(client, admin_user, tenant):
     # ya devuelve la instancia, no un QuerySet -- .select_related() fallaba).
     resp_detalle = client.get(
         f"/api/v1/empleados/devengos/{devengo_uuid}/render-offcanvas/detalle/",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
     assert resp_detalle.status_code == 200, resp_detalle.content
     assert b"{#" not in resp_detalle.content
@@ -583,10 +648,9 @@ def test_devengo_detalle_y_pdf(client, admin_user, tenant):
     # PDF: 200, documento HTML imprimible con el neto correcto.
     resp_pdf = client.get(
         f"/api/v1/empleados/devengos/{devengo_uuid}/pdf/",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
     assert resp_pdf.status_code == 200, resp_pdf.content
     assert b"{#" not in resp_pdf.content
     assert "Desprendible de Pago de Nómina".encode() in resp_pdf.content
-    assert "1.840.000".encode() in resp_pdf.content
-
+    assert b"1.840.000" in resp_pdf.content

@@ -9,6 +9,7 @@ nunca recibia su Area "General". Confirmado empiricamente contra los 3
 tenants reales del entorno de desarrollo (`shelltest1` tenia 1 Sede y 0 Area)
 antes de corregir la funcion.
 """
+
 from apps.tenant.empresa.models import Area, Empresa, Sede
 from apps.tenant.empresa.services.business_service import (
     asegurar_estructura_organizacional_inicial,
@@ -20,7 +21,9 @@ class AsegurarEstructuraOrganizacionalInicialTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F4", nit="900000333", direccion="Calle 1",
+            razon_social="Empresa Test F4",
+            nit="900000333",
+            direccion="Calle 1",
         )
 
     def test_empresa_sin_ninguna_sede_crea_principal_y_general(self):
@@ -48,7 +51,10 @@ class AsegurarEstructuraOrganizacionalInicialTests(SintelTenantTestCase):
         Sede.objects.filter(empresa=self.empresa).delete()
         sede_existente = Sede.objects.create(empresa=self.empresa, nombre="Principal")
         Area.objects.create(
-            empresa=self.empresa, sede=sede_existente, nombre="General", codigo_funcionamiento="GEN",
+            empresa=self.empresa,
+            sede=sede_existente,
+            nombre="General",
+            codigo_funcionamiento="GEN",
         )
 
         sede = asegurar_estructura_organizacional_inicial(self.empresa)

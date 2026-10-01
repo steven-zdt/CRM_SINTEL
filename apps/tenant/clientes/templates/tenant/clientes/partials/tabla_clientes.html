@@ -1,21 +1,26 @@
-{% load django_tables2 %}
-{% load sintel_ui %}
-{# Fragmento HTMX: KPIs + tabla de Clientes. Reemplaza #clientes-panel completo. #}
-{# F33.14-A: migrado a sintel_kpi_card (F33.9) -- markup identico, ya no copiado. #}
-
-<div class="row g-3 mb-3" id="clientes-kpis">
-  {% sintel_kpi_card icon="people" color="primary" value=kpis.total label="Total" %}
-  {% sintel_kpi_card icon="person-check" color="success" value=kpis.activos label="Activos" %}
-  {% sintel_kpi_card icon="building" color="info" value=kpis.juridicas label="Jurídicas" %}
-  {% sintel_kpi_card icon="person" color="secondary" value=kpis.naturales label="Naturales" %}
-  {% sintel_kpi_card icon="shield-check" color="warning" value=kpis.retenedores label="Retenedores" %}
-  {% sintel_kpi_card icon="person-x" color="danger" value=kpis.inactivos label="Inactivos" %}
-</div>
+{# tabla_clientes.html — DataTables 3.x (mismo patron ya validado en Ventas/ #}
+{# Bancos/Facturas, ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). #}
+{# Esqueleto ESTATICO, poblado via ajax por clientes.list.js contra          #}
+{# POST /api/v1/clientes/dt/. Indices de columna deben coincidir 1:1 con    #}
+{# fields_map/column_filters de ClienteViewSet.dt().                        #}
 
 <div class="card shadow-sm border-0">
   <div class="card-body p-0">
     <div class="w-100" style="max-width:100%; overflow-x:auto;">
-      {% render_table table %}
+      <table id="tabla-clientes" class="table table-hover align-middle mb-0 w-100">
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>Tipo</th>
+            <th>Régimen / Ret.</th>
+            <th>Cartera</th>
+            <th>Contacto</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
   </div>
 </div>

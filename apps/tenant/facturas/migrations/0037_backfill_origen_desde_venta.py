@@ -12,32 +12,33 @@ from django.db import migrations
 
 
 def backfill_origen_interno(apps, schema_editor):
-    Venta = apps.get_model('tenant_ventas', 'Venta')
-    Factura = apps.get_model('facturas', 'Factura')
+    Venta = apps.get_model("tenant_ventas", "Venta")
+    Factura = apps.get_model("facturas", "Factura")
 
     factura_ids = list(
-        Venta.objects.exclude(factura_asociada=None).values_list('factura_asociada_id', flat=True)
+        Venta.objects.exclude(factura_asociada=None).values_list("factura_asociada_id", flat=True)
     )
     if factura_ids:
-        Factura.objects.filter(id__in=factura_ids).update(origen='INTERNO', source_system='SINTEL')
+        Factura.objects.filter(id__in=factura_ids).update(origen="INTERNO", source_system="SINTEL")
 
 
 def revertir_a_default(apps, schema_editor):
-    Venta = apps.get_model('tenant_ventas', 'Venta')
-    Factura = apps.get_model('facturas', 'Factura')
+    Venta = apps.get_model("tenant_ventas", "Venta")
+    Factura = apps.get_model("facturas", "Factura")
 
     factura_ids = list(
-        Venta.objects.exclude(factura_asociada=None).values_list('factura_asociada_id', flat=True)
+        Venta.objects.exclude(factura_asociada=None).values_list("factura_asociada_id", flat=True)
     )
     if factura_ids:
-        Factura.objects.filter(id__in=factura_ids).update(origen='EXTERNO', source_system='DESCONOCIDO')
+        Factura.objects.filter(id__in=factura_ids).update(
+            origen="EXTERNO", source_system="DESCONOCIDO"
+        )
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('facturas', '0036_factura_origen_factura_source_system'),
-        ('tenant_ventas', '0003_venta_numero_factura_resolucionfacturacion_and_more'),
+        ("facturas", "0036_factura_origen_factura_source_system"),
+        ("tenant_ventas", "0003_venta_numero_factura_resolucionfacturacion_and_more"),
     ]
 
     operations = [

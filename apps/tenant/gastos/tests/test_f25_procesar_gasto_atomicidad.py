@@ -8,6 +8,7 @@ capturaba la excepcion y retornaba (False, ..., 500) sin volver a lanzarla y sin
 transaction.set_rollback(True) -- Django confirmaba el DocumentoSoporte y la
 retencion parcial pese a reportar error.
 """
+
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -24,23 +25,39 @@ from apps.tenant.proveedores.models import Proveedor
 
 def _preparar(emp):
     res = ResolucionDIAN.objects.create(
-        empresa=emp, numero_resolucion="F25-001", prefijo="F25",
-        rango_desde=1, rango_hasta=1000,
-        fecha_resolucion="2026-01-01", fecha_inicio="2026-01-01", fecha_fin="2027-12-31",
+        empresa=emp,
+        numero_resolucion="F25-001",
+        prefijo="F25",
+        rango_desde=1,
+        rango_hasta=1000,
+        fecha_resolucion="2026-01-01",
+        fecha_inicio="2026-01-01",
+        fecha_fin="2027-12-31",
         vigente=True,
     )
     prov = Proveedor.objects.create(
-        empresa=emp, razon_social="Proveedor F25", numero_documento="900111222", tipo_documento="NIT",
+        empresa=emp,
+        razon_social="Proveedor F25",
+        numero_documento="900111222",
+        tipo_documento="NIT",
     )
     ConfiguracionRetenciones.objects.create(
-        empresa=emp, tipo_tercero="PROVEEDOR", nit_tercero="900111222",
-        tipo_retencion="RETEFUENTE", porcentaje_por_defecto=Decimal("4.00"),
-        naturaleza="COMPRA", activa=True,
+        empresa=emp,
+        tipo_tercero="PROVEEDOR",
+        nit_tercero="900111222",
+        tipo_retencion="RETEFUENTE",
+        porcentaje_por_defecto=Decimal("4.00"),
+        naturaleza="COMPRA",
+        activa=True,
     )
     ConfiguracionRetenciones.objects.create(
-        empresa=emp, tipo_tercero="PROVEEDOR", nit_tercero="900111222",
-        tipo_retencion="RETEICA", porcentaje_por_defecto=Decimal("0.69"),
-        naturaleza="COMPRA", activa=True,
+        empresa=emp,
+        tipo_tercero="PROVEEDOR",
+        nit_tercero="900111222",
+        tipo_retencion="RETEICA",
+        porcentaje_por_defecto=Decimal("0.69"),
+        naturaleza="COMPRA",
+        activa=True,
     )
     return res, prov
 
@@ -48,8 +65,12 @@ def _preparar(emp):
 def _payload(res, prov):
     return {
         "documento_soporte": {
-            "resolucion": res.id, "fecha": "2026-06-01", "proveedor": prov.id,
-            "numero_documento_proveedor": "FAC-F25", "subtotal": 100000.00, "total": 95310.00,
+            "resolucion": res.id,
+            "fecha": "2026-06-01",
+            "proveedor": prov.id,
+            "numero_documento_proveedor": "FAC-F25",
+            "subtotal": 100000.00,
+            "total": 95310.00,
         },
         "descripcion": "Gasto F25 atomicidad",
     }
@@ -98,7 +119,11 @@ def test_camino_feliz_sin_fallo_sigue_creando_documento_y_ambas_retenciones(tena
         ok, documento, code = GastoBusinessService.procesar_gasto(emp, data)
         assert ok, documento
         assert code == 201
-        assert Retencion.objects.filter(
-            documento_origen_app="gastos", documento_origen_modelo="DocumentoSoporte",
-            documento_origen_id=documento.id,
-        ).count() == 2
+        assert (
+            Retencion.objects.filter(
+                documento_origen_app="gastos",
+                documento_origen_modelo="DocumentoSoporte",
+                documento_origen_id=documento.id,
+            ).count()
+            == 2
+        )

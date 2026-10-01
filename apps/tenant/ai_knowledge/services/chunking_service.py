@@ -53,9 +53,7 @@ class ChunkingService:
             if len(paragraph) <= max_chars:
                 chunks.append(paragraph)
                 continue
-            chunks.extend(
-                ChunkingService._split_long(paragraph, max_chars, overlap_chars)
-            )
+            chunks.extend(ChunkingService._split_long(paragraph, max_chars, overlap_chars))
 
         return [c for c in (c.strip() for c in chunks) if len(c) >= MIN_CHUNK_CHARS]
 

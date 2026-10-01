@@ -11,7 +11,7 @@ Arquitectura:
 - Usa routers de DRF para generar endpoints automáticamente
 - Referencia: https://www.django-rest-framework.org/api-guide/routers/
 
-# WARNING: IMPORTANTE: El include en config/api_urls.py es `path('facturas/', include(...))`, 
+# WARNING: IMPORTANTE: El include en config/api_urls.py es `path('facturas/', include(...))`,
 por lo que el router debe registrar con ruta vacía "" para generar /api/v1/facturas/
 
 # WARNING: v2.61.2: OPTIMIZACIONES:
@@ -19,6 +19,7 @@ por lo que el router debe registrar con ruta vacía "" para generar /api/v1/fact
 - Batch processing: soporte para files[] (múltiples archivos)
 - Silent Success: actualización automática de FacturaAnexos si XML es más completo
 """
+
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
@@ -40,9 +41,15 @@ router = DefaultRouter(trailing_slash=True)
 # Si r'' está primero, captura todas las rutas (greedy matching) y notas-credito nunca se alcanza
 # # WARNING: IMPORTANTE: Registrar con ruta vacía "" porque el include en config/api_urls.py es path('facturas/', ...)
 # Esto genera rutas como: /api/v1/facturas/ (list), /api/v1/facturas/{id}/ (detail)
-router.register(r'notas-credito', NotaCreditoViewSet, basename='nota-credito')  # # WARNING: ANTES de r''
-router.register(r'items-factura', ItemFacturaViewSet, basename='item-factura')  # # WARNING: ANTES de r''
-router.register(r'', FacturaViewSet, basename='factura')  # # WARNING: AL FINAL para evitar greedy matching
+router.register(
+    r"notas-credito", NotaCreditoViewSet, basename="nota-credito"
+)  # # WARNING: ANTES de r''
+router.register(
+    r"items-factura", ItemFacturaViewSet, basename="item-factura"
+)  # # WARNING: ANTES de r''
+router.register(
+    r"", FacturaViewSet, basename="factura"
+)  # # WARNING: AL FINAL para evitar greedy matching
 
 # URLs generadas por el router
 # Endpoints disponibles:
@@ -78,8 +85,16 @@ urlpatterns = router.urls
 urlpatterns += [
     path("ingesta-correo/run/", MailIngestionRunCreateAPIView.as_view(), name="facturas_mail_run"),
     path("ingesta-correo/runs/", MailIngestionRunsListAPIView.as_view(), name="facturas_mail_runs"),
-    path("ingesta-correo/runs/<int:run_id>/documents/", MailIngestionRunDocumentsAPIView.as_view(), name="facturas_mail_run_documents"),
-    path("ingesta-correo/preview/", MailIngestionPreviewAPIView.as_view(), name="facturas_mail_preview"),
+    path(
+        "ingesta-correo/runs/<int:run_id>/documents/",
+        MailIngestionRunDocumentsAPIView.as_view(),
+        name="facturas_mail_run_documents",
+    ),
+    path(
+        "ingesta-correo/preview/",
+        MailIngestionPreviewAPIView.as_view(),
+        name="facturas_mail_preview",
+    ),
     # # WARNING: DEPRECATED v2.40: Endpoints DataTables eliminados.
     # Usar GET /api/v1/facturas/ con StandardResultsSetPagination (Tabulator Factory).
     # path("dt/facturas/", facturas_dt, name="facturas_dt"),  # # WARNING: DEPRECATED
@@ -87,7 +102,7 @@ urlpatterns += [
 ]
 
 # # WARNING: v2.61.2: DOCUMENTACIÓN DE ENDPOINTS OPTIMIZADOS
-# 
+#
 # BATCH PROCESSING (upload-ubl):
 # POST /api/v1/facturas/upload-ubl/
 # Body (multipart/form-data):
@@ -102,16 +117,16 @@ urlpatterns += [
 #   - 202 Accepted: Tarea async encolada (si async=true)
 # Returns (batch):
 #   - 200 OK: {"creados": X, "duplicados": Y, "errores": Z, "resultados": [...]}
-# 
+#
 # PRE-VALIDACIÓN DE IDEMPOTENCIA:
 # - Extrae CUFE/CUDE usando regex rápida antes del parsing completo
 # - Si CUFE ya existe, retorna 200 OK inmediatamente sin parsing
 # - Reduce tiempo de respuesta para archivos duplicados
-# 
+#
 # SILENT SUCCESS:
 # - Si factura existe, actualiza FacturaAnexos si el XML nuevo es más completo
 # - Compara tamaño del XML y actualiza solo si el nuevo es más largo
-# 
+#
 # TRANSACTION.ATOMIC OPTIMIZADO:
 # - Solo envuelve persistencia, no parsing
 # - Mejora rendimiento al no bloquear BD durante parsing

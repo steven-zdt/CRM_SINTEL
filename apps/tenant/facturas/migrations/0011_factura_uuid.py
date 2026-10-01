@@ -8,15 +8,16 @@ Migration: Agrega campo uuid a Factura (v3.7.1).
 """
 
 import uuid as uuid_module
+
 from django.db import migrations, models
 
 
 def populate_uuids(apps, schema_editor):
     """Asigna un UUID unico a cada Factura existente."""
-    Factura = apps.get_model('facturas', 'Factura')
+    Factura = apps.get_model("facturas", "Factura")
     for factura in Factura.objects.filter(uuid__isnull=True).iterator():
         factura.uuid = uuid_module.uuid4()
-        factura.save(update_fields=['uuid'])
+        factura.save(update_fields=["uuid"])
 
 
 def noop(apps, schema_editor):
@@ -24,30 +25,29 @@ def noop(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('facturas', '0010_alter_factura_retefuente_alter_factura_reteica_and_more'),
+        ("facturas", "0010_alter_factura_retefuente_alter_factura_reteica_and_more"),
     ]
 
     operations = [
         # Paso 1: columna nullable SIN default → PostgreSQL no asigna ningún valor
         migrations.AddField(
-            model_name='factura',
-            name='uuid',
+            model_name="factura",
+            name="uuid",
             field=models.UUIDField(null=True, editable=False),
         ),
         # Paso 2: Python genera uuid4() individual por cada fila
         migrations.RunPython(populate_uuids, noop),
         # Paso 3: ya todos tienen UUID único → aplicar unique + NOT NULL
         migrations.AlterField(
-            model_name='factura',
-            name='uuid',
+            model_name="factura",
+            name="uuid",
             field=models.UUIDField(
                 default=uuid_module.uuid4,
                 editable=False,
                 unique=True,
-                verbose_name='UUID',
-                help_text='Identificador unico universal (usado en API URLs)',
+                verbose_name="UUID",
+                help_text="Identificador unico universal (usado en API URLs)",
             ),
         ),
     ]

@@ -182,57 +182,35 @@
         <div class="tab-pane fade show active" id="tab-pane-empleados" role="tabpanel" aria-labelledby="tab-empleados"
           tabindex="0">
 
-          {# Toolbar mejorado #}
-          <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom"
+          {# Toolbar mejorado -- sin buscador propio: DataTables trae el suyo #}
+          <div class="d-flex justify-content-end align-items-center mb-3 pb-2 border-bottom"
             data-module="empleados">
-            <input type="text" id="search-empleado" class="form-control form-control-sm"
-              placeholder="Buscar por nombre, cédula, correo, cargo..." style="max-width: 400px;"
-              data-module="empleados"
-              hx-get="{% url 'empleados:empleado-tabla' %}"
-              hx-trigger="keyup changed delay:400ms, search"
-              hx-target="#empleados-panel"
-              name="q">
             <button class="btn btn-primary btn-sm ms-2" hx-get="/api/v1/empleados/gestor-offcanvas/?tipo=empleado"
               hx-target="#offcanvas-container-empleados" hx-swap="innerHTML">
               <i class="bi bi-plus-lg me-1"></i>Nuevo Empleado
             </button>
           </div>
 
-          {# Tabla server-rendered (django-tables2 + HTMX) #}
-          <div id="empleados-panel" class="w-100 flex-grow-1"
-               hx-get="{% url 'empleados:empleado-tabla' %}"
-               hx-trigger="load, empleado-updated from:body"
-               hx-target="this"
-               hx-swap="innerHTML"
-               hx-boost="true">
+          {# Tabla -- esqueleto estatico, poblado via ajax por empleado_list.js #}
+          <div class="w-100 flex-grow-1">
+            {% include 'tenant/empleados/partials/tabla_empleados.html' %}
           </div>
         </div>
 
         {# TAB 3: CONTRATOS #}
         <div class="tab-pane fade" id="tab-pane-contratos" role="tabpanel" aria-labelledby="tab-contratos" tabindex="0">
 
-          {# Toolbar mejorado #}
-          <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom"
+          {# Toolbar -- sin buscador propio: DataTables trae su buscador nativo #}
+          <div class="d-flex justify-content-end align-items-center mb-3 pb-2 border-bottom"
             data-module="contratos">
-            <input type="text" id="search-contrato" class="form-control form-control-sm"
-              placeholder="Buscar por empleado, tipo, estado, fecha..." style="max-width: 400px;"
-              data-module="contratos"
-              hx-get="{% url 'empleados:contrato-tabla' %}"
-              hx-trigger="keyup changed delay:400ms, search"
-              hx-target="#contratos-panel"
-              name="q">
             <button class="btn btn-primary btn-sm ms-2" id="btn-nuevo-contrato">
               <i class="bi bi-plus-lg me-1"></i>Nuevo Contrato
             </button>
           </div>
 
-          {# Tabla server-rendered (django-tables2 + HTMX) -- carga solo al abrir este sub-tab #}
-          <div id="contratos-panel" class="w-100 flex-grow-1"
-               hx-get="{% url 'empleados:contrato-tabla' %}"
-               hx-trigger="shown.bs.tab from:#tab-contratos once, contrato-updated from:body"
-               hx-target="this"
-               hx-swap="innerHTML"
-               hx-boost="true">
+          {# Tabla -- esqueleto estatico, poblado via ajax por contrato_list.js #}
+          <div class="w-100 flex-grow-1">
+            {% include 'tenant/empleados/partials/tabla_contratos.html' %}
           </div>
         </div>
 
@@ -255,19 +233,9 @@
                 <p class="mb-1 small fw-semibold text-muted text-uppercase" style="letter-spacing:.05em;">
                   <i class="bi bi-people-fill me-1"></i>Colaboradores
                 </p>
-                <input type="text" id="search-nomina-master"
-                       class="form-control form-control-sm"
-                       placeholder="Filtrar empleado..."
-                       hx-get="{% url 'empleados:nomina-master-tabla' %}"
-                       hx-trigger="keyup changed delay:400ms, search"
-                       hx-target="#nomina-master-panel"
-                       name="q">
               </div>
-              <div id="nomina-master-panel" style="flex: 1; overflow-y: auto;"
-                   hx-get="{% url 'empleados:nomina-master-tabla' %}"
-                   hx-trigger="shown.bs.tab from:#tab-nominas once, nomina-updated from:body"
-                   hx-target="this"
-                   hx-swap="innerHTML">
+              <div style="flex: 1; overflow-y: auto;">
+                {% include 'tenant/empleados/partials/tabla_nomina_master.html' %}
               </div>
             </div>
 
@@ -292,27 +260,17 @@
         <div class="tab-pane fade" id="empleados-tab-pane-resoluciones" role="tabpanel" aria-labelledby="empleados-tab-resoluciones"
           tabindex="0">
 
-          {# Toolbar mejorado #}
-          <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom"
+          {# Toolbar -- sin buscador propio: DataTables trae su buscador nativo #}
+          <div class="d-flex justify-content-end align-items-center mb-3 pb-2 border-bottom"
             data-module="resoluciones">
-            <input type="text" id="empleados-search-resolucion" class="form-control form-control-sm"
-              placeholder="Buscar por número de resolución..." style="max-width: 400px;" data-module="resoluciones"
-              hx-get="{% url 'empleados:resolucion-tabla' %}"
-              hx-trigger="keyup changed delay:400ms, search"
-              hx-target="#empleados-resoluciones-panel"
-              name="q">
             <button class="btn btn-primary btn-sm ms-2" id="btn-nueva-resolucion">
               <i class="bi bi-plus-lg me-1"></i>Nueva Resolución
             </button>
           </div>
 
-          {# Tabla server-rendered (django-tables2 + HTMX) -- carga solo al abrir este sub-tab #}
-          <div id="empleados-resoluciones-panel" class="w-100 flex-grow-1"
-               hx-get="{% url 'empleados:resolucion-tabla' %}"
-               hx-trigger="shown.bs.tab from:#empleados-tab-resoluciones once, resolucion-updated from:body"
-               hx-target="this"
-               hx-swap="innerHTML"
-               hx-boost="true">
+          {# Tabla -- esqueleto estatico, poblado via ajax por resolucion_list.js #}
+          <div class="w-100 flex-grow-1">
+            {% include 'tenant/empleados/partials/tabla_resoluciones.html' %}
           </div>
         </div>
 
@@ -376,20 +334,9 @@
               <div class="liq-master-header d-flex align-items-center gap-2">
                 <i class="bi bi-people-fill text-primary" style="font-size:.9rem;"></i>
                 <span class="fw-semibold" style="font-size:.78rem;">EMPLEADOS</span>
-                <div class="input-group input-group-sm ms-auto" style="max-width:120px;">
-                  <input type="text" id="search-liq-empleado" class="form-control py-0"
-                    placeholder="Buscar..." style="font-size:.72rem;"
-                    hx-get="{% url 'empleados:liquidacion-master-tabla' %}"
-                    hx-trigger="keyup changed delay:400ms, search"
-                    hx-target="#liq-master-panel"
-                    name="q">
-                </div>
               </div>
-              <div id="liq-master-panel"
-                   hx-get="{% url 'empleados:liquidacion-master-tabla' %}"
-                   hx-trigger="shown.bs.tab from:#tab-liquidaciones once, liquidacion-updated from:body"
-                   hx-target="this"
-                   hx-swap="innerHTML">
+              <div id="liq-master-panel" style="flex: 1; overflow-y: auto;">
+                {% include 'tenant/empleados/partials/tabla_liquidacion_master.html' %}
               </div>
             </div>
 
@@ -413,11 +360,7 @@
           <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom"
             data-module="periodos">
             <select id="empleados-filtro-estado-periodo" class="form-select form-select-sm" style="max-width: 260px;"
-              data-module="periodos"
-              hx-get="{% url 'empleados:periodo-tabla' %}"
-              hx-trigger="change"
-              hx-target="#empleados-periodos-panel"
-              name="estado">
+              data-module="periodos">
               <option value="">Todos los estados</option>
               <option value="ABIERTO">Abierto</option>
               <option value="PRELIQUIDADO">Preliquidado</option>
@@ -433,13 +376,9 @@
             </button>
           </div>
 
-          {# Tabla server-rendered (django-tables2 + HTMX) -- carga solo al abrir este sub-tab #}
-          <div id="empleados-periodos-panel" class="w-100 flex-grow-1"
-               hx-get="{% url 'empleados:periodo-tabla' %}"
-               hx-trigger="shown.bs.tab from:#tab-periodos once, periodo-updated from:body"
-               hx-target="this"
-               hx-swap="innerHTML"
-               hx-boost="true">
+          {# Tabla -- esqueleto estatico, poblado via ajax por periodo_list.js #}
+          <div class="w-100 flex-grow-1">
+            {% include 'tenant/empleados/partials/tabla_periodos.html' %}
           </div>
         </div>
       </div>

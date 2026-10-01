@@ -1,14 +1,17 @@
 // @ts-nocheck — Vanilla JS con namespace global window.Sintel (no TypeScript)
 /**
- * Empleado List Module — Fase 5-BIS: tabla server-rendered via
- * django-tables2 + HTMX (#empleados-panel, cargada por atributos
- * hx-get/hx-trigger declarados en empleados_list.html).
+ * Empleado List Module — tabla "Empleados" (directorio) es DataTables 3.x
+ * (#tabla-empleados, mismo patron ya validado en Ventas/Bancos/Facturas/
+ * Clientes/Proveedores/Compras/Gastos -- ver
+ * docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md), poblada via ajax
+ * contra POST /api/v1/empleados/dt/. EmpleadoTable/EmpleadoTableView
+ * (django-tables2) retirados. Contratos/Resoluciones/Nominas/Liquidaciones
+ * siguen en django-tables2/HTMX -- no migradas en esta pasada.
  * Namespace: window.Sintel.Empleados.EmpleadoList
  *
- * Este archivo maneja: acciones de fila (ver/editar/eliminar), el resumen
- * de estadisticas (panel-resumen-empleados, endpoint JSON aparte -- no es
- * una grilla y no cambia con esta migracion), y el evento que hace que
- * HTMX vuelva a pedir la tabla al backend tras una mutacion.
+ * Este archivo maneja: init de la tabla, acciones de fila
+ * (ver/editar/eliminar), y el resumen de estadisticas (panel-resumen-empleados,
+ * endpoint JSON aparte -- no es una grilla y no cambia con esta migracion).
  */
 (function (w, d) {
     'use strict';
@@ -16,20 +19,99 @@
     window.Sintel = window.Sintel || {};
     window.Sintel.Empleados = window.Sintel.Empleados || {};
 
-    const PANEL_SELECTOR = '#empleados-panel';
+    const TABLA_EMPLEADOS_SELECTOR = '#tabla-empleados';
+    const TABLA_EMPLEADOS_URL = '/api/v1/empleados/dt/';
+    let _empleadosTablaInicializada = false;
 
     let empleadoIdEliminar = null;
 
+    var BADGE_ESTADO_EMPLEADO = { ACTIVO: ['bg-success', 'bi-check-circle'], RETIRADO: ['bg-danger', 'bi-x-circle'] };
+
+    function escapeHtmlEmpleado(str) {
+        var div = d.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
+
+    function renderFotoEmpleado(data, type, row) {
+        if (row.foto_url) {
+            return '<img src="' + escapeHtmlEmpleado(row.foto_url) + '" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid #dee2e6;">';
+        }
+        var iniciales = ((row.primer_nombre || '?').slice(0, 1) + (row.primer_apellido || '').slice(0, 1)).toUpperCase() || '?';
+        var color = row.estado === 'RETIRADO' ? '#adb5bd' : '#0d6efd';
+        return '<div style="width:36px;height:36px;border-radius:50%;background:' + color + '20;' +
+            'border:2px solid ' + color + '40;display:flex;align-items:center;justify-content:center;' +
+            'font-size:.75rem;font-weight:700;color:' + color + ';">' + escapeHtmlEmpleado(iniciales) + '</div>';
+    }
+
+    function renderNombreEmpleado(data, type, row) {
+        var nombre = (row.primer_nombre + ' ' + row.primer_apellido).trim();
+        var doc = row.numero_documento ? '<div class="small text-muted">' + escapeHtmlEmpleado(row.numero_documento) + '</div>' : '';
+        return '<div class="fw-semibold lh-sm">' + escapeHtmlEmpleado(nombre) + '</div>' + doc;
+    }
+
+    function renderEstadoEmpleado(value) {
+        var cfg = BADGE_ESTADO_EMPLEADO[value] || ['bg-secondary', ''];
+        var icon = cfg[1] ? '<i class="bi ' + cfg[1] + ' me-1"></i>' : '';
+        return '<span class="badge ' + cfg[0] + '">' + icon + escapeHtmlEmpleado(value || 'N/A') + '</span>';
+    }
+
+    function renderCargoEmpleado(value) {
+        if (!value) return '<span class="text-muted">—</span>';
+        return '<i class="bi bi-briefcase text-info me-1"></i><span>' + escapeHtmlEmpleado(value) + '</span>';
+    }
+
+    function renderContactoEmpleado(data, type, row) {
+        var filas = [];
+        if (row.email) filas.push('<i class="bi bi-envelope text-info me-1"></i><span class="small">' + escapeHtmlEmpleado(row.email) + '</span>');
+        if (row.telefono) filas.push('<i class="bi bi-telephone text-success me-1"></i><span class="small">' + escapeHtmlEmpleado(row.telefono) + '</span>');
+        return filas.length ? filas.join('<br>') : '<span class="text-muted">—</span>';
+    }
+
+    function renderAccionesEmpleado(data, type, row) {
+        var nombre = (row.primer_nombre + ' ' + row.primer_apellido).trim();
+        return '<div class="btn-group btn-group-sm">' +
+            '<button type="button" class="btn btn-outline-info btn-ver-empleado" data-uuid="' + escapeHtmlEmpleado(row.uuid) + '" title="Ver detalle"><i class="bi bi-eye"></i></button>' +
+            '<button type="button" class="btn btn-outline-primary btn-editar-empleado" data-uuid="' + escapeHtmlEmpleado(row.uuid) + '" title="Editar empleado"><i class="bi bi-pencil"></i></button>' +
+            '<button type="button" class="btn btn-outline-danger btn-eliminar-empleado" data-uuid="' + escapeHtmlEmpleado(row.uuid) + '" data-nombre="' + escapeHtmlEmpleado(nombre) + '" data-doc="' + escapeHtmlEmpleado(row.numero_documento || '') + '" title="Eliminar permanentemente"><i class="bi bi-trash"></i></button>' +
+            '</div>';
+    }
+
+    var EMPLEADOS_COLUMNS = [
+        { data: null, title: '', orderable: false, searchable: false, render: renderFotoEmpleado },
+        { data: null, title: 'Empleado', render: renderNombreEmpleado },
+        { data: 'estado', title: 'Estado', render: renderEstadoEmpleado },
+        { data: 'fecha_ingreso', title: 'Ingreso' },
+        { data: 'cargo', title: 'Cargo', orderable: false, render: renderCargoEmpleado },
+        { data: null, title: 'Contacto', orderable: false, searchable: false, render: renderContactoEmpleado },
+        { data: null, title: '', orderable: false, searchable: false, render: renderAccionesEmpleado },
+    ];
+
+    function initEmpleadosTabla() {
+        if (_empleadosTablaInicializada) return;
+        if (typeof DataTable === 'undefined' || !w.Sintel.Core || !w.Sintel.Core.DataTablesFactory) return;
+        w.Sintel.Core.DataTablesFactory.create(TABLA_EMPLEADOS_SELECTOR, TABLA_EMPLEADOS_URL, EMPLEADOS_COLUMNS, {
+            pageLength: 20,
+            order: [[1, 'asc']],
+        });
+        _empleadosTablaInicializada = true;
+    }
+
     /**
-     * init()/reload() -- ya no inicializan Tabulator (el panel HTMX se
-     * auto-carga con hx-trigger="load"); se conservan porque
-     * empleados.module.js las invoca al activarse el sub-tab.
+     * empleados.module.js invoca init() al activarse el sub-tab "Empleados"
+     * -- initEmpleadosTabla() es idempotente (guard _empleadosTablaInicializada),
+     * asi que es seguro llamarla aqui tambien (cubre el caso de que el tab
+     * estuviera oculto -- display:none -- cuando setup() corrio la primera vez).
      */
     function init() {
+        initEmpleadosTabla();
         loadSummary('#panel-resumen-empleados');
     }
 
     function reload() {
+        if (w.Sintel.Core && w.Sintel.Core.DataTablesFactory) {
+            w.Sintel.Core.DataTablesFactory.reload(TABLA_EMPLEADOS_SELECTOR);
+        }
         d.body.dispatchEvent(new CustomEvent('empleado-updated'));
     }
 
@@ -60,8 +142,8 @@
                     // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
                     costoEl.textContent = (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
                         ? w.DOMUtils.formatCurrency(val, { minimumFractionDigits: 0 })
-                        : new Intl.NumberFormat('es-CO', {
-                            style: 'currency', currency: 'COP', minimumFractionDigits: 0
+                        : new Intl.NumberFormat('en-US', {
+                            style: 'currency', currency: 'USD', minimumFractionDigits: 0
                         }).format(val);
                 }
             } else {
@@ -190,10 +272,9 @@
     // ── Acciones de fila (delegado sobre el panel persistente) ──────────────
 
     function attachTableListeners() {
-        const panel = d.querySelector(PANEL_SELECTOR);
-        if (!panel) return;
+        d.body.addEventListener('click', (ev) => {
+            if (!ev.target.closest(TABLA_EMPLEADOS_SELECTOR)) return;
 
-        panel.addEventListener('click', (ev) => {
             const btnVer = ev.target.closest('.btn-ver-empleado');
             const btnEditar = ev.target.closest('.btn-editar-empleado');
             const btnEliminar = ev.target.closest('.btn-eliminar-empleado');
@@ -216,15 +297,13 @@
                 ev.preventDefault();
                 const uuid = btnEliminar.dataset.uuid;
                 if (!uuid) return;
-                const row = btnEliminar.closest('tr');
-                const nombre = row?.querySelector('.fw-semibold.lh-sm')?.textContent?.trim() || '';
-                const doc = row?.querySelector('.small.text-muted')?.textContent?.trim() || '';
-                confirmarEliminar(uuid, nombre, doc);
+                confirmarEliminar(uuid, btnEliminar.dataset.nombre || '', btnEliminar.dataset.doc || '');
             }
         });
     }
 
     function setup() {
+        initEmpleadosTabla();
         attachTableListeners();
 
         const btnConfirmar = document.getElementById('btn-confirmar-eliminar');

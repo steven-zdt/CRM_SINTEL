@@ -1,223 +1,160 @@
 {% load static %}
-{# partials/representantes_directory.html - Directorio de Representantes v3.17.0 #}
-{# Vista independiente: Listado consolidado de representantes de todos los proveedores #}
+{# partials/representantes_directory.html - Directorio de Representantes #}
+{# DataTables 3.x (docs/ux/TABLES_FORMS_RELEASE_GATE.md) -- reemplaza el    #}
+{# Tabulator client-side anterior (traia TODOS los representantes de la    #}
+{# empresa en un solo GET sin paginacion server-side). Poblado via ajax    #}
+{# contra POST /api/v1/proveedores/representantes/dt/                     #}
+{# (RepresentanteViewSet.dt()). Indices de columna deben coincidir 1:1     #}
+{# con fields_map/column_filters de esa accion.                           #}
 
 <div class="representantes-directory">
-  <div class="d-flex align-items-center justify-content-between mb-4">
-    <h4 class="mb-0">
-      <i class="bi bi-person-check text-primary me-2"></i>
-      Directorio de Representantes
-    </h4>
-    <div class="d-flex align-items-center gap-2">
-      <div class="input-group" style="width: 230px;">
-        <span class="input-group-text bg-light">
-          <i class="bi bi-search"></i>
-        </span>
-        <input type="text" class="form-control" id="search-representantes-directory"
-               placeholder="Buscar nombre, documento...">
+  <div class="card shadow-sm">
+    <div class="card-header bg-white py-3 px-3">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0 text-secondary fw-semibold">
+          <i class="bi bi-person-check me-2"></i>Directorio de Representantes
+        </h6>
+
+        <div class="d-flex align-items-center gap-2">
+          <button type="button" class="btn btn-primary btn-sm text-nowrap"
+                  onclick="window.Sintel.Proveedores.abrirFormRepresentante(null, null)">
+            <i class="bi bi-plus-circle me-1"></i>Nuevo Representante
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" title="Refrescar" id="btn-refresh-representantes">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
       </div>
-      <button type="button" class="btn btn-primary btn-sm text-nowrap"
-              onclick="window.Sintel.Proveedores.abrirFormRepresentante(null, null)">
-        <i class="bi bi-plus-circle me-1"></i>Nuevo Representante
-      </button>
     </div>
-  </div>
 
-  {# Grid de Representantes #}
-  <div id="grid-representantes-directory" style="height: 600px;"></div>
-
-  {# Estado Vacío #}
-  <div id="representantes-directory-empty" class="alert alert-info text-center py-5 d-none">
-    <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
-    <p class="mt-3 mb-0 text-muted">No hay representantes registrados aún.</p>
+    {# Tabla -- esqueleto estatico, poblado via ajax (ver script mas abajo) #}
+    <div class="card-body p-0">
+      <div class="w-100" style="max-width:100%; overflow-x:auto;">
+        <table id="tabla-representantes" class="table table-hover align-middle mb-0 w-100">
+          <thead>
+            <tr>
+              <th>Documento</th>
+              <th>Nombre Completo</th>
+              <th>Cargo</th>
+              <th>Contacto</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
 /**
- * representantes_directory.js - Inicializador del Directorio de Representantes v3.17.0
- * Tabulator grid consolidado mostrando todos los representantes de la empresa
+ * representantes_directory.js - Inicializador del Directorio de Representantes
+ * DataTables 3.x (#tabla-representantes) consolidado mostrando todos los
+ * representantes de la empresa -- ver docstring HTML arriba.
  */
 (function (w, d) {
   'use strict';
 
   const MOD = '[representantes:directory]';
-  const GRID_ID = '#grid-representantes-directory';
-  const SEARCH_ID = '#search-representantes-directory';
-  const API_URL = '/api/v1/proveedores/representantes/';
-  let table = null;
-  let initialized = false;
+  const TABLA_SELECTOR = '#tabla-representantes';
+  const DT_URL = '/api/v1/proveedores/representantes/dt/';
+  let _tablaInicializada = false;
 
-  /**
-   * Obtener todas los representantes de la empresa (sin filtro de proveedor)
-   */
-  async function obtenerRepresentantes() {
-    try {
-      const response = await w.http('GET', API_URL);
-      return response || [];
-    } catch (error) {
-      console.error(`${MOD} Error obteniendo representantes:`, error);
-      return [];
-    }
+  function escapeHtml(str) {
+    var div = d.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
   }
 
-  /**
-   * Definir columnas para Tabulator
-   */
-  function getColumns() {
-    return [
-      {
-        title: 'Documento',
-        field: 'numero_documento',
-        width: 120,
-        formatter: function(cell) {
-          const row = cell.getRow().getData();
-          return `
-            <strong>${row.numero_documento}</strong>
-            <small class="d-block text-muted">${row.tipo_documento_display}</small>
-          `;
-        }
-      },
-      {
-        title: 'Nombre Completo',
-        field: 'nombre_completo',
-        minWidth: 180,
-        formatter: function(cell) {
-          const row = cell.getRow().getData();
-          const badge = row.es_principal ? '<span class="badge bg-success ms-2">Principal</span>' : '';
-          return `${cell.getValue()}${badge}`;
-        }
-      },
-      {
-        title: 'Cargo',
-        field: 'cargo',
-        width: 140,
-        formatter: w.TabulatorFactory?.formatters?.valueOrFallback || null
-      },
-      {
-        title: 'Email/Teléfono',
-        field: 'email_contacto',
-        minWidth: 180,
-        formatter: function(cell) {
-          const row = cell.getRow().getData();
-          const email = row.email_contacto;
-          const telefono = row.telefono_contacto;
-          if (email) return `<small>${email}</small>`;
-          if (telefono) return `<small>${telefono}</small>`;
-          return '<span class="text-muted">—</span>';
-        }
-      },
-      {
-        title: 'Acciones',
-        field: 'acciones',
-        width: 100,
-        headerSort: false,
-        formatter: function(cell) {
-          const uuid = cell.getRow().getData().uuid;
-          return `
-            <div class="btn-group btn-group-sm">
-              <button class="btn btn-outline-primary btn-edit-representante" data-uuid="${uuid}" title="Editar">
-                <i class="bi bi-pencil"></i>
-              </button>
-              <button class="btn btn-outline-danger btn-delete-representante" data-uuid="${uuid}" title="Eliminar">
-                <i class="bi bi-trash"></i>
-              </button>
-            </div>
-          `;
-        }
-      }
-    ];
+  function renderDocumento(data, type, row) {
+    return '<strong>' + escapeHtml(row.numero_documento) + '</strong>' +
+      '<small class="d-block text-muted">' + escapeHtml(row.tipo_documento_display || '') + '</small>';
   }
 
-  /**
-   * Inicializar tabla Tabulator
-   */
-  async function initTable() {
-    if (!w.TabulatorFactory) {
-      console.error(`${MOD} TabulatorFactory no disponible`);
-      return;
-    }
+  function renderNombre(data, type, row) {
+    var badge = row.es_principal ? '<span class="badge bg-success ms-2">Principal</span>' : '';
+    return escapeHtml(row.nombre_completo) + badge;
+  }
 
-    const gridEl = d.querySelector(GRID_ID);
-    if (!gridEl) return;
+  function renderCargo(value) {
+    return value ? escapeHtml(value) : '<span class="text-muted">—</span>';
+  }
 
-    // Obtener datos
-    const representantes = await obtenerRepresentantes();
+  function renderContacto(data, type, row) {
+    var parts = [];
+    if (row.email_contacto) parts.push('<div class="text-truncate small"><i class="bi bi-envelope me-1 text-muted"></i>' + escapeHtml(row.email_contacto) + '</div>');
+    if (row.telefono_contacto) parts.push('<div class="small"><i class="bi bi-telephone me-1 text-muted"></i>' + escapeHtml(row.telefono_contacto) + '</div>');
+    return parts.length ? '<div class="lh-sm">' + parts.join('') + '</div>' : '<span class="text-muted small">—</span>';
+  }
 
-    if (!representantes || representantes.length === 0) {
-      d.querySelector('#representantes-directory-empty')?.classList.remove('d-none');
-      return;
-    }
+  function renderAcciones(data, type, row) {
+    return '<div class="btn-group btn-group-sm">' +
+      '<button class="btn btn-outline-primary btn-edit-representante" data-uuid="' + escapeHtml(row.uuid) + '" title="Editar">' +
+      '<i class="bi bi-pencil"></i></button>' +
+      '<button class="btn btn-outline-danger btn-delete-representante" data-uuid="' + escapeHtml(row.uuid) + '" title="Eliminar">' +
+      '<i class="bi bi-trash"></i></button>' +
+      '</div>';
+  }
 
-    d.querySelector('#representantes-directory-empty')?.classList.add('d-none');
+  var COLUMNS = [
+    { data: null, title: 'Documento', render: renderDocumento },
+    { data: null, title: 'Nombre Completo', render: renderNombre },
+    { data: 'cargo', title: 'Cargo', render: function (v) { return renderCargo(v); } },
+    { data: null, title: 'Contacto', orderable: false, render: renderContacto },
+    { data: null, title: '', orderable: false, searchable: false, render: renderAcciones },
+  ];
 
-    // Crear Tabulator
-    table = new w.Tabulator(GRID_ID, {
-      data: representantes,
-      columns: getColumns(),
-      layout: 'fitColumns',
-      responsiveLayout: 'collapse',
-      pagination: 'local',
-      paginationSize: 20,
-      paginationSizeSelector: [10, 20, 50, 100],
-      sortMode: 'local',
-      filterMode: 'local',
-      height: '100%',
-      selectable: false,
+  function initTabla() {
+    if (_tablaInicializada) return;
+    if (typeof DataTable === 'undefined' || !w.Sintel.Core || !w.Sintel.Core.DataTablesFactory) return;
+    w.Sintel.Core.DataTablesFactory.create(TABLA_SELECTOR, DT_URL, COLUMNS, {
+      pageLength: 20,
+      order: [[1, 'asc']],
     });
-
-    // Search/Filter
-    const searchInput = d.querySelector(SEARCH_ID);
-    if (searchInput) {
-      searchInput.addEventListener('keyup', (e) => {
-        table.setFilter([
-          { field: 'nombre_completo', type: 'like', value: e.target.value },
-          { field: 'numero_documento', type: 'like', value: e.target.value },
-          { field: 'email_contacto', type: 'like', value: e.target.value }
-        ]);
-      });
-    }
-
-    // Event Listeners: Editar/Eliminar
-    d.addEventListener('click', (e) => {
-      const btnEdit = e.target.closest('.btn-edit-representante');
-      const btnDelete = e.target.closest('.btn-delete-representante');
-
-      if (btnEdit) {
-        const uuid = btnEdit.dataset.uuid;
-        w.Sintel?.Proveedores?.abrirFormRepresentante?.(uuid, null);
-      } else if (btnDelete) {
-        const uuid = btnDelete.dataset.uuid;
-        if (confirm('¿Está seguro de eliminar este representante?')) {
-          w.Sintel?.Representante?.eliminar?.(uuid).then(() => {
-            showNotification('Representante eliminado correctamente', 'success');
-            reloadDirectorio();
-          }).catch(err => {
-            showNotification(`Error: ${err.message || 'Error eliminando representante'}`, 'danger');
-          });
-        }
-      }
-    });
-
-    initialized = true;
-    console.log(`${MOD} Tabla inicializada con ${representantes.length} representantes`);
+    _tablaInicializada = true;
   }
 
-  /**
-   * Recarga el directorio desde cero (llamado por representante_editor tras CRUD).
-   */
-  async function reloadDirectorio() {
-    if (table) {
-      table.destroy();
-      table = null;
+  function reloadDirectorio() {
+    if (w.Sintel.Core && w.Sintel.Core.DataTablesFactory) {
+      w.Sintel.Core.DataTablesFactory.reload(TABLA_SELECTOR);
     }
-    initialized = false;
-    await initTable();
+  }
+
+  function attachRefreshListener() {
+    var btn = d.getElementById('btn-refresh-representantes');
+    if (btn && !btn.dataset.bound) {
+      btn.dataset.bound = 'true';
+      btn.addEventListener('click', reloadDirectorio);
+    }
   }
 
   // Exponemos reload al namespace global para que representante_editor.js lo invoque
   w.Sintel = w.Sintel || {};
   w.Sintel.DirectorioRepresentantes = { reload: reloadDirectorio };
+
+  // ── Acciones de fila (delegado sobre document.body -- la tabla se recrea
+  // via ajax.reload(), nunca via innerHTML swap de un contenedor) ─────────
+  d.body.addEventListener('click', (e) => {
+    if (!e.target.closest(TABLA_SELECTOR)) return;
+    const btnEdit = e.target.closest('.btn-edit-representante');
+    const btnDelete = e.target.closest('.btn-delete-representante');
+
+    if (btnEdit) {
+      const uuid = btnEdit.dataset.uuid;
+      w.Sintel?.Proveedores?.abrirFormRepresentante?.(uuid, null);
+    } else if (btnDelete) {
+      const uuid = btnDelete.dataset.uuid;
+      if (confirm('¿Está seguro de eliminar este representante?')) {
+        w.Sintel?.Representante?.eliminar?.(uuid).then(() => {
+          showNotification('Representante eliminado correctamente', 'success');
+          reloadDirectorio();
+        }).catch(err => {
+          showNotification(`Error: ${err.message || 'Error eliminando representante'}`, 'danger');
+        });
+      }
+    }
+  });
 
   /**
    * Manejador de afterSettle para offcanvas form
@@ -238,24 +175,22 @@
     }
   });
 
+  if (d.readyState === 'loading') {
+    d.addEventListener('DOMContentLoaded', () => { initTabla(); attachRefreshListener(); });
+  } else {
+    initTabla();
+    attachRefreshListener();
+  }
+
   /**
-   * Escuchar cambio de tab
+   * Fallback: si el sub-tab ya esta activo al cargar, o se activa despues
+   * (initTabla() es idempotente -- guard _tablaInicializada).
    */
   d.addEventListener('DOMContentLoaded', () => {
     const tabBtn = d.querySelector('#subtab-representantes-btn');
     if (tabBtn) {
-      tabBtn.addEventListener('shown.bs.tab', () => {
-        if (!initialized) {
-          initTable();
-        }
-      });
+      tabBtn.addEventListener('shown.bs.tab', initTabla);
     }
-    // Fallback: inicializar inmediatamente si tab ya es activo
-    setTimeout(() => {
-      if (d.querySelector('#subtab-representantes')?.classList.contains('active') && !initialized) {
-        initTable();
-      }
-    }, 100);
   });
 
 })(window, document);

@@ -6,11 +6,11 @@ v2.62.0: ARQUITECTURA ESTABILIZADA.
 - Deprecacion formal de endpoints legacy (410 Gone).
 - Integracion con TabulatorFactory y UIManager.
 """
+
 import logging
 from decimal import Decimal
 
-from django.core.exceptions import ValidationError
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status
 from rest_framework.decorators import action
@@ -19,32 +19,35 @@ from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
+from apps.shared.datatable import ColumnFilter, ColumnFilterType, DataTableServer, DataTableSpec
+from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
+from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.gastos.models import DocumentoSoporte, ResolucionDIAN
 from apps.tenant.gastos.services import (
-    GastoServiceMixin,
-    ResolucionServiceMixin,
     GastoBusinessService,
+    GastoServiceMixin,
     ResolucionBusinessService,
+    ResolucionServiceMixin,
 )
 from apps.tenant.gastos.services.selectors import DocumentoSelector
 
 from .serializers import (
-    GastoSerializer,
     GastoDetailSerializer,
+    GastoSerializer,
     ResolucionDIANCreateSerializer,
     ResolucionDIANDetailSerializer,
     ResolucionDIANListSerializer,
     ResolucionDIANNestedSerializer,
 )
 
-from apps.tenant.api.mixins import SintelDSVMixin
-from apps.tenant.api.base import BaseTenantViewSet
-from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
-
 logger = logging.getLogger(__name__)
 
-class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+
+class GastoViewSet(
+    OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet
+):
     """
     ViewSet para gastos (v2.62.0).
 
@@ -56,16 +59,17 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
     selector con sus propios .only() que context.filter() generico no
     replica.
     """
+
     queryset = DocumentoSoporte.objects.none()
     serializer_class = GastoDetailSerializer
     service_class = GastoBusinessService
-    http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
-    
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
+
     pagination_class = StandardResultsSetPagination
     parser_classes = [JSONParser, FormParser, MultiPartParser]
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     renderer_classes = [JSONRenderer]
-    
+
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["categoria_contable", "proveedor__numero_documento"]
     search_fields = ["descripcion", "proveedor__razon_social", "consecutivo"]
@@ -74,7 +78,7 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
 
     def get_queryset(self):
         """SSoT: Delegar al mixin que usa get_empresa_id() validado."""
-        if not hasattr(self, 'action') or self.action is None:
+        if not hasattr(self, "action") or self.action is None:
             return DocumentoSoporte.objects.none()
 
         if self.action == "list":
@@ -82,17 +86,53 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
 
         return self.get_qs_detail()
 
+    @action(detail=False, methods=["post"], url_path="dt")
+    def dt(self, request):
+        """
+        DataTables 3.x server-side (mismo patron ya validado en Ventas/
+        Bancos/Facturas/Clientes/Proveedores/Compras -- ver
+        docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Reemplaza
+        DocumentoSoporteTable/DocumentoSoporteTableView (django-tables2,
+        retirados). "Resoluciones DIAN" tambien migrada, ver
+        ResolucionDIANViewSet.dt() mas abajo. base_qs reutiliza
+        get_qs_list() (mismo alcance de sede via OrganizationalScope que ya
+        usa "list").
+        """
+        base_qs = self.get_qs_list()
+
+        spec = DataTableSpec(
+            fields_map={
+                0: "numero_documento_proveedor",
+                1: "fecha",
+                2: "proveedor__razon_social",
+                3: "categoria_contable",
+                4: "total",
+            },
+            search_fields=["descripcion", "proveedor__razon_social", "consecutivo"],
+            base_qs=base_qs,
+            serializer=GastoSerializer,
+            column_filters={
+                0: ColumnFilter("numero_documento_proveedor", ColumnFilterType.ICONTAINS),
+                1: ColumnFilter("fecha", ColumnFilterType.DATE_RANGE),
+                2: ColumnFilter("proveedor__razon_social", ColumnFilterType.ICONTAINS),
+                3: ColumnFilter("categoria_contable", ColumnFilterType.EXACT),
+                4: ColumnFilter("total", ColumnFilterType.NUMBER_RANGE),
+                5: ColumnFilter("anulado", ColumnFilterType.EXACT),
+            },
+        )
+        return DataTableServer(spec).handle(request)
+
     def get_serializer_class(self):
         if self.action == "list":
             return GastoSerializer
         return GastoDetailSerializer
-    
+
     def get_serializer_context(self):
         context = super().get_serializer_context()
         try:
-            context['empresa_id'] = self.get_empresa_id()
+            context["empresa_id"] = self.get_empresa_id()
         except Exception:
-            context['empresa_id'] = None
+            context["empresa_id"] = None
         return context
 
     def perform_update(self, serializer):
@@ -109,18 +149,20 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
 
         instance = serializer.instance
         empresa_id = self.get_empresa_id()
-        nueva_fecha = serializer.validated_data.get('fecha', instance.fecha)
+        nueva_fecha = serializer.validated_data.get("fecha", instance.fecha)
 
         for fecha_a_validar in {instance.fecha, nueva_fecha}:
             cerrado, periodo_nombre = verificar_periodo_cerrado(fecha_a_validar, empresa_id)
             if cerrado:
-                raise DRFValidationError({
-                    "detail": (
-                        f"No se puede editar este documento: la fecha "
-                        f"{fecha_a_validar} pertenece al periodo contable "
-                        f"'{periodo_nombre}', que ya esta CERRADO."
-                    )
-                })
+                raise DRFValidationError(
+                    {
+                        "detail": (
+                            f"No se puede editar este documento: la fecha "
+                            f"{fecha_a_validar} pertenece al periodo contable "
+                            f"'{periodo_nombre}', que ya esta CERRADO."
+                        )
+                    }
+                )
 
         # GASTOS_PROYECTOS_01: capturar proyecto anterior antes de guardar --
         # el PATCH de Gasto no pasa por business_service, asi que el
@@ -132,6 +174,7 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
         super().perform_update(serializer)
 
         from apps.tenant.gastos.services.business_service import _recalcular_proyecto
+
         proyecto_nuevo = serializer.instance.proyecto_uuid
         proyectos_a_recalcular = {p for p in (proyecto_anterior, proyecto_nuevo) if p}
         for proyecto_uuid in proyectos_a_recalcular:
@@ -143,24 +186,34 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
             empresa = self._get_empresa()
             if not empresa:
                 return Response(
-                    {"error": "empresa_no_configurada", "message": "No se pudo determinar la empresa activa."},
-                    status=status.HTTP_403_FORBIDDEN
+                    {
+                        "error": "empresa_no_configurada",
+                        "message": "No se pudo determinar la empresa activa.",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
                 )
-            
+
             # WARNING: [SEC-M6] Solo nombres de campo, no valores (datos de proveedor/monto).
-            _campos = list(request.data.keys()) if hasattr(request.data, 'keys') else type(request.data).__name__
+            _campos = (
+                list(request.data.keys())
+                if hasattr(request.data, "keys")
+                else type(request.data).__name__
+            )
             logger.info(f"[GastoViewSet:create] Campos recibidos: {_campos}")
-            
+
             success, result, status_code = self.service_crear_gasto(request.data.copy(), empresa)
             if not success:
                 logger.warning(f"[GastoViewSet:create] Fallo creacion: {result}")
                 return Response(result, status=status_code)
-                
+
             serializer = self.get_serializer(result)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
             logger.error(f"Error en GastoViewSet.create: {e}", exc_info=True)
-            return Response({"error": "error_interno", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": "error_interno", "message": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -177,12 +230,11 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
             if not instance.anulado:
                 return Response(
                     {"detail": "El gasto debe estar anulado antes de eliminar."},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             success, result, status_code = self.service_class.eliminar_gasto(
-                instance.id,
-                empresa_id=self.get_empresa_id()
+                instance.id, empresa_id=self.get_empresa_id()
             )
             return Response(result, status=status_code)
         except Exception as e:
@@ -193,14 +245,19 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
         """Anula un gasto (DocumentoSoporte) v2.62.0."""
         try:
             gasto = self.get_object()
-            motivo = request.data.get('motivo')
+            motivo = request.data.get("motivo")
             if not motivo:
-                return Response({"detail": "Debe especificar un motivo de anulacion."}, status=status.HTTP_400_BAD_REQUEST)
-            
-            usuario_perfil = getattr(request.user, 'tenant_profile', None)
+                return Response(
+                    {"detail": "Debe especificar un motivo de anulacion."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            usuario_perfil = getattr(request.user, "tenant_profile", None)
             if not usuario_perfil:
-                return Response({"detail": "Perfil operativo no encontrado."}, status=status.HTTP_403_FORBIDDEN)
-            
+                return Response(
+                    {"detail": "Perfil operativo no encontrado."}, status=status.HTTP_403_FORBIDDEN
+                )
+
             success, result, status_code = self.service_anular_gasto(gasto, motivo, usuario_perfil)
             return Response(result, status=status_code)
         except Exception as e:
@@ -217,35 +274,51 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
 
     # --- Acciones de Renderizado (UI/HTMX) ---
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/crear",
+    )
     def render_offcanvas_crear(self, request):
         """Renderiza offcanvas para crear."""
         import datetime
+
         empresa_id = self.get_empresa_id()
 
-        resolucion_activa = ResolucionDIAN.objects.filter(empresa_id=empresa_id, vigente=True).first()
+        resolucion_activa = ResolucionDIAN.objects.filter(
+            empresa_id=empresa_id, vigente=True
+        ).first()
 
-        doc_soporte_siguiente = ''
+        doc_soporte_siguiente = ""
         fecha_default = datetime.date.today().isoformat()
         if resolucion_activa:
             preview = DocumentoSelector.get_siguiente_numero_preview(resolucion_activa)
-            doc_soporte_siguiente = preview['formateado']
-            if resolucion_activa.fecha_inicio and resolucion_activa.fecha_inicio > datetime.date.today():
+            doc_soporte_siguiente = preview["formateado"]
+            if (
+                resolucion_activa.fecha_inicio
+                and resolucion_activa.fecha_inicio > datetime.date.today()
+            ):
                 fecha_default = resolucion_activa.fecha_inicio.isoformat()
 
         context = {
-            'offcanvas_id': 'offcanvas-gasto-crear',
-            'mode': 'create',
-            'resolucion_activa': resolucion_activa,
-            'doc_soporte_siguiente': doc_soporte_siguiente,
-            'fecha_default': fecha_default,
+            "offcanvas_id": "offcanvas-gasto-crear",
+            "mode": "create",
+            "resolucion_activa": resolucion_activa,
+            "doc_soporte_siguiente": doc_soporte_siguiente,
+            "fecha_default": fecha_default,
         }
-        return Response(context, template_name='tenant/gastos/offcanvas_crear_gasto.html')
+        return Response(context, template_name="tenant/gastos/offcanvas_crear_gasto.html")
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/editar",
+    )
     def render_offcanvas_editar(self, request):
         """Renderiza offcanvas para editar."""
-        uuid_val = request.query_params.get('uuid') or request.query_params.get('id')
+        uuid_val = request.query_params.get("uuid") or request.query_params.get("id")
         empresa_id = self.get_empresa_id()
         if not uuid_val:
             return Response({"error": "ID requerido"}, status=status.HTTP_400_BAD_REQUEST)
@@ -260,46 +333,59 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
         retenciones_fracciones = {}
         try:
             from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
-            _zero_keys = {'0.00', '0', '0.0'}
+
+            _zero_keys = {"0.00", "0", "0.0"}
             _choices_map = {}
-            for fraction_str, _ in (DocumentoSoporte.RETEFUENTE_CHOICES + DocumentoSoporte.RETEICA_CHOICES):
+            for fraction_str, _ in (
+                DocumentoSoporte.RETEFUENTE_CHOICES + DocumentoSoporte.RETEICA_CHOICES
+            ):
                 if fraction_str not in _zero_keys:
-                    pct_norm = (Decimal(fraction_str) * Decimal('100')).normalize()
+                    pct_norm = (Decimal(fraction_str) * Decimal("100")).normalize()
                     _choices_map[pct_norm] = fraction_str
             for r in RetencionesService.listar_retenciones_por_documento(
-                documento_origen_app='gastos',
-                documento_origen_modelo='DocumentoSoporte',
+                documento_origen_app="gastos",
+                documento_origen_modelo="DocumentoSoporte",
                 documento_origen_id=instance.id,
                 empresa_id=empresa_id,
             ):
-                if r.tipo in ('RETEFUENTE', 'RETEICA', 'RETEIVA'):
+                if r.tipo in ("RETEFUENTE", "RETEICA", "RETEIVA"):
                     pct_norm = Decimal(str(r.porcentaje)).normalize()
-                    retenciones_fracciones[r.tipo] = _choices_map.get(pct_norm, '0.00')
+                    retenciones_fracciones[r.tipo] = _choices_map.get(pct_norm, "0.00")
         except Exception as e:
             logger.warning(
                 "[GastoViewSet:render_offcanvas_editar] No se pudieron cargar retenciones "
-                "para documento id=%s: %s", instance.id, e,
+                "para documento id=%s: %s",
+                instance.id,
+                e,
             )
 
         context = {
-            'instance': instance,
-            'offcanvas_id': 'offcanvas-gasto-editar',
-            'mode': 'edit',
-            'retenciones_fracciones': retenciones_fracciones,
+            "instance": instance,
+            "offcanvas_id": "offcanvas-gasto-editar",
+            "mode": "edit",
+            "retenciones_fracciones": retenciones_fracciones,
         }
-        return Response(context, template_name='tenant/gastos/offcanvas_editar_gasto.html')
+        return Response(context, template_name="tenant/gastos/offcanvas_editar_gasto.html")
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/detalle",
+    )
     def render_offcanvas_detalle(self, request):
         """Renderiza offcanvas de detalle."""
-        uuid_val = request.query_params.get('uuid') or request.query_params.get('id')
+        uuid_val = request.query_params.get("uuid") or request.query_params.get("id")
         empresa_id = self.get_empresa_id()
         if not uuid_val:
             return Response({"error": "ID requerido"}, status=status.HTTP_400_BAD_REQUEST)
 
         # [OSF Fase F13] ver nota de render_offcanvas_editar - mismo gap.
         instance = get_object_or_404(self._get_documento_scope_qs(empresa_id), uuid=uuid_val)
-        return Response({'instance': instance, 'offcanvas_id': 'offcanvas-gasto-detalle'}, template_name='tenant/gastos/offcanvas_detalle_gasto.html')
+        return Response(
+            {"instance": instance, "offcanvas_id": "offcanvas-gasto-detalle"},
+            template_name="tenant/gastos/offcanvas_detalle_gasto.html",
+        )
 
     def _get_documento_scope_qs(self, empresa_id):
         """[OSF Fase F13] QuerySet de DocumentoSoporte con OrganizationalScope
@@ -310,55 +396,92 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
             OrganizationalScope,
             OrganizationalScopeError,
         )
+
         try:
             sede_ids = OrganizationalScope.resolve(self.request).sede_ids
         except OrganizationalScopeError:
             sede_ids = None
         return DocumentoSelector.get_detail(empresa_id, sede_ids=sede_ids)
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/resolucion')
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/resolucion",
+    )
     def render_offcanvas_resolucion(self, request):
         """Renderiza offcanvas de resolucion DIAN."""
-        uuid_val = request.query_params.get('uuid') or request.query_params.get('id')
+        uuid_val = request.query_params.get("uuid") or request.query_params.get("id")
         empresa_id = self.get_empresa_id()
-        context = {'offcanvas_id': 'offcanvas-resolucion-editor'}
+        context = {"offcanvas_id": "offcanvas-resolucion-editor"}
 
         if uuid_val:
             instance = get_object_or_404(ResolucionDIAN, uuid=uuid_val, empresa_id=empresa_id)
-            context['instance'] = instance
-            context['mode'] = 'edit'
+            context["instance"] = instance
+            context["mode"] = "edit"
         else:
-            context['mode'] = 'create'
+            context["mode"] = "create"
 
-        return Response(context, template_name='tenant/gastos/offcanvas_resolucion.html')
+        return Response(context, template_name="tenant/gastos/offcanvas_resolucion.html")
 
 
-
-class ResolucionDIANViewSet(OrganizationalContextMixin, ResolucionServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class ResolucionDIANViewSet(
+    OrganizationalContextMixin, ResolucionServiceMixin, SintelDSVMixin, BaseTenantViewSet
+):
     """
     ViewSet para Resoluciones DIAN (v2.62.0).
     """
+
     queryset = ResolucionDIAN.objects.none()
     serializer_class = ResolucionDIANDetailSerializer
     service_class = ResolucionBusinessService
     pagination_class = StandardResultsSetPagination
-    http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
-    
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
+
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     parser_classes = [JSONParser, FormParser, MultiPartParser]
     renderer_classes = [JSONRenderer]
-    
+
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['numero_resolucion', 'prefijo']
-    ordering_fields = ['fecha_resolucion', 'vigente', 'created_at']
-    ordering = ['-vigente', '-fecha_resolucion']
+    search_fields = ["numero_resolucion", "prefijo"]
+    ordering_fields = ["fecha_resolucion", "vigente", "created_at"]
+    ordering = ["-vigente", "-fecha_resolucion"]
 
     def get_queryset(self):
-        if not hasattr(self, 'action') or self.action is None:
+        if not hasattr(self, "action") or self.action is None:
             return ResolucionDIAN.objects.none()
         if self.action == "list":
             return self.get_qs_list()
         return self.get_qs_detail()
+
+    @action(detail=False, methods=["post"], url_path="dt")
+    def dt(self, request):
+        """
+        DataTables 3.x server-side (mismo patron ya validado en Ventas/
+        Bancos/Facturas/Clientes/Proveedores/Compras/Gastos -- ver
+        docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Reemplaza
+        ResolucionDIANTable/ResolucionDIANTableView (django-tables2,
+        retirados). base_qs reutiliza get_qs_list() (mismo alcance de
+        empresa que ya usa "list").
+        """
+        base_qs = self.get_qs_list()
+
+        spec = DataTableSpec(
+            fields_map={
+                0: "numero_resolucion",
+                2: "fecha_fin",
+                3: "vigente",
+            },
+            search_fields=["numero_resolucion", "prefijo"],
+            base_qs=base_qs,
+            serializer=ResolucionDIANListSerializer,
+            column_filters={
+                0: ColumnFilter("numero_resolucion", ColumnFilterType.ICONTAINS),
+                2: ColumnFilter("fecha_fin", ColumnFilterType.DATE_RANGE),
+                3: ColumnFilter("vigente", ColumnFilterType.EXACT),
+            },
+        )
+        return DataTableServer(spec).handle(request)
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -372,7 +495,9 @@ class ResolucionDIANViewSet(OrganizationalContextMixin, ResolucionServiceMixin, 
         serializer.is_valid(raise_exception=True)
         try:
             resultado = self.service_crear_resolucion(serializer)
-            return Response(ResolucionDIANDetailSerializer(resultado).data, status=status.HTTP_201_CREATED)
+            return Response(
+                ResolucionDIANDetailSerializer(resultado).data, status=status.HTTP_201_CREATED
+            )
         except Exception as e:
             return self.handle_service_error(e)
 
@@ -390,7 +515,11 @@ class ResolucionDIANViewSet(OrganizationalContextMixin, ResolucionServiceMixin, 
         try:
             resolucion = self.service_obtener_vigente()
             if not resolucion:
-                return Response({"error": "No hay resolucion vigente."}, status=status.HTTP_404_NOT_FOUND)
-            return Response(ResolucionDIANNestedSerializer(resolucion).data, status=status.HTTP_200_OK)
+                return Response(
+                    {"error": "No hay resolucion vigente."}, status=status.HTTP_404_NOT_FOUND
+                )
+            return Response(
+                ResolucionDIANNestedSerializer(resolucion).data, status=status.HTTP_200_OK
+            )
         except Exception as e:
             return self.handle_service_error(e)

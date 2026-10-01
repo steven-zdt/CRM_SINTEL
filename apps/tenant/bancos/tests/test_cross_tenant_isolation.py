@@ -18,6 +18,7 @@ Este test reproduce el escenario exacto documentado en la auditoria
 (documentacion/PLAN_PRUEBASUI_PRIVADAS.md, Fase 5) y debe fallar si el bypass
 vuelve a introducirse en cualquiera de los dos archivos.
 """
+
 import pytest
 from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context

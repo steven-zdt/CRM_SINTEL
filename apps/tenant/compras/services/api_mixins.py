@@ -22,6 +22,7 @@ class PlantillaOrdenCompraServiceMixin(BaseServiceMixin):
     Mixin para inyectar logica de negocios y acceso a datos de Plantillas de Orden de Compra
     en los ViewSets correspondientes.
     """
+
     selector_class = PlantillaOrdenCompraSelector
     crud_service_class = PlantillaOrdenCompraCRUDService
 
@@ -46,7 +47,9 @@ class PlantillaOrdenCompraServiceMixin(BaseServiceMixin):
         empresa_id = self._get_empresa_id_seguro()
         plantilla = self.selector_class.get_detail(empresa_id, plantilla_uuid).first()
         if not plantilla:
-            raise ValidationError({"plantilla": "Plantilla no encontrada o no pertenece a su empresa."})
+            raise ValidationError(
+                {"plantilla": "Plantilla no encontrada o no pertenece a su empresa."}
+            )
         return self.crud_service_class.actualizar_plantilla(plantilla, data)
 
 
@@ -55,6 +58,7 @@ class OrdenCompraServiceMixin(BaseServiceMixin):
     Mixin para inyectar logica de negocios y acceso a datos de Ordenes de Compra
     en los ViewSets correspondientes.
     """
+
     selector_class = OrdenCompraSelector
     crud_service_class = OrdenCompraCRUDService
     business_service_class = OrdenCompraBusinessService
@@ -90,7 +94,7 @@ class OrdenCompraServiceMixin(BaseServiceMixin):
         )
 
         empresa_id = self._get_empresa_id_seguro()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
+        search = self.request.query_params.get("search") if hasattr(self, "request") else None
 
         try:
             scope = OrganizationalScope.resolve(self.request)
@@ -99,7 +103,10 @@ class OrdenCompraServiceMixin(BaseServiceMixin):
             sede_ids, area_ids = None, None
 
         return self.selector_class.get_list(
-            empresa_id, search=search, sede_ids=sede_ids, area_ids=area_ids,
+            empresa_id,
+            search=search,
+            sede_ids=sede_ids,
+            area_ids=area_ids,
         )
 
     def service_crear_orden_compra(self, data: dict, items_data: list, empresa):
@@ -146,6 +153,29 @@ class OrdenCompraServiceMixin(BaseServiceMixin):
             orden_uuid, factura_uuid, empresa_id
         )
 
+    def service_desvincular_factura(self, orden_uuid: str):
+        """PLAN_VINCULAR_FACTURA_COMPRA_COMPRAS: elimina el vinculo con la
+        Factura (nunca la Factura fiscal en si)."""
+        empresa_id = self._get_empresa_id_seguro()
+        return self.business_service_class.desvincular_factura_existente(orden_uuid, empresa_id)
+
+    def service_vincular_requisicion(self, orden_uuid: str, requisicion_uuid: str):
+        """Vinculacion manual de una Requisicion existente (con saldo) a
+        una Orden ya creada -- complementa la seleccion obligatoria al
+        crear."""
+        empresa_id = self._get_empresa_id_seguro()
+        return self.business_service_class.vincular_requisicion_existente(
+            orden_uuid, requisicion_uuid, empresa_id
+        )
+
+    def service_desvincular_requisicion(self, orden_uuid: str, requisicion_uuid: str):
+        """Elimina el vinculo con una Requisicion (nunca la Requisicion en
+        si)."""
+        empresa_id = self._get_empresa_id_seguro()
+        return self.business_service_class.desvincular_requisicion_existente(
+            orden_uuid, requisicion_uuid, empresa_id
+        )
+
     def service_get_siguiente_consecutivo(self) -> int:
         """
         Obtiene el consecutivo siguiente para la empresa actual.
@@ -156,6 +186,7 @@ class OrdenCompraServiceMixin(BaseServiceMixin):
 
 class RecepcionCompraServiceMixin(BaseServiceMixin):
     """Mixin para inyectar logica de negocios de Recepcion de Compras (F21)."""
+
     selector_class = RecepcionCompraSelector
     crud_service_class = RecepcionCompraCRUDService
     business_service_class = RecepcionCompraBusinessService
@@ -165,6 +196,7 @@ class RecepcionCompraServiceMixin(BaseServiceMixin):
             OrganizationalScope,
             OrganizationalScopeError,
         )
+
         empresa_id = self._get_empresa_id_seguro()
         try:
             scope = OrganizationalScope.resolve(self.request)
@@ -172,8 +204,11 @@ class RecepcionCompraServiceMixin(BaseServiceMixin):
         except OrganizationalScopeError:
             sede_ids, area_ids = None, None
         return self.selector_class.get_list(
-            empresa_id, orden_compra_uuid=orden_compra_uuid, estado=estado,
-            sede_ids=sede_ids, area_ids=area_ids,
+            empresa_id,
+            orden_compra_uuid=orden_compra_uuid,
+            estado=estado,
+            sede_ids=sede_ids,
+            area_ids=area_ids,
         )
 
     def get_qs_detail(self, recepcion_uuid: str):
@@ -182,7 +217,7 @@ class RecepcionCompraServiceMixin(BaseServiceMixin):
 
     def service_crear_recepcion(self, data: dict, items_data: list, empresa):
         sede = self._get_sede()
-        usuario = getattr(self.request.user, 'tenant_profile', None)
+        usuario = getattr(self.request.user, "tenant_profile", None)
         return self.business_service_class.crear_recepcion(data, items_data, empresa, sede, usuario)
 
     def service_confirmar_recepcion(self, recepcion_uuid: str):

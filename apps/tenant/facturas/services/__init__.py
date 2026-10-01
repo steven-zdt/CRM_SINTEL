@@ -22,6 +22,23 @@ from .selectors import (
     ProveedorBridge,
 )
 
+# Re-exports publicos del Service Layer (SSoT) -- declarados explicitamente
+# para que ruff (F401) no los marque como "importados pero no usados": el
+# proposito de este __init__.py es precisamente exponerlos a otros modulos
+# via `from apps.tenant.facturas.services import X`.
+__all__ = [
+    "FacturaServiceMixin",
+    "FacturaBusinessService",
+    "FacturaInterAppAPI",
+    "FacturaService",
+    "FacturaCRUDService",
+    "DETAIL_FIELDS",
+    "LIST_FIELDS",
+    "ClienteBridge",
+    "FacturaSelectors",
+    "ProveedorBridge",
+]
+
 # ---------------------------------------------------------------------------
 # [COMPAT] Wrappers funcionales de compatibilidad para tests y management cmds.
 # Delegan a los metodos estaticos del Service Layer actual.
@@ -49,13 +66,13 @@ def _norm_nit(value: str | None) -> str | None:
 
     normalized = str(value).strip().upper()
     # Eliminar separadores comunes
-    normalized = re.sub(r'[\.\-\s]', '', normalized)
+    normalized = re.sub(r"[\.\-\s]", "", normalized)
 
     if not normalized:
         return None
 
     # Para NITs puramente numericos: recortar a 9 digitos (estandar colombiano)
-    if re.match(r'^\d+$', normalized):
+    if re.match(r"^\d+$", normalized):
         # Eliminar ceros a la izquierda
         normalized = str(int(normalized))
         # Truncar al NIT sin DV (primeros 9 digitos)
@@ -133,7 +150,7 @@ def crear_factura(factura_data: dict[str, Any], items_data: list | None = None) 
 def importar_ubl(
     file_bytes: bytes,
     preview: bool = False,
-    filename: str = 'ubl.xml',
+    filename: str = "ubl.xml",
     **kwargs: Any,
 ) -> tuple[dict, int]:
     """
@@ -158,7 +175,7 @@ def importar_ubl(
     )
 
 
-def importar_ubl_sync(file_bytes: bytes, filename: str = 'ubl.xml') -> tuple[dict, int]:
+def importar_ubl_sync(file_bytes: bytes, filename: str = "ubl.xml") -> tuple[dict, int]:
     """
     [COMPAT] Importa un XML UBL de forma sincrona y retorna (payload, http_code).
 
@@ -173,7 +190,9 @@ def importar_ubl_sync(file_bytes: bytes, filename: str = 'ubl.xml') -> tuple[dic
     )
 
 
-def materializar_factura_desde_result(result: dict, empresa_id: int | None = None) -> tuple[dict, int]:
+def materializar_factura_desde_result(
+    result: dict, empresa_id: int | None = None
+) -> tuple[dict, int]:
     """
     [COMPAT] Materializa una Factura desde un resultado de preview.
 
@@ -196,6 +215,8 @@ def materializar_factura_desde_result(result: dict, empresa_id: int | None = Non
 # Expuesto adicionalmente para que el test de integracion pueda parcharlo:
 # apps.tenant.facturas.services.ingest_ubl_sync
 try:
-    from apps.services.document_ingest.ingest_service import ingest_document as ingest_ubl_sync  # noqa: F401
+    from apps.services.document_ingest.ingest_service import (
+        ingest_document as ingest_ubl_sync,  # noqa: F401
+    )
 except ImportError:
     ingest_ubl_sync = None  # type: ignore[assignment]

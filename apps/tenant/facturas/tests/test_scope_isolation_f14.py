@@ -18,6 +18,7 @@ end-to-end contra un endpoint real de ninguna de las 6 apps:
 
 Este archivo cierra ese gap para `facturas`.
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa, Sede
@@ -30,17 +31,23 @@ class FacturaIsolationF14Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F14 Facturas", nit="900000792", direccion="Calle 1",
+            razon_social="Empresa Test F14 Facturas",
+            nit="900000792",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F14 Facturas")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F14 Facturas")
 
     def _crear(self, numero, sede=None):
         return Factura.objects.create(
-            empresa=self.empresa, numero=numero, consecutivo=1,
+            empresa=self.empresa,
+            numero=numero,
+            consecutivo=1,
             fecha_emision="2026-06-01T00:00:00Z",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
-            receptor_nit="123", receptor_razon_social="Cliente F14",
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
+            receptor_nit="123",
+            receptor_razon_social="Cliente F14",
             sede=sede,
         )
 
@@ -51,7 +58,10 @@ class FacturaIsolationF14Tests(SintelTenantTestCase):
         # alcance=SEDE pero SIN llamar a sedes_asignadas.set(...) - perfil
         # con cero sedes asignadas (frozenset(), no None).
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
 
         resp = self.api_client.get("/api/v1/facturas/")
@@ -68,7 +78,10 @@ class FacturaIsolationF14Tests(SintelTenantTestCase):
         f_c = self._crear("F14-DOBLE-C", sede=sede_c)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a, self.sede_b])
 

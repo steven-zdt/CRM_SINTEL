@@ -1,51 +1,30 @@
-{% load django_tables2 %}
-{% load sintel_ui %}
-{# Fragmento HTMX: KPIs + tabla de Proyectos. Reemplaza #proyectos-panel completo. #}
-{% comment %}
-F33.14-A: 4 de 6 KPIs migrados a sintel_kpi_card (F33.9) -- markup identico.
-Los otros 2 (Avance Prom., Cartera Total) NO se migraron: usan un color
-"purple" no estandar y un font-size custom para el valor (moneda larga),
-personalizaciones reales que el primitivo actual no soporta sin cambiar
-su contrato -- se dejan como estaban, sin forzar una migracion visual.
-{% endcomment %}
-
-<div class="row g-3 mb-3" id="proyectos-kpis">
-  {% sintel_kpi_card icon="folder2-open" color="primary" value=kpis.total label="Total Proyectos" %}
-  {% sintel_kpi_card icon="lightning-charge" color="warning" value=kpis.ejecucion label="En Ejecucion" %}
-  {% sintel_kpi_card icon="hourglass-split" color="secondary" value=kpis.pendientes label="Pendientes" %}
-  {% sintel_kpi_card icon="check2-circle" color="success" value=kpis.completados label="Completados" %}
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;background:rgba(111,66,193,.1) !important;">
-          <i class="bi bi-bar-chart-line" style="color:#6f42c1;"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="fs-4 fw-bold lh-1 mb-1">{{ kpis.avance_prom }}%</div>
-          <div class="small text-muted text-truncate">Avance Prom.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-        <div class="rounded-circle bg-info bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-          <i class="bi bi-cash-stack text-info"></i>
-        </div>
-        <div class="min-w-0">
-          <div class="fw-bold lh-1 mb-1" style="font-size:0.9rem;">$ {{ kpis.cartera|floatformat:0 }}</div>
-          <div class="small text-muted text-truncate">Cartera Total</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+{# tabla_proyectos.html — DataTables 3.x (mismo patron ya validado en      #}
+{# Ventas/Bancos/Facturas/Clientes/Proveedores/Compras/Gastos/Empleados,   #}
+{# ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Esqueleto      #}
+{# ESTATICO, poblado via ajax por proyectos_list.js contra                #}
+{# POST /api/v1/proyectos/dt/. Indices de columna deben coincidir 1:1 con  #}
+{# fields_map/column_filters de ProyectoViewSet.dt().                     #}
 
 <div class="card shadow-sm border-0">
   <div class="card-body p-0">
     <div class="w-100" style="max-width:100%; overflow-x:auto;">
-      {% render_table table %}
+      <table id="tabla-proyectos" class="table table-hover align-middle mb-0 w-100">
+        <thead>
+          <tr>
+            <th>Proyecto</th>
+            <th>Fase</th>
+            <th>Estado</th>
+            <th>Avance</th>
+            <th>Responsable</th>
+            <th>Cliente</th>
+            <th>Documentos</th>
+            <th>Período</th>
+            <th>Contrato / Margen</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
   </div>
 </div>

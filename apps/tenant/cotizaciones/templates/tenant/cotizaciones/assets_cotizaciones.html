@@ -2,6 +2,12 @@
 {% load static %}
 <link rel="stylesheet" href="{% static 'cotizaciones/css/cotizaciones.css' %}">
 
+{# DataTables 3.x + ColumnControl (solo Cotizaciones principal -- Productos/ #}
+{# Servicios/Configuracion dentro del offcanvas siguen en Tabulator, no     #}
+{# migrados en esta pasada) #}
+{% include 'tenant/core/partials/assets_datatables_cdn.html' %}
+<script src="{% static 'core/js/common/datatables.factory.js' %}"></script>
+
 <!-- CORE JS -->
 <script src="{% static 'cotizaciones/js/cotizaciones.module.js' %}"></script>
 <script src="{% static 'cotizaciones/js/cotizaciones.api.js' %}"></script>

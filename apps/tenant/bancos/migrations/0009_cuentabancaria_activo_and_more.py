@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('bancos', '0008_extractobancario_sede'),
-        ('empresa', '0009_sedes_areas_explicit_fk'),
+        ("bancos", "0008_extractobancario_sede"),
+        ("empresa", "0009_sedes_areas_explicit_fk"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='cuentabancaria',
-            name='activo',
-            field=models.BooleanField(default=True, verbose_name='Activo'),
+            model_name="cuentabancaria",
+            name="activo",
+            field=models.BooleanField(default=True, verbose_name="Activo"),
         ),
         migrations.AddIndex(
-            model_name='cuentabancaria',
-            index=models.Index(fields=['empresa', 'activo'], name='bancos_cuen_empresa_64117d_idx'),
+            model_name="cuentabancaria",
+            index=models.Index(fields=["empresa", "activo"], name="bancos_cuen_empresa_64117d_idx"),
         ),
     ]

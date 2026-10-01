@@ -5,7 +5,9 @@ Puro Python -- dataclasses + Protocol, sin modelos ni DB. unittest.TestCase
 simple (sin pytest.mark.django_db) para no pagar el costo de fixture de
 schema tenant en algo que no lo necesita.
 """
+
 import unittest
+from dataclasses import FrozenInstanceError
 
 from apps.tenant.core.dian import (
     ElectronicDocument,
@@ -63,7 +65,7 @@ class ElectronicDocumentTransportContractTests(unittest.TestCase):
 
     def test_electronic_document_es_inmutable(self):
         documento = self._documento_de_prueba()
-        with self.assertRaises(Exception):
+        with self.assertRaises(FrozenInstanceError):
             documento.numero = "otro"  # dataclass frozen=True -> FrozenInstanceError
 
     def test_adaptador_custom_que_no_implementa_send_no_cumple_el_protocol(self):

@@ -5,6 +5,7 @@ signals para logica de negocio/integracion) -- los dominios llaman a
 `publish_event()` explicitamente, en el punto exacto donde la operacion de
 negocio ya se completo con exito, nunca antes.
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,7 +19,11 @@ logger = logging.getLogger("apps.services.integration_events")
 
 
 def publish_event(
-    *, event_type: str, tenant: str, aggregate_type: str, aggregate_uuid: str,
+    *,
+    event_type: str,
+    tenant: str,
+    aggregate_type: str,
+    aggregate_uuid: str,
     payload: dict[str, Any] | None = None,
 ) -> DomainEvent:
     """
@@ -29,8 +34,11 @@ def publish_event(
     negocio que lo dispara.
     """
     event = DomainEvent(
-        event_type=event_type, tenant=tenant, aggregate_type=aggregate_type,
-        aggregate_uuid=str(aggregate_uuid), payload=payload or {},
+        event_type=event_type,
+        tenant=tenant,
+        aggregate_type=aggregate_type,
+        aggregate_uuid=str(aggregate_uuid),
+        payload=payload or {},
     )
 
     webhook_url = getattr(settings, "N8N_WEBHOOK_URL", "") or ""
@@ -47,8 +55,11 @@ def publish_event(
     logger.info(
         "integration_events.publish_enqueued",
         extra={
-            "event_type": event_type, "event_id": event.event_id, "tenant": tenant,
-            "aggregate_type": aggregate_type, "aggregate_uuid": aggregate_uuid,
+            "event_type": event_type,
+            "event_id": event.event_id,
+            "tenant": tenant,
+            "aggregate_type": aggregate_type,
+            "aggregate_uuid": aggregate_uuid,
         },
     )
     return event

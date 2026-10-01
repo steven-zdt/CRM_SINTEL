@@ -9,4 +9,5 @@ class GastosConfig(AppConfig):
 
     def ready(self) -> None:
         from apps.tenant.gastos.reporting import register
+
         register()

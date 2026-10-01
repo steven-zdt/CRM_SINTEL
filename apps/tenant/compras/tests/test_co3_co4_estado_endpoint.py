@@ -14,6 +14,7 @@ auto_now=True si esta en update_fields, asi que 'updated_at' nunca
 avanzaba en una transicion real (Aprobar/Anular). Fix:
 update_fields=['estado', 'updated_at'].
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -29,22 +30,39 @@ class CO3EstadoNoEditableViaPatchGenericoTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa CO3-CO4", nit="900000963", direccion="Calle CO3-CO4",
+            razon_social="Empresa CO3-CO4",
+            nit="900000963",
+            direccion="Calle CO3-CO4",
         )
         TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN")
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Sede CO3-CO4")
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor CO3-CO4", numero_documento="CO3-1",
+            empresa=self.empresa,
+            razon_social="Proveedor CO3-CO4",
+            numero_documento="CO3-1",
             tipo_documento="NIT",
         )
         self.plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla CO3-CO4", prefijo="CO3",
-            rango_desde=1, rango_hasta=1000, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla CO3-CO4",
+            prefijo="CO3",
+            rango_desde=1,
+            rango_hasta=1000,
+            consecutivo_actual=1,
+            vigente=True,
         )
         self.orden = OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede, proveedor=self.proveedor, plantilla=self.plantilla,
-            fecha=date(2026, 6, 1), consecutivo=1, numero_documento="CO3-1", estado="BORRADOR",
-            subtotal=Decimal("1000.00"), impuestos=Decimal("190.00"), total=Decimal("1190.00"),
+            empresa=self.empresa,
+            sede=self.sede,
+            proveedor=self.proveedor,
+            plantilla=self.plantilla,
+            fecha=date(2026, 6, 1),
+            consecutivo=1,
+            numero_documento="CO3-1",
+            estado="BORRADOR",
+            subtotal=Decimal("1000.00"),
+            impuestos=Decimal("190.00"),
+            total=Decimal("1190.00"),
         )
 
     def test_patch_generico_con_estado_no_lo_cambia_ni_genera_cxp(self):
@@ -62,56 +80,84 @@ class CO3EstadoNoEditableViaPatchGenericoTests(SintelTenantTestCase):
 
         self.orden.refresh_from_db()
         self.assertEqual(
-            self.orden.estado, "BORRADOR",
+            self.orden.estado,
+            "BORRADOR",
             "estado cambio via PATCH generico -- el bypass de la maquina de estados sigue abierto.",
         )
         self.assertEqual(
-            CuentasPagar.objects.filter(empresa=self.empresa, numero_factura="CO3-1").count(), 0,
+            CuentasPagar.objects.filter(empresa=self.empresa, numero_factura="CO3-1").count(),
+            0,
             "Se genero una CuentasPagar sin pasar por cambiar_estado_orden_compra().",
         )
 
     def test_transicion_real_si_aprueba_y_genera_cxp(self):
         """Control positivo: el endpoint de transicion dedicado sigue
         funcionando exactamente igual tras el fix de CO-3."""
-        resp = self.api_client.post(f"/api/v1/compras/{self.orden.uuid}/cambiar-estado/", {"estado": "APROBADA"}, format="json")
+        resp = self.api_client.post(
+            f"/api/v1/compras/{self.orden.uuid}/cambiar-estado/",
+            {"estado": "APROBADA"},
+            format="json",
+        )
         self.assertEqual(resp.status_code, 200, resp.content)
         self.orden.refresh_from_db()
         self.assertEqual(self.orden.estado, "APROBADA")
-        self.assertTrue(CuentasPagar.objects.filter(empresa=self.empresa, numero_factura="CO3-1").exists())
+        self.assertTrue(
+            CuentasPagar.objects.filter(empresa=self.empresa, numero_factura="CO3-1").exists()
+        )
 
 
 class CO4UpdatedAtEnTransicionTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa CO4", nit="900000964", direccion="Calle CO4",
+            razon_social="Empresa CO4",
+            nit="900000964",
+            direccion="Calle CO4",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Sede CO4")
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor CO4", numero_documento="CO4-1",
+            empresa=self.empresa,
+            razon_social="Proveedor CO4",
+            numero_documento="CO4-1",
             tipo_documento="NIT",
         )
         self.plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla CO4", prefijo="CO4",
-            rango_desde=1, rango_hasta=1000, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla CO4",
+            prefijo="CO4",
+            rango_desde=1,
+            rango_hasta=1000,
+            consecutivo_actual=1,
+            vigente=True,
         )
         self.orden = OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede, proveedor=self.proveedor, plantilla=self.plantilla,
-            fecha=date(2026, 6, 1), consecutivo=1, numero_documento="CO4-1", estado="BORRADOR",
-            subtotal=Decimal("1000.00"), impuestos=Decimal("190.00"), total=Decimal("1190.00"),
+            empresa=self.empresa,
+            sede=self.sede,
+            proveedor=self.proveedor,
+            plantilla=self.plantilla,
+            fecha=date(2026, 6, 1),
+            consecutivo=1,
+            numero_documento="CO4-1",
+            estado="BORRADOR",
+            subtotal=Decimal("1000.00"),
+            impuestos=Decimal("190.00"),
+            total=Decimal("1190.00"),
         )
 
     def test_aprobar_actualiza_updated_at(self):
         updated_at_antes = self.orden.updated_at
 
         ok, orden, code = OrdenCompraBusinessService.cambiar_estado_orden_compra(
-            str(self.orden.uuid), "APROBADA", self.empresa.id,
+            str(self.orden.uuid),
+            "APROBADA",
+            self.empresa.id,
         )
         self.assertTrue(ok, orden)
 
         self.orden.refresh_from_db()
         self.assertEqual(self.orden.estado, "APROBADA")
         self.assertGreater(
-            self.orden.updated_at, updated_at_antes,
+            self.orden.updated_at,
+            updated_at_antes,
             "updated_at no avanzo tras la transicion -- update_fields no incluia 'updated_at'.",
         )

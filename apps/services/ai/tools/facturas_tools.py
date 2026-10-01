@@ -10,6 +10,7 @@ Envuelve `FacturaSelectors.qs_list` ya existente. Mismo patron
 NULL-safe de sede que `cotizaciones_tools.py`/`gastos_tools.py`/
 `proyectos_tools.py` -- `Factura` tampoco tiene campo `area`.
 """
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext

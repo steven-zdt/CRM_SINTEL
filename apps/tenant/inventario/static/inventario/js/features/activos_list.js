@@ -1,24 +1,105 @@
 /**
  * activos_list.js - Controlador de Lista de Activos Fijos
  * Namespace: window.ActivosList (legacy, consumido por activos_editor.js)
- * Fase 5-BIS: tabla server-rendered via django-tables2 + HTMX (#activos-panel,
- * cargada por atributos hx-get/hx-trigger declarados en list_activos.html).
- * Columnas/orden/paginacion/KPIs viven en tables.py/views.py (server-side).
- * Las acciones de fila (editar/eliminar) se delegan sobre document.body para
- * sobrevivir a los re-renders HTMX del panel.
+ *
+ * Tabla "Activos Fijos" es DataTables 3.x (#tabla-activos, mismo patron ya
+ * validado en Ventas/Bancos/Facturas/Clientes/Proveedores/Compras/Gastos/
+ * Empleados/Proyectos/Inventario -- ver
+ * docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md), poblada via ajax
+ * contra POST /api/v1/inventario/activos/dt/. ActivoFijoTable/
+ * ActivoFijoTableView (django-tables2) retirados. Los KPIs (total/valor
+ * libros/por estado) siguen server-rendered via HTMX (kpis_activos.html,
+ * ActivoFijoKpisView) -- mismo patron ya usado en Ventas/Compras/Gastos/
+ * Proyectos.
+ *
+ * Las acciones de fila (editar/eliminar) se delegan sobre document.body
+ * (persistente -- la tabla se recrea via ajax.reload(), nunca via
+ * innerHTML swap de un contenedor).
  */
 (function (w, d) {
     'use strict';
 
     const MOD = '[activos.list]';
     const CORE_API_BASE = '/api/v1/inventario/activos';
+    const TABLA_SELECTOR = '#tabla-activos';
+    const TABLA_URL = '/api/v1/inventario/activos/dt/';
     let _delegated = false;
+    let _tablaInicializada = false;
+
+    var BADGE_ESTADO = {
+        ACTIVO: ['bg-success', 'bi-check-circle-fill', 'En Uso'],
+        MANTENIMIENTO: ['bg-warning', 'bi-tools', 'Mantenimiento'],
+        BAJA: ['bg-danger', 'bi-x-circle-fill', 'De Baja'],
+        VENDIDO: ['bg-secondary', 'bi-tag-fill', 'Vendido'],
+    };
+
+    function escapeHtml(str) {
+        var div = d.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
+
+    function renderActivo(data, type, row) {
+        var cat = row.categoria ? '<span class="badge bg-light text-secondary border" style="font-size:.65rem;font-weight:500">' +
+            escapeHtml(row.categoria_nombre || '') + '</span>' : '';
+        var cod = row.codigo ? '<span class="font-monospace text-muted me-1" style="font-size:.72rem">' + escapeHtml(row.codigo) + '</span>' : '';
+        var resp = row.responsable ? '<div class="mt-1"><span class="text-muted" style="font-size:.72rem"><i class="bi bi-person me-1"></i>' +
+            escapeHtml(row.responsable) + '</span></div>' : '';
+        return '<div class="py-1 lh-sm"><div class="fw-semibold">' + escapeHtml(row.nombre || '—') + '</div>' +
+            '<div class="d-flex align-items-center gap-1 mt-1">' + cod + cat + '</div>' + resp + '</div>';
+    }
+
+    function renderAdquisicion(data, type, row) {
+        var fecha = row.fecha_adquisicion ? new Date(row.fecha_adquisicion + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+        var costo = row.costo_adquisicion ? '<div class="fw-semibold mt-1">$' + Number(row.costo_adquisicion).toLocaleString('en-US', { maximumFractionDigits: 0 }) + '</div>' : '';
+        return '<div class="text-end lh-sm"><div class="text-muted" style="font-size:.8rem">' + fecha + '</div>' + costo + '</div>';
+    }
+
+    function renderEstado(data, type, row) {
+        var cfg = BADGE_ESTADO[row.estado] || ['bg-secondary', 'bi-question-circle', row.estado_display || row.estado || '—'];
+        return '<span class="badge ' + cfg[0] + '"><i class="bi ' + cfg[1] + ' me-1"></i>' + escapeHtml(cfg[2]) + '</span>';
+    }
+
+    function renderAcciones(data, type, row) {
+        return '<div class="btn-group btn-group-sm" role="group">' +
+            '<button type="button" class="btn btn-outline-primary btn-edit-activo" data-uuid="' + escapeHtml(row.id) + '" title="Editar">' +
+            '<i class="bi bi-pencil"></i></button>' +
+            '<button type="button" class="btn btn-outline-danger btn-delete-activo" data-uuid="' + escapeHtml(row.id) + '" title="Eliminar">' +
+            '<i class="bi bi-trash"></i></button>' +
+            '</div>';
+    }
+
+    // Nota: en ActivoFijoListSerializer el campo JSON "id" es en realidad el
+    // UUID (source='uuid') -- "pk" es el id entero. Los botones de accion
+    // usan row.id (mismo patron ya documentado en productos_list.js).
+    var COLUMNS = [
+        { data: null, title: 'Activo', render: renderActivo },
+        { data: null, title: 'Adquisición', className: 'text-end', render: renderAdquisicion },
+        { data: null, title: 'Estado', render: renderEstado },
+        { data: null, title: '', orderable: false, searchable: false, render: renderAcciones },
+    ];
+
+    function initTabla() {
+        if (_tablaInicializada) return;
+        if (typeof DataTable === 'undefined' || !w.Sintel || !w.Sintel.Core || !w.Sintel.Core.DataTablesFactory) return;
+        w.Sintel.Core.DataTablesFactory.create(TABLA_SELECTOR, TABLA_URL, COLUMNS, {
+            pageLength: 20,
+            order: [[0, 'asc']],
+        });
+        _tablaInicializada = true;
+    }
 
     function refresh() {
+        if (w.Sintel && w.Sintel.Core && w.Sintel.Core.DataTablesFactory) {
+            w.Sintel.Core.DataTablesFactory.reload(TABLA_SELECTOR);
+        }
+        // Los KPIs siguen server-rendered via HTMX (kpis_activos.html).
         d.body.dispatchEvent(new CustomEvent('activo-updated'));
     }
 
-    function init() {}
+    function init() {
+        initTabla();
+    }
 
     function initDelegation() {
         if (_delegated) return;
@@ -111,6 +192,12 @@
     }
 
     initDelegation();
+
+    if (d.readyState === 'loading') {
+        d.addEventListener('DOMContentLoaded', initTabla);
+    } else {
+        initTabla();
+    }
 
     // Namespace legacy plano — activos_editor.js lo consume directamente.
     if (!w.ActivosList) {

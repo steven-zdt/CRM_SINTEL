@@ -6,15 +6,16 @@ Usa TypedDict para validación de tipos en tiempo de desarrollo.
 
 WARNING: FASE 1: Solo contratos, sin lógica de negocio.
 """
+
 from typing import Any, Literal, TypedDict
 
 
 class MailboxConfigDTO(TypedDict, total=False):
     """
     Configuración de conexión a buzón de correo.
-    
+
     WARNING: GMAIL: Si provider == "gmail", host/port/ssl se fuerzan a presets de Gmail.
-    
+
     Ejemplo:
         config = {
             "provider": "gmail",
@@ -39,6 +40,7 @@ class MailboxConfigDTO(TypedDict, total=False):
             }
         }
     """
+
     provider: Literal["gmail", "custom"] | None  # Proveedor predefinido
     host: str
     port: int
@@ -57,7 +59,7 @@ class MailboxConfigDTO(TypedDict, total=False):
 class AttachmentDTO(TypedDict):
     """
     DTO para adjuntos extraídos de mensajes de correo.
-    
+
     Ejemplo:
         attachment = {
             "filename": "factura.xml",
@@ -66,6 +68,7 @@ class AttachmentDTO(TypedDict):
             "content": b"<?xml version='1.0'?>..."
         }
     """
+
     filename: str
     content_type: str
     size_bytes: int
@@ -75,7 +78,7 @@ class AttachmentDTO(TypedDict):
 class ExtractedFileDTO(TypedDict):
     """
     DTO para archivos extraídos (ya sea adjunto directo o descomprimido).
-    
+
     Ejemplo:
         file = {
             "filename": "FAC-123.xml",
@@ -84,6 +87,7 @@ class ExtractedFileDTO(TypedDict):
             "content": b"<?xml version='1.0'?>..."
         }
     """
+
     filename: str
     guessed_type: Literal["xml", "zip", "rar", "7z", "other"]
     size_bytes: int
@@ -93,10 +97,10 @@ class ExtractedFileDTO(TypedDict):
 class InvoiceXMLDTO(TypedDict, total=False):
     """
     DTO para XML de factura UBL listo para importar.
-    
+
     Este es el contrato de salida principal de collect_invoice_xml_from_mailbox().
     Los servicios de apps.tenant.facturas consumirán estos DTOs para persistir.
-    
+
     Ejemplo:
         invoice_xml = {
             "source_email_id": "msg_12345",
@@ -110,6 +114,7 @@ class InvoiceXMLDTO(TypedDict, total=False):
             }
         }
     """
+
     source_email_id: str  # id del mensaje/correo
     source_filename: str | None
     xml_text: str  # XML UBL normalizado a texto

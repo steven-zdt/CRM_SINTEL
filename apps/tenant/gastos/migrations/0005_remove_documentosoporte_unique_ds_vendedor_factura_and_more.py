@@ -4,37 +4,50 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('empresa', '0007_empresa_owner_email'),
-        ('perfil', '0005_tenantprofile_rol'),
-        ('tenant_gastos', '0004_remove_documentosoporte_unique_ds_resolucion_consecutivo_and_more'),
+        ("empresa", "0007_empresa_owner_email"),
+        ("perfil", "0005_tenantprofile_rol"),
+        ("tenant_gastos", "0004_remove_documentosoporte_unique_ds_resolucion_consecutivo_and_more"),
     ]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='documentosoporte',
-            name='unique_ds_vendedor_factura',
+            model_name="documentosoporte",
+            name="unique_ds_vendedor_factura",
         ),
         migrations.RemoveIndex(
-            model_name='documentosoporte',
-            name='tenant_gast_vendedo_11479e_idx',
+            model_name="documentosoporte",
+            name="tenant_gast_vendedo_11479e_idx",
         ),
         migrations.RemoveField(
-            model_name='documentosoporte',
-            name='numero_factura_proveedor',
+            model_name="documentosoporte",
+            name="numero_factura_proveedor",
         ),
         migrations.AddField(
-            model_name='documentosoporte',
-            name='numero_documento_proveedor',
-            field=models.CharField(blank=True, db_index=True, help_text='Numero de la factura o documento de referencia del proveedor', max_length=100, null=True, verbose_name='Numero Documento Proveedor'),
+            model_name="documentosoporte",
+            name="numero_documento_proveedor",
+            field=models.CharField(
+                blank=True,
+                db_index=True,
+                help_text="Numero de la factura o documento de referencia del proveedor",
+                max_length=100,
+                null=True,
+                verbose_name="Numero Documento Proveedor",
+            ),
         ),
         migrations.AddIndex(
-            model_name='documentosoporte',
-            index=models.Index(fields=['vendedor_nit', 'numero_documento_proveedor'], name='tenant_gast_vendedo_19f9db_idx'),
+            model_name="documentosoporte",
+            index=models.Index(
+                fields=["vendedor_nit", "numero_documento_proveedor"],
+                name="tenant_gast_vendedo_19f9db_idx",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='documentosoporte',
-            constraint=models.UniqueConstraint(condition=models.Q(('anulado', False)), fields=('empresa', 'vendedor_nit', 'numero_documento_proveedor'), name='unique_ds_vendedor_factura'),
+            model_name="documentosoporte",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("anulado", False)),
+                fields=("empresa", "vendedor_nit", "numero_documento_proveedor"),
+                name="unique_ds_vendedor_factura",
+            ),
         ),
     ]

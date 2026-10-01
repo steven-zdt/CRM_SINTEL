@@ -1,5 +1,27 @@
-{% load django_tables2 %}
-{# Fragmento HTMX: tabla de Asientos Contables. Reemplaza #asientos-panel completo. #}
-<div class="w-100" style="max-width:100%; overflow-x:auto;">
-  {% render_table table %}
+{# tabla_asientos.html — DataTables 3.x + ColumnControl (docs/ux/TABLES_FORMS_RELEASE_GATE.md) #}
+{# Esqueleto ESTATICO: ya no se sirve via HTMX/django-tables2 -- se incluye  #}
+{# una sola vez en list_asientos.html y asiento_list.js puebla <tbody> via  #}
+{# ajax contra POST /api/v1/contabilidad/asientos-contables/dt/            #}
+{# (AsientoContableViewSet.dt()). Indices de columna deben coincidir 1:1   #}
+{# con fields_map/column_filters de esa accion.                           #}
+
+<div class="border rounded shadow-sm bg-white">
+  <div class="w-100" style="max-width:100%; overflow-x:auto;">
+    <table id="tabla-asientos-contables" class="table table-hover align-middle mb-0 w-100">
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Fecha</th>
+          <th>Descripción</th>
+          <th>Estado</th>
+          <th>Movimientos</th>
+          <th>Débito</th>
+          <th>Crédito</th>
+          <th>Cuadratura</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>

@@ -23,11 +23,11 @@ Namespaces:
 # default "Invoice" preserva el comportamiento exacto para facturas/ventas.
 # Ver docs/nomina/NOMINA_DIAN_AUDIT.md §3.
 """
+
 import base64
 import hashlib
 import uuid as _uuid
-from datetime import datetime, timezone
-
+from datetime import UTC, datetime
 
 # ---------------------------------------------------------------------------
 # Namespaces
@@ -51,7 +51,9 @@ class AttachedDocumentService:
     """
 
     @classmethod
-    def build(cls, signed_invoice_bytes: bytes, dto: dict, cufe: str, document_type: str = "Invoice") -> bytes:
+    def build(
+        cls, signed_invoice_bytes: bytes, dto: dict, cufe: str, document_type: str = "Invoice"
+    ) -> bytes:
         """
         Envuelve el XML firmado en un AttachedDocument DIAN.
         Retorna los bytes UTF-8 del XML AttachedDocument.
@@ -61,14 +63,14 @@ class AttachedDocumentService:
                           "NominaIndividual" (nomina electronica), etc.
         """
         ad_uuid = str(_uuid.uuid4())
-        ahora = datetime.now(timezone.utc)
+        ahora = datetime.now(UTC)
         issue_date = ahora.strftime("%Y-%m-%d")
         issue_time = ahora.strftime("%H:%M:%S") + "-05:00"
 
         emisor = dto.get("emisor", {})
         receptor = dto.get("receptor", {})
 
-        invoice_b64 = base64.b64encode(signed_invoice_bytes).decode("ascii")
+        base64.b64encode(signed_invoice_bytes).decode("ascii")
         invoice_sha256 = hashlib.sha256(signed_invoice_bytes).hexdigest()
 
         # Numero del AttachedDocument == numero del documento origen
@@ -77,69 +79,62 @@ class AttachedDocumentService:
         # sts namespace no esta en AttachedDocument; usamos cbc/cac directos
         lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
-            f'<AttachedDocument',
+            "<AttachedDocument",
             f'  xmlns="{_NS["AD"]}"',
             f'  xmlns:cac="{_NS["cac"]}"',
             f'  xmlns:cbc="{_NS["cbc"]}"',
             f'  xmlns:ext="{_NS["ext"]}"',
             f'  xmlns:xsi="{_NS["xsi"]}">',
-
             # Extensiones vacias (requeridas por schema)
             "  <ext:UBLExtensions>",
             "    <ext:UBLExtension>",
             "      <ext:ExtensionContent/>",
             "    </ext:UBLExtension>",
             "  </ext:UBLExtensions>",
-
             # Metadatos
             "  <cbc:UBLVersionID>UBL 2.1</cbc:UBLVersionID>",
             "  <cbc:CustomizationID>1</cbc:CustomizationID>",
             f"  <cbc:ID>{num_fac}</cbc:ID>",
-            f"  <cbc:UUID schemeName=\"CUFE-SHA384\">{cufe}</cbc:UUID>",
+            f'  <cbc:UUID schemeName="CUFE-SHA384">{cufe}</cbc:UUID>',
             f"  <cbc:IssueDate>{issue_date}</cbc:IssueDate>",
             f"  <cbc:IssueTime>{issue_time}</cbc:IssueTime>",
-
             # Descripcion del documento adjunto
             f"  <cbc:DocumentType>{document_type}</cbc:DocumentType>",
-
             # Sender (emisor)
             "  <cac:SenderParty>",
             "    <cac:PartyTaxScheme>",
             f"      <cbc:CompanyID schemeName=\"31\" schemeID=\"{emisor.get('dv','0')}\"",
-            f"        schemeAgencyName=\"CO, DIAN\" schemeAgencyID=\"195\">",
+            '        schemeAgencyName="CO, DIAN" schemeAgencyID="195">',
             f"        {emisor.get('nit','')}",
             "      </cbc:CompanyID>",
             "      <cac:TaxScheme>",
-            f"        <cbc:ID>01</cbc:ID>",
-            f"        <cbc:Name>IVA</cbc:Name>",
+            "        <cbc:ID>01</cbc:ID>",
+            "        <cbc:Name>IVA</cbc:Name>",
             "      </cac:TaxScheme>",
             "    </cac:PartyTaxScheme>",
             "  </cac:SenderParty>",
-
             # Receiver (receptor)
             "  <cac:ReceiverParty>",
             "    <cac:PartyTaxScheme>",
             f"      <cbc:CompanyID schemeName=\"{receptor.get('tipo_documento','31')}\" schemeID=\"0\"",
-            f"        schemeAgencyName=\"CO, DIAN\" schemeAgencyID=\"195\">",
+            '        schemeAgencyName="CO, DIAN" schemeAgencyID="195">',
             f"        {receptor.get('nit','')}",
             "      </cbc:CompanyID>",
             "      <cac:TaxScheme>",
-            f"        <cbc:ID>ZZ</cbc:ID>",
-            f"        <cbc:Name>No aplica</cbc:Name>",
+            "        <cbc:ID>ZZ</cbc:ID>",
+            "        <cbc:Name>No aplica</cbc:Name>",
             "      </cac:TaxScheme>",
             "    </cac:PartyTaxScheme>",
             "  </cac:ReceiverParty>",
-
             # Attachment: documento XML en base64 (se puede enviar en CDATA o b64)
             "  <cac:Attachment>",
             "    <cac:ExternalReference>",
             f"      <cbc:URI>#invoice-{num_fac}</cbc:URI>",
             f"      <cbc:DocumentHash>{invoice_sha256}</cbc:DocumentHash>",
-            f"      <cbc:HashAlgorithmMethod>SHA-256</cbc:HashAlgorithmMethod>",
+            "      <cbc:HashAlgorithmMethod>SHA-256</cbc:HashAlgorithmMethod>",
             f"      <cbc:Description><![CDATA[{signed_invoice_bytes.decode('utf-8')}]]></cbc:Description>",
             "    </cac:ExternalReference>",
             "  </cac:Attachment>",
-
             "</AttachedDocument>",
         ]
 
@@ -157,7 +152,7 @@ class AttachedDocumentService:
         Normalmente la DIAN retorna este XML, pero se pre-genera para
         almacenarlo junto con el documento en el campo dian_response_xml.
         """
-        ahora = datetime.now(timezone.utc)
+        ahora = datetime.now(UTC)
         issue_date = ahora.strftime("%Y-%m-%d")
         issue_time = ahora.strftime("%H:%M:%S") + "-05:00"
         num_fac = dto.get("num_fac", "")
@@ -165,10 +160,10 @@ class AttachedDocumentService:
 
         lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
-            '<ApplicationResponse',
+            "<ApplicationResponse",
             '  xmlns="urn:oasis:names:specification:ubl:schema:xsd:ApplicationResponse-2"',
-            f'  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"',
-            f'  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">',
+            '  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"',
+            '  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">',
             "  <cbc:UBLVersionID>UBL 2.1</cbc:UBLVersionID>",
             "  <cbc:CustomizationID>1</cbc:CustomizationID>",
             f"  <cbc:ID>{num_fac}</cbc:ID>",
@@ -176,7 +171,7 @@ class AttachedDocumentService:
             f"  <cbc:IssueTime>{issue_time}</cbc:IssueTime>",
             "  <cac:SenderParty>",
             "    <cac:PartyTaxScheme>",
-            f"      <cbc:CompanyID schemeName=\"31\">800197268</cbc:CompanyID>",
+            '      <cbc:CompanyID schemeName="31">800197268</cbc:CompanyID>',
             "      <cac:TaxScheme><cbc:ID>01</cbc:ID><cbc:Name>IVA</cbc:Name></cac:TaxScheme>",
             "    </cac:PartyTaxScheme>",
             "  </cac:SenderParty>",
@@ -189,11 +184,11 @@ class AttachedDocumentService:
             "  <cac:DocumentResponse>",
             "    <cac:Response>",
             f"      <cbc:ResponseCode>{validation_code}</cbc:ResponseCode>",
-            f"      <cbc:Description>Documento procesado correctamente</cbc:Description>",
+            "      <cbc:Description>Documento procesado correctamente</cbc:Description>",
             "    </cac:Response>",
             "    <cac:DocumentReference>",
             f"      <cbc:ID>{num_fac}</cbc:ID>",
-            f"      <cbc:UUID schemeName=\"CUFE-SHA384\">{cufe}</cbc:UUID>",
+            f'      <cbc:UUID schemeName="CUFE-SHA384">{cufe}</cbc:UUID>',
             "    </cac:DocumentReference>",
             "  </cac:DocumentResponse>",
             "</ApplicationResponse>",

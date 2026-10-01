@@ -4,14 +4,13 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('facturas', '0031_itemnotacredito'),
+        ("facturas", "0031_itemnotacredito"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='factura',
-            name='xml_file_path',
+            model_name="factura",
+            name="xml_file_path",
         ),
     ]

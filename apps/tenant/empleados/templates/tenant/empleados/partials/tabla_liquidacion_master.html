@@ -1,4 +1,15 @@
-{% load django_tables2 %}
-{# Fragmento HTMX: tabla Master (todos los empleados, ordenados por total de liquidaciones). #}
-{# Reemplaza #liq-master-panel completo. #}
-{% render_table table %}
+{# tabla_liquidacion_master.html — DataTables 3.x (docs/ux/TABLES_FORMS_RELEASE_GATE.md) #}
+{# Esqueleto ESTATICO del panel Master del split-pane Master-Detail de      #}
+{# "Liquidaciones" -- se incluye una sola vez en empleados_list.html y      #}
+{# liquidacion_list.js puebla <tbody> via ajax contra                      #}
+{# POST /api/v1/empleados/con-liquidaciones/dt/                            #}
+{# (EmpleadoViewSet.con_liquidaciones_dt()). El panel Detail                #}
+{# (#liq-detail-panel-content) sigue en django-tables2 + HTMX -- se carga   #}
+{# al hacer click en una fila de este Master (ver liquidacion_list.js).     #}
+
+<table id="tabla-liquidacion-master" class="table table-hover align-middle mb-0 w-100">
+  <thead>
+    <tr><th>Empleado</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>

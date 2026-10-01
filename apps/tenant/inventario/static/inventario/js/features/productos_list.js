@@ -1,11 +1,21 @@
 /**
  * productos_list.js - Controlador de Lista de Productos
  * Namespace: window.Sintel.Inventario.Productos.List
- * Fase 5-BIS: tabla server-rendered via django-tables2 + HTMX (#productos-panel,
- * cargada por atributos hx-get/hx-trigger declarados en list_productos.html).
- * Columnas/orden/paginacion/KPIs viven en tables.py/views.py (server-side).
+ *
+ * La tabla "Productos" es DataTables 3.x (#tabla-productos, mismo patron ya
+ * validado en Ventas/Bancos/Facturas/Clientes/Proveedores/Compras/Gastos/
+ * Empleados/Proyectos -- ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md),
+ * poblada via ajax contra POST /api/v1/inventario/productos/dt/.
+ * ProductoTable/ProductoTableView (django-tables2) retirados.
+ * Categoria/Servicio/ActivoFijo siguen en django-tables2/HTMX -- no
+ * migradas en esta pasada. Los KPIs siguen server-rendered via HTMX
+ * (kpis_productos.html).
+ *
+ * Nota: ProductoListSerializer expone "id" como el UUID (source='uuid') y
+ * "pk" como el id entero -- por eso los renders/acciones usan row.id.
+ *
  * Las acciones de fila (editar/kardex/eliminar) se delegan sobre document.body
- * para sobrevivir a los re-renders HTMX del panel.
+ * (ya lo hacian antes de esta migracion, sin cambios).
  */
 (function (w, d) {
     'use strict';
@@ -15,11 +25,84 @@
     let _delegated = false;
     let _eliminandoProducto = false;
 
+    var TABLA_PRODUCTOS_SELECTOR = '#tabla-productos';
+    var TABLA_PRODUCTOS_URL = '/api/v1/inventario/productos/dt/';
+    var _productosTablaInicializada = false;
+
+    function escapeHtmlProducto(str) {
+        var div = d.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
+
+    function renderNombreProducto(data, type, row) {
+        var cat = row.categoria_nombre
+            ? '<span class="badge bg-light text-secondary border" style="font-size:.65rem;font-weight:500">' + escapeHtmlProducto(row.categoria_nombre) + '</span>' : '';
+        var cod = row.codigo
+            ? '<span class="font-monospace text-muted me-1" style="font-size:.72rem">' + escapeHtmlProducto(row.codigo) + '</span>' : '';
+        return '<div class="py-1 lh-sm"><div class="fw-semibold">' + escapeHtmlProducto(row.nombre || '—') + '</div>' +
+            '<div class="d-flex align-items-center gap-1 mt-1">' + cod + cat + '</div></div>';
+    }
+
+    function renderStockProducto(data, type, row) {
+        var actual = parseFloat(row.stock_actual || 0);
+        var minimo = parseFloat(row.stock_minimo || 0);
+        var alerta = actual <= minimo;
+        var cls = alerta ? 'bg-danger' : 'bg-success';
+        var icon = alerta ? '<i class="bi bi-exclamation-triangle-fill me-1" style="font-size:.7rem"></i>' : '';
+        var unidad = row.unidad ? '<span class="text-muted">' + escapeHtmlProducto(row.unidad) + '</span>' : '';
+        return '<div class="text-center lh-sm"><span class="badge ' + cls + '">' + icon + actual.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' ' + unidad + '</span>' +
+            '<div class="text-muted mt-1" style="font-size:.68rem">mín ' + minimo.toLocaleString('en-US', { maximumFractionDigits: 2 }) + '</div></div>';
+    }
+
+    function renderPrecioProducto(data, type, row) {
+        var precio = row.precio_venta ? '$' + parseFloat(row.precio_venta).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '$0';
+        var costo = row.costo_promedio
+            ? '<div class="text-muted mt-1" style="font-size:.72rem">Costo: $' + parseFloat(row.costo_promedio).toLocaleString('en-US', { maximumFractionDigits: 0 }) + '</div>' : '';
+        return '<div class="text-end lh-sm"><div class="fw-semibold">' + precio + '</div>' + costo + '</div>';
+    }
+
+    function renderEstadoProducto(value) {
+        if (value) return '<span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>';
+        return '<span class="badge bg-secondary-subtle text-secondary border">Inactivo</span>';
+    }
+
+    function renderAccionesProducto(data, type, row) {
+        return '<div class="btn-group btn-group-sm" role="group">' +
+            '<button type="button" class="btn btn-outline-primary btn-edit-producto" data-uuid="' + escapeHtmlProducto(row.id) + '" title="Editar" aria-label="Editar producto"><i class="bi bi-pencil"></i></button>' +
+            '<button type="button" class="btn btn-outline-info btn-ver-kardex" data-uuid="' + escapeHtmlProducto(row.id) + '" title="Kardex" aria-label="Ver kardex del producto"><i class="bi bi-list-ul"></i></button>' +
+            '<button type="button" class="btn btn-outline-danger btn-delete-producto" data-uuid="' + escapeHtmlProducto(row.id) + '" title="Eliminar" aria-label="Eliminar producto"><i class="bi bi-trash"></i></button>' +
+            '</div>';
+    }
+
+    var PRODUCTOS_COLUMNS = [
+        { data: null, title: 'Producto', render: renderNombreProducto },
+        { data: null, title: 'Stock', render: renderStockProducto },
+        { data: null, title: 'Precio / Costo', render: renderPrecioProducto },
+        { data: 'activo', title: 'Estado', render: renderEstadoProducto },
+        { data: null, title: '', orderable: false, searchable: false, render: renderAccionesProducto },
+    ];
+
+    function initProductosTabla() {
+        if (_productosTablaInicializada) return;
+        if (typeof DataTable === 'undefined' || !w.Sintel || !w.Sintel.Core || !w.Sintel.Core.DataTablesFactory) return;
+        w.Sintel.Core.DataTablesFactory.create(TABLA_PRODUCTOS_SELECTOR, TABLA_PRODUCTOS_URL, PRODUCTOS_COLUMNS, {
+            pageLength: 15,
+            order: [[0, 'asc']],
+        });
+        _productosTablaInicializada = true;
+    }
+
     function refresh() {
+        if (w.Sintel && w.Sintel.Core && w.Sintel.Core.DataTablesFactory) {
+            w.Sintel.Core.DataTablesFactory.reload(TABLA_PRODUCTOS_SELECTOR);
+        }
         d.body.dispatchEvent(new CustomEvent('producto-updated'));
     }
 
-    function init() {}
+    function init() {
+        initProductosTabla();
+    }
 
     /**
      * Ver Kardex de producto
@@ -231,6 +314,12 @@
     }
 
     initDelegation();
+
+    if (d.readyState === 'loading') {
+        d.addEventListener('DOMContentLoaded', initProductosTabla);
+    } else {
+        initProductosTabla();
+    }
 
     w.Sintel = w.Sintel || {};
     w.Sintel.Inventario = w.Sintel.Inventario || {};

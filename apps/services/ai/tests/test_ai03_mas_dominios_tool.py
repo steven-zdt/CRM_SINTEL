@@ -4,6 +4,7 @@ Fase AI-03 (continuacion): tests reales para 6 tools nuevas
 consultar_cotizacion, consultar_gasto, consultar_proyecto), mismo
 patron que test_buscar_cliente_tool.py / test_buscar_producto_tool.py.
 """
+
 import datetime
 import json
 import os
@@ -45,13 +46,18 @@ class BuscarProveedorToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA PROV TEST S.A.S.", nit="900666777", direccion="Calle Prov",
+            razon_social="EMPRESA PROV TEST S.A.S.",
+            nit="900666777",
+            direccion="Calle Prov",
         )
         self.user = User.objects.create_user(email="prov_user@test.local", password="testpass123")
         TenantProfile.objects.create(user=self.user, empresa=self.empresa)
         Proveedor.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="800111222", razon_social="Proveedor Real Uno",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="800111222",
+            razon_social="Proveedor Real Uno",
         )
 
     @override_settings(**AI_FLAGS_ON)
@@ -64,7 +70,12 @@ class BuscarProveedorToolTests(SintelTenantTestCase):
         assert len(result.data) == 1
         assert result.data[0]["razon_social"] == "Proveedor Real Uno"
 
+    @override_settings(AI_ENABLED=False)
     def test_buscar_proveedor_bloqueado_sin_ai_enabled(self):
+        """Hallazgo real (2026-09-25): sin este override, el test dependia
+        de que AI_ENABLED sea False por defecto -- falla en cualquier
+        entorno con AI_ENABLED=true en .env (este mismo). Ver
+        docs/mcp/MCP_RELEASE_GATE.md."""
         request = _FakeRequest(user=self.user, tenant=self.tenant)
 
         result = run_tool("buscar_proveedor", request)
@@ -76,17 +87,26 @@ class ConsultarVentaToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA VENTAS TEST S.A.S.", nit="900777888", direccion="Calle V",
+            razon_social="EMPRESA VENTAS TEST S.A.S.",
+            nit="900777888",
+            direccion="Calle V",
         )
         self.user = User.objects.create_user(email="venta_user@test.local", password="testpass123")
         TenantProfile.objects.create(user=self.user, empresa=self.empresa)
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900222333", razon_social="Cliente De La Venta",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900222333",
+            razon_social="Cliente De La Venta",
         )
         Venta.objects.create(
-            empresa=self.empresa, cliente=self.cliente, fecha_emision="2026-06-01",
-            numero_factura="VENTA-AI-TEST", subtotal="500.00", total_neto="500.00",
+            empresa=self.empresa,
+            cliente=self.cliente,
+            fecha_emision="2026-06-01",
+            numero_factura="VENTA-AI-TEST",
+            subtotal="500.00",
+            total_neto="500.00",
             estado="BORRADOR",
         )
 
@@ -117,29 +137,48 @@ class ConsultarCompraToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA COMPRAS TEST S.A.S.", nit="900888999", direccion="Calle C",
+            razon_social="EMPRESA COMPRAS TEST S.A.S.",
+            nit="900888999",
+            direccion="Calle C",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B")
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="800333444", razon_social="Proveedor De La Compra",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="800333444",
+            razon_social="Proveedor De La Compra",
         )
         OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede_a, proveedor=self.proveedor,
-            consecutivo=1, fecha="2026-06-01",
+            empresa=self.empresa,
+            sede=self.sede_a,
+            proveedor=self.proveedor,
+            consecutivo=1,
+            fecha="2026-06-01",
         )
         OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede_b, proveedor=self.proveedor,
-            consecutivo=2, fecha="2026-06-02",
+            empresa=self.empresa,
+            sede=self.sede_b,
+            proveedor=self.proveedor,
+            consecutivo=2,
+            fecha="2026-06-02",
         )
 
-        self.user_empresa = User.objects.create_user(email="oc_empresa@test.local", password="testpass123")
-        TenantProfile.objects.create(user=self.user_empresa, empresa=self.empresa, alcance="EMPRESA")
+        self.user_empresa = User.objects.create_user(
+            email="oc_empresa@test.local", password="testpass123"
+        )
+        TenantProfile.objects.create(
+            user=self.user_empresa, empresa=self.empresa, alcance="EMPRESA"
+        )
 
-        self.user_sede_a = User.objects.create_user(email="oc_sede_a@test.local", password="testpass123")
+        self.user_sede_a = User.objects.create_user(
+            email="oc_sede_a@test.local", password="testpass123"
+        )
         profile_sede_a = TenantProfile.objects.create(
-            user=self.user_sede_a, empresa=self.empresa, alcance="SEDE",
+            user=self.user_sede_a,
+            empresa=self.empresa,
+            alcance="SEDE",
         )
         profile_sede_a.sedes_asignadas.set([self.sede_a])
 
@@ -168,17 +207,25 @@ class ConsultarCotizacionToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA COTIZ TEST S.A.S.", nit="900999000", direccion="Calle Q",
+            razon_social="EMPRESA COTIZ TEST S.A.S.",
+            nit="900999000",
+            direccion="Calle Q",
         )
         self.user = User.objects.create_user(email="cotiz_user@test.local", password="testpass123")
         TenantProfile.objects.create(user=self.user, empresa=self.empresa)
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900333444", razon_social="Cliente De La Cotizacion",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900333444",
+            razon_social="Cliente De La Cotizacion",
         )
         Cotizacion.objects.create(
-            empresa=self.empresa, cliente=self.cliente, numero_cotizacion="COT-AI-TEST",
-            fecha_vencimiento=datetime.date(2026, 12, 31), estado="BORRADOR",
+            empresa=self.empresa,
+            cliente=self.cliente,
+            numero_cotizacion="COT-AI-TEST",
+            fecha_vencimiento=datetime.date(2026, 12, 31),
+            estado="BORRADOR",
         )
 
     @override_settings(**AI_FLAGS_ON)
@@ -197,23 +244,37 @@ class ConsultarGastoToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA GASTOS TEST S.A.S.", nit="900111333", direccion="Calle G",
+            razon_social="EMPRESA GASTOS TEST S.A.S.",
+            nit="900111333",
+            direccion="Calle G",
         )
         self.user = User.objects.create_user(email="gasto_user@test.local", password="testpass123")
         TenantProfile.objects.create(user=self.user, empresa=self.empresa)
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="800555666", razon_social="Proveedor Del Gasto",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="800555666",
+            razon_social="Proveedor Del Gasto",
         )
         self.resolucion = ResolucionDIAN.objects.create(
-            empresa=self.empresa, numero_resolucion="RES-AI-TEST", prefijo="DS",
-            rango_desde=1, rango_hasta=1000,
-            fecha_resolucion=datetime.date(2026, 1, 1), fecha_fin=datetime.date(2027, 1, 1),
+            empresa=self.empresa,
+            numero_resolucion="RES-AI-TEST",
+            prefijo="DS",
+            rango_desde=1,
+            rango_hasta=1000,
+            fecha_resolucion=datetime.date(2026, 1, 1),
+            fecha_fin=datetime.date(2027, 1, 1),
         )
         DocumentoSoporte.objects.create(
-            empresa=self.empresa, resolucion_dian=self.resolucion, proveedor=self.proveedor,
-            consecutivo=1, fecha=datetime.date(2026, 6, 1),
-            descripcion="Gasto de prueba AI", subtotal="100.00", total="100.00",
+            empresa=self.empresa,
+            resolucion_dian=self.resolucion,
+            proveedor=self.proveedor,
+            consecutivo=1,
+            fecha=datetime.date(2026, 6, 1),
+            descripcion="Gasto de prueba AI",
+            subtotal="100.00",
+            total="100.00",
         )
 
     @override_settings(**AI_FLAGS_ON)
@@ -232,13 +293,18 @@ class ConsultarProyectoToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA PROYECTOS TEST S.A.S.", nit="900222444", direccion="Calle P",
+            razon_social="EMPRESA PROYECTOS TEST S.A.S.",
+            nit="900222444",
+            direccion="Calle P",
         )
         self.user = User.objects.create_user(email="proy_user@test.local", password="testpass123")
         TenantProfile.objects.create(user=self.user, empresa=self.empresa)
         Proyecto.objects.create(
-            empresa=self.empresa, nombre="Proyecto De Prueba AI", codigo="PRY-AI-TEST",
-            cliente_nombre="Cliente Snapshot", fase_actual="EJECUCION",
+            empresa=self.empresa,
+            nombre="Proyecto De Prueba AI",
+            codigo="PRY-AI-TEST",
+            cliente_nombre="Cliente Snapshot",
+            fase_actual="EJECUCION",
         )
 
     @override_settings(**AI_FLAGS_ON)
@@ -260,15 +326,22 @@ class ConsultarFacturaToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA FACTURAS TEST S.A.S.", nit="900444555", direccion="Calle F",
+            razon_social="EMPRESA FACTURAS TEST S.A.S.",
+            nit="900444555",
+            direccion="Calle F",
         )
         self.user = User.objects.create_user(email="fact_user@test.local", password="testpass123")
         TenantProfile.objects.create(user=self.user, empresa=self.empresa)
         Factura.objects.create(
-            empresa=self.empresa, numero="FE-AI-TEST-001", consecutivo=1,
-            naturaleza="VENTA", fecha_emision="2026-06-01T00:00:00Z",
-            emisor_nit="900444555", emisor_razon_social="EMPRESA FACTURAS TEST S.A.S.",
-            receptor_nit="900333444", receptor_razon_social="Cliente Receptor AI",
+            empresa=self.empresa,
+            numero="FE-AI-TEST-001",
+            consecutivo=1,
+            naturaleza="VENTA",
+            fecha_emision="2026-06-01T00:00:00Z",
+            emisor_nit="900444555",
+            emisor_razon_social="EMPRESA FACTURAS TEST S.A.S.",
+            receptor_nit="900333444",
+            receptor_razon_social="Cliente Receptor AI",
             total="238.00",
         )
 
@@ -299,19 +372,32 @@ class BuscarEmpleadoToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA EMPLEADOS TEST S.A.S.", nit="900666888", direccion="Calle E",
+            razon_social="EMPRESA EMPLEADOS TEST S.A.S.",
+            nit="900666888",
+            direccion="Calle E",
         )
         self.empleado = Empleado.objects.create(
-            empresa=self.empresa, tipo_documento="CC", numero_documento="1000999888",
-            primer_nombre="Ana", primer_apellido="Torres", email="ana.torres@test.local",
-            telefono="3001234567", eps="EPS001", afp="AFP001", arl="ARL001",
+            empresa=self.empresa,
+            tipo_documento="CC",
+            numero_documento="1000999888",
+            primer_nombre="Ana",
+            primer_apellido="Torres",
+            email="ana.torres@test.local",
+            telefono="3001234567",
+            eps="EPS001",
+            afp="AFP001",
+            arl="ARL001",
             fecha_ingreso=datetime.date(2025, 1, 15),
         )
 
-        self.user_admin = User.objects.create_user(email="emp_admin@test.local", password="testpass123")
+        self.user_admin = User.objects.create_user(
+            email="emp_admin@test.local", password="testpass123"
+        )
         TenantProfile.objects.create(user=self.user_admin, empresa=self.empresa, rol="ADMIN")
 
-        self.user_operador = User.objects.create_user(email="emp_operador@test.local", password="testpass123")
+        self.user_operador = User.objects.create_user(
+            email="emp_operador@test.local", password="testpass123"
+        )
         TenantProfile.objects.create(user=self.user_operador, empresa=self.empresa, rol="OPERADOR")
 
     @override_settings(**AI_FLAGS_ON)
@@ -372,13 +458,18 @@ class ConsultarCuentaBancariaToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA BANCOS TEST S.A.S.", nit="900777999", direccion="Calle B",
+            razon_social="EMPRESA BANCOS TEST S.A.S.",
+            nit="900777999",
+            direccion="Calle B",
         )
         self.user = User.objects.create_user(email="banco_user@test.local", password="testpass123")
         TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN")
         CuentaBancaria.objects.create(
-            empresa=self.empresa, nombre="Cuenta Principal AI", banco="Bancolombia",
-            tipo="AHORROS", numero="1234567890123456",
+            empresa=self.empresa,
+            nombre="Cuenta Principal AI",
+            banco="Bancolombia",
+            tipo="AHORROS",
+            numero="1234567890123456",
         )
 
     @override_settings(**AI_FLAGS_ON)
@@ -423,21 +514,35 @@ class SugerirAsientoContableToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA CONTAB TEST S.A.S.", nit="900555111", direccion="Calle K",
+            razon_social="EMPRESA CONTAB TEST S.A.S.",
+            nit="900555111",
+            direccion="Calle K",
         )
         CuentaContable.objects.create(
-            empresa=self.empresa, codigo="513505", nombre="Gastos administrativos AI",
-            tipo="GASTO", nivel=6, activa=True,
+            empresa=self.empresa,
+            codigo="513505",
+            nombre="Gastos administrativos AI",
+            tipo="GASTO",
+            nivel=6,
+            activa=True,
         )
         CuentaContable.objects.create(
-            empresa=self.empresa, codigo="233505", nombre="Cuentas por pagar proveedores AI",
-            tipo="PASIVO", nivel=6, activa=True,
+            empresa=self.empresa,
+            codigo="233505",
+            nombre="Cuentas por pagar proveedores AI",
+            tipo="PASIVO",
+            nivel=6,
+            activa=True,
         )
 
-        self.user_admin = User.objects.create_user(email="contab_admin@test.local", password="testpass123")
+        self.user_admin = User.objects.create_user(
+            email="contab_admin@test.local", password="testpass123"
+        )
         TenantProfile.objects.create(user=self.user_admin, empresa=self.empresa, rol="ADMIN")
 
-        self.user_operador = User.objects.create_user(email="contab_operador@test.local", password="testpass123")
+        self.user_operador = User.objects.create_user(
+            email="contab_operador@test.local", password="testpass123"
+        )
         TenantProfile.objects.create(user=self.user_operador, empresa=self.empresa, rol="OPERADOR")
 
     def _mock_anthropic_response(self, lineas):
@@ -453,8 +558,11 @@ class SugerirAsientoContableToolTests(SintelTenantTestCase):
         request = _FakeRequest(user=self.user_operador, tenant=self.tenant)
 
         result = run_tool(
-            "sugerir_asiento_contable", request,
-            app_label="gastos", subtotal="100.00", total="100.00",
+            "sugerir_asiento_contable",
+            request,
+            app_label="gastos",
+            subtotal="100.00",
+            total="100.00",
         )
 
         assert result.status == "PERMISSION_DENIED"
@@ -472,9 +580,13 @@ class SugerirAsientoContableToolTests(SintelTenantTestCase):
 
         with self._mock_anthropic_response(lineas_mock):
             result = run_tool(
-                "sugerir_asiento_contable", request,
-                app_label="gastos", subtotal="100.00", total="100.00",
-                tercero_nit="900111222", tercero_nombre="Proveedor AI Test",
+                "sugerir_asiento_contable",
+                request,
+                app_label="gastos",
+                subtotal="100.00",
+                total="100.00",
+                tercero_nit="900111222",
+                tercero_nombre="Proveedor AI Test",
             )
 
         assert result.status == "OK"
@@ -490,14 +602,22 @@ class SugerirAsientoContableToolTests(SintelTenantTestCase):
         debe traducirla, nunca propagar el traceback."""
         request = _FakeRequest(user=self.user_admin, tenant=self.tenant)
         lineas_mock = [
-            {"cuenta_codigo": "999999", "debe": 100.00, "haber": 0, "descripcion": "Cuenta que no existe"},
+            {
+                "cuenta_codigo": "999999",
+                "debe": 100.00,
+                "haber": 0,
+                "descripcion": "Cuenta que no existe",
+            },
             {"cuenta_codigo": "233505", "debe": 0, "haber": 100.00, "descripcion": "CxP AI test"},
         ]
 
         with self._mock_anthropic_response(lineas_mock):
             result = run_tool(
-                "sugerir_asiento_contable", request,
-                app_label="gastos", subtotal="100.00", total="100.00",
+                "sugerir_asiento_contable",
+                request,
+                app_label="gastos",
+                subtotal="100.00",
+                total="100.00",
             )
 
         assert result.status == "VALIDATION_ERROR"
@@ -507,8 +627,11 @@ class SugerirAsientoContableToolTests(SintelTenantTestCase):
         request = _FakeRequest(user=self.user_admin, tenant=self.tenant)
 
         result = run_tool(
-            "sugerir_asiento_contable", request,
-            app_label="ventas", subtotal="100.00", total="100.00",
+            "sugerir_asiento_contable",
+            request,
+            app_label="ventas",
+            subtotal="100.00",
+            total="100.00",
         )
 
         assert result.status == "VALIDATION_ERROR"

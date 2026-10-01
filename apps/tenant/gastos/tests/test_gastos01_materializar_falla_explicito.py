@@ -8,6 +8,7 @@ significativo). Ahora debe fallar explicito con ValidationError -- el
 document_router ya distingue ese caso de un error inesperado (ver su
 propio except ValidationError dedicado).
 """
+
 from decimal import Decimal
 
 import pytest
@@ -61,9 +62,14 @@ def test_camino_feliz_con_empresa_y_resolucion_reales_sigue_funcionando(tenant1)
     with schema_context(tenant1.schema_name):
         empresa = Empresa.objects.first()
         ResolucionDIAN.objects.create(
-            empresa=empresa, numero_resolucion="GASTOS01-RES", prefijo="G01",
-            rango_desde=1, rango_hasta=1000,
-            fecha_resolucion="2026-01-01", fecha_inicio="2026-01-01", fecha_fin="2027-12-31",
+            empresa=empresa,
+            numero_resolucion="GASTOS01-RES",
+            prefijo="G01",
+            rango_desde=1,
+            rango_hasta=1000,
+            fecha_resolucion="2026-01-01",
+            fecha_inicio="2026-01-01",
+            fecha_fin="2027-12-31",
             vigente=True,
         )
 

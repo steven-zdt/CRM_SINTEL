@@ -18,6 +18,7 @@ from apps.tenant.bancos.services.selectors import (
 
 class CuentaBancariaServiceMixin(BaseServiceMixin):
     """Bridge service methods for CuentaBancaria ViewSet."""
+
     selector_class = CuentaBancariaSelector
     crud_service_class = CuentaBancariaCRUDService
 
@@ -46,15 +47,19 @@ class CuentaBancariaServiceMixin(BaseServiceMixin):
     def service_activar_cuenta(self, cuenta):
         return self.crud_service_class.activar_cuenta(cuenta)
 
+
 class ExtractoBancarioServiceMixin(BaseServiceMixin):
     """Bridge service methods for ExtractoBancario ViewSet."""
+
     selector_class = ExtractoBancarioSelector
     crud_service_class = ExtractoBancarioCRUDService
     business_service_class = ExtractoBancarioBusinessService
 
     def get_qs_list(self):
         empresa_id = self._get_empresa_id_seguro()
-        cuenta_uuid = self.request.query_params.get("cuenta_uuid") if hasattr(self, "request") else None
+        cuenta_uuid = (
+            self.request.query_params.get("cuenta_uuid") if hasattr(self, "request") else None
+        )
         search = self.request.query_params.get("search") if hasattr(self, "request") else None
         return self.selector_class.get_list(empresa_id, cuenta_uuid=cuenta_uuid, search=search)
 
@@ -75,17 +80,25 @@ class ExtractoBancarioServiceMixin(BaseServiceMixin):
     def service_procesar_extracto(self, extracto, forzar=False):
         return self.business_service_class.procesar_archivo_extracto(extracto, forzar=forzar)
 
+
 class TransaccionBancariaServiceMixin(BaseServiceMixin):
     """Bridge service methods for TransaccionBancaria ViewSet."""
+
     selector_class = TransaccionBancariaSelector
     crud_service_class = TransaccionBancariaCRUDService
 
     def get_qs_list(self):
         empresa_id = self._get_empresa_id_seguro()
-        extracto_uuid = self.request.query_params.get("extracto_uuid") if hasattr(self, "request") else None
+        extracto_uuid = (
+            self.request.query_params.get("extracto_uuid") if hasattr(self, "request") else None
+        )
         search = self.request.query_params.get("search") if hasattr(self, "request") else None
-        tipo_movimiento = self.request.query_params.get("tipo_movimiento") if hasattr(self, "request") else None
-        conciliado = self.request.query_params.get("conciliado") if hasattr(self, "request") else None
+        tipo_movimiento = (
+            self.request.query_params.get("tipo_movimiento") if hasattr(self, "request") else None
+        )
+        conciliado = (
+            self.request.query_params.get("conciliado") if hasattr(self, "request") else None
+        )
         return self.selector_class.get_list(
             empresa_id,
             extracto_uuid=extracto_uuid,
@@ -108,12 +121,15 @@ class TransaccionBancariaServiceMixin(BaseServiceMixin):
 
 class MovimientoBancarioAplicacionServiceMixin(BaseServiceMixin):
     """Bridge service methods for MovimientoBancarioAplicacion ViewSet (Fase 5/7)."""
+
     selector_class = MovimientoBancarioAplicacionSelector
     crud_service_class = MovimientoBancarioAplicacionCRUDService
 
     def get_qs_list(self):
         empresa_id = self._get_empresa_id_seguro()
-        transaccion_uuid = self.request.query_params.get("transaccion_uuid") if hasattr(self, "request") else None
+        transaccion_uuid = (
+            self.request.query_params.get("transaccion_uuid") if hasattr(self, "request") else None
+        )
         return self.selector_class.get_list(empresa_id, transaccion_uuid=transaccion_uuid)
 
     def get_qs_detail(self):

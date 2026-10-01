@@ -30,6 +30,7 @@ bug ya encontrado y corregido en `compras_tools.py` (un perfil alcance
 SEDE tiene `area_ids=()` por diseno de AIContext, y aplicar eso al eje
 de area lo restringiria a "sin area" en vez de dejarlo sin restringir).
 """
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext
@@ -79,7 +80,14 @@ class BuscarEmpleadoTool(BaseTool):
                 "id": e.id,
                 "uuid": str(e.uuid),
                 "nombre_completo": " ".join(
-                    p for p in (e.primer_nombre, e.segundo_nombre, e.primer_apellido, e.segundo_apellido) if p
+                    p
+                    for p in (
+                        e.primer_nombre,
+                        e.segundo_nombre,
+                        e.primer_apellido,
+                        e.segundo_apellido,
+                    )
+                    if p
                 ),
                 "cargo": e.cargo,
                 "estado": e.estado,

@@ -6,6 +6,7 @@ WARNING: SINTEL v3.5: API-First & Zero-Coupling
 - Zero Trust: Aislamiento estricto por empresa_id
 - Performance: Queries optimizadas (Zero Waste) via Selectors
 """
+
 import logging
 
 from django.db.models import Q
@@ -18,22 +19,31 @@ from rest_framework.renderers import TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
-from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
+from apps.shared.datatable import ColumnFilter, ColumnFilterType, DataTableServer, DataTableSpec
 from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.empresa.models import Empresa
-from .serializers import (
-    ProyectoDetailSerializer, ProyectoListSerializer, ItemPresupuestoSerializer,
-    TareaDiariaSerializer, TareaCortaSerializer,
-    DocumentoProyectoSerializer, HistorialFaseProyectoSerializer,
+
+from ..models import ItemPresupuestoProyecto, Proyecto, TareaCorta, TareaDiariaProyecto
+from ..services import (
+    PRESUPUESTO_ITEM_FIELDS,
+    TAREA_FIELDS,
+    PresupuestoBusinessService,
+    TareaCortaSelector,
+    TareaCortaServiceMixin,
+    TareasCortasBusinessService,
+    TareasDiariasBusinessService,
 )
 from .mixins import ProyectoServiceMixin
-from ..models import Proyecto, ItemPresupuestoProyecto, TareaDiariaProyecto, TareaCorta
-from ..services import (
-    PresupuestoBusinessService, PRESUPUESTO_ITEM_FIELDS,
-    TareasDiariasBusinessService, TareasDiariasSelector, TAREA_FIELDS,
-    TareasCortasBusinessService, TareaCortaSelector, TAREA_CORTA_FIELDS,
-    TareaCortaServiceMixin,
+from .serializers import (
+    DocumentoProyectoSerializer,
+    HistorialFaseProyectoSerializer,
+    ItemPresupuestoSerializer,
+    ProyectoDetailSerializer,
+    ProyectoListSerializer,
+    TareaCortaSerializer,
+    TareaDiariaSerializer,
 )
 
 try:
@@ -57,7 +67,9 @@ except ImportError:
     _ProveedorProyecto = None
 
 try:
-    from apps.tenant.facturas.services.business_service import FacturaInterAppAPI as _FacturaInterAppAPI
+    from apps.tenant.facturas.services.business_service import (
+        FacturaInterAppAPI as _FacturaInterAppAPI,
+    )
 except ImportError:
     _FacturaInterAppAPI = None
 
@@ -68,6 +80,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
 class ProyectoViewSet(
     OrganizationalContextMixin,
     ProyectoServiceMixin,
@@ -76,7 +89,7 @@ class ProyectoViewSet(
     mixins.CreateModelMixin,
     mixins.UpdateModelMixin,
     mixins.DestroyModelMixin,
-    viewsets.GenericViewSet
+    viewsets.GenericViewSet,
 ):
     """
     ViewSet para Proyectos v3.5.
@@ -87,27 +100,30 @@ class ProyectoViewSet(
     Empresa.objects.only('id').first() sin exigir TenantProfile, mismo
     patron de riesgo ya documentado en empresa (Fase 9 app 1/14).
     """
+
     queryset = Proyecto.objects.none()
     pagination_class = StandardResultsSetPagination
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
-    lookup_field = 'uuid'
-    lookup_value_regex = '[0-9a-f-]{36}'
-    
+    lookup_field = "uuid"
+    lookup_value_regex = "[0-9a-f-]{36}"
+
     def get_serializer_class(self):
-        if self.action == 'list':
+        if self.action == "list":
             return ProyectoListSerializer
         return ProyectoDetailSerializer
-    
+
     def get_empresa(self):
-        empresa = Empresa.objects.only('id').first()
+        empresa = Empresa.objects.only("id").first()
         if not empresa:
-            raise APIException(detail='No se encontro la empresa (SSoT) configurada en este tenant.')
+            raise APIException(
+                detail="No se encontro la empresa (SSoT) configurada en este tenant."
+            )
         return empresa
-    
+
     def get_queryset(self):
         """Usa el selector optimizado con Zero Trust."""
         empresa = self.get_empresa()
-        search = self.request.query_params.get('search', None)
+        search = self.request.query_params.get("search", None)
 
         # [OSF Fase F7] mismo criterio de degradacion que facturas/
         # cotizaciones/gastos/inventario/compras.
@@ -115,13 +131,61 @@ class ProyectoViewSet(
             OrganizationalScope,
             OrganizationalScopeError,
         )
+
         try:
             sede_ids = OrganizationalScope.resolve(self.request).sede_ids
         except OrganizationalScopeError:
             sede_ids = None
 
         return self.proyecto_selector(empresa_id=empresa.id, search=search, sede_ids=sede_ids)
-    
+
+    @action(detail=False, methods=["post"], url_path="dt")
+    def dt(self, request):
+        """
+        DataTables 3.x server-side (mismo patron ya validado en Ventas/
+        Bancos/Facturas/Clientes/Proveedores/Compras/Gastos/Empleados --
+        ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Reemplaza
+        ProyectoTable/ProyectoTableView (django-tables2, retirados) para el
+        listado principal. TareaCortaTable (panel "Tareas Cortas" dentro
+        del offcanvas de detalle) NO migrada en esta pasada.
+        """
+        empresa = self.get_empresa()
+
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+
+        try:
+            sede_ids = OrganizationalScope.resolve(request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
+        base_qs = self.proyecto_selector(empresa_id=empresa.id, sede_ids=sede_ids)
+
+        spec = DataTableSpec(
+            fields_map={
+                0: "nombre",
+                1: "fase_actual",
+                2: "estado_tarea",
+                3: "porcentaje_avance",
+                4: "responsable_actual_nombre",
+                5: "cliente_nombre",
+            },
+            search_fields=["nombre", "codigo", "cliente_nombre", "responsable_actual_nombre"],
+            base_qs=base_qs,
+            serializer=ProyectoListSerializer,
+            column_filters={
+                0: ColumnFilter("nombre", ColumnFilterType.ICONTAINS),
+                1: ColumnFilter("fase_actual", ColumnFilterType.EXACT),
+                2: ColumnFilter("estado_tarea", ColumnFilterType.EXACT),
+                3: ColumnFilter("porcentaje_avance", ColumnFilterType.NUMBER_RANGE),
+                4: ColumnFilter("responsable_actual_nombre", ColumnFilterType.ICONTAINS),
+                5: ColumnFilter("cliente_nombre", ColumnFilterType.ICONTAINS),
+            },
+        )
+        return DataTableServer(spec).handle(request)
+
     def get_object(self):
         """Usa el selector de detalle optimizado. Filtra por uuid (M-001 Roadmap M3).
 
@@ -135,12 +199,15 @@ class ProyectoViewSet(
             OrganizationalScope,
             OrganizationalScopeError,
         )
+
         try:
             sede_ids = OrganizationalScope.resolve(self.request).sede_ids
         except OrganizationalScopeError:
             sede_ids = None
 
-        obj = self.proyecto_detail_selector(empresa_id=empresa.id, uuid=self.kwargs['uuid'], sede_ids=sede_ids)
+        obj = self.proyecto_detail_selector(
+            empresa_id=empresa.id, uuid=self.kwargs["uuid"], sede_ids=sede_ids
+        )
         if not obj:
             raise NotFound("Proyecto no encontrado o no pertenece a este tenant.")
         return obj
@@ -150,7 +217,7 @@ class ProyectoViewSet(
         context = super().get_serializer_context()
         try:
             empresa = self.get_empresa()
-            context['empresa_id'] = empresa.id
+            context["empresa_id"] = empresa.id
         except Exception:
             # Si no hay empresa, dejar context sin empresa_id (sera manejado por __init__)
             pass
@@ -159,96 +226,97 @@ class ProyectoViewSet(
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
-        
+
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
-        
+
         serializer = self.get_serializer(queryset, many=True)
-        return Response({
-            'count': queryset.count(),
-            'results': serializer.data,
-            'next': None,
-            'previous': None
-        }, status=status.HTTP_200_OK)
-    
+        return Response(
+            {"count": queryset.count(), "results": serializer.data, "next": None, "previous": None},
+            status=status.HTTP_200_OK,
+        )
+
     def create(self, request, *args, **kwargs):
         empresa = self.get_empresa()
         serializer = self.get_serializer(data=request.data)
-        
+
         # WARNING: Logging para debug de validacion
         if not serializer.is_valid():
             logger.error(f"[ProyectoViewSet] Validacion fallida: {serializer.errors}")
             # WARNING: [SEC-M6] Solo se loguean los nombres de campo, no los valores
             # (pueden incluir datos de cliente/presupuesto/PII).
-            _campos = list(request.data.keys()) if hasattr(request.data, 'keys') else type(request.data).__name__
+            _campos = (
+                list(request.data.keys())
+                if hasattr(request.data, "keys")
+                else type(request.data).__name__
+            )
             logger.error(f"[ProyectoViewSet] Campos recibidos: {_campos}")
             return Response(
-                {'detail': 'Datos invalidos', 'errors': serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Datos invalidos", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Orquestacion via Business Service
         try:
             proyecto = self.proyecto_business_service.orchestrate_create_proyecto(
-                empresa, 
-                serializer.validated_data
+                empresa, serializer.validated_data
             )
         except ValidationError as e:
             logger.error(f"[ProyectoViewSet] Error de negocio: {e.detail}")
             return Response(
-                {'detail': 'Error de validacion de negocio', 'errors': e.detail},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Error de validacion de negocio", "errors": e.detail},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         response_serializer = ProyectoDetailSerializer(proyecto)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
-    
+
     def update(self, request, *args, **kwargs):
         proyecto = self.get_object()
         serializer = self.get_serializer(proyecto, data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         proyecto = self.proyecto_business_service.orchestrate_update_proyecto(
-            proyecto, 
-            serializer.validated_data
+            proyecto, serializer.validated_data
         )
-        
+
         response_serializer = ProyectoDetailSerializer(proyecto)
         return Response(response_serializer.data)
-    
+
     def partial_update(self, request, *args, **kwargs):
         proyecto = self.get_object()
         serializer = self.get_serializer(proyecto, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        
+
         proyecto = self.proyecto_business_service.orchestrate_update_proyecto(
-            proyecto, 
-            serializer.validated_data
+            proyecto, serializer.validated_data
         )
-        
+
         response_serializer = ProyectoDetailSerializer(proyecto)
         return Response(response_serializer.data)
-    
+
     def destroy(self, request, *args, **kwargs):
         proyecto = self.get_object()
         self.proyecto_crud_service.delete_proyecto(proyecto)
         return Response(status=status.HTTP_204_NO_CONTENT)
-    
-    @action(detail=True, methods=['post'], url_path='avanzar-fase')
+
+    @action(detail=True, methods=["post"], url_path="avanzar-fase")
     def avanzar_fase(self, request, uuid=None):
         """
         POST /api/v1/proyectos/{id}/avanzar-fase/
         """
         proyecto = self.get_object()
-        nueva_fase = request.data.get('fase')
-        responsable_id = request.data.get('responsable_id', None)
-        responsable_nombre = request.data.get('responsable_nombre', None)
-        motivo = request.data.get('motivo', '')
-        usuario = getattr(request.user, 'tenant_profile', None)
+        nueva_fase = request.data.get("fase")
+        responsable_id = request.data.get("responsable_id", None)
+        responsable_nombre = request.data.get("responsable_nombre", None)
+        motivo = request.data.get("motivo", "")
+        usuario = getattr(request.user, "tenant_profile", None)
 
         if not nueva_fase:
-            return Response({'detail': 'El campo "fase" es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": 'El campo "fase" es requerido.'}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             # cambiar_fase_proyecto() ya valida la transicion (maquina de
@@ -257,8 +325,12 @@ class ProyectoViewSet(
             # de su propia transaccion atomica (Fase 4) -- no hace falta un
             # save_proyecto() adicional aqui solo para la fase.
             proyecto = self.proyecto_business_service.cambiar_fase_proyecto(
-                proyecto, nueva_fase, responsable_id, responsable_nombre,
-                usuario=usuario, motivo=motivo,
+                proyecto,
+                nueva_fase,
+                responsable_id,
+                responsable_nombre,
+                usuario=usuario,
+                motivo=motivo,
             )
             self.proyecto_business_service.calcular_indicadores_financieros(proyecto)
 
@@ -266,10 +338,10 @@ class ProyectoViewSet(
             return Response(response_serializer.data)
 
         except ValidationError as e:
-            detail = e.detail if hasattr(e, 'detail') else {'detail': str(e)}
+            detail = e.detail if hasattr(e, "detail") else {"detail": str(e)}
             return Response(detail, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['get', 'post'], url_path='documentos')
+    @action(detail=True, methods=["get", "post"], url_path="documentos")
     def documentos(self, request, uuid=None):
         """
         GET  /api/v1/proyectos/{uuid}/documentos/  -- lista el expediente documental activo.
@@ -277,42 +349,44 @@ class ProyectoViewSet(
         """
         proyecto = self.get_object()
 
-        if request.method == 'GET':
-            tipo_documento = request.query_params.get('tipo_documento')
+        if request.method == "GET":
+            tipo_documento = request.query_params.get("tipo_documento")
             qs = self.proyecto_documentos_service.DocumentosBusinessService.listar_documentos(
                 proyecto, tipo_documento=tipo_documento
             )
-            serializer = DocumentoProyectoSerializer(qs, many=True, context={'request': request})
+            serializer = DocumentoProyectoSerializer(qs, many=True, context={"request": request})
             return Response(serializer.data)
 
-        archivo = request.FILES.get('archivo')
-        tipo_documento = request.data.get('tipo_documento')
+        archivo = request.FILES.get("archivo")
+        tipo_documento = request.data.get("tipo_documento")
         if not archivo or not tipo_documento:
             return Response(
-                {'detail': 'Los campos "archivo" y "tipo_documento" son requeridos.'},
+                {"detail": 'Los campos "archivo" y "tipo_documento" son requeridos.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        usuario = getattr(request.user, 'tenant_profile', None)
+        usuario = getattr(request.user, "tenant_profile", None)
         try:
             documento = self.proyecto_documentos_service.DocumentosBusinessService.crear_documento(
                 proyecto,
                 tipo_documento=tipo_documento,
                 archivo=archivo,
-                fase=request.data.get('fase') or None,
-                fecha_documento=request.data.get('fecha_documento') or None,
-                observaciones=request.data.get('observaciones', ''),
+                fase=request.data.get("fase") or None,
+                fecha_documento=request.data.get("fecha_documento") or None,
+                observaciones=request.data.get("observaciones", ""),
                 subido_por=usuario,
-                nombre=request.data.get('nombre', ''),
+                nombre=request.data.get("nombre", ""),
             )
         except ValidationError as e:
-            detail = e.detail if hasattr(e, 'detail') else {'detail': str(e)}
+            detail = e.detail if hasattr(e, "detail") else {"detail": str(e)}
             return Response(detail, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = DocumentoProyectoSerializer(documento, context={'request': request})
+        serializer = DocumentoProyectoSerializer(documento, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['delete'], url_path='documentos/(?P<documento_uuid>[0-9a-f-]{36})')
+    @action(
+        detail=True, methods=["delete"], url_path="documentos/(?P<documento_uuid>[0-9a-f-]{36})"
+    )
     def documento_detalle(self, request, uuid=None, documento_uuid=None):
         """DELETE /api/v1/proyectos/{uuid}/documentos/{documento_uuid}/ -- desactiva (soft-delete)."""
         proyecto = self.get_object()
@@ -320,13 +394,16 @@ class ProyectoViewSet(
             proyecto, documento_uuid
         )
         if not documento:
-            raise NotFound('Documento no encontrado para este proyecto.')
+            raise NotFound("Documento no encontrado para este proyecto.")
 
         self.proyecto_documentos_service.DocumentosBusinessService.desactivar_documento(documento)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=['get'],
-            url_path='documentos/(?P<documento_uuid>[0-9a-f-]{36})/descargar')
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="documentos/(?P<documento_uuid>[0-9a-f-]{36})/descargar",
+    )
     def documento_descargar(self, request, uuid=None, documento_uuid=None):
         """
         GET /api/v1/proyectos/{uuid}/documentos/{documento_uuid}/descargar/
@@ -342,24 +419,24 @@ class ProyectoViewSet(
             proyecto, documento_uuid
         )
         if not documento or not documento.archivo:
-            raise NotFound('Documento no encontrado para este proyecto.')
+            raise NotFound("Documento no encontrado para este proyecto.")
 
         response = FileResponse(
-            documento.archivo.open('rb'),
+            documento.archivo.open("rb"),
             as_attachment=True,
-            filename=documento.nombre or documento.archivo.name.rsplit('/', 1)[-1],
+            filename=documento.nombre or documento.archivo.name.rsplit("/", 1)[-1],
         )
         return response
 
-    @action(detail=True, methods=['get'], url_path='historial-fases')
+    @action(detail=True, methods=["get"], url_path="historial-fases")
     def historial_fases(self, request, uuid=None):
         """GET /api/v1/proyectos/{uuid}/historial-fases/ -- solo lectura, append-only."""
         proyecto = self.get_object()
-        historial = proyecto.historial_fases.select_related('usuario__user').all()
+        historial = proyecto.historial_fases.select_related("usuario__user").all()
         serializer = HistorialFaseProyectoSerializer(historial, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['get'], url_path='gastos')
+    @action(detail=True, methods=["get"], url_path="gastos")
     def gastos(self, request, uuid=None):
         """
         GET /api/v1/proyectos/{uuid}/gastos/ -- lista de DocumentoSoporte
@@ -374,45 +451,53 @@ class ProyectoViewSet(
         gastos_qs = DocumentoSelector.get_by_proyecto(proyecto.empresa_id, proyecto.uuid)
         items = [
             {
-                'uuid': str(g.uuid),
-                'fecha': g.fecha.isoformat() if g.fecha else None,
-                'numero_documento': f"{g.resolucion_dian.prefijo} {g.consecutivo}" if g.resolucion_dian_id else str(g.consecutivo),
-                'proveedor_nombre': g.proveedor.razon_social if g.proveedor_id else None,
-                'descripcion': g.descripcion,
-                'subtotal': str(g.subtotal),
-                'total': str(g.total),
-                'activo': g.activo,
-                'anulado': g.anulado,
+                "uuid": str(g.uuid),
+                "fecha": g.fecha.isoformat() if g.fecha else None,
+                "numero_documento": f"{g.resolucion_dian.prefijo} {g.consecutivo}"
+                if g.resolucion_dian_id
+                else str(g.consecutivo),
+                "proveedor_nombre": g.proveedor.razon_social if g.proveedor_id else None,
+                "descripcion": g.descripcion,
+                "subtotal": str(g.subtotal),
+                "total": str(g.total),
+                "activo": g.activo,
+                "anulado": g.anulado,
             }
             for g in gastos_qs
         ]
-        return Response({
-            'count': len(items),
-            'costo_gastos_real': str(proyecto.costo_gastos_real),
-            'results': items,
-        })
+        return Response(
+            {
+                "count": len(items),
+                "costo_gastos_real": str(proyecto.costo_gastos_real),
+                "results": items,
+            }
+        )
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="gestor-offcanvas",
+    )
     def gestor_offcanvas(self, request):
         """
         [FSD v3.5] Devuelve el HTML del formulario local de la app Proyectos.
         """
         empresa = self.get_empresa()
         proyecto = None
-        id_instancia = request.query_params.get('uuid')
+        id_instancia = request.query_params.get("uuid")
 
         if id_instancia:
             proyecto = get_object_or_404(self.get_queryset(), uuid=id_instancia)
 
         historial_prefill = None
-        historial_uuid = request.query_params.get('historial_uuid')
+        historial_uuid = request.query_params.get("historial_uuid")
         if historial_uuid and not proyecto:
             try:
                 if _HistorialServicio is None:
                     raise ImportError
-                historial_prefill = _HistorialServicio.objects.select_related('servicio').get(
-                    uuid=historial_uuid,
-                    empresa_id=empresa.id
+                historial_prefill = _HistorialServicio.objects.select_related("servicio").get(
+                    uuid=historial_uuid, empresa_id=empresa.id
                 )
             except Exception:
                 pass
@@ -421,9 +506,11 @@ class ProyectoViewSet(
         try:
             if _ClienteProyecto is None:
                 raise ImportError
-            clientes = _ClienteProyecto.objects.filter(empresa_id=empresa.id, activo=True).only(
-                'id', 'razon_social', 'numero_documento'
-            ).order_by('razon_social')[:100]
+            clientes = (
+                _ClienteProyecto.objects.filter(empresa_id=empresa.id, activo=True)
+                .only("id", "razon_social", "numero_documento")
+                .order_by("razon_social")[:100]
+            )
         except ImportError:
             pass
 
@@ -439,9 +526,11 @@ class ProyectoViewSet(
         try:
             if _ProveedorProyecto is None:
                 raise ImportError
-            proveedores = _ProveedorProyecto.objects.filter(empresa_id=empresa.id, activo=True).only(
-                'id', 'razon_social', 'numero_documento'
-            ).order_by('razon_social')[:100]
+            proveedores = (
+                _ProveedorProyecto.objects.filter(empresa_id=empresa.id, activo=True)
+                .only("id", "razon_social", "numero_documento")
+                .order_by("razon_social")[:100]
+            )
         except ImportError:
             pass
 
@@ -452,7 +541,7 @@ class ProyectoViewSet(
             facturas_raw = list(
                 _FacturaInterAppAPI.list_all()
                 # .only('id', 'numero', 'receptor_razon_social', 'total', 'cotizacion_uuid', 'cotizacion_numero')
-                .order_by('-fecha_emision')[:200]
+                .order_by("-fecha_emision")[:200]
             )
         except Exception:
             pass
@@ -464,20 +553,27 @@ class ProyectoViewSet(
             try:
                 if _CotizacionProyecto is None:
                     raise ImportError
-                cots = _CotizacionProyecto.objects.filter(
-                    uuid__in=uuids_cot
-                ).select_related('cliente').only(
-                    'uuid', 'estado', 'total_con_impuestos',
-                    'fecha_emision', 'fecha_vencimiento',
-                    'cliente__razon_social'
+                cots = (
+                    _CotizacionProyecto.objects.filter(uuid__in=uuids_cot)
+                    .select_related("cliente")
+                    .only(
+                        "uuid",
+                        "estado",
+                        "total_con_impuestos",
+                        "fecha_emision",
+                        "fecha_vencimiento",
+                        "cliente__razon_social",
+                    )
                 )
                 cotizaciones_map = {
                     str(c.uuid): {
-                        'estado': c.estado,
-                        'total': float(c.total_con_impuestos or 0),
-                        'cliente': c.cliente.razon_social if c.cliente else '',
-                        'fecha_emision': c.fecha_emision.isoformat() if c.fecha_emision else '',
-                        'fecha_vencimiento': c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else '',
+                        "estado": c.estado,
+                        "total": float(c.total_con_impuestos or 0),
+                        "cliente": c.cliente.razon_social if c.cliente else "",
+                        "fecha_emision": c.fecha_emision.isoformat() if c.fecha_emision else "",
+                        "fecha_vencimiento": c.fecha_vencimiento.isoformat()
+                        if c.fecha_vencimiento
+                        else "",
                     }
                     for c in cots
                 }
@@ -487,50 +583,52 @@ class ProyectoViewSet(
         # Enriquecer facturas como lista de dicts con datos de cotizacion embebidos
         facturas = []
         for f in facturas_raw:
-            uuid_key = str(f.cotizacion_uuid) if f.cotizacion_uuid else ''
+            uuid_key = str(f.cotizacion_uuid) if f.cotizacion_uuid else ""
             cot = cotizaciones_map.get(uuid_key, {})
-            facturas.append({
-                'id': f.id,
-                'numero': f.numero,
-                'receptor_razon_social': getattr(f, 'receptor_razon_social', '') or '',
-                'cotizacion_uuid': str(f.cotizacion_uuid) if f.cotizacion_uuid else '',
-                'cotizacion_numero': f.cotizacion_numero or '',
-                'cot_estado': cot.get('estado', ''),
-                'cot_total': cot.get('total', ''),
-                'cot_cliente': cot.get('cliente', ''),
-                'cot_fecha_emision': cot.get('fecha_emision', ''),
-                'cot_fecha_vencimiento': cot.get('fecha_vencimiento', ''),
-            })
+            facturas.append(
+                {
+                    "id": f.id,
+                    "numero": f.numero,
+                    "receptor_razon_social": getattr(f, "receptor_razon_social", "") or "",
+                    "cotizacion_uuid": str(f.cotizacion_uuid) if f.cotizacion_uuid else "",
+                    "cotizacion_numero": f.cotizacion_numero or "",
+                    "cot_estado": cot.get("estado", ""),
+                    "cot_total": cot.get("total", ""),
+                    "cot_cliente": cot.get("cliente", ""),
+                    "cot_fecha_emision": cot.get("fecha_emision", ""),
+                    "cot_fecha_vencimiento": cot.get("fecha_vencimiento", ""),
+                }
+            )
 
         context = {
-            'proyecto': proyecto,
-            'clientes': clientes,
-            'empleados': empleados,
-            'proveedores': proveedores,
-            'facturas': facturas,
-            'tipos_servicio': Proyecto.TIPO_SERVICIO,
-            'fases': Proyecto.FASES,
-            'estados_tarea': Proyecto.ESTADO_TAREA,
-            'historial_prefill': historial_prefill,
+            "proyecto": proyecto,
+            "clientes": clientes,
+            "empleados": empleados,
+            "proveedores": proveedores,
+            "facturas": facturas,
+            "tipos_servicio": Proyecto.TIPO_SERVICIO,
+            "fases": Proyecto.FASES,
+            "estados_tarea": Proyecto.ESTADO_TAREA,
+            "historial_prefill": historial_prefill,
         }
-        
-        # [v3.5] Ruta local FSD
-        return Response(context, template_name='tenant/proyectos/offcanvas_form.html')
 
-    @action(detail=False, methods=['post'], url_path='vincular-proyecto')
+        # [v3.5] Ruta local FSD
+        return Response(context, template_name="tenant/proyectos/offcanvas_form.html")
+
+    @action(detail=False, methods=["post"], url_path="vincular-proyecto")
     def vincular_proyecto(self, request):
         """
         [v3.9.7] Vincula un proyecto recien creado con un registro de HistorialServicio.
         Body: { "proyecto_uuid": "...", "historial_uuid": "..." }
         """
         empresa = self.get_empresa()
-        proyecto_uuid = request.data.get('proyecto_uuid')
-        historial_uuid = request.data.get('historial_uuid')
+        proyecto_uuid = request.data.get("proyecto_uuid")
+        historial_uuid = request.data.get("historial_uuid")
 
         if not proyecto_uuid or not historial_uuid:
             return Response(
-                {'detail': 'Los campos "proyecto_uuid" y "historial_uuid" son obligatorios.'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": 'Los campos "proyecto_uuid" y "historial_uuid" son obligatorios.'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Buscar proyecto para validar que exista y pertenezca al tenant (DSV)
@@ -541,23 +639,28 @@ class ProyectoViewSet(
             OrganizationalScope,
             OrganizationalScopeError,
         )
+
         try:
             sede_ids = OrganizationalScope.resolve(request).sede_ids
         except OrganizationalScopeError:
             sede_ids = None
-        proyecto = self.proyecto_detail_selector(empresa_id=empresa.id, uuid=proyecto_uuid, sede_ids=sede_ids)
+        proyecto = self.proyecto_detail_selector(
+            empresa_id=empresa.id, uuid=proyecto_uuid, sede_ids=sede_ids
+        )
         if not proyecto:
             raise NotFound("Proyecto no encontrado o no pertenece a este tenant.")
 
         # Buscar HistorialServicio en inventario
-        historial = get_object_or_404(_HistorialServicio, uuid=historial_uuid, empresa_id=empresa.id)
+        historial = get_object_or_404(
+            _HistorialServicio, uuid=historial_uuid, empresa_id=empresa.id
+        )
 
         # Establecer la referencia suave
         historial.proyecto_uuid = proyecto.uuid
         historial.proyecto_nombre = proyecto.nombre
         historial.save()
 
-        return Response({'status': 'vinculado_exitosamente'})
+        return Response({"status": "vinculado_exitosamente"})
 
 
 class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
@@ -570,6 +673,7 @@ class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     - PATCH  /api/v1/proyectos/items-presupuesto/<uuid>/
     - DELETE /api/v1/proyectos/items-presupuesto/<uuid>/
     """
+
     serializer_class = ItemPresupuestoSerializer
     queryset = ItemPresupuestoProyecto.objects.none()
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
@@ -592,7 +696,7 @@ class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         if sede_ids is not None:
             qs = qs.filter(Q(proyecto__sede_id__isnull=True) | Q(proyecto__sede_id__in=sede_ids))
 
-        proyecto_uuid = self.request.query_params.get('proyecto_uuid')
+        proyecto_uuid = self.request.query_params.get("proyecto_uuid")
         if proyecto_uuid:
             qs = qs.filter(proyecto__uuid=proyecto_uuid)
 
@@ -600,9 +704,9 @@ class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
 
     def _get_empresa_id(self):
         """Obtiene empresa_id del contexto de request (multi-tenant)."""
-        empresa = Empresa.objects.only('id').first()
+        empresa = Empresa.objects.only("id").first()
         if not empresa:
-            raise APIException(detail='No se encontro la empresa configurada en este tenant.')
+            raise APIException(detail="No se encontro la empresa configurada en este tenant.")
         return empresa.id
 
     def _get_sede_ids(self):
@@ -611,6 +715,7 @@ class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
             OrganizationalScope,
             OrganizationalScopeError,
         )
+
         try:
             return OrganizationalScope.resolve(self.request).sede_ids
         except OrganizationalScopeError:
@@ -633,14 +738,12 @@ class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         Crea un nuevo item de presupuesto.
         Delegacion al service para validacion y calculo.
         """
-        empresa = Empresa.objects.only('id').first()
-        proyecto_uuid = self.request.data.get('proyecto_uuid')
+        empresa = Empresa.objects.only("id").first()
+        proyecto_uuid = self.request.data.get("proyecto_uuid")
         proyecto = self._get_proyecto(proyecto_uuid)
 
         serializer.instance = PresupuestoBusinessService.crear_item(
-            empresa=empresa,
-            proyecto=proyecto,
-            data=serializer.validated_data
+            empresa=empresa, proyecto=proyecto, data=serializer.validated_data
         )
 
     def perform_update(self, serializer):
@@ -649,8 +752,7 @@ class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         Delegacion al service para validacion y calculo.
         """
         PresupuestoBusinessService.actualizar_item(
-            item=self.get_object(),
-            data=serializer.validated_data
+            item=self.get_object(), data=serializer.validated_data
         )
 
     def perform_destroy(self, instance):
@@ -674,6 +776,7 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
 
     DSV: Filtrado automatico por empresa_id via BaseTenantViewSet.
     """
+
     serializer_class = TareaDiariaSerializer
     queryset = TareaDiariaProyecto.objects.none()
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
@@ -694,6 +797,7 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
             OrganizationalScope,
             OrganizationalScopeError,
         )
+
         try:
             sede_ids = OrganizationalScope.resolve(self.request).sede_ids
         except OrganizationalScopeError:
@@ -701,15 +805,15 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         if sede_ids is not None:
             qs = qs.filter(Q(proyecto__sede_id__isnull=True) | Q(proyecto__sede_id__in=sede_ids))
 
-        proyecto_uuid = self.request.query_params.get('proyecto_uuid')
+        proyecto_uuid = self.request.query_params.get("proyecto_uuid")
         if proyecto_uuid:
             qs = qs.filter(proyecto__uuid=proyecto_uuid)
 
-        fecha_inicio = self.request.query_params.get('fecha_inicio')
+        fecha_inicio = self.request.query_params.get("fecha_inicio")
         if fecha_inicio:
             qs = qs.filter(fecha_inicio__gte=fecha_inicio)
 
-        fecha_fin = self.request.query_params.get('fecha_fin')
+        fecha_fin = self.request.query_params.get("fecha_fin")
         if fecha_fin:
             qs = qs.filter(fecha_fin__lte=fecha_fin)
 
@@ -717,9 +821,9 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
 
     def _get_empresa_id(self):
         """Obtiene empresa_id del contexto de request (multi-tenant)."""
-        empresa = Empresa.objects.only('id').first()
+        empresa = Empresa.objects.only("id").first()
         if not empresa:
-            raise APIException(detail='No se encontro la empresa configurada en este tenant.')
+            raise APIException(detail="No se encontro la empresa configurada en este tenant.")
         return empresa.id
 
     def _get_proyecto(self, proyecto_uuid):
@@ -732,6 +836,7 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
             OrganizationalScope,
             OrganizationalScopeError,
         )
+
         empresa_id = self._get_empresa_id()
         qs = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa_id)
         try:
@@ -747,22 +852,22 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         Crea una nueva tarea diaria.
         Delegacion al service para validaciones y calculos.
         """
-        empresa = Empresa.objects.only('id').first()
-        proyecto_uuid = self.request.data.get('proyecto_uuid')
+        empresa = Empresa.objects.only("id").first()
+        proyecto_uuid = self.request.data.get("proyecto_uuid")
         proyecto = self._get_proyecto(proyecto_uuid)
 
         serializer.instance = TareasDiariasBusinessService.crear_tarea(
             empresa=empresa,
             proyecto=proyecto,
-            fecha_inicio=serializer.validated_data['fecha_inicio'],
-            fecha_fin=serializer.validated_data['fecha_fin'],
-            titulo=serializer.validated_data['titulo'],
-            descripcion=serializer.validated_data.get('descripcion', ''),
-            prioridad=serializer.validated_data.get('prioridad', 'NORMAL'),
-            asignado_a=serializer.validated_data.get('asignado_a', ''),
-            avance=serializer.validated_data.get('avance'),
-            bloqueos=serializer.validated_data.get('bloqueos', ''),
-            incidencias=serializer.validated_data.get('incidencias', ''),
+            fecha_inicio=serializer.validated_data["fecha_inicio"],
+            fecha_fin=serializer.validated_data["fecha_fin"],
+            titulo=serializer.validated_data["titulo"],
+            descripcion=serializer.validated_data.get("descripcion", ""),
+            prioridad=serializer.validated_data.get("prioridad", "NORMAL"),
+            asignado_a=serializer.validated_data.get("asignado_a", ""),
+            avance=serializer.validated_data.get("avance"),
+            bloqueos=serializer.validated_data.get("bloqueos", ""),
+            incidencias=serializer.validated_data.get("incidencias", ""),
         )
 
     def perform_update(self, serializer):
@@ -771,8 +876,7 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         Delegacion al service para validaciones.
         """
         TareasDiariasBusinessService.actualizar_tarea(
-            tarea=self.get_object(),
-            data=serializer.validated_data
+            tarea=self.get_object(), data=serializer.validated_data
         )
 
     def perform_destroy(self, instance):
@@ -782,7 +886,7 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         """
         TareasDiariasBusinessService.eliminar_tarea(instance)
 
-    @action(detail=True, methods=['post'], url_path='cambiar-estado')
+    @action(detail=True, methods=["post"], url_path="cambiar-estado")
     def cambiar_estado(self, request, uuid=None):
         """
         POST /api/v1/proyectos/tareas-diarias/<uuid>/cambiar-estado/
@@ -791,12 +895,12 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         Body: { "nuevo_estado": "EN_PROCESO" | "COMPLETADA" | "CANCELADA" }
         """
         tarea = self.get_object()
-        nuevo_estado = request.data.get('nuevo_estado')
+        nuevo_estado = request.data.get("nuevo_estado")
 
         if not nuevo_estado:
             return Response(
-                {'detail': 'El campo "nuevo_estado" es requerido.'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": 'El campo "nuevo_estado" es requerido.'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
@@ -805,8 +909,8 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
             return Response(serializer.data)
         except ValidationError as e:
             return Response(
-                {'detail': str(e.detail) if hasattr(e, 'detail') else str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": str(e.detail) if hasattr(e, "detail") else str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
 
@@ -824,17 +928,18 @@ class TareaCortaViewSet(OrganizationalContextMixin, TareaCortaServiceMixin, Base
 
     DSV: Filtrado automatico por empresa_id via TareaCortaServiceMixin.
     """
+
     serializer_class = TareaCortaSerializer
     queryset = TareaCorta.objects.none()
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
-    lookup_field = 'uuid'
-    lookup_url_kwarg = 'uuid'
-    lookup_value_regex = '[0-9a-f-]{36}'
+    lookup_field = "uuid"
+    lookup_url_kwarg = "uuid"
+    lookup_value_regex = "[0-9a-f-]{36}"
 
     def _get_empresa(self):
-        empresa = Empresa.objects.only('id').first()
+        empresa = Empresa.objects.only("id").first()
         if not empresa:
-            raise APIException(detail='No se encontro la empresa configurada en este tenant.')
+            raise APIException(detail="No se encontro la empresa configurada en este tenant.")
         return empresa
 
     def get_empresa_id(self):
@@ -845,38 +950,37 @@ class TareaCortaViewSet(OrganizationalContextMixin, TareaCortaServiceMixin, Base
 
     def get_object(self):
         empresa_id = self.get_empresa_id()
-        uuid = self.kwargs.get('uuid')
+        uuid = self.kwargs.get("uuid")
         obj = TareaCortaSelector.get_tarea_corta(empresa_id, uuid)
         if not obj:
-            raise NotFound('Tarea corta no encontrada o no pertenece a este tenant.')
+            raise NotFound("Tarea corta no encontrada o no pertenece a este tenant.")
         return obj
 
     def perform_create(self, serializer):
         empresa = self._get_empresa()
-        cliente = serializer.validated_data.pop('cliente', None)
-        empleado = serializer.validated_data.pop('empleado', None)
+        cliente = serializer.validated_data.pop("cliente", None)
+        empleado = serializer.validated_data.pop("empleado", None)
         serializer.instance = TareasCortasBusinessService.crear_tarea_corta(
             empresa=empresa,
             cliente=cliente,
             empleado=empleado,
-            fecha_inicio=serializer.validated_data['fecha_inicio'],
-            fecha_fin=serializer.validated_data['fecha_fin'],
-            titulo=serializer.validated_data['titulo'],
-            descripcion=serializer.validated_data.get('descripcion', ''),
-            prioridad=serializer.validated_data.get('prioridad', 'NORMAL'),
-            notas_progreso=serializer.validated_data.get('notas_progreso', '')
+            fecha_inicio=serializer.validated_data["fecha_inicio"],
+            fecha_fin=serializer.validated_data["fecha_fin"],
+            titulo=serializer.validated_data["titulo"],
+            descripcion=serializer.validated_data.get("descripcion", ""),
+            prioridad=serializer.validated_data.get("prioridad", "NORMAL"),
+            notas_progreso=serializer.validated_data.get("notas_progreso", ""),
         )
 
     def perform_update(self, serializer):
         TareasCortasBusinessService.actualizar_tarea_corta(
-            tarea_corta=self.get_object(),
-            data=serializer.validated_data
+            tarea_corta=self.get_object(), data=serializer.validated_data
         )
 
     def perform_destroy(self, instance):
         TareasCortasBusinessService.eliminar_tarea_corta(instance)
 
-    @action(detail=True, methods=['post'], url_path='cambiar-estado')
+    @action(detail=True, methods=["post"], url_path="cambiar-estado")
     def cambiar_estado(self, request, uuid=None):
         """
         POST /api/v1/proyectos/tareas-cortas/<uuid>/cambiar-estado/
@@ -885,12 +989,12 @@ class TareaCortaViewSet(OrganizationalContextMixin, TareaCortaServiceMixin, Base
         Body: { "nuevo_estado": "EN_PROCESO" | "COMPLETADA" | "CANCELADA" }
         """
         tarea = self.get_object()
-        nuevo_estado = request.data.get('nuevo_estado')
+        nuevo_estado = request.data.get("nuevo_estado")
 
         if not nuevo_estado:
             return Response(
-                {'detail': 'El campo "nuevo_estado" es requerido.'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": 'El campo "nuevo_estado" es requerido.'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
@@ -899,7 +1003,6 @@ class TareaCortaViewSet(OrganizationalContextMixin, TareaCortaServiceMixin, Base
             return Response(serializer.data)
         except ValidationError as e:
             return Response(
-                {'detail': str(e.detail) if hasattr(e, 'detail') else str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": str(e.detail) if hasattr(e, "detail") else str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-

@@ -5,189 +5,658 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('empresa', '0001_initial'),
-        ('perfil', '0001_initial'),
+        ("empresa", "0001_initial"),
+        ("perfil", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Proyecto',
+            name="Proyecto",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('nombre', models.CharField(max_length=200, verbose_name='Nombre del Proyecto')),
-                ('codigo', models.CharField(blank=True, max_length=50, verbose_name='Codigo')),
-                ('tipo_servicio', models.CharField(choices=[('PROYECTO_INTEGRAL', 'Proyecto Integral'), ('INSTALACION', 'Instalacion Tecnica'), ('MANTENIMIENTO', 'Mantenimiento'), ('SUPERVISION', 'Supervision/Interventoria'), ('CONSULTORIA', 'Consultoria')], default='PROYECTO_INTEGRAL', max_length=30, verbose_name='Tipo de Servicio')),
-                ('descripcion', models.TextField(blank=True, verbose_name='Descripcion')),
-                ('cliente_id', models.IntegerField(blank=True, help_text='ID referencial del sistema de clientes (Soft Reference)', null=True, verbose_name='ID Cliente')),
-                ('cliente_nombre', models.CharField(blank=True, help_text='Snapshot del nombre del cliente para evitar FK', max_length=200, verbose_name='Nombre Cliente')),
-                ('factura_ref', models.CharField(blank=True, help_text='Numero o Codigo de la factura asociada', max_length=50, verbose_name='Referencia Factura')),
-                ('valor_contrato_proyectado', models.DecimalField(decimal_places=2, default=0, max_digits=15, verbose_name='Valor Contrato Proyectado')),
-                ('responsable_comercial_id', models.IntegerField(blank=True, help_text='ID referencial comercial (Fase: Inicio)', null=True)),
-                ('responsable_comercial_nombre', models.CharField(blank=True, help_text='Snapshot responsable comercial', max_length=150)),
-                ('responsable_tecnico_id', models.IntegerField(blank=True, help_text='ID referencial tecnico (Fase: Planeacion)', null=True)),
-                ('responsable_tecnico_nombre', models.CharField(blank=True, help_text='Snapshot responsable tecnico', max_length=150)),
-                ('responsable_operativo_id', models.IntegerField(blank=True, help_text='ID referencial operativo (Fase: Ejecucion)', null=True)),
-                ('responsable_operativo_nombre', models.CharField(blank=True, help_text='Snapshot responsable operativo', max_length=150)),
-                ('responsable_administrativo_id', models.IntegerField(blank=True, help_text='ID referencial administrativo (Fase: Cierre)', null=True)),
-                ('responsable_administrativo_nombre', models.CharField(blank=True, help_text='Snapshot responsable administrativo', max_length=150)),
-                ('responsable_actual_id', models.IntegerField(blank=True, help_text='ID referencial del responsable actual', null=True)),
-                ('responsable_actual_nombre', models.CharField(blank=True, help_text='Snapshot responsable actual', max_length=150)),
-                ('contrato_archivo', models.FileField(blank=True, null=True, upload_to='proyectos/contratos/')),
-                ('acta_inicio_archivo', models.FileField(blank=True, null=True, upload_to='proyectos/actas/')),
-                ('cronograma_archivo', models.FileField(blank=True, null=True, upload_to='proyectos/cronogramas/')),
-                ('fecha_inicio', models.DateField(blank=True, null=True, verbose_name='Fecha de Inicio')),
-                ('fecha_fin_estimada', models.DateField(blank=True, null=True, verbose_name='Fecha Fin Estimada')),
-                ('costo_mano_obra_real', models.DecimalField(decimal_places=2, default=0, help_text='Calculado por services.py', max_digits=15)),
-                ('costo_materiales_real', models.DecimalField(decimal_places=2, default=0, help_text='Calculado por services.py', max_digits=15)),
-                ('utilidad_estimada', models.DecimalField(decimal_places=2, default=0, help_text='Calculado por services.py', max_digits=15)),
-                ('margen_rentabilidad', models.DecimalField(decimal_places=2, default=0, help_text='Calculado por services.py', max_digits=5)),
-                ('porcentaje_avance', models.PositiveIntegerField(default=0, verbose_name='Porcentaje Avance')),
-                ('fecha_cierre_real', models.DateField(blank=True, null=True, verbose_name='Fecha Cierre Real')),
-                ('acta_entrega_archivo', models.FileField(blank=True, null=True, upload_to='proyectos/entregas/')),
-                ('informe_final_archivo', models.FileField(blank=True, null=True, upload_to='proyectos/finales/')),
-                ('fase_actual', models.CharField(choices=[('BORRADOR', '0. Borrador / Oportunidad'), ('INICIO', '1. Inicio (Comercial y Legal)'), ('PLANEACION', '2. Planeacion (Diseno y Tecnica)'), ('EJECUCION', '3. Ejecucion (Operativa)'), ('CIERRE', '4. Cierre (Administrativa)')], default='BORRADOR', max_length=20, verbose_name='Fase Actual')),
-                ('estado_tarea', models.CharField(choices=[('PENDIENTE', 'Pendiente de Gestion'), ('EN_PROCESO', 'En Proceso'), ('DETENIDO', 'Detenido / Bloqueado'), ('COMPLETADO', 'Fase Finalizada')], default='PENDIENTE', max_length=20, verbose_name='Estado de Tarea')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('empresa', models.ForeignKey(help_text='SSoT Empresa propietaria', on_delete=django.db.models.deletion.PROTECT, related_name='proyectos', to='empresa.empresa', verbose_name='Empresa')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("nombre", models.CharField(max_length=200, verbose_name="Nombre del Proyecto")),
+                ("codigo", models.CharField(blank=True, max_length=50, verbose_name="Codigo")),
+                (
+                    "tipo_servicio",
+                    models.CharField(
+                        choices=[
+                            ("PROYECTO_INTEGRAL", "Proyecto Integral"),
+                            ("INSTALACION", "Instalacion Tecnica"),
+                            ("MANTENIMIENTO", "Mantenimiento"),
+                            ("SUPERVISION", "Supervision/Interventoria"),
+                            ("CONSULTORIA", "Consultoria"),
+                        ],
+                        default="PROYECTO_INTEGRAL",
+                        max_length=30,
+                        verbose_name="Tipo de Servicio",
+                    ),
+                ),
+                ("descripcion", models.TextField(blank=True, verbose_name="Descripcion")),
+                (
+                    "cliente_id",
+                    models.IntegerField(
+                        blank=True,
+                        help_text="ID referencial del sistema de clientes (Soft Reference)",
+                        null=True,
+                        verbose_name="ID Cliente",
+                    ),
+                ),
+                (
+                    "cliente_nombre",
+                    models.CharField(
+                        blank=True,
+                        help_text="Snapshot del nombre del cliente para evitar FK",
+                        max_length=200,
+                        verbose_name="Nombre Cliente",
+                    ),
+                ),
+                (
+                    "factura_ref",
+                    models.CharField(
+                        blank=True,
+                        help_text="Numero o Codigo de la factura asociada",
+                        max_length=50,
+                        verbose_name="Referencia Factura",
+                    ),
+                ),
+                (
+                    "valor_contrato_proyectado",
+                    models.DecimalField(
+                        decimal_places=2,
+                        default=0,
+                        max_digits=15,
+                        verbose_name="Valor Contrato Proyectado",
+                    ),
+                ),
+                (
+                    "responsable_comercial_id",
+                    models.IntegerField(
+                        blank=True, help_text="ID referencial comercial (Fase: Inicio)", null=True
+                    ),
+                ),
+                (
+                    "responsable_comercial_nombre",
+                    models.CharField(
+                        blank=True, help_text="Snapshot responsable comercial", max_length=150
+                    ),
+                ),
+                (
+                    "responsable_tecnico_id",
+                    models.IntegerField(
+                        blank=True, help_text="ID referencial tecnico (Fase: Planeacion)", null=True
+                    ),
+                ),
+                (
+                    "responsable_tecnico_nombre",
+                    models.CharField(
+                        blank=True, help_text="Snapshot responsable tecnico", max_length=150
+                    ),
+                ),
+                (
+                    "responsable_operativo_id",
+                    models.IntegerField(
+                        blank=True,
+                        help_text="ID referencial operativo (Fase: Ejecucion)",
+                        null=True,
+                    ),
+                ),
+                (
+                    "responsable_operativo_nombre",
+                    models.CharField(
+                        blank=True, help_text="Snapshot responsable operativo", max_length=150
+                    ),
+                ),
+                (
+                    "responsable_administrativo_id",
+                    models.IntegerField(
+                        blank=True,
+                        help_text="ID referencial administrativo (Fase: Cierre)",
+                        null=True,
+                    ),
+                ),
+                (
+                    "responsable_administrativo_nombre",
+                    models.CharField(
+                        blank=True, help_text="Snapshot responsable administrativo", max_length=150
+                    ),
+                ),
+                (
+                    "responsable_actual_id",
+                    models.IntegerField(
+                        blank=True, help_text="ID referencial del responsable actual", null=True
+                    ),
+                ),
+                (
+                    "responsable_actual_nombre",
+                    models.CharField(
+                        blank=True, help_text="Snapshot responsable actual", max_length=150
+                    ),
+                ),
+                (
+                    "contrato_archivo",
+                    models.FileField(blank=True, null=True, upload_to="proyectos/contratos/"),
+                ),
+                (
+                    "acta_inicio_archivo",
+                    models.FileField(blank=True, null=True, upload_to="proyectos/actas/"),
+                ),
+                (
+                    "cronograma_archivo",
+                    models.FileField(blank=True, null=True, upload_to="proyectos/cronogramas/"),
+                ),
+                (
+                    "fecha_inicio",
+                    models.DateField(blank=True, null=True, verbose_name="Fecha de Inicio"),
+                ),
+                (
+                    "fecha_fin_estimada",
+                    models.DateField(blank=True, null=True, verbose_name="Fecha Fin Estimada"),
+                ),
+                (
+                    "costo_mano_obra_real",
+                    models.DecimalField(
+                        decimal_places=2,
+                        default=0,
+                        help_text="Calculado por services.py",
+                        max_digits=15,
+                    ),
+                ),
+                (
+                    "costo_materiales_real",
+                    models.DecimalField(
+                        decimal_places=2,
+                        default=0,
+                        help_text="Calculado por services.py",
+                        max_digits=15,
+                    ),
+                ),
+                (
+                    "utilidad_estimada",
+                    models.DecimalField(
+                        decimal_places=2,
+                        default=0,
+                        help_text="Calculado por services.py",
+                        max_digits=15,
+                    ),
+                ),
+                (
+                    "margen_rentabilidad",
+                    models.DecimalField(
+                        decimal_places=2,
+                        default=0,
+                        help_text="Calculado por services.py",
+                        max_digits=5,
+                    ),
+                ),
+                (
+                    "porcentaje_avance",
+                    models.PositiveIntegerField(default=0, verbose_name="Porcentaje Avance"),
+                ),
+                (
+                    "fecha_cierre_real",
+                    models.DateField(blank=True, null=True, verbose_name="Fecha Cierre Real"),
+                ),
+                (
+                    "acta_entrega_archivo",
+                    models.FileField(blank=True, null=True, upload_to="proyectos/entregas/"),
+                ),
+                (
+                    "informe_final_archivo",
+                    models.FileField(blank=True, null=True, upload_to="proyectos/finales/"),
+                ),
+                (
+                    "fase_actual",
+                    models.CharField(
+                        choices=[
+                            ("BORRADOR", "0. Borrador / Oportunidad"),
+                            ("INICIO", "1. Inicio (Comercial y Legal)"),
+                            ("PLANEACION", "2. Planeacion (Diseno y Tecnica)"),
+                            ("EJECUCION", "3. Ejecucion (Operativa)"),
+                            ("CIERRE", "4. Cierre (Administrativa)"),
+                        ],
+                        default="BORRADOR",
+                        max_length=20,
+                        verbose_name="Fase Actual",
+                    ),
+                ),
+                (
+                    "estado_tarea",
+                    models.CharField(
+                        choices=[
+                            ("PENDIENTE", "Pendiente de Gestion"),
+                            ("EN_PROCESO", "En Proceso"),
+                            ("DETENIDO", "Detenido / Bloqueado"),
+                            ("COMPLETADO", "Fase Finalizada"),
+                        ],
+                        default="PENDIENTE",
+                        max_length=20,
+                        verbose_name="Estado de Tarea",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        help_text="SSoT Empresa propietaria",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="proyectos",
+                        to="empresa.empresa",
+                        verbose_name="Empresa",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Proyecto',
-                'verbose_name_plural': 'Proyectos',
-                'ordering': ['-updated_at'],
+                "verbose_name": "Proyecto",
+                "verbose_name_plural": "Proyectos",
+                "ordering": ["-updated_at"],
             },
         ),
         migrations.CreateModel(
-            name='PedidoProyecto',
+            name="PedidoProyecto",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Timestamp auto-asignado al crear el registro.', verbose_name='Creado')),
-                ('updated_at', models.DateTimeField(auto_now=True, db_index=True, help_text='Timestamp auto-actualizado al modificar.', verbose_name='Actualizado')),
-                ('tipo_recurso', models.CharField(choices=[('MATERIALES', 'Materiales'), ('EQUIPOS', 'Equipos'), ('HERRAMIENTAS', 'Herramientas')], max_length=20, verbose_name='Tipo de Recurso')),
-                ('fuente_suministro', models.CharField(choices=[('PROVEEDOR', 'Proveedor'), ('EMPLEADO', 'Reembolso'), ('ALMACEN', 'Interno')], default='PROVEEDOR', max_length=20, verbose_name='Fuente de Suministro')),
-                ('proveedor_id', models.IntegerField(blank=True, help_text='ID referencial si existe modulo de proveedores', null=True, verbose_name='ID Proveedor')),
-                ('proveedor_nombre', models.CharField(blank=True, help_text='Snapshot del proveedor', max_length=200, verbose_name='Nombre Proveedor/Tienda')),
-                ('empleado_encargado_nombre', models.CharField(blank=True, help_text='Quien gestiona el recurso', max_length=150, verbose_name='Encargado')),
-                ('fecha_solicitud', models.DateField(auto_now_add=True, verbose_name='Fecha Solicitud')),
-                ('estado', models.CharField(choices=[('BORRADOR', 'Borrador'), ('SOLICITADO', 'Solicitado'), ('APROBADO', 'Aprobado'), ('RECHAZADO', 'Rechazado')], default='BORRADOR', max_length=20, verbose_name='Estado')),
-                ('observaciones', models.TextField(blank=True, verbose_name='Observaciones')),
-                ('archivo_adjunto', models.FileField(blank=True, null=True, upload_to='proyectos/pedidos/')),
-                ('empresa', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='pedidos_proyecto', to='empresa.empresa')),
-                ('solicitante', models.ForeignKey(blank=True, help_text='Operador del tenant que solicita los recursos', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='pedidos_realizados', to='perfil.tenantprofile', verbose_name='Solicitante')),
-                ('proyecto', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='pedidos', to='tenant_proyectos.proyecto')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        db_index=True,
+                        help_text="Timestamp auto-asignado al crear el registro.",
+                        verbose_name="Creado",
+                    ),
+                ),
+                (
+                    "updated_at",
+                    models.DateTimeField(
+                        auto_now=True,
+                        db_index=True,
+                        help_text="Timestamp auto-actualizado al modificar.",
+                        verbose_name="Actualizado",
+                    ),
+                ),
+                (
+                    "tipo_recurso",
+                    models.CharField(
+                        choices=[
+                            ("MATERIALES", "Materiales"),
+                            ("EQUIPOS", "Equipos"),
+                            ("HERRAMIENTAS", "Herramientas"),
+                        ],
+                        max_length=20,
+                        verbose_name="Tipo de Recurso",
+                    ),
+                ),
+                (
+                    "fuente_suministro",
+                    models.CharField(
+                        choices=[
+                            ("PROVEEDOR", "Proveedor"),
+                            ("EMPLEADO", "Reembolso"),
+                            ("ALMACEN", "Interno"),
+                        ],
+                        default="PROVEEDOR",
+                        max_length=20,
+                        verbose_name="Fuente de Suministro",
+                    ),
+                ),
+                (
+                    "proveedor_id",
+                    models.IntegerField(
+                        blank=True,
+                        help_text="ID referencial si existe modulo de proveedores",
+                        null=True,
+                        verbose_name="ID Proveedor",
+                    ),
+                ),
+                (
+                    "proveedor_nombre",
+                    models.CharField(
+                        blank=True,
+                        help_text="Snapshot del proveedor",
+                        max_length=200,
+                        verbose_name="Nombre Proveedor/Tienda",
+                    ),
+                ),
+                (
+                    "empleado_encargado_nombre",
+                    models.CharField(
+                        blank=True,
+                        help_text="Quien gestiona el recurso",
+                        max_length=150,
+                        verbose_name="Encargado",
+                    ),
+                ),
+                (
+                    "fecha_solicitud",
+                    models.DateField(auto_now_add=True, verbose_name="Fecha Solicitud"),
+                ),
+                (
+                    "estado",
+                    models.CharField(
+                        choices=[
+                            ("BORRADOR", "Borrador"),
+                            ("SOLICITADO", "Solicitado"),
+                            ("APROBADO", "Aprobado"),
+                            ("RECHAZADO", "Rechazado"),
+                        ],
+                        default="BORRADOR",
+                        max_length=20,
+                        verbose_name="Estado",
+                    ),
+                ),
+                ("observaciones", models.TextField(blank=True, verbose_name="Observaciones")),
+                (
+                    "archivo_adjunto",
+                    models.FileField(blank=True, null=True, upload_to="proyectos/pedidos/"),
+                ),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="pedidos_proyecto",
+                        to="empresa.empresa",
+                    ),
+                ),
+                (
+                    "solicitante",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Operador del tenant que solicita los recursos",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="pedidos_realizados",
+                        to="perfil.tenantprofile",
+                        verbose_name="Solicitante",
+                    ),
+                ),
+                (
+                    "proyecto",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="pedidos",
+                        to="tenant_proyectos.proyecto",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Pedido de Proyecto',
-                'verbose_name_plural': 'Pedidos de Proyecto',
-                'ordering': ['-fecha_solicitud'],
+                "verbose_name": "Pedido de Proyecto",
+                "verbose_name_plural": "Pedidos de Proyecto",
+                "ordering": ["-fecha_solicitud"],
             },
         ),
         migrations.CreateModel(
-            name='AsignacionPersonal',
+            name="AsignacionPersonal",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Timestamp auto-asignado al crear el registro.', verbose_name='Creado')),
-                ('updated_at', models.DateTimeField(auto_now=True, db_index=True, help_text='Timestamp auto-actualizado al modificar.', verbose_name='Actualizado')),
-                ('empleado_id', models.IntegerField(blank=True, help_text='ID referencial del empleado', null=True, verbose_name='ID Empleado')),
-                ('nombre_colaborador', models.CharField(help_text='Snapshot al momento de asignar', max_length=150, verbose_name='Nombre Colaborador')),
-                ('rol', models.CharField(choices=[('TECNICO', 'Tecnico Operativo'), ('AYUDANTE', 'Ayudante / Auxiliar'), ('RESIDENTE', 'Ingeniero Residente'), ('SISOMA', 'Inspector SST')], default='TECNICO', max_length=20, verbose_name='Rol')),
-                ('fecha_asignacion', models.DateField(verbose_name='Fecha Asignacion')),
-                ('fecha_fin_asignacion', models.DateField(blank=True, null=True, verbose_name='Fecha Fin Asignacion')),
-                ('horas_totales_registradas', models.DecimalField(decimal_places=2, default=0, max_digits=10, verbose_name='Horas Totales')),
-                ('costo_hora', models.DecimalField(decimal_places=2, default=0, max_digits=12, verbose_name='Costo por Hora')),
-                ('costo_total_asignacion', models.DecimalField(decimal_places=2, default=0, max_digits=15, verbose_name='Costo Total')),
-                ('activo', models.BooleanField(default=True, verbose_name='Activo')),
-                ('empresa', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='asignaciones_personal', to='empresa.empresa')),
-                ('proyecto', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='equipo_trabajo', to='tenant_proyectos.proyecto')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        db_index=True,
+                        help_text="Timestamp auto-asignado al crear el registro.",
+                        verbose_name="Creado",
+                    ),
+                ),
+                (
+                    "updated_at",
+                    models.DateTimeField(
+                        auto_now=True,
+                        db_index=True,
+                        help_text="Timestamp auto-actualizado al modificar.",
+                        verbose_name="Actualizado",
+                    ),
+                ),
+                (
+                    "empleado_id",
+                    models.IntegerField(
+                        blank=True,
+                        help_text="ID referencial del empleado",
+                        null=True,
+                        verbose_name="ID Empleado",
+                    ),
+                ),
+                (
+                    "nombre_colaborador",
+                    models.CharField(
+                        help_text="Snapshot al momento de asignar",
+                        max_length=150,
+                        verbose_name="Nombre Colaborador",
+                    ),
+                ),
+                (
+                    "rol",
+                    models.CharField(
+                        choices=[
+                            ("TECNICO", "Tecnico Operativo"),
+                            ("AYUDANTE", "Ayudante / Auxiliar"),
+                            ("RESIDENTE", "Ingeniero Residente"),
+                            ("SISOMA", "Inspector SST"),
+                        ],
+                        default="TECNICO",
+                        max_length=20,
+                        verbose_name="Rol",
+                    ),
+                ),
+                ("fecha_asignacion", models.DateField(verbose_name="Fecha Asignacion")),
+                (
+                    "fecha_fin_asignacion",
+                    models.DateField(blank=True, null=True, verbose_name="Fecha Fin Asignacion"),
+                ),
+                (
+                    "horas_totales_registradas",
+                    models.DecimalField(
+                        decimal_places=2, default=0, max_digits=10, verbose_name="Horas Totales"
+                    ),
+                ),
+                (
+                    "costo_hora",
+                    models.DecimalField(
+                        decimal_places=2, default=0, max_digits=12, verbose_name="Costo por Hora"
+                    ),
+                ),
+                (
+                    "costo_total_asignacion",
+                    models.DecimalField(
+                        decimal_places=2, default=0, max_digits=15, verbose_name="Costo Total"
+                    ),
+                ),
+                ("activo", models.BooleanField(default=True, verbose_name="Activo")),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="asignaciones_personal",
+                        to="empresa.empresa",
+                    ),
+                ),
+                (
+                    "proyecto",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="equipo_trabajo",
+                        to="tenant_proyectos.proyecto",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Asignacion Personal',
-                'verbose_name_plural': 'Equipo de Trabajo',
+                "verbose_name": "Asignacion Personal",
+                "verbose_name_plural": "Equipo de Trabajo",
             },
         ),
         migrations.CreateModel(
-            name='ItemPedido',
+            name="ItemPedido",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Timestamp auto-asignado al crear el registro.', verbose_name='Creado')),
-                ('updated_at', models.DateTimeField(auto_now=True, db_index=True, help_text='Timestamp auto-actualizado al modificar.', verbose_name='Actualizado')),
-                ('material_ref', models.CharField(blank=True, help_text='SKU o ID del material referencial', max_length=50, verbose_name='Referencia/SKU')),
-                ('nombre_material', models.CharField(max_length=200, verbose_name='Nombre Material')),
-                ('cantidad', models.DecimalField(decimal_places=2, max_digits=10, verbose_name='Cantidad')),
-                ('unidad_medida', models.CharField(max_length=20, verbose_name='Unidad de Medida')),
-                ('precio_unitario', models.DecimalField(decimal_places=2, default=0, max_digits=15, verbose_name='Precio Unitario')),
-                ('empresa', models.ForeignKey(help_text='Empresa propietaria (SSoT por tenant). Requerido.', on_delete=django.db.models.deletion.PROTECT, related_name='%(app_label)s_%(class)s_related', to='empresa.empresa', verbose_name='Empresa')),
-                ('pedido', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='items', to='tenant_proyectos.pedidoproyecto')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        db_index=True,
+                        help_text="Timestamp auto-asignado al crear el registro.",
+                        verbose_name="Creado",
+                    ),
+                ),
+                (
+                    "updated_at",
+                    models.DateTimeField(
+                        auto_now=True,
+                        db_index=True,
+                        help_text="Timestamp auto-actualizado al modificar.",
+                        verbose_name="Actualizado",
+                    ),
+                ),
+                (
+                    "material_ref",
+                    models.CharField(
+                        blank=True,
+                        help_text="SKU o ID del material referencial",
+                        max_length=50,
+                        verbose_name="Referencia/SKU",
+                    ),
+                ),
+                (
+                    "nombre_material",
+                    models.CharField(max_length=200, verbose_name="Nombre Material"),
+                ),
+                (
+                    "cantidad",
+                    models.DecimalField(decimal_places=2, max_digits=10, verbose_name="Cantidad"),
+                ),
+                ("unidad_medida", models.CharField(max_length=20, verbose_name="Unidad de Medida")),
+                (
+                    "precio_unitario",
+                    models.DecimalField(
+                        decimal_places=2, default=0, max_digits=15, verbose_name="Precio Unitario"
+                    ),
+                ),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        help_text="Empresa propietaria (SSoT por tenant). Requerido.",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_related",
+                        to="empresa.empresa",
+                        verbose_name="Empresa",
+                    ),
+                ),
+                (
+                    "pedido",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="items",
+                        to="tenant_proyectos.pedidoproyecto",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'item de Pedido',
-                'verbose_name_plural': 'items de Pedido',
-                'indexes': [models.Index(fields=['pedido'], name='tenant_proy_pedido__d05295_idx'), models.Index(fields=['material_ref'], name='tenant_proy_materia_1400e7_idx')],
-                'unique_together': {('pedido', 'material_ref')},
+                "verbose_name": "item de Pedido",
+                "verbose_name_plural": "items de Pedido",
+                "indexes": [
+                    models.Index(fields=["pedido"], name="tenant_proy_pedido__d05295_idx"),
+                    models.Index(fields=["material_ref"], name="tenant_proy_materia_1400e7_idx"),
+                ],
+                "unique_together": {("pedido", "material_ref")},
             },
         ),
         migrations.AddIndex(
-            model_name='proyecto',
-            index=models.Index(fields=['empresa'], name='tenant_proy_empresa_4462c5_idx'),
+            model_name="proyecto",
+            index=models.Index(fields=["empresa"], name="tenant_proy_empresa_4462c5_idx"),
         ),
         migrations.AddIndex(
-            model_name='proyecto',
-            index=models.Index(fields=['empresa', 'fase_actual'], name='tenant_proy_empresa_768e14_idx'),
+            model_name="proyecto",
+            index=models.Index(
+                fields=["empresa", "fase_actual"], name="tenant_proy_empresa_768e14_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='proyecto',
-            index=models.Index(fields=['empresa', 'cliente_id'], name='tenant_proy_empresa_b77c04_idx'),
+            model_name="proyecto",
+            index=models.Index(
+                fields=["empresa", "cliente_id"], name="tenant_proy_empresa_b77c04_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='proyecto',
-            index=models.Index(fields=['responsable_comercial_id'], name='tenant_proy_respons_c78364_idx'),
+            model_name="proyecto",
+            index=models.Index(
+                fields=["responsable_comercial_id"], name="tenant_proy_respons_c78364_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='proyecto',
-            index=models.Index(fields=['responsable_tecnico_id'], name='tenant_proy_respons_c4f77b_idx'),
+            model_name="proyecto",
+            index=models.Index(
+                fields=["responsable_tecnico_id"], name="tenant_proy_respons_c4f77b_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='proyecto',
-            index=models.Index(fields=['responsable_operativo_id'], name='tenant_proy_respons_1f988c_idx'),
+            model_name="proyecto",
+            index=models.Index(
+                fields=["responsable_operativo_id"], name="tenant_proy_respons_1f988c_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='proyecto',
-            index=models.Index(fields=['responsable_administrativo_id'], name='tenant_proy_respons_f6c06f_idx'),
+            model_name="proyecto",
+            index=models.Index(
+                fields=["responsable_administrativo_id"], name="tenant_proy_respons_f6c06f_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='proyecto',
-            index=models.Index(fields=['responsable_actual_id'], name='tenant_proy_respons_8b360e_idx'),
+            model_name="proyecto",
+            index=models.Index(
+                fields=["responsable_actual_id"], name="tenant_proy_respons_8b360e_idx"
+            ),
         ),
         migrations.AddConstraint(
-            model_name='proyecto',
-            constraint=models.UniqueConstraint(condition=models.Q(('codigo__gt', '')), fields=('empresa', 'codigo'), name='uniq_proyecto_codigo_empresa'),
+            model_name="proyecto",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("codigo__gt", "")),
+                fields=("empresa", "codigo"),
+                name="uniq_proyecto_codigo_empresa",
+            ),
         ),
         migrations.AddIndex(
-            model_name='pedidoproyecto',
-            index=models.Index(fields=['empresa'], name='tenant_proy_empresa_1e5ce6_idx'),
+            model_name="pedidoproyecto",
+            index=models.Index(fields=["empresa"], name="tenant_proy_empresa_1e5ce6_idx"),
         ),
         migrations.AddIndex(
-            model_name='pedidoproyecto',
-            index=models.Index(fields=['proyecto'], name='tenant_proy_proyect_39c343_idx'),
+            model_name="pedidoproyecto",
+            index=models.Index(fields=["proyecto"], name="tenant_proy_proyect_39c343_idx"),
         ),
         migrations.AddIndex(
-            model_name='pedidoproyecto',
-            index=models.Index(fields=['proveedor_id'], name='tenant_proy_proveed_f3c297_idx'),
+            model_name="pedidoproyecto",
+            index=models.Index(fields=["proveedor_id"], name="tenant_proy_proveed_f3c297_idx"),
         ),
         migrations.AddIndex(
-            model_name='asignacionpersonal',
-            index=models.Index(fields=['empresa'], name='tenant_proy_empresa_1d37f7_idx'),
+            model_name="asignacionpersonal",
+            index=models.Index(fields=["empresa"], name="tenant_proy_empresa_1d37f7_idx"),
         ),
         migrations.AddIndex(
-            model_name='asignacionpersonal',
-            index=models.Index(fields=['proyecto'], name='tenant_proy_proyect_6c1042_idx'),
+            model_name="asignacionpersonal",
+            index=models.Index(fields=["proyecto"], name="tenant_proy_proyect_6c1042_idx"),
         ),
         migrations.AddIndex(
-            model_name='asignacionpersonal',
-            index=models.Index(fields=['empleado_id'], name='tenant_proy_emplead_9fe06b_idx'),
+            model_name="asignacionpersonal",
+            index=models.Index(fields=["empleado_id"], name="tenant_proy_emplead_9fe06b_idx"),
         ),
     ]

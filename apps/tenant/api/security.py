@@ -8,7 +8,6 @@ Ref: AGENTS.md § Double Semantic Verification (DSV)
 """
 
 import logging
-from typing import Optional
 
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
@@ -49,7 +48,7 @@ def get_empresa_id_validated(viewset_or_serializer) -> int:
         ).first()
     """
     # 1. Intentar desde ViewSet.get_empresa_id() (auth-backed, SSoT)
-    if hasattr(viewset_or_serializer, 'get_empresa_id'):
+    if hasattr(viewset_or_serializer, "get_empresa_id"):
         try:
             empresa_id = viewset_or_serializer.get_empresa_id()
             if empresa_id:
@@ -58,15 +57,16 @@ def get_empresa_id_validated(viewset_or_serializer) -> int:
             logger.warning(f"[DSV] get_empresa_id() failed: {e}, trying fallback...")
 
     # 2. Intentar desde contexto (serializers)
-    if hasattr(viewset_or_serializer, 'context'):
-        empresa_id = viewset_or_serializer.context.get('empresa_id')
+    if hasattr(viewset_or_serializer, "context"):
+        empresa_id = viewset_or_serializer.context.get("empresa_id")
         if empresa_id:
             return empresa_id
 
     # 3. FALLBACK: Singleton Empresa (dev only, logged as warning)
     try:
         from apps.tenant.empresa.models import Empresa
-        empresa = Empresa.objects.only('id').first()
+
+        empresa = Empresa.objects.only("id").first()
         if empresa:
             logger.warning(
                 f"[DSV] Using singleton Empresa fallback (empresa_id={empresa.id}). "
@@ -83,7 +83,7 @@ def get_empresa_id_validated(viewset_or_serializer) -> int:
     )
 
 
-def validate_empresa_id(empresa_id: Optional[int], raise_if_none: bool = True) -> Optional[int]:
+def validate_empresa_id(empresa_id: int | None, raise_if_none: bool = True) -> int | None:
     """
     # CANONICAL: Validación de empresa_id
 
@@ -105,7 +105,9 @@ def validate_empresa_id(empresa_id: Optional[int], raise_if_none: bool = True) -
         return None
 
     if not isinstance(empresa_id, int):
-        raise DRFValidationError(f"empresa_id debe ser un entero (recibido: {type(empresa_id).__name__})")
+        raise DRFValidationError(
+            f"empresa_id debe ser un entero (recibido: {type(empresa_id).__name__})"
+        )
 
     if empresa_id <= 0:
         raise DRFValidationError("empresa_id debe ser un entero positivo")
@@ -114,10 +116,8 @@ def validate_empresa_id(empresa_id: Optional[int], raise_if_none: bool = True) -
 
 
 def get_or_default_empresa_id(
-    viewset_or_serializer,
-    default: Optional[int] = None,
-    strict: bool = False
-) -> Optional[int]:
+    viewset_or_serializer, default: int | None = None, strict: bool = False
+) -> int | None:
     """
     # Variante relajada: get_empresa_id con default
 

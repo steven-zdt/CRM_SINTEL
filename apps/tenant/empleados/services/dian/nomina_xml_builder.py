@@ -22,7 +22,8 @@ segunda vacia como marcador para que `XadesSignerService.sign()` inserte
 §2, "puede invocarse sin modificar una sola linea, siempre que el XML de
 nomina deje el mismo placeholder vacio").
 """
-from decimal import Decimal, ROUND_HALF_UP
+
+from decimal import ROUND_HALF_UP, Decimal
 from xml.etree import ElementTree as ET
 
 # ---------------------------------------------------------------------------
@@ -41,7 +42,7 @@ for _prefix, _uri in NS.items():
 
 
 def _tag(ns_key: str, local: str) -> str:
-    return "{%s}%s" % (NS[ns_key], local)
+    return f"{{{NS[ns_key]}}}{local}"
 
 
 def _sub(parent, ns_key: str, local: str, text: str = None, attribs: dict = None):
@@ -69,7 +70,9 @@ class NominaXMLBuilderService:
     def build(cls, dto: dict, cune: str) -> bytes:
         root = cls._build_root(dto, cune)
         ET.indent(root, space="  ")
-        return b'<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="unicode").encode("utf-8")
+        return b'<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(
+            root, encoding="unicode"
+        ).encode("utf-8")
 
     # ------------------------------------------------------------------
     @classmethod
@@ -95,7 +98,9 @@ class NominaXMLBuilderService:
         periodo = dto.get("periodo", {})
         periodo_el = _sub(root, "sts", "PeriodoNomina")
         _sub(periodo_el, "cbc", "FechaIngreso", periodo.get("fecha_ingreso", ""))
-        _sub(periodo_el, "cbc", "FechaLiquidacionInicio", periodo.get("fecha_liquidacion_inicio", ""))
+        _sub(
+            periodo_el, "cbc", "FechaLiquidacionInicio", periodo.get("fecha_liquidacion_inicio", "")
+        )
         _sub(periodo_el, "cbc", "FechaLiquidacionFin", periodo.get("fecha_liquidacion_fin", ""))
         _sub(periodo_el, "cbc", "TiempoLaboradoDias", str(periodo.get("tiempo_laborado_dias", "")))
 
@@ -106,9 +111,27 @@ class NominaXMLBuilderService:
         cls._build_deducciones(root, dto.get("deducciones", {}))
 
         totales = _sub(root, "sts", "ResumenNomina")
-        _sub(totales, "cbc", "TotalDevengado", _fmt2(dto.get("devengados", {}).get("total", "0")), {"currencyID": "COP"})
-        _sub(totales, "cbc", "TotalDeducciones", _fmt2(dto.get("deducciones", {}).get("total", "0")), {"currencyID": "COP"})
-        _sub(totales, "cbc", "ComprobanteTotal", _fmt2(dto.get("total_pago", "0")), {"currencyID": "COP"})
+        _sub(
+            totales,
+            "cbc",
+            "TotalDevengado",
+            _fmt2(dto.get("devengados", {}).get("total", "0")),
+            {"currencyID": "COP"},
+        )
+        _sub(
+            totales,
+            "cbc",
+            "TotalDeducciones",
+            _fmt2(dto.get("deducciones", {}).get("total", "0")),
+            {"currencyID": "COP"},
+        )
+        _sub(
+            totales,
+            "cbc",
+            "ComprobanteTotal",
+            _fmt2(dto.get("total_pago", "0")),
+            {"currencyID": "COP"},
+        )
 
         return root
 
@@ -144,9 +167,18 @@ class NominaXMLBuilderService:
     def _build_empleador(cls, root: ET.Element, empleador: dict):
         el = _sub(root, "sts", "Empleador")
         _sub(el, "cbc", "RegistrationName", empleador.get("razon_social", ""))
-        _sub(el, "cbc", "CompanyID", empleador.get("nit", ""),
-             {"schemeAgencyID": "195", "schemeAgencyName": "CO, DIAN",
-              "schemeID": empleador.get("dv", "0"), "schemeName": "31"})
+        _sub(
+            el,
+            "cbc",
+            "CompanyID",
+            empleador.get("nit", ""),
+            {
+                "schemeAgencyID": "195",
+                "schemeAgencyName": "CO, DIAN",
+                "schemeID": empleador.get("dv", "0"),
+                "schemeName": "31",
+            },
+        )
         addr = _sub(el, "cac", "RegistrationAddress")
         _sub(addr, "cbc", "CityName", empleador.get("ciudad", ""))
         addr_line = _sub(addr, "cac", "AddressLine")
@@ -167,7 +199,13 @@ class NominaXMLBuilderService:
         _sub(el, "cbc", "TipoContrato", trabajador.get("tipo_contrato", ""))
         _sub(el, "cbc", "Cargo", trabajador.get("cargo", ""))
         _sub(el, "cbc", "SalarioIntegral", "false")
-        _sub(el, "cbc", "SueldoTrabajador", _fmt2(trabajador.get("salario", "0")), {"currencyID": "COP"})
+        _sub(
+            el,
+            "cbc",
+            "SueldoTrabajador",
+            _fmt2(trabajador.get("salario", "0")),
+            {"currencyID": "COP"},
+        )
 
     # ------------------------------------------------------------------
     @classmethod
@@ -183,15 +221,29 @@ class NominaXMLBuilderService:
         el = _sub(root, "sts", "Devengados")
         basico = _sub(el, "sts", "Basico")
         _sub(basico, "cbc", "DiasTrabajados", str(devengados.get("dias_trabajados", "30")))
-        _sub(basico, "cbc", "SueldoTrabajado", _fmt2(devengados.get("salario_basico", "0")), {"currencyID": "COP"})
+        _sub(
+            basico,
+            "cbc",
+            "SueldoTrabajado",
+            _fmt2(devengados.get("salario_basico", "0")),
+            {"currencyID": "COP"},
+        )
 
         if Decimal(str(devengados.get("auxilio_transporte", "0"))) > 0:
             transporte = _sub(el, "sts", "Transporte")
-            _sub(transporte, "cbc", "AuxilioTransporte", _fmt2(devengados.get("auxilio_transporte", "0")), {"currencyID": "COP"})
+            _sub(
+                transporte,
+                "cbc",
+                "AuxilioTransporte",
+                _fmt2(devengados.get("auxilio_transporte", "0")),
+                {"currencyID": "COP"},
+            )
 
         if Decimal(str(devengados.get("horas_extras", "0"))) > 0:
             he = _sub(el, "sts", "HorasExtra")
-            _sub(he, "cbc", "Pago", _fmt2(devengados.get("horas_extras", "0")), {"currencyID": "COP"})
+            _sub(
+                he, "cbc", "Pago", _fmt2(devengados.get("horas_extras", "0")), {"currencyID": "COP"}
+            )
 
         if Decimal(str(devengados.get("otros", "0"))) > 0:
             otros = _sub(el, "sts", "OtrosConceptos")
@@ -204,8 +256,20 @@ class NominaXMLBuilderService:
         salud = _sub(el, "sts", "Salud")
         _sub(salud, "cbc", "Deduccion", _fmt2(deducciones.get("salud", "0")), {"currencyID": "COP"})
         pension = _sub(el, "sts", "FondoPension")
-        _sub(pension, "cbc", "Deduccion", _fmt2(deducciones.get("pension", "0")), {"currencyID": "COP"})
+        _sub(
+            pension,
+            "cbc",
+            "Deduccion",
+            _fmt2(deducciones.get("pension", "0")),
+            {"currencyID": "COP"},
+        )
 
         if Decimal(str(deducciones.get("otros", "0"))) > 0:
             otros = _sub(el, "sts", "OtrasDeducciones")
-            _sub(otros, "cbc", "Deduccion", _fmt2(deducciones.get("otros", "0")), {"currencyID": "COP"})
+            _sub(
+                otros,
+                "cbc",
+                "Deduccion",
+                _fmt2(deducciones.get("otros", "0")),
+                {"currencyID": "COP"},
+            )

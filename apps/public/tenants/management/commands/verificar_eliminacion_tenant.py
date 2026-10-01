@@ -137,35 +137,34 @@ class Command(BaseCommand):
 
                 # Intentar verificar si hay tablas en el esquema
                 try:
-                    with schema_context(schema_name):
-                        with connection.cursor() as cursor:
-                            cursor.execute(
-                                """
-                                SELECT table_name 
-                                FROM information_schema.tables 
+                    with schema_context(schema_name), connection.cursor() as cursor:
+                        cursor.execute(
+                            """
+                                SELECT table_name
+                                FROM information_schema.tables
                                 WHERE table_schema = %s
                                 ORDER BY table_name
                             """,
-                                [schema_name],
-                            )
-                            tables = cursor.fetchall()
+                            [schema_name],
+                        )
+                        tables = cursor.fetchall()
 
-                            if tables:
-                                self.stdout.write(
-                                    self.style.WARNING(
-                                        f"   WARNING:  El esquema contiene {len(tables)} tablas:"
-                                    )
+                        if tables:
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"   WARNING:  El esquema contiene {len(tables)} tablas:"
                                 )
-                                for table in tables[:10]:  # Mostrar solo las primeras 10
-                                    self.stdout.write(f"      - {table[0]}")
-                                if len(tables) > 10:
-                                    self.stdout.write(f"      ... y {len(tables) - 10} más")
-                            else:
-                                self.stdout.write(
-                                    self.style.WARNING(
-                                        "   WARNING:  El esquema existe pero está vacío (sin tablas)"
-                                    )
+                            )
+                            for table in tables[:10]:  # Mostrar solo las primeras 10
+                                self.stdout.write(f"      - {table[0]}")
+                            if len(tables) > 10:
+                                self.stdout.write(f"      ... y {len(tables) - 10} más")
+                        else:
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    "   WARNING:  El esquema existe pero está vacío (sin tablas)"
                                 )
+                            )
                 except Exception as e:
                     self.stdout.write(
                         self.style.WARNING(f"   WARNING:  No se pudo acceder al esquema: {e}")

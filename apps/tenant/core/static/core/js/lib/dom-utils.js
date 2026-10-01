@@ -180,42 +180,56 @@
   }
 
   /**
-   * Formatea un valor numérico como moneda colombiana (COP)
+   * Formatea un valor numérico como moneda (pesos colombianos, COP).
+   *
+   * Hallazgo real (2026-09-25, pedido explícito del usuario): usaba el
+   * locale 'es-CO' de Intl, que agrupa con PUNTO de miles y COMA
+   * decimal (ej. "$ 1.118.881") -- la convención real que este proyecto
+   * necesita es la contraria (agrupación con COMA, decimales con PUNTO:
+   * "$1,118,881.00"). Intl no tiene un locale es-CO con esa convención,
+   * así que se usa 'en-US' (que agrupa exactamente así) + `currency:
+   * 'USD'` -- truco deliberado y documentado: el símbolo resultante es
+   * "$" (lo que ya se mostraba antes), el VALOR sigue siendo pesos
+   * colombianos tal cual, nunca se convierte ni se reinterpreta como
+   * dólares reales -- currency:'USD' aquí es puramente una instrucción
+   * de presentación (qué símbolo/agrupación usar), no una conversión de
+   * moneda.
+   *
    * @param {number|string} value - Valor a formatear
    * @param {Object} options - Opciones de formateo
-   * @returns {string} Valor formateado como moneda COP
+   * @returns {string} Valor formateado como moneda
    */
   function formatCurrency(value, options = {}) {
     if (value === null || value === undefined || value === '') return '-';
-    
+
     const numValue = typeof value === 'string' ? parseFloat(value) : value;
     if (isNaN(numValue)) return '-';
-    
+
     const {
       minimumFractionDigits = 0,
       maximumFractionDigits = 2,
       showSymbol = true
     } = options;
-    
+
     try {
-      const formatter = new Intl.NumberFormat('es-CO', {
+      const formatter = new Intl.NumberFormat('en-US', {
         style: 'currency',
-        currency: 'COP',
+        currency: 'USD',
         minimumFractionDigits,
         maximumFractionDigits,
       });
-      
+
       const formatted = formatter.format(numValue);
-      
+
       // Si no se quiere mostrar símbolo, removerlo
       if (!showSymbol) {
-        return formatted.replace(/[COP$\s]/g, '').trim();
+        return formatted.replace(/[$\s]/g, '').trim();
       }
-      
+
       return formatted;
     } catch (err) {
       // Fallback simple si Intl.NumberFormat falla
-      return `$${numValue.toLocaleString('es-CO', { minimumFractionDigits, maximumFractionDigits })}`;
+      return `$${numValue.toLocaleString('en-US', { minimumFractionDigits, maximumFractionDigits })}`;
     }
   }
 

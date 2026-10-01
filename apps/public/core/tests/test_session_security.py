@@ -4,8 +4,8 @@ Tests para SessionSecurityHelper y LoggedTokenVerifyView de la aplicacion core.
 [WARNING] REGLA 0: Cero caracteres especiales o emojis. Solo ASCII.
 """
 
-from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
+from django.test import RequestFactory, TestCase
 
 from apps.public.console.models import ConsoleActionLog
 from apps.public.core.services.session_security import SessionSecurityHelper
@@ -19,7 +19,7 @@ class SessionSecurityTestCase(TestCase):
     def setUp(self):
         super().setUp()
         self.factory = RequestFactory()
-        
+
         User = get_user_model()
         self.user = User.objects.create_user(
             username="security_test_user",
@@ -36,16 +36,18 @@ class SessionSecurityTestCase(TestCase):
             HTTP_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             REMOTE_ADDR="192.168.1.50",
         )
-        
+
         # Inyectar una sesion simulada en el request
         session = {}
         request.session = session
-        
+
         result = SessionSecurityHelper.evaluate_session_security(request, self.user)
-        
+
         self.assertTrue(result)
         self.assertEqual(ConsoleActionLog.objects.filter(action="SECURITY_ALERT").count(), 0)
-        self.assertEqual(session.get("_security_last_user_agent"), "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        self.assertEqual(
+            session.get("_security_last_user_agent"), "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        )
 
     def test_suspicious_user_agent_generates_alert(self):
         """
@@ -57,17 +59,20 @@ class SessionSecurityTestCase(TestCase):
             REMOTE_ADDR="192.168.1.100",
         )
         request.session = {}
-        
+
         result = SessionSecurityHelper.evaluate_session_security(request, self.user)
-        
+
         self.assertFalse(result)
-        
+
         # Verificar que se creo la alerta en la base de datos
         alerts = ConsoleActionLog.objects.filter(action="SECURITY_ALERT", actor=self.user)
         self.assertEqual(alerts.count(), 1)
-        
+
         alert = alerts.first()
-        self.assertEqual(alert.metadata["reason"], "Herramienta automatizada detectada en User-Agent: python-requests/2.28.1")
+        self.assertEqual(
+            alert.metadata["reason"],
+            "Herramienta automatizada detectada en User-Agent: python-requests/2.28.1",
+        )
         self.assertEqual(alert.metadata["ip"], "192.168.1.100")
         self.assertEqual(alert.metadata["user_agent"], "python-requests/2.28.1")
 
@@ -82,11 +87,11 @@ class SessionSecurityTestCase(TestCase):
         )
         session = {}
         request1.session = session
-        
+
         # Primera peticion (limpia)
         result1 = SessionSecurityHelper.evaluate_session_security(request1, self.user)
         self.assertTrue(result1)
-        
+
         # Segunda peticion con User-Agent modificado
         request2 = self.factory.post(
             "/api/token/verify/",
@@ -94,10 +99,10 @@ class SessionSecurityTestCase(TestCase):
             REMOTE_ADDR="192.168.1.50",
         )
         request2.session = session
-        
+
         result2 = SessionSecurityHelper.evaluate_session_security(request2, self.user)
         self.assertFalse(result2)
-        
+
         # Verificar que se creo la alerta
         alerts = ConsoleActionLog.objects.filter(action="SECURITY_ALERT")
         self.assertEqual(alerts.count(), 1)

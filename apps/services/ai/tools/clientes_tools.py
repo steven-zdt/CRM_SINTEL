@@ -7,6 +7,7 @@ el patron Tool -> Selector -> SSoT end-to-end con una sola tool antes
 de replicarlo a los demas dominios (ver docs/ai/AI_TOOL_REGISTRY.md
 para el resto, deliberadamente no implementado aun).
 """
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext

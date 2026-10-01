@@ -9,6 +9,7 @@ Uso:
     python manage.py production_readiness
     python manage.py production_readiness --json out.json
 """
+
 import json
 
 from django.core.management.base import BaseCommand
@@ -26,7 +27,9 @@ class Command(BaseCommand):
     help = "Ejecuta todos los production readiness checks registrados y produce un reporte."
 
     def add_arguments(self, parser):
-        parser.add_argument("--json", dest="json_path", default=None, help="Ruta donde guardar el reporte JSON.")
+        parser.add_argument(
+            "--json", dest="json_path", default=None, help="Ruta donde guardar el reporte JSON."
+        )
 
     def handle(self, *args, **options):
         results = run_all_checks()
@@ -34,7 +37,11 @@ class Command(BaseCommand):
         scorecard = compute_scorecard(results)
         status = overall_status(results)
 
-        self.stdout.write(self.style.MIGRATE_HEADING(f"\nPRODUCTION READINESS RUN — {timezone.now().isoformat()}\n"))
+        self.stdout.write(
+            self.style.MIGRATE_HEADING(
+                f"\nPRODUCTION READINESS RUN — {timezone.now().isoformat()}\n"
+            )
+        )
 
         by_category: dict[str, list] = {}
         for r in results:
@@ -43,8 +50,10 @@ class Command(BaseCommand):
         for category in sorted(by_category):
             self.stdout.write(f"\n== {category} ==")
             for r in by_category[category]:
-                style = self.style.SUCCESS if r.status == "PASS" else (
-                    self.style.ERROR if r.status == "BLOCKER" else self.style.WARNING
+                style = (
+                    self.style.SUCCESS
+                    if r.status == "PASS"
+                    else (self.style.ERROR if r.status == "BLOCKER" else self.style.WARNING)
                 )
                 self.stdout.write(style(f"  [{r.status:20s}] {r.severity} {r.id} ({r.owner})"))
                 self.stdout.write(f"      {r.evidence[:300]}")
@@ -57,8 +66,10 @@ class Command(BaseCommand):
         for b in blockers:
             self.stdout.write(self.style.ERROR(f"  [{b.severity}] {b.id}: {b.evidence[:200]}"))
 
-        final_style = self.style.SUCCESS if status == "READY" else (
-            self.style.ERROR if status == "NOT_READY" else self.style.WARNING
+        final_style = (
+            self.style.SUCCESS
+            if status == "READY"
+            else (self.style.ERROR if status == "NOT_READY" else self.style.WARNING)
         )
         self.stdout.write(final_style(f"\nOVERALL STATUS: {status}\n"))
 

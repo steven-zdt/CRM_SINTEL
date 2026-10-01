@@ -22,9 +22,9 @@ Estructura (v2.40):
 - register_parsers.py: Registro automático de parsers por app
 """
 
+import contextlib
+
 # WARNING: v2.40: Registrar automáticamente los parsers de cada app
-try:
+# Si hay un error al importar, continuar sin registro automático.
+with contextlib.suppress(ImportError):
     from . import register_parsers  # noqa: F401
-except ImportError:
-    # Si hay un error al importar, continuar sin registro automático
-    pass

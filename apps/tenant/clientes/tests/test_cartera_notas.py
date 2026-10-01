@@ -3,6 +3,7 @@ Tests de CarteraNota (mision "Clientes + Cartera" seccion 29-30, 2026-09-11):
 historial de anotaciones de seguimiento sobre una obligacion de Cartera,
 append-only, independiente del campo `observaciones` legado.
 """
+
 from decimal import Decimal
 
 import pytest
@@ -15,13 +16,20 @@ from apps.tenant.empresa.models import Empresa
 
 def _crear_cartera(empresa):
     cliente = Cliente.objects.create(
-        empresa=empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-        numero_documento="900333444", razon_social="Cliente Notas Cartera",
-        regimen_tributario="ORDINARIO", activo=True,
+        empresa=empresa,
+        tipo_persona="JURIDICA",
+        tipo_documento="NIT",
+        numero_documento="900333444",
+        razon_social="Cliente Notas Cartera",
+        regimen_tributario="ORDINARIO",
+        activo=True,
     )
     return Cartera.objects.create(
-        empresa=empresa, cliente=cliente, numero_factura="FE-NOTA-1",
-        fecha_emision="2026-06-01", fecha_vencimiento="2026-07-01",
+        empresa=empresa,
+        cliente=cliente,
+        numero_factura="FE-NOTA-1",
+        fecha_emision="2026-06-01",
+        fecha_vencimiento="2026-07-01",
         valor_total=Decimal("1000000.00"),
     )
 
@@ -33,8 +41,10 @@ def test_agregar_nota_service(tenant):
         cartera = _crear_cartera(empresa)
 
         nota = CarteraBusinessService.agregar_nota(
-            empresa_id=empresa.id, cartera_uuid=cartera.uuid,
-            texto="Cliente informa que paga el viernes.", tipo="PROMESA_PAGO",
+            empresa_id=empresa.id,
+            cartera_uuid=cartera.uuid,
+            texto="Cliente informa que paga el viernes.",
+            tipo="PROMESA_PAGO",
         )
         assert nota.id
         assert nota.texto == "Cliente informa que paga el viernes."
@@ -45,13 +55,16 @@ def test_agregar_nota_service(tenant):
 @pytest.mark.django_db
 def test_agregar_nota_texto_vacio_falla(tenant):
     from rest_framework.exceptions import ValidationError
+
     with schema_context(tenant.schema_name):
         empresa = Empresa.objects.first()
         cartera = _crear_cartera(empresa)
 
         with pytest.raises(ValidationError):
             CarteraBusinessService.agregar_nota(
-                empresa_id=empresa.id, cartera_uuid=cartera.uuid, texto="   ",
+                empresa_id=empresa.id,
+                cartera_uuid=cartera.uuid,
+                texto="   ",
             )
 
 

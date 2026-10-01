@@ -204,6 +204,14 @@
                 var burbuja = d.createElement('div');
                 burbuja.className = 'asistente-ia-msg asistente-ia-msg-asistente';
                 burbuja.appendChild(nodo);
+                if (body.fallback_used) {
+                    // Fase 10 (plan LLM Provider Hub, Seccion 28): un fallback
+                    // real NUNCA debe quedar oculto para el usuario.
+                    var aviso = d.createElement('div');
+                    aviso.className = 'asistente-ia-fallback-aviso text-muted small mt-1';
+                    aviso.textContent = 'Respondido con el proveedor de respaldo (el principal no estaba disponible).';
+                    burbuja.appendChild(aviso);
+                }
                 el.mensajes.appendChild(burbuja);
             } else {
                 _agregarBurbuja(el, _mensajeAmigable(res.status, body), 'asistente-ia-msg-error');

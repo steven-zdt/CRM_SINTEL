@@ -9,6 +9,7 @@ compras.OrdenCompra, donde sede es obligatoria). `filter_by_scope_null_safe()`
 en Fase F7) - un NULL debe quedar visible para todos los alcances, no solo
 EMPRESA, para no ocultar datos existentes al activar el filtrado.
 """
+
 from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra
 from apps.tenant.core.services.organizational_filters import (
     filter_by_scope,
@@ -24,7 +25,9 @@ class FilterByScopeTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F7", nit="900000555", direccion="Calle 1",
+            razon_social="Empresa Test F7",
+            nit="900000555",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F7")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F7")
@@ -33,23 +36,41 @@ class FilterByScopeTests(SintelTenantTestCase):
         """OrdenCompra.sede es NOT NULL - filter_by_scope() (F5) es correcto
         sin NULL-safety aqui."""
         proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Prov F7", numero_documento="F7-1", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Prov F7",
+            numero_documento="F7-1",
+            tipo_documento="NIT",
         )
         plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla F7", prefijo="F7",
-            rango_desde=1, rango_hasta=100, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla F7",
+            prefijo="F7",
+            rango_desde=1,
+            rango_hasta=100,
+            consecutivo_actual=1,
+            vigente=True,
         )
         orden_a = OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede_a, proveedor=proveedor,
-            plantilla=plantilla, fecha="2026-06-01", consecutivo=1,
+            empresa=self.empresa,
+            sede=self.sede_a,
+            proveedor=proveedor,
+            plantilla=plantilla,
+            fecha="2026-06-01",
+            consecutivo=1,
         )
         OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede_b, proveedor=proveedor,
-            plantilla=plantilla, fecha="2026-06-01", consecutivo=2,
+            empresa=self.empresa,
+            sede=self.sede_b,
+            proveedor=proveedor,
+            plantilla=plantilla,
+            fecha="2026-06-01",
+            consecutivo=2,
         )
 
         qs = filter_by_scope(
-            OrdenCompra.objects.all(), self.empresa.id, sede_ids=frozenset({self.sede_a.id}),
+            OrdenCompra.objects.all(),
+            self.empresa.id,
+            sede_ids=frozenset({self.sede_a.id}),
         )
 
         self.assertEqual(set(qs.values_list("id", flat=True)), {orden_a.id})
@@ -64,7 +85,9 @@ class FilterByScopeTests(SintelTenantTestCase):
             receptor_razon_social=self.empresa.razon_social,
             fecha_emision="2026-06-01T00:00:00Z",
             consecutivo=1,
-            subtotal=100, impuestos=19, total=119,
+            subtotal=100,
+            impuestos=19,
+            total=119,
             sede=sede,
         )
 
@@ -78,7 +101,9 @@ class FilterByScopeTests(SintelTenantTestCase):
         factura_sede_b = self._crear_factura("F7-SEDE-B", sede=self.sede_b)
 
         qs = filter_by_scope_null_safe(
-            Factura.objects.all(), self.empresa.id, sede_ids=frozenset({self.sede_a.id}),
+            Factura.objects.all(),
+            self.empresa.id,
+            sede_ids=frozenset({self.sede_a.id}),
         )
         ids = set(qs.values_list("id", flat=True))
 

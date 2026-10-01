@@ -38,7 +38,7 @@ def parse_pdf_to_chunks(fpath_or_file) -> dict:
 
     matches = list(article_pattern.finditer(raw_text))
 
-    for i, match in enumerate(matches):
+    for _i, match in enumerate(matches):
         article_num = match.group(1)
         content = match.group(2).strip()
 

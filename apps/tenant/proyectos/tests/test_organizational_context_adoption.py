@@ -8,6 +8,7 @@ ventas/facturas: get_empresa()/_get_empresa_id() usan el singleton
 Empresa.objects.only('id').first() directamente, sin exigir TenantProfile,
 mientras OrganizationalContext.resolve() si lo exige.
 """
+
 from apps.tenant.core.services.organizational_context import (
     OrganizationalContext,
     OrganizationalContextError,
@@ -25,12 +26,16 @@ class ProyectosOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9 Proyectos", nit="900000986", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9 Proyectos",
+            nit="900000986",
+            direccion="Calle 1",
         )
         self.proyecto = Proyecto.objects.create(empresa=self.empresa, nombre="Proyecto Fase9")
 
     def test_proyectoviewset_exposes_get_organizational_context_with_a_real_profile(self):
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         from rest_framework.test import APIRequestFactory
         from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -50,7 +55,9 @@ class ProyectosOrganizationalContextAdoptionTests(SintelTenantTestCase):
         self.assertEqual(context.empresa_id, self.empresa.id)
 
         ids_context = set(context.filter(Proyecto).values_list("id", flat=True))
-        ids_selector = set(proyectos_selectors.qs_list(self.empresa.id).values_list("id", flat=True))
+        ids_selector = set(
+            proyectos_selectors.qs_list(self.empresa.id).values_list("id", flat=True)
+        )
         self.assertEqual(ids_context, ids_selector)
         self.assertIn(self.proyecto.id, ids_context)
 

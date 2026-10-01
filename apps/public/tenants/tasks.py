@@ -37,7 +37,10 @@ def onboard_tenant_task(self, nombre: str, admin_user_id: int, schema_name: str 
     """
     logger.info(
         "INICIANDO ONBOARDING TASK [ID: %s] | Schema: %s | Nombre: %s | Admin ID: %s",
-        self.request.id, schema_name, nombre, admin_user_id,
+        self.request.id,
+        schema_name,
+        nombre,
+        admin_user_id,
     )
 
     # Asegurar PUBLIC schema antes de crear Client
@@ -71,7 +74,11 @@ def onboard_tenant_task(self, nombre: str, admin_user_id: int, schema_name: str 
     except Exception as ex:
         logger.error(
             "ERROR EN ONBOARDING TASK [ID: %s] | Tenant: '%s' (schema: %s) | Error: %s",
-            self.request.id, nombre, schema_name, str(ex), exc_info=True,
+            self.request.id,
+            nombre,
+            schema_name,
+            str(ex),
+            exc_info=True,
         )
 
         if self.request.retries >= self.max_retries:
@@ -105,13 +112,16 @@ def send_activation_email_task(self, user_id: int, token: str, domain: str) -> d
     """
     logger.info(
         "[send_activation_email_task] user_id=%s domain=%s [retry=%s] → delegando a SSoT",
-        user_id, domain, self.request.retries,
+        user_id,
+        domain,
+        self.request.retries,
     )
 
     try:
         from django.contrib.auth import get_user_model
-        from apps.public.tenants.models import Domain
+
         from apps.public.core.services.email_service import EmailService
+        from apps.public.tenants.models import Domain
 
         User = get_user_model()
         user = User.objects.get(pk=user_id)
@@ -128,14 +138,18 @@ def send_activation_email_task(self, user_id: int, token: str, domain: str) -> d
 
         logger.info(
             "[send_activation_email_task] OK: Email enviado a %s | tenant=%s",
-            user.email, tenant.schema_name,
+            user.email,
+            tenant.schema_name,
         )
         return {"status": "sent", "user": user.email, "domain": domain}
 
     except Exception as ex:
         logger.error(
             "[send_activation_email_task] ERROR [retry=%s/%s]: %s",
-            self.request.retries, self.max_retries, str(ex), exc_info=True,
+            self.request.retries,
+            self.max_retries,
+            str(ex),
+            exc_info=True,
         )
 
         if self.request.retries >= self.max_retries:
@@ -151,11 +165,13 @@ def send_activation_email_task(self, user_id: int, token: str, domain: str) -> d
             logger.error(
                 "[DLQ] send_activation_email_task registrada en FailedTenantTask "
                 "tras %s intentos | user_id=%s domain=%s",
-                self.request.retries, user_id, domain,
+                self.request.retries,
+                user_id,
+                domain,
             )
             return {"status": "failed_dlq", "user_id": user_id}
 
-        raise self.retry(exc=ex)
+        raise self.retry(exc=ex) from ex
 
 
 @shared_task(
@@ -183,7 +199,9 @@ def provision_tenant_certificates_task(self, domain: str, schema_name: str) -> d
 
     logger.info(
         "[provision_tenant_certificates_task] Iniciando: domain=%s, schema=%s [retry=%s]",
-        domain, schema_name, self.request.retries,
+        domain,
+        schema_name,
+        self.request.retries,
     )
 
     try:
@@ -192,15 +210,14 @@ def provision_tenant_certificates_task(self, domain: str, schema_name: str) -> d
         # -- Verificacion DNS -------------------------------------------------
         try:
             ip = socket.gethostbyname(domain)
-            logger.info(
-                "[provision_tenant_certificates_task] DNS OK: %s -> %s", domain, ip
-            )
+            logger.info("[provision_tenant_certificates_task] DNS OK: %s -> %s", domain, ip)
         except socket.gaierror as dns_err:
             # No es critico en desarrollo; el dominio puede propagarse despues
             logger.warning(
                 "[provision_tenant_certificates_task] DNS no resuelve %s: %s "
                 "(puede ser normal en desarrollo o propagacion pendiente)",
-                domain, dns_err,
+                domain,
+                dns_err,
             )
 
         # -- Certificado wildcard: ya cubre todos los subdominios -------------
@@ -209,7 +226,8 @@ def provision_tenant_certificates_task(self, domain: str, schema_name: str) -> d
             logger.info(
                 "[provision_tenant_certificates_task] Wildcard *.%s cubre %s. "
                 "No se requiere aprovisionamiento individual.",
-                wildcard_base, domain,
+                wildcard_base,
+                domain,
             )
             return {
                 "status": "wildcard_covered",
@@ -223,7 +241,9 @@ def provision_tenant_certificates_task(self, domain: str, schema_name: str) -> d
         if cert_script and os.path.isfile(cert_script):
             logger.info(
                 "[provision_tenant_certificates_task] Ejecutando script: %s %s %s",
-                cert_script, domain, schema_name,
+                cert_script,
+                domain,
+                schema_name,
             )
             proc = subprocess.run(
                 [cert_script, domain, schema_name],
@@ -233,8 +253,7 @@ def provision_tenant_certificates_task(self, domain: str, schema_name: str) -> d
             )
             if proc.returncode != 0:
                 raise RuntimeError(
-                    f"Script de certificados fallo (rc={proc.returncode}): "
-                    f"{proc.stderr[:500]}"
+                    f"Script de certificados fallo (rc={proc.returncode}): " f"{proc.stderr[:500]}"
                 )
             logger.info(
                 "[provision_tenant_certificates_task] Script OK: %s",
@@ -258,7 +277,10 @@ def provision_tenant_certificates_task(self, domain: str, schema_name: str) -> d
     except Exception as ex:
         logger.error(
             "[provision_tenant_certificates_task] ERROR [retry=%s/%s]: %s",
-            self.request.retries, self.max_retries, str(ex), exc_info=True,
+            self.request.retries,
+            self.max_retries,
+            str(ex),
+            exc_info=True,
         )
 
         if self.request.retries >= self.max_retries:
@@ -274,11 +296,12 @@ def provision_tenant_certificates_task(self, domain: str, schema_name: str) -> d
             logger.error(
                 "[DLQ] provision_tenant_certificates_task registrada en FailedTenantTask "
                 "tras %s intentos | domain=%s",
-                self.request.retries, domain,
+                self.request.retries,
+                domain,
             )
             return {"status": "failed_dlq", "domain": domain, "schema": schema_name}
 
-        raise self.retry(exc=ex)
+        raise self.retry(exc=ex) from ex
 
 
 @shared_task(
@@ -307,12 +330,14 @@ def reconcile_tenants_lifecycle_task(self) -> dict:
         if resultado["reconciled"]:
             logger.warning(
                 "[LIFECYCLE] Reconciliacion periodica: %s tenant(s) desactivados por trial vencido: %s",
-                len(resultado["reconciled"]), resultado["reconciled"],
+                len(resultado["reconciled"]),
+                resultado["reconciled"],
             )
         if resultado["errors"]:
             logger.error(
                 "[LIFECYCLE] Reconciliacion periodica: %s error(es): %s",
-                len(resultado["errors"]), resultado["errors"],
+                len(resultado["errors"]),
+                resultado["errors"],
             )
         return resultado
     except Exception as ex:
@@ -327,12 +352,13 @@ def reconcile_tenants_lifecycle_task(self) -> dict:
                 retries=self.request.retries,
             )
             return {"status": "failed_dlq"}
-        raise self.retry(exc=ex)
+        raise self.retry(exc=ex) from ex
 
 
 # ---------------------------------------------------------------------------
 # Helpers internos
 # ---------------------------------------------------------------------------
+
 
 def _registrar_dlq(
     task_id: str,
@@ -346,6 +372,7 @@ def _registrar_dlq(
     """Registra una tarea fallida en FailedTenantTask (Dead Letter Queue)."""
     try:
         from .models import FailedTenantTask
+
         FailedTenantTask.objects.create(
             task_id=task_id or "unknown",
             task_name=task_name,

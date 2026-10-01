@@ -14,6 +14,7 @@ alcanzable (Limited Edit / partial_update) nunca pasaba por ese serializer.
 Este archivo cubre ambos hallazgos: aislamiento a nivel de objeto (NULL-safe,
 mismo criterio de F7) y la nueva capacidad de asignar `sede` con DSV real.
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa, Sede
@@ -26,23 +27,32 @@ class FacturaObjectLevelScopeF11Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F11", nit="900000786", direccion="Calle 1",
+            razon_social="Empresa Test F11",
+            nit="900000786",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F11")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F11")
 
     def _crear_factura(self, numero, sede=None):
         return Factura.objects.create(
-            empresa=self.empresa, numero=numero, consecutivo=1,
+            empresa=self.empresa,
+            numero=numero,
+            consecutivo=1,
             fecha_emision="2026-06-01T00:00:00Z",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
-            receptor_nit="123", receptor_razon_social="Cliente F11",
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
+            receptor_nit="123",
+            receptor_razon_social="Cliente F11",
             sede=sede,
         )
 
     def _asignar_perfil_sede(self, sedes):
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set(sedes)
         return perfil
@@ -103,7 +113,9 @@ class FacturaObjectLevelScopeF11Tests(SintelTenantTestCase):
 
     def test_alcance_empresa_puede_ver_y_editar_cualquier_sede(self):
         factura_b = self._crear_factura("FA-F11-EMP-B", sede=self.sede_b)
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         resp_get = self.api_client.get(f"/api/v1/facturas/{factura_b.uuid}/")
         self.assertEqual(resp_get.status_code, status.HTTP_200_OK, resp_get.content)

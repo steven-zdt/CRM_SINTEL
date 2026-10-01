@@ -4,6 +4,7 @@ Fase F7 (proyecto OSF), "Migrar Selectors a scope-aware" - DocumentoSoporte,
 pero nunca se usaba para filtrar. NULL-safe: el 100% de los DocumentoSoporte
 reales tiene sede=NULL hoy.
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa, Sede
@@ -17,24 +18,41 @@ class GastosScopeSelectorsF7Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F7 Gastos", nit="900000778", direccion="Calle 1",
+            razon_social="Empresa Test F7 Gastos",
+            nit="900000778",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F7 Gastos")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F7 Gastos")
         self.resolucion = ResolucionDIAN.objects.create(
-            empresa=self.empresa, numero_resolucion="RESF7", prefijo="GF7",
-            rango_desde=1, rango_hasta=1000,
-            fecha_resolucion="2026-01-01", fecha_fin="2027-01-01", vigente=True,
+            empresa=self.empresa,
+            numero_resolucion="RESF7",
+            prefijo="GF7",
+            rango_desde=1,
+            rango_hasta=1000,
+            fecha_resolucion="2026-01-01",
+            fecha_fin="2027-01-01",
+            vigente=True,
         )
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor F7 Gastos", numero_documento="F7-654", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor F7 Gastos",
+            numero_documento="F7-654",
+            tipo_documento="NIT",
         )
 
     def _crear(self, consecutivo, sede=None):
         return DocumentoSoporte.objects.create(
-            empresa=self.empresa, resolucion_dian=self.resolucion, consecutivo=consecutivo,
-            fecha="2026-05-01", proveedor=self.proveedor, subtotal=1000, total=1000,
-            descripcion="Gasto F7", categoria_contable="ARRENDAMIENTOS", sede=sede,
+            empresa=self.empresa,
+            resolucion_dian=self.resolucion,
+            consecutivo=consecutivo,
+            fecha="2026-05-01",
+            proveedor=self.proveedor,
+            subtotal=1000,
+            total=1000,
+            descripcion="Gasto F7",
+            categoria_contable="ARRENDAMIENTOS",
+            sede=sede,
         )
 
     def test_alcance_sede_ve_sin_sede_y_su_sede_pero_no_la_de_otra(self):
@@ -43,7 +61,10 @@ class GastosScopeSelectorsF7Tests(SintelTenantTestCase):
         d_b = self._crear(3, sede=self.sede_b)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a])
 
@@ -60,7 +81,9 @@ class GastosScopeSelectorsF7Tests(SintelTenantTestCase):
         self._crear(2, sede=self.sede_b)
         self._crear(3)
 
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         resp = self.api_client.get("/api/v1/gastos/")
 

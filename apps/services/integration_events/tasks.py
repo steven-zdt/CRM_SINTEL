@@ -3,6 +3,7 @@ Entrega asincrona de eventos de dominio hacia n8n (N8N-SINTEL-01, Fase 8).
 Mismo patron de retry que apps/services/maildigester/tasks.py -- solo
 reintenta errores transitorios (red/timeout), nunca errores de programa.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -58,7 +59,8 @@ def send_webhook_event(self, event: dict) -> None:
         logger.warning(
             "integration_events.send_transient_error_will_retry",
             extra={
-                "event_id": event.get("event_id"), "event_type": event.get("event_type"),
+                "event_id": event.get("event_id"),
+                "event_type": event.get("event_type"),
                 "attempt": self.request.retries + 1,
             },
         )
@@ -69,7 +71,8 @@ def send_webhook_event(self, event: dict) -> None:
         logger.warning(
             "integration_events.send_5xx_will_retry",
             extra={
-                "event_id": event.get("event_id"), "status_code": resp.status_code,
+                "event_id": event.get("event_id"),
+                "status_code": resp.status_code,
                 "attempt": self.request.retries + 1,
             },
         )
@@ -82,8 +85,10 @@ def send_webhook_event(self, event: dict) -> None:
         logger.error(
             "integration_events.send_rejected_by_n8n",
             extra={
-                "event_id": event.get("event_id"), "event_type": event.get("event_type"),
-                "status_code": resp.status_code, "response_body": resp.text[:500],
+                "event_id": event.get("event_id"),
+                "event_type": event.get("event_type"),
+                "status_code": resp.status_code,
+                "response_body": resp.text[:500],
             },
         )
         return
@@ -91,7 +96,8 @@ def send_webhook_event(self, event: dict) -> None:
     logger.info(
         "integration_events.send_success",
         extra={
-            "event_id": event.get("event_id"), "event_type": event.get("event_type"),
+            "event_id": event.get("event_id"),
+            "event_type": event.get("event_type"),
             "status_code": resp.status_code,
         },
     )

@@ -6,6 +6,7 @@ verificando: la URL resuelve de verdad, la autenticacion/permiso real
 (IsTenantMember) se aplica, el serializer de entrada valida `message`,
 y el mapeo status->codigo HTTP es correcto.
 """
+
 import json
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -19,15 +20,45 @@ from apps.tenant.empresa.models import Empresa
 from apps.tenant.perfil.models import TenantProfile
 from tests.tenant.base_test import SintelTenantTestCase
 
-AI_READ_FLAGS_ON = {"AI_ENABLED": True, "AI_READ_ENABLED": True}
+# Hallazgo real (2026-09-25): .env de este entorno tiene AI_ADK_ENABLED=true
+# -- ver misma nota en test_ai06_form_assistant.py. Sin forzar
+# AI_ADK_ENABLED=False, apps.services.ai.orchestrator.ask() despacha al
+# agente ADK real (LM Studio/Ollama) en vez de form_assistant.ask(), la
+# funcion que _mock_llm_decision_text mockea.
+AI_READ_FLAGS_ON = {"AI_ENABLED": True, "AI_READ_ENABLED": True, "AI_ADK_ENABLED": False}
 ASK_URL = "/api/v1/ai/ask/"
 
 
-def _mock_anthropic_text(payload_dict_or_text):
-    text = payload_dict_or_text if isinstance(payload_dict_or_text, str) else json.dumps(payload_dict_or_text)
-    fake_message = SimpleNamespace(content=[SimpleNamespace(type="text", text=text)])
-    fake_client = SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: fake_message))
-    return patch("anthropic.Anthropic", return_value=fake_client)
+def _mock_llm_decision_text(payload_dict_or_text):
+    """Mockea resolve_active_llm() (el punto real de resolucion desde Fase
+    10 del plan LLM Provider Hub, ver test_ai06_form_assistant.py), no un
+    SDK de proveedor especifico -- hallazgo real 2026-09-25: mockear
+    anthropic.Anthropic directo dejo de interceptar nada cuando ask()
+    empezo a resolver el provider real via resolve_active_llm()."""
+    text = (
+        payload_dict_or_text
+        if isinstance(payload_dict_or_text, str)
+        else json.dumps(payload_dict_or_text)
+    )
+    fake_response = SimpleNamespace(
+        text=text,
+        model="fake-model",
+        provider="fake",
+        input_tokens=0,
+        output_tokens=0,
+        tool_calls=[],
+    )
+    fake_resolution = SimpleNamespace(
+        provider=SimpleNamespace(complete=lambda *a, **kw: fake_response),
+        provider_name="fake",
+        model="fake-model",
+        capabilities=None,
+        model_config_id=None,
+    )
+    return patch(
+        "apps.services.ai.orchestrator.form_assistant.resolve_active_llm",
+        return_value=fake_resolution,
+    )
 
 
 class AIAskEndpointTests(SintelTenantTestCase):
@@ -45,17 +76,29 @@ class AIAskEndpointTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA AI06 HTTP TEST S.A.S.", nit="900999222", direccion="Calle AI06-HTTP",
+            razon_social="EMPRESA AI06 HTTP TEST S.A.S.",
+            nit="900999222",
+            direccion="Calle AI06-HTTP",
         )
         TenantProfile.objects.create(user=self.user, empresa=self.empresa)
         Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900333222", razon_social="Acme AI06 HTTP S.A.S.", regimen_tributario="ORDINARIO",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900333222",
+            razon_social="Acme AI06 HTTP S.A.S.",
+            regimen_tributario="ORDINARIO",
         )
         self.client_autenticado = self.api_client
 
+    @override_settings(AI_ENABLED=False)
     def test_ai_deshabilitado_devuelve_403(self):
-        resp = self.client_autenticado.post(ASK_URL, data={"message": "busca clientes"}, format="json")
+        """Hallazgo real (2026-09-25): sin este override explicito, el test
+        dependia de que AI_ENABLED sea False por defecto -- falla en
+        cualquier entorno con AI_ENABLED=true en .env (este mismo)."""
+        resp = self.client_autenticado.post(
+            ASK_URL, data={"message": "busca clientes"}, format="json"
+        )
 
         assert resp.status_code == status.HTTP_403_FORBIDDEN
         assert resp.json()["status"] == "PERMISSION_DENIED"
@@ -83,8 +126,10 @@ class AIAskEndpointTests(SintelTenantTestCase):
     def test_flujo_completo_devuelve_200_con_resultado_de_la_tool(self):
         decision = {"tool": "buscar_cliente", "arguments": {"search": "Acme AI06 HTTP"}}
 
-        with _mock_anthropic_text(decision):
-            resp = self.client_autenticado.post(ASK_URL, data={"message": "busca Acme"}, format="json")
+        with _mock_llm_decision_text(decision):
+            resp = self.client_autenticado.post(
+                ASK_URL, data={"message": "busca Acme"}, format="json"
+            )
 
         assert resp.status_code == status.HTTP_200_OK
         body = resp.json()
@@ -100,10 +145,15 @@ class AIAskEndpointTests(SintelTenantTestCase):
         decision = {"tool": None, "reason": "no aplica ninguna herramienta"}
         payload = {
             "message": "estoy en el formulario de clientes",
-            "screen": {"app": "clientes", "entity": "Cliente", "entity_id": "", "operation": "create"},
+            "screen": {
+                "app": "clientes",
+                "entity": "Cliente",
+                "entity_id": "",
+                "operation": "create",
+            },
         }
 
-        with _mock_anthropic_text(decision):
+        with _mock_llm_decision_text(decision):
             resp = self.client_autenticado.post(ASK_URL, data=payload, format="json")
 
         assert resp.status_code == status.HTTP_200_OK

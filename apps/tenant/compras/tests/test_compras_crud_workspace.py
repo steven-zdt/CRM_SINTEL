@@ -17,9 +17,16 @@ Verifica:
 - Negativos: items vacios, fecha_entrega < fecha, transicion invalida,
   eliminar orden ya aprobada, UUID inexistente
 """
+
+from datetime import date, timedelta
+
 from rest_framework import status
 
 from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra
+from apps.tenant.compras.requisiciones.services.business_service import (
+    RequisicionCompraBusinessService,
+)
+from apps.tenant.cotizaciones.models import Cotizacion
 from apps.tenant.empresa.models import Empresa, Sede
 from apps.tenant.perfil.models import TenantProfile
 from apps.tenant.proveedores.models import Proveedor
@@ -30,23 +37,78 @@ class ComprasCrudWorkspaceTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test Compras CRUD", nit="900555111", direccion="Calle 1",
+            razon_social="Empresa Test Compras CRUD",
+            nit="900555111",
+            direccion="Calle 1",
         )
         # IsTenantAdminOrReadOnly lee TenantProfile.rol (SSoT v2.61.8), no
         # TenantMembership.rol -- SintelTenantTestCase solo crea el segundo.
-        TenantProfile.objects.get_or_create(
-            user=self.user, empresa=self.empresa,
+        self.perfil = TenantProfile.objects.get_or_create(
+            user=self.user,
+            empresa=self.empresa,
             defaults={"rol": "ADMIN", "alcance": "EMPRESA", "cargo": "Gerente de Compras"},
-        )
+        )[0]
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Sede CRUD Test")
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor CRUD Test",
-            tipo_documento="NIT", numero_documento="900555222", activo=True,
+            empresa=self.empresa,
+            razon_social="Proveedor CRUD Test",
+            tipo_documento="NIT",
+            numero_documento="900555222",
+            activo=True,
         )
         self.plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla CRUD Test", prefijo="OCCRUD",
-            rango_desde=1, rango_hasta=1000, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla CRUD Test",
+            prefijo="OCCRUD",
+            rango_desde=1,
+            rango_hasta=1000,
+            consecutivo_actual=1,
+            vigente=True,
         )
+        self.requisicion = self._crear_requisicion_aprobada()
+
+    def _crear_requisicion_aprobada(self):
+        """Toda OrdenCompra ahora requiere >= 1 Requisicion, sin excepcion
+        posible (PLAN_CENTRO_APROBACIONES_DASHBOARD_COMPRAS.md #3) -- este
+        archivo no es especifico de Requisiciones, pero ya no existe una via
+        de excepcion para evitar fabricar esta cadena."""
+        cotizacion = Cotizacion.objects.create(
+            empresa=self.empresa,
+            numero_cotizacion="COT-CRUD-TEST",
+            fecha_vencimiento=date.today() + timedelta(days=30),
+        )
+        ok, req, code = RequisicionCompraBusinessService.crear_requisicion(
+            {
+                "fecha_necesidad": date.today() + timedelta(days=5),
+                "tipo": "BIEN",
+                "prioridad": "MEDIA",
+                "justificacion": "Requisicion de soporte para test de CRUD generico",
+                "observaciones": "",
+                "proyecto": None,
+                "responsable_aprobacion": None,
+                "cotizacion": cotizacion,
+            },
+            [
+                {
+                    "tipo_item": "BIEN",
+                    "descripcion": "Item CRUD",
+                    "cantidad_solicitada": "10",
+                    "valor_unitario_estimado": "100000",
+                    "porcentaje_iva": "19",
+                    "unidad_medida": "UND",
+                }
+            ],
+            self.empresa,
+            self.sede,
+            self.perfil,
+        )
+        assert ok, req
+        RequisicionCompraBusinessService.enviar_a_aprobacion(str(req.uuid), self.empresa.id)
+        ok, req, code = RequisicionCompraBusinessService.aprobar_requisicion(
+            str(req.uuid), self.empresa.id
+        )
+        assert ok, req
+        return req
 
     def _payload_valido(self):
         return {
@@ -56,12 +118,15 @@ class ComprasCrudWorkspaceTests(SintelTenantTestCase):
             "fecha": "2026-06-01",
             "fecha_entrega": "2026-06-10",
             "observaciones": "Orden de prueba CRUD",
-            "items": [{
-                "descripcion": "Item de prueba",
-                "cantidad": "2",
-                "valor_unitario": "100000",
-                "porcentaje_iva": "19",
-            }],
+            "requisiciones": [str(self.requisicion.uuid)],
+            "items": [
+                {
+                    "descripcion": "Item de prueba",
+                    "cantidad": "2",
+                    "valor_unitario": "100000",
+                    "porcentaje_iva": "19",
+                }
+            ],
         }
 
     def test_orden_compra_crud_completo(self):
@@ -102,20 +167,26 @@ class ComprasCrudWorkspaceTests(SintelTenantTestCase):
 
         # 6. DELETE negativo: transicion invalida antes de cambiar estado
         resp = self.api_client.post(
-            f"/api/v1/compras/{orden_uuid}/cambiar-estado/", data={"estado": "RECIBIDA"}, format="json"
+            f"/api/v1/compras/{orden_uuid}/cambiar-estado/",
+            data={"estado": "RECIBIDA"},
+            format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.content)
 
         # 7. Cambiar estado valido: BORRADOR -> APROBADA
         resp = self.api_client.post(
-            f"/api/v1/compras/{orden_uuid}/cambiar-estado/", data={"estado": "APROBADA"}, format="json"
+            f"/api/v1/compras/{orden_uuid}/cambiar-estado/",
+            data={"estado": "APROBADA"},
+            format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
         self.assertEqual(resp.json()["estado"], "APROBADA")
 
         # 8. DELETE negativo: ya no esta en Borrador, no se puede eliminar
         resp = self.api_client.delete(f"/api/v1/compras/{orden_uuid}/")
-        self.assertIn(resp.status_code, (status.HTTP_400_BAD_REQUEST, status.HTTP_409_CONFLICT), resp.content)
+        self.assertIn(
+            resp.status_code, (status.HTTP_400_BAD_REQUEST, status.HTTP_409_CONFLICT), resp.content
+        )
         self.assertTrue(OrdenCompra.objects.filter(uuid=orden_uuid).exists())
 
     def test_orden_compra_delete_positivo_en_borrador(self):

@@ -19,7 +19,6 @@ from django.http import HttpResponse
 
 from apps.tenant.facturas.models import Factura, FacturaAnexos
 
-
 # --- Campos optimizados para alineación Serializers ↔ UI ---
 # IMPORTANTE: estas constantes se usan en Meta.fields de serializers.
 # NUNCA incluir notacion ORM de traversal (doble guion bajo ej: sede__nombre).
@@ -29,8 +28,8 @@ LIST_FIELDS = (
     "uuid",
     "numero",
     "naturaleza",
-    "origen",          # Facturas Hub FASE 7
-    "source_system",   # Facturas Hub FASE 8
+    "origen",  # Facturas Hub FASE 7
+    "source_system",  # Facturas Hub FASE 8
     "estado",
     "estado_pago",
     "dian_validation_desc",
@@ -53,7 +52,7 @@ LIST_FIELDS = (
     "cotizacion_numero",
     "cufe",
     "qr_url",
-    "sede_id",      # DT-SEDE-02: FK id (valido en Meta.fields y en .only())
+    "sede_id",  # DT-SEDE-02: FK id (valido en Meta.fields y en .only())
 )
 
 # Traversals ORM para .only() — NO incluir en LIST_FIELDS/DETAIL_FIELDS
@@ -69,8 +68,8 @@ DETAIL_FIELDS = (
     "tipo",
     "estado",
     "naturaleza",
-    "origen",          # Facturas Hub FASE 7
-    "source_system",   # Facturas Hub FASE 8
+    "origen",  # Facturas Hub FASE 7
+    "source_system",  # Facturas Hub FASE 8
     "categoria",
     "fecha_emision",
     "fecha_vencimiento",
@@ -108,7 +107,7 @@ DETAIL_FIELDS = (
     "autorizacion_rango_hasta",
     "autorizacion_vigencia_inicio",
     "autorizacion_vigencia_fin",
-    "sede_id",       # DT-SEDE-02: FK id (valido en Meta.fields y en .only())
+    "sede_id",  # DT-SEDE-02: FK id (valido en Meta.fields y en .only())
     "created_at",
     "updated_at",
 )
@@ -153,10 +152,10 @@ class FacturaSelectors:
             qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
         if search:
             qs = qs.filter(
-                Q(numero__icontains=search) |
-                Q(cufe__icontains=search) |
-                Q(receptor_razon_social__icontains=search) |
-                Q(emisor_razon_social__icontains=search)
+                Q(numero__icontains=search)
+                | Q(cufe__icontains=search)
+                | Q(receptor_razon_social__icontains=search)
+                | Q(emisor_razon_social__icontains=search)
             )
         return qs.order_by("-fecha_emision", "-id")
 
@@ -173,10 +172,14 @@ class FacturaSelectors:
         perfil con alcance=SEDE podia ver/editar/eliminar por UUID directo
         una Factura de otra sede aunque el listado (F7) ya se la ocultara.
         """
-        qs = Factura.objects.select_related("nota_credito", "sede").prefetch_related("impuestos_desglosados").only(
-            *DETAIL_FIELDS,
-            *NOTA_CREDITO_ONLY_FIELDS,
-            *_SEDE_ONLY_TRAVERSALS,
+        qs = (
+            Factura.objects.select_related("nota_credito", "sede")
+            .prefetch_related("impuestos_desglosados")
+            .only(
+                *DETAIL_FIELDS,
+                *NOTA_CREDITO_ONLY_FIELDS,
+                *_SEDE_ONLY_TRAVERSALS,
+            )
         )
         if empresa_id:
             qs = qs.filter(empresa_id=empresa_id)
@@ -206,10 +209,10 @@ class FacturaSelectors:
         ).only(*LIST_FIELDS)
         if search:
             qs = qs.filter(
-                Q(numero__icontains=search) |
-                Q(cufe__icontains=search) |
-                Q(receptor_razon_social__icontains=search) |
-                Q(receptor_nit__icontains=search)
+                Q(numero__icontains=search)
+                | Q(cufe__icontains=search)
+                | Q(receptor_razon_social__icontains=search)
+                | Q(receptor_nit__icontains=search)
             )
         return qs.order_by("-fecha_emision", "-id")
 
@@ -228,42 +231,50 @@ class FacturaSelectors:
     def get_summary(empresa_id: int | None = None) -> dict[str, Any]:
         """
         Calcula resumen neto de facturación (Facturas - Notas Crédito).
-        
-        # WARNING: v3.7.1: Se corrige lógica para incluir facturas con NC 
+
+        # WARNING: v3.7.1: Se corrige lógica para incluir facturas con NC
         y restar el total de la NC para obtener el valor neto real.
         """
         from apps.tenant.facturas.models import NotaCredito
-        
+
         base_filter = Q()
         if empresa_id:
             base_filter &= Q(empresa_id=empresa_id)
-        
+
         # 1. Agregación de Facturas (Bruto)
-        ventas_f = Factura.objects.filter(base_filter, naturaleza=Factura.Naturaleza.VENTA).aggregate(
-            sub=Coalesce(Sum('subtotal', output_field=DecimalField()), Decimal('0.00')),
-            imp=Coalesce(Sum('impuestos', output_field=DecimalField()), Decimal('0.00')),
-            tot=Coalesce(Sum('total', output_field=DecimalField()), Decimal('0.00')),
-            qty=Count('id')
+        ventas_f = Factura.objects.filter(
+            base_filter, naturaleza=Factura.Naturaleza.VENTA
+        ).aggregate(
+            sub=Coalesce(Sum("subtotal", output_field=DecimalField()), Decimal("0.00")),
+            imp=Coalesce(Sum("impuestos", output_field=DecimalField()), Decimal("0.00")),
+            tot=Coalesce(Sum("total", output_field=DecimalField()), Decimal("0.00")),
+            qty=Count("id"),
         )
-        
-        compras_f = Factura.objects.filter(base_filter, naturaleza=Factura.Naturaleza.COMPRA).aggregate(
-            sub=Coalesce(Sum('subtotal', output_field=DecimalField()), Decimal('0.00')),
-            imp=Coalesce(Sum('impuestos', output_field=DecimalField()), Decimal('0.00')),
-            tot=Coalesce(Sum('total', output_field=DecimalField()), Decimal('0.00')),
-            qty=Count('id')
+
+        compras_f = Factura.objects.filter(
+            base_filter, naturaleza=Factura.Naturaleza.COMPRA
+        ).aggregate(
+            sub=Coalesce(Sum("subtotal", output_field=DecimalField()), Decimal("0.00")),
+            imp=Coalesce(Sum("impuestos", output_field=DecimalField()), Decimal("0.00")),
+            tot=Coalesce(Sum("total", output_field=DecimalField()), Decimal("0.00")),
+            qty=Count("id"),
         )
 
         # 2. Agregación de Notas Crédito (Reversiones)
-        ventas_nc = NotaCredito.objects.filter(base_filter, factura__naturaleza=Factura.Naturaleza.VENTA).aggregate(
-            sub=Coalesce(Sum('subtotal', output_field=DecimalField()), Decimal('0.00')),
-            imp=Coalesce(Sum('impuestos', output_field=DecimalField()), Decimal('0.00')),
-            tot=Coalesce(Sum('total', output_field=DecimalField()), Decimal('0.00'))
+        ventas_nc = NotaCredito.objects.filter(
+            base_filter, factura__naturaleza=Factura.Naturaleza.VENTA
+        ).aggregate(
+            sub=Coalesce(Sum("subtotal", output_field=DecimalField()), Decimal("0.00")),
+            imp=Coalesce(Sum("impuestos", output_field=DecimalField()), Decimal("0.00")),
+            tot=Coalesce(Sum("total", output_field=DecimalField()), Decimal("0.00")),
         )
-        
-        compras_nc = NotaCredito.objects.filter(base_filter, factura__naturaleza=Factura.Naturaleza.COMPRA).aggregate(
-            sub=Coalesce(Sum('subtotal', output_field=DecimalField()), Decimal('0.00')),
-            imp=Coalesce(Sum('impuestos', output_field=DecimalField()), Decimal('0.00')),
-            tot=Coalesce(Sum('total', output_field=DecimalField()), Decimal('0.00'))
+
+        compras_nc = NotaCredito.objects.filter(
+            base_filter, factura__naturaleza=Factura.Naturaleza.COMPRA
+        ).aggregate(
+            sub=Coalesce(Sum("subtotal", output_field=DecimalField()), Decimal("0.00")),
+            imp=Coalesce(Sum("impuestos", output_field=DecimalField()), Decimal("0.00")),
+            tot=Coalesce(Sum("total", output_field=DecimalField()), Decimal("0.00")),
         )
 
         return {
@@ -271,16 +282,15 @@ class FacturaSelectors:
                 "subtotal_neto": ventas_f["sub"] - ventas_nc["sub"],
                 "impuestos_neto": ventas_f["imp"] - ventas_nc["imp"],
                 "total_neto": ventas_f["tot"] - ventas_nc["tot"],
-                "cantidad": ventas_f["qty"]
+                "cantidad": ventas_f["qty"],
             },
             "compras": {
                 "subtotal_neto": compras_f["sub"] - compras_nc["sub"],
                 "impuestos_neto": compras_f["imp"] - compras_nc["imp"],
                 "total_neto": compras_f["tot"] - compras_nc["tot"],
-                "cantidad": compras_f["qty"]
-            }
+                "cantidad": compras_f["qty"],
+            },
         }
-
 
     @staticmethod
     def obtener_anexo_xml(factura: Factura, tipo: str) -> tuple[HttpResponse | dict[str, Any], int]:
@@ -291,7 +301,7 @@ class FacturaSelectors:
             anexos = FacturaAnexos.objects.get(factura=factura)
         except FacturaAnexos.DoesNotExist:
             return {"error": "no_anexos", "message": "No hay anexos disponibles."}, 204
-        
+
         if tipo == "ubl":
             xml_content = anexos.ubl_xml
             filename = f"factura_{factura.numero}_ubl.xml"
@@ -300,12 +310,12 @@ class FacturaSelectors:
             filename = f"factura_{factura.numero}_app_response.xml"
         else:
             return {"error": "invalid_type", "message": "Tipo inválido."}, 400
-        
+
         if not xml_content:
             return {"error": "no_xml", "message": "No hay XML disponible."}, 204
-        
+
         xml_bytes = xml_content.encode("utf-8") if isinstance(xml_content, str) else xml_content
-        
+
         if len(xml_bytes) > MAX_INLINE_BYTES:
             response = HttpResponse(xml_bytes, content_type="application/xml")
             response["Content-Disposition"] = f'attachment; filename="{filename}"'
@@ -322,9 +332,12 @@ class CotizacionBridge:
     Selector dinamico para resolver Cotizaciones vinculadas a Facturas.
     Integración con apps.tenant.cotizaciones sin acoplamiento circular.
     """
+
     @staticmethod
     def obtener_cotizacion_por_uuid(
-        cotizacion_uuid: str, empresa_id: int | None = None, sede_ids=None,
+        cotizacion_uuid: str,
+        empresa_id: int | None = None,
+        sede_ids=None,
     ) -> dict | None:
         """
         Resuelve Cotizacion a partir de uuid vinculado en Factura.
@@ -355,12 +368,12 @@ class CotizacionBridge:
             # Si tenemos empresa_id, usarlo para validación DSV
             if empresa_id:
                 cotizacion = CotizacionSelector.get_detail_by_uuid(
-                    uuid=cotizacion_uuid,
-                    empresa_id=empresa_id
+                    uuid=cotizacion_uuid, empresa_id=empresa_id
                 ).first()
             else:
                 # Sin empresa_id, acceso abierto (inter-app)
                 from apps.tenant.cotizaciones.models import Cotizacion
+
                 cotizacion = Cotizacion.objects.filter(uuid=cotizacion_uuid).first()
 
             if not cotizacion:
@@ -370,20 +383,33 @@ class CotizacionBridge:
             # pero puede estar fuera del alcance organizacional de quien
             # pregunta - se trata igual que "no existe" (mismo criterio DSV
             # que las demas verificaciones de este bridge).
-            if sede_ids is not None and cotizacion.sede_id is not None and cotizacion.sede_id not in sede_ids:
+            if (
+                sede_ids is not None
+                and cotizacion.sede_id is not None
+                and cotizacion.sede_id not in sede_ids
+            ):
                 return None
 
             return {
-                'uuid': str(cotizacion.uuid),
-                'numero_cotizacion': cotizacion.numero_cotizacion,
-                'estado': cotizacion.estado,
-                'fecha_emision': cotizacion.fecha_emision.isoformat() if cotizacion.fecha_emision else None,
-                'fecha_vencimiento': cotizacion.fecha_vencimiento.isoformat() if cotizacion.fecha_vencimiento else None,
-                'total_con_impuestos': float(cotizacion.total_con_impuestos) if cotizacion.total_con_impuestos else 0.0,
-                'cliente_razon_social': cotizacion.cliente.razon_social if cotizacion.cliente else None,
+                "uuid": str(cotizacion.uuid),
+                "numero_cotizacion": cotizacion.numero_cotizacion,
+                "estado": cotizacion.estado,
+                "fecha_emision": cotizacion.fecha_emision.isoformat()
+                if cotizacion.fecha_emision
+                else None,
+                "fecha_vencimiento": cotizacion.fecha_vencimiento.isoformat()
+                if cotizacion.fecha_vencimiento
+                else None,
+                "total_con_impuestos": float(cotizacion.total_con_impuestos)
+                if cotizacion.total_con_impuestos
+                else 0.0,
+                "cliente_razon_social": cotizacion.cliente.razon_social
+                if cotizacion.cliente
+                else None,
             }
         except Exception as e:
             from logging import getLogger
+
             logger = getLogger(__name__)
             logger.warning(f"Error resolviendo cotizacion {cotizacion_uuid}: {e}")
             return None
@@ -392,7 +418,10 @@ class CotizacionBridge:
     def exists_by_uuid(cotizacion_uuid: str, empresa_id: int | None = None, sede_ids=None) -> bool:
         """Valida existencia de cotizacion por UUID (y, si se pasa `sede_ids`,
         que este dentro del alcance organizacional del solicitante - F9)."""
-        return CotizacionBridge.obtener_cotizacion_por_uuid(cotizacion_uuid, empresa_id, sede_ids) is not None
+        return (
+            CotizacionBridge.obtener_cotizacion_por_uuid(cotizacion_uuid, empresa_id, sede_ids)
+            is not None
+        )
 
 
 class ClienteBridge:
@@ -446,7 +475,9 @@ class ProveedorBridge:
     """Bridge de lectura hacia Proveedores para resolver proveedor_uuid sin snapshots."""
 
     @staticmethod
-    def obtener_proveedor_por_uuid(proveedor_uuid: str, empresa_id: int | None = None) -> dict | None:
+    def obtener_proveedor_por_uuid(
+        proveedor_uuid: str, empresa_id: int | None = None
+    ) -> dict | None:
         """Retorna informacion minima del proveedor vinculado."""
         if not proveedor_uuid:
             return None
@@ -499,6 +530,7 @@ class InventarioItemBridge:
     Selector dinamico para resolver items de inventario (Productos/Servicios)
     desde el modulo de facturacion sin acoplamiento circular.
     """
+
     @staticmethod
     def buscar_catalogo(empresa_id: int, search: str = "") -> list[dict[str, Any]]:
         """
@@ -510,39 +542,39 @@ class InventarioItemBridge:
         # Busqueda de Productos
         prod_qs = Producto.objects.filter(empresa_id=empresa_id)
         if search:
-            prod_qs = prod_qs.filter(
-                Q(codigo__icontains=search) | Q(nombre__icontains=search)
-            )
-        productos = prod_qs.only('uuid', 'codigo', 'nombre', 'precio_venta').order_by('nombre')[:50]
+            prod_qs = prod_qs.filter(Q(codigo__icontains=search) | Q(nombre__icontains=search))
+        productos = prod_qs.only("uuid", "codigo", "nombre", "precio_venta").order_by("nombre")[:50]
 
         # Busqueda de Servicios
         serv_qs = Servicio.objects.filter(empresa_id=empresa_id)
         if search:
-            serv_qs = serv_qs.filter(
-                Q(codigo__icontains=search) | Q(nombre__icontains=search)
-            )
-        servicios = serv_qs.only('uuid', 'codigo', 'nombre', 'precio_venta').order_by('nombre')[:50]
+            serv_qs = serv_qs.filter(Q(codigo__icontains=search) | Q(nombre__icontains=search))
+        servicios = serv_qs.only("uuid", "codigo", "nombre", "precio_venta").order_by("nombre")[:50]
 
         catalogo = []
         for p in productos:
-            catalogo.append({
-                'uuid': str(p.uuid),
-                'codigo': p.codigo,
-                'nombre': p.nombre,
-                'precio_venta': float(p.precio_venta) if p.precio_venta else 0.0,
-                'tipo': 'PRODUCTO'
-            })
+            catalogo.append(
+                {
+                    "uuid": str(p.uuid),
+                    "codigo": p.codigo,
+                    "nombre": p.nombre,
+                    "precio_venta": float(p.precio_venta) if p.precio_venta else 0.0,
+                    "tipo": "PRODUCTO",
+                }
+            )
         for s in servicios:
-            catalogo.append({
-                'uuid': str(s.uuid),
-                'codigo': s.codigo,
-                'nombre': s.nombre,
-                'precio_venta': float(s.precio_venta) if s.precio_venta else 0.0,
-                'tipo': 'SERVICIO'
-            })
+            catalogo.append(
+                {
+                    "uuid": str(s.uuid),
+                    "codigo": s.codigo,
+                    "nombre": s.nombre,
+                    "precio_venta": float(s.precio_venta) if s.precio_venta else 0.0,
+                    "tipo": "SERVICIO",
+                }
+            )
 
         # Ordenar catalogo final por nombre
-        catalogo.sort(key=lambda x: x['nombre'])
+        catalogo.sort(key=lambda x: x["nombre"])
         return catalogo
 
     @staticmethod
@@ -552,35 +584,36 @@ class InventarioItemBridge:
         """
         from apps.tenant.inventario.models import Producto, Servicio
 
-        if item_tipo == 'PRODUCTO':
+        if item_tipo == "PRODUCTO":
             try:
-                p = Producto.objects.only('uuid', 'codigo', 'nombre', 'precio_venta').get(
+                p = Producto.objects.only("uuid", "codigo", "nombre", "precio_venta").get(
                     empresa_id=empresa_id, uuid=item_uuid
                 )
                 return {
-                    'uuid': str(p.uuid),
-                    'codigo': p.codigo,
-                    'nombre': p.nombre,
-                    'precio_venta': float(p.precio_venta) if p.precio_venta else 0.0,
-                    'tipo': 'PRODUCTO'
+                    "uuid": str(p.uuid),
+                    "codigo": p.codigo,
+                    "nombre": p.nombre,
+                    "precio_venta": float(p.precio_venta) if p.precio_venta else 0.0,
+                    "tipo": "PRODUCTO",
                 }
             except Producto.DoesNotExist:
                 return None
-        elif item_tipo == 'SERVICIO':
+        elif item_tipo == "SERVICIO":
             try:
-                s = Servicio.objects.only('uuid', 'codigo', 'nombre', 'precio_venta').get(
+                s = Servicio.objects.only("uuid", "codigo", "nombre", "precio_venta").get(
                     empresa_id=empresa_id, uuid=item_uuid
                 )
                 return {
-                    'uuid': str(s.uuid),
-                    'codigo': s.codigo,
-                    'nombre': s.nombre,
-                    'precio_venta': float(s.precio_venta) if s.precio_venta else 0.0,
-                    'tipo': 'SERVICIO'
+                    "uuid": str(s.uuid),
+                    "codigo": s.codigo,
+                    "nombre": s.nombre,
+                    "precio_venta": float(s.precio_venta) if s.precio_venta else 0.0,
+                    "tipo": "SERVICIO",
                 }
             except Servicio.DoesNotExist:
                 return None
         return None
+
 
 # Nota (reestructuracion arquitectonica v4.0.0 F2): `BancosBridge` (leia
 # TransaccionBancaria desde Facturas, Pull Model v3.11.0/ADR-001) se

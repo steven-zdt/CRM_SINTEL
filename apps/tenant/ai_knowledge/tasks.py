@@ -32,15 +32,15 @@ def _clasificar_excepcion(exc: Exception) -> str:
     # PermissionError es subclase de OSError -- se clasifica ANTES del catch-all.
     if isinstance(exc, PermissionError):
         return "security"
-    if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+    if isinstance(exc, ConnectionError | TimeoutError | OSError):
         return "transient"
     if isinstance(exc, EmbeddingProviderError):
         return "transient" if exc.transient else "unknown"
-    if isinstance(exc, (ImportError, AttributeError, ProgrammingError, NameError, TypeError)):
+    if isinstance(exc, ImportError | AttributeError | ProgrammingError | NameError | TypeError):
         return "programming"
     if isinstance(exc, IntegrityError):
         return "domain"
-    if isinstance(exc, (DjangoValidationError, ValueError, KeyError)):
+    if isinstance(exc, DjangoValidationError | ValueError | KeyError):
         return "validation"
     return "unknown"
 
@@ -63,7 +63,9 @@ def reindex_tenant_knowledge(self, schema_name: str, source_types: list[str] | N
     task_id = getattr(self.request, "id", None)
     logger.info(
         "[reindex_tenant_knowledge] start schema=%s source_types=%s task_id=%s",
-        schema_name, source_types or "*", task_id,
+        schema_name,
+        source_types or "*",
+        task_id,
     )
 
     with schema_context(schema_name):
@@ -72,23 +74,34 @@ def reindex_tenant_knowledge(self, schema_name: str, source_types: list[str] | N
 
         empresa = Empresa.objects.only("id").first()
         if empresa is None:
-            logger.warning("[reindex_tenant_knowledge] schema=%s sin Empresa -- nada que indexar", schema_name)
+            logger.warning(
+                "[reindex_tenant_knowledge] schema=%s sin Empresa -- nada que indexar", schema_name
+            )
             return {"schema": schema_name, "status": "NO_EMPRESA"}
 
         try:
             result = IndexingService().reindex_all(empresa=empresa, source_types=source_types)
         except EmbeddingProviderError as exc:
             if exc.transient:
-                logger.warning("[reindex_tenant_knowledge] proveedor transitorio, reintento: %s", exc)
-                raise self.retry(exc=exc)
+                logger.warning(
+                    "[reindex_tenant_knowledge] proveedor transitorio, reintento: %s", exc
+                )
+                raise self.retry(exc=exc) from exc
             logger.error("[reindex_tenant_knowledge] proveedor NO transitorio", exc_info=True)
             raise
         except Exception as exc:  # noqa: BLE001 -- clasificamos, no silenciamos
             categoria = _clasificar_excepcion(exc)
             if categoria in ("programming", "security"):
-                logger.error("[reindex_tenant_knowledge] %s error schema=%s", categoria, schema_name, exc_info=True)
+                logger.error(
+                    "[reindex_tenant_knowledge] %s error schema=%s",
+                    categoria,
+                    schema_name,
+                    exc_info=True,
+                )
             else:
-                logger.warning("[reindex_tenant_knowledge] %s error schema=%s: %s", categoria, schema_name, exc)
+                logger.warning(
+                    "[reindex_tenant_knowledge] %s error schema=%s: %s", categoria, schema_name, exc
+                )
             raise
 
     payload = {

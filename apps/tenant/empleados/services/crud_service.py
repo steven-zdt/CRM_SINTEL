@@ -6,11 +6,11 @@ WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
 - Sin logica de negocio, solo acceso a datos con @transaction.atomic.
 - Todas las funciones son @staticmethod.
 """
+
 import logging
 from decimal import Decimal
 
 from django.db import transaction
-from rest_framework.exceptions import ValidationError
 
 from apps.tenant.empleados.models import Contrato, Devengo, Empleado, PeriodoNomina
 
@@ -48,11 +48,11 @@ class EmpleadoCRUDService:
         devengos_qs = Devengo.objects.filter(
             empresa_id=empresa_id,
             empleado_id=empleado_id,
-        ).only('id')
+        ).only("id")
         contratos_qs = Contrato.objects.filter(
             empresa_id=empresa_id,
             empleado_id=empleado_id,
-        ).only('id')
+        ).only("id")
 
         # Contar dependencias antes de eliminar
         contratos_count = contratos_qs.count()
@@ -66,7 +66,8 @@ class EmpleadoCRUDService:
 
         # Desvincular tareas cortas de proyectos (FK nullable, PROTECT)
         from django.apps import apps as django_apps
-        TareaCorta = django_apps.get_model('tenant_proyectos', 'TareaCorta')
+
+        TareaCorta = django_apps.get_model("tenant_proyectos", "TareaCorta")
         TareaCorta.objects.filter(empleado_id=empleado_id).update(empleado=None)
 
         empleado.delete()
@@ -77,9 +78,9 @@ class EmpleadoCRUDService:
         )
 
         return {
-            'contratos_eliminados': contratos_count,
-            'devengos_eliminados': devengos_count,
-            'empleado_eliminado': True
+            "contratos_eliminados": contratos_count,
+            "devengos_eliminados": devengos_count,
+            "empleado_eliminado": True,
         }
 
 
@@ -91,16 +92,16 @@ class ContratoCRUDService:
     def crear_contrato(empleado: Empleado, data: dict) -> Contrato:
         """Crea un nuevo contrato."""
         # Asignar empresa desde empleado si no viene en data
-        if 'empresa' not in data:
-            data['empresa'] = empleado.empresa
+        if "empresa" not in data:
+            data["empresa"] = empleado.empresa
 
         # Sincronizar campos legacy y nuevos
-        if 'estado' in data:
-            data['activo'] = (data['estado'] == 'ACTIVO')
-        if 'estado' not in data:
-            data['estado'] = 'ACTIVO'
-        if 'activo' not in data:
-            data['activo'] = True
+        if "estado" in data:
+            data["activo"] = data["estado"] == "ACTIVO"
+        if "estado" not in data:
+            data["estado"] = "ACTIVO"
+        if "activo" not in data:
+            data["activo"] = True
 
         contrato = Contrato.objects.create(empleado=empleado, **data)
         logger.info(f"[ContratoCRUD] Creado contrato ID={contrato.id} para empleado {empleado.id}")
@@ -111,8 +112,8 @@ class ContratoCRUDService:
     def actualizar_contrato(contrato: Contrato, data: dict) -> Contrato:
         """Actualiza un contrato existente."""
         # Sincronizar campos legacy y nuevos
-        if 'estado' in data:
-            data['activo'] = (data['estado'] == 'ACTIVO')
+        if "estado" in data:
+            data["activo"] = data["estado"] == "ACTIVO"
 
         for key, value in data.items():
             setattr(contrato, key, value)
@@ -125,16 +126,16 @@ class ContratoCRUDService:
     def desactivar_contratos_previos(empleado: Empleado, contrato_excluir=None):
         """Desactiva contratos previos activos de un empleado."""
         qs_previos = Contrato.objects.filter(
-            empleado=empleado,
-            estado='ACTIVO',
-            empresa_id=empleado.empresa_id
+            empleado=empleado, estado="ACTIVO", empresa_id=empleado.empresa_id
         )
 
         if contrato_excluir:
             qs_previos = qs_previos.exclude(pk=contrato_excluir.pk)
 
-        count = qs_previos.update(activo=False, estado='INACTIVO')
-        logger.info(f"[ContratoCRUD] Desactivados {count} contratos previos del empleado {empleado.id}")
+        count = qs_previos.update(activo=False, estado="INACTIVO")
+        logger.info(
+            f"[ContratoCRUD] Desactivados {count} contratos previos del empleado {empleado.id}"
+        )
         return count
 
 
@@ -146,8 +147,8 @@ class DevengoCRUDService:
     def crear_devengo(empleado: Empleado, data: dict) -> Devengo:
         """Crea un nuevo registro de nomina."""
         # Asignar empresa desde empleado si no viene en data
-        if 'empresa' not in data:
-            data['empresa'] = empleado.empresa
+        if "empresa" not in data:
+            data["empresa"] = empleado.empresa
 
         devengo = Devengo.objects.create(empleado=empleado, **data, anulado=False)
         logger.info(f"[DevengoCRUD] Creado devengo ID={devengo.id} para empleado {empleado.id}")
@@ -171,7 +172,7 @@ class DevengoCRUDService:
             raise ValueError("El desprendible ya esta anulado.")
 
         devengo.anulado = True
-        devengo.save(update_fields=['anulado'])
+        devengo.save(update_fields=["anulado"])
         logger.info(f"[DevengoCRUD] Anulado devengo ID={devengo.id}")
         return devengo
 
@@ -190,9 +191,9 @@ class DevengoCRUDService:
         """Actualiza el saldo de prestamo en un contrato."""
         contrato.refresh_from_db()
         prestamo_actual = Decimal(str(contrato.prestamos_empresa or 0))
-        nuevo_prestamo = max(Decimal('0'), prestamo_actual - monto_diferencia)
+        nuevo_prestamo = max(Decimal("0"), prestamo_actual - monto_diferencia)
         contrato.prestamos_empresa = nuevo_prestamo
-        contrato.save(update_fields=['prestamos_empresa'])
+        contrato.save(update_fields=["prestamos_empresa"])
         logger.info(
             f"[DevengoCRUD] Prestamo actualizado: contrato {contrato.id}, "
             f"diferencia={monto_diferencia}, nuevo_saldo={nuevo_prestamo}"
@@ -219,7 +220,7 @@ class PeriodoNominaCRUDService:
         No valida que la transicion sea legal -- esa responsabilidad es de
         PeriodoNominaBusinessService."""
         periodo.estado = estado
-        update_fields = ['estado', 'updated_at']
+        update_fields = ["estado", "updated_at"]
         for campo, valor in campos_auditoria.items():
             setattr(periodo, campo, valor)
             update_fields.append(campo)

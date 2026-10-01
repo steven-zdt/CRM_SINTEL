@@ -13,6 +13,7 @@ siguen siendo la puerta real -- este ViewSet solo agrega la capa HTTP
 en `apps/services/ai/orchestrator/form_assistant.py::ask()` y, debajo,
 en `AIEngine.run_tool()`.
 """
+
 from rest_framework import status, viewsets
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
@@ -40,6 +41,7 @@ class AIAssistantViewSet(viewsets.ViewSet):
     POST /api/v1/ai/ask/  -> el Form Assistant elige y ejecuta una tool
     ya registrada a partir de lenguaje natural.
     """
+
     authentication_classes = [RelaxedJWTAuthentication, SessionAuthentication]
     permission_classes = [IsTenantMember]
 

@@ -1,16 +1,16 @@
 from django.urls import path
 
-from .views import VentaTableView
+from .views import VentaKpisView
 from .views_reportes import VentaReportesContainerView, VentaReportesView
 
-app_name = 'ventas'
+app_name = "ventas"
 
 urlpatterns = [
-    # Tabla server-rendered (django-tables2 + HTMX) — Fase 5-BIS, reemplaza
-    # la inicializacion de Tabulator en venta_list.js
-    path('tabla/', VentaTableView.as_view(), name='tabla'),
+    # KPIs del listado de Ventas (HTMX) -- la tabla la sirve POST
+    # /api/v1/ventas/dt/ + DataTables JS (ver DATATABLES_PILOT_VENTAS_STATUS.md)
+    path("tabla/", VentaKpisView.as_view(), name="tabla"),
     # Reporte "Resumen de Ventas" -- consume el Reporting Hub (mision
     # Reporting Hub Frontend), no VentaSelector directo.
-    path('reportes/', VentaReportesContainerView.as_view(), name='reportes-container'),
-    path('reportes/tabla/', VentaReportesView.as_view(), name='reportes-tabla'),
+    path("reportes/", VentaReportesContainerView.as_view(), name="reportes-container"),
+    path("reportes/tabla/", VentaReportesView.as_view(), name="reportes-tabla"),
 ]

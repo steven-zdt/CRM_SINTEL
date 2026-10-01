@@ -22,6 +22,6 @@ class CotizacionItemCoreViewSet(CotizacionItemViewSet):
 
 class ConfiguracionCotizacionCoreViewSet(ConfiguracionCotizacionViewSet):
     def get_serializer_class(self):
-        if self.action == 'list':
+        if self.action == "list":
             return ws_serializers.ConfiguracionCotizacionWorkspaceListSerializer
         return ws_serializers.ConfiguracionCotizacionWorkspaceDetailSerializer

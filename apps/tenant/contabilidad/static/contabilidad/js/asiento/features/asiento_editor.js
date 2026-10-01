@@ -185,10 +185,12 @@
     const btnGuardar = d.querySelector('#btn-guardar-asiento-crear, #btn-guardar-asiento-editar');
 
     const diferencia = Math.abs(totalDebe - totalHaber);
-    // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
-    const formatter = new Intl.NumberFormat('es-CO', {
+    // en-US agrupa con coma/punto (convencion real que este proyecto
+    // necesita); currency:'USD' es solo el simbolo "$", el valor sigue
+    // siendo COP real -- mismo truco documentado en dom-utils.js.
+    const formatter = new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'COP',
+      currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });

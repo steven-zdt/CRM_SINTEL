@@ -17,6 +17,7 @@ Patron de aislamiento:
     Esto garantiza la unidireccionalidad: tenant importa de public,
     nunca al reves.
 """
+
 from django.dispatch import Signal
 
 global_user_hard_deleting = Signal()

@@ -1,6 +1,7 @@
 """
 Template filters propios de la app impuestos (consola de administracion).
 """
+
 from django import template
 from django.utils.html import escape
 from django.utils.safestring import mark_safe

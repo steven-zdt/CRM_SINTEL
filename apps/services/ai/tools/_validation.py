@@ -21,6 +21,7 @@ Contrato de salida (ya documentado en AI_TOOL_REGISTRY.md Fase 14,
 implementado aqui por primera vez):
 `{"valid": bool, "warnings": [...], "missing_data": [...]}`.
 """
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext

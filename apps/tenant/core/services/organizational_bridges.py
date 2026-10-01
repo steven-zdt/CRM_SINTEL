@@ -38,6 +38,7 @@ Cobertura honesta:
     Fase 0 Anexo A.3/A.16. Quedan para cuando Fase 9 migre esas apps y de
     verdad necesiten una lectura inter-app equivalente a un bridge.
 """
+
 from __future__ import annotations
 
 from typing import Any, Protocol

@@ -26,6 +26,7 @@ Las otras 16 apps reciben el mismo tratamiento en Fase 9 (migracion app por
 app), no aqui - construir 17 adaptadores sin que ninguna fase futura los
 haya pedido todavia seria infraestructura especulativa.
 """
+
 from __future__ import annotations
 
 from typing import Any

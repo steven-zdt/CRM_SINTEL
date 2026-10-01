@@ -21,6 +21,7 @@ kind=SUGGEST (nunca escribe un AsientoContable -- esa persistencia
 sigue perteneciendo exclusivamente a contabilizar_documento_manual(),
 un flujo de confirmacion humana fuera de alcance de esta tool).
 """
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext
@@ -84,11 +85,17 @@ class SugerirAsientoContableTool(BaseTool):
 
         try:
             lineas = ContabilidadBusinessService().sugerir_lineas_asiento_ia(
-                empresa_id=context.empresa_id, app_label=app_label, ctx=ctx,
+                empresa_id=context.empresa_id,
+                app_label=app_label,
+                ctx=ctx,
             )
         except DRFValidationError as exc:
             detail = exc.detail
-            message = "; ".join(str(v) for v in detail.values()) if isinstance(detail, dict) else str(detail)
+            message = (
+                "; ".join(str(v) for v in detail.values())
+                if isinstance(detail, dict)
+                else str(detail)
+            )
             return ToolResult(status="VALIDATION_ERROR", message=message)
 
         return ToolResult(status="OK", data=lineas)

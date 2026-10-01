@@ -27,6 +27,7 @@ fase futura con un caso de uso real justifique separar una nueva capacidad
 (ej. "puede aprobar" vs "solo puede operar"). No se fabrica una jerarquia
 rol/alcance que no tiene respaldo en ningun modulo existente.
 """
+
 from __future__ import annotations
 
 ADMIN_GLOBAL = "ADMIN_GLOBAL"
@@ -50,7 +51,9 @@ ORGANIZATIONAL_PERMISSION_LEVELS = (
 _LEVEL_RANK = {level: idx for idx, level in enumerate(ORGANIZATIONAL_PERMISSION_LEVELS)}
 
 
-def resolve_organizational_permission_level(*, rol: str, alcance: str, is_staff: bool = False) -> str:
+def resolve_organizational_permission_level(
+    *, rol: str, alcance: str, is_staff: bool = False
+) -> str:
     """Resuelve el nivel jerarquico (Fase 4) a partir de datos ya existentes
     (RolTenant.rol, AlcanceOrganizacional.alcance, Django is_staff) - no
     requiere ningun campo nuevo en TenantProfile."""

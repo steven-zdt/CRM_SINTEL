@@ -12,6 +12,7 @@ sintoma reportado ("subi el extracto y no aparece").
 Fix: _resolver_empresa_id() ahora atrapa cualquier excepcion y cae al
 mismo fallback amplio (singleton Empresa).
 """
+
 from unittest.mock import patch
 
 import pytest
@@ -33,16 +34,23 @@ def test_extractos_tabla_no_queda_vacia_si_get_empresa_id_falla_por_otro_motivo(
         empresa = Empresa.objects.first()
         user = User.objects.create_user(username="b1_user", email="b1@t.com", password="password")
         TenantProfile.objects.create(user=user, empresa=empresa, rol="ADMIN")
-        with schema_context('public'):
+        with schema_context("public"):
             TenantMembership.objects.create(client=tenant1, user=user, rol="ADMIN")
 
         cuenta = CuentaBancaria.objects.create(
-            empresa=empresa, nombre="Cuenta B1", banco="BANCOLOMBIA",
-            tipo="CORRIENTE", numero="B1-001",
+            empresa=empresa,
+            nombre="Cuenta B1",
+            banco="BANCOLOMBIA",
+            tipo="CORRIENTE",
+            numero="B1-001",
         )
         ExtractoBancario.objects.create(
-            empresa=empresa, cuenta=cuenta, mes=1, anio=2026,
-            saldo_inicial=1000, saldo_final=2000,
+            empresa=empresa,
+            cuenta=cuenta,
+            mes=1,
+            anio=2026,
+            saldo_inicial=1000,
+            saldo_final=2000,
         )
 
     with schema_context(tenant1.schema_name):

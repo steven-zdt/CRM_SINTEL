@@ -6,16 +6,23 @@ WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
 - Delega persistencia a crud_service.py.
 - Todas las funciones son @staticmethod.
 """
+
 import logging
-from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from apps.tenant.empleados.models import Contrato, Devengo, Empleado, LiquidacionPrestacion, PeriodoNomina
+from apps.tenant.empleados.models import (
+    Contrato,
+    Devengo,
+    Empleado,
+    LiquidacionPrestacion,
+    PeriodoNomina,
+)
 from apps.tenant.empleados.services.crud_service import (
     ContratoCRUDService,
     DevengoCRUDService,
@@ -29,9 +36,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Constantes monetarias — SSoT para toda la lógica de nómina
 # ---------------------------------------------------------------------------
-MONEY_Q = Decimal('0.01')          # Cuantizador COP: 2 decimales
-_DIAS_MENSUALES = Decimal('30')     # Base comercial Colombia (mes = 30 días)
-_HORAS_MENSUALES = Decimal('200')   # Ley 2101/2021: jornada mensual de referencia
+MONEY_Q = Decimal("0.01")  # Cuantizador COP: 2 decimales
+_DIAS_MENSUALES = Decimal("30")  # Base comercial Colombia (mes = 30 días)
+_HORAS_MENSUALES = Decimal("200")  # Ley 2101/2021: jornada mensual de referencia
 
 
 def _to_decimal(value, *, allow_negative: bool = False) -> Decimal:
@@ -52,12 +59,12 @@ def _to_decimal(value, *, allow_negative: bool = False) -> Decimal:
         if isinstance(value, Decimal):
             result = value
         else:
-            result = Decimal(str(value)) if value is not None else Decimal('0.00')
+            result = Decimal(str(value)) if value is not None else Decimal("0.00")
     except Exception:
-        result = Decimal('0.00')
+        result = Decimal("0.00")
 
     if not allow_negative:
-        return max(Decimal('0.00'), result)
+        return max(Decimal("0.00"), result)
     return result
 
 
@@ -83,13 +90,13 @@ class EmpleadoBusinessService:
         Este es el unico punto de entrada tanto para el PATCH generico del
         ViewSet como para cualquier otro caller futuro.
         """
-        nuevo_estado = data.get('estado', empleado.estado)
+        nuevo_estado = data.get("estado", empleado.estado)
         estado_anterior = empleado.estado
 
-        if estado_anterior != 'RETIRADO' and nuevo_estado == 'RETIRADO':
-            motivo_retiro = data.pop('motivo_retiro', None)
-            fecha_retiro = data.pop('fecha_retiro', None)
-            data.pop('estado', None)
+        if estado_anterior != "RETIRADO" and nuevo_estado == "RETIRADO":
+            motivo_retiro = data.pop("motivo_retiro", None)
+            fecha_retiro = data.pop("fecha_retiro", None)
+            data.pop("estado", None)
             # Aplicar el resto de campos editados en el mismo request (ej.
             # telefono, email) antes de ejecutar el flujo de retiro.
             if data:
@@ -100,7 +107,7 @@ class EmpleadoBusinessService:
                 fecha_retiro=fecha_retiro,
                 empresa_id=empleado.empresa_id,
             )
-            return resultado['empleado']
+            return resultado["empleado"]
 
         return EmpleadoCRUDService.actualizar_empleado(empleado, data)
 
@@ -131,46 +138,60 @@ class EmpleadoBusinessService:
         en el resultado ('liquidacion': None), no se falla silenciosamente.
         """
         if empresa_id is not None and empleado.empresa_id != empresa_id:
-            raise ValidationError({'empleado': 'El empleado no pertenece a la empresa activa.'})
+            raise ValidationError({"empleado": "El empleado no pertenece a la empresa activa."})
 
-        if empleado.estado == 'RETIRADO':
-            raise ValidationError({'estado': 'El empleado ya esta retirado.'})
+        if empleado.estado == "RETIRADO":
+            raise ValidationError({"estado": "El empleado ya esta retirado."})
 
-        motivos_validos = {c[0] for c in Empleado._meta.get_field('motivo_retiro').choices}
+        motivos_validos = {c[0] for c in Empleado._meta.get_field("motivo_retiro").choices}
         if not motivo_retiro or motivo_retiro not in motivos_validos:
-            raise ValidationError({
-                'motivo_retiro': f'Motivo de retiro requerido. Valores validos: {sorted(motivos_validos)}.'
-            })
+            raise ValidationError(
+                {
+                    "motivo_retiro": f"Motivo de retiro requerido. Valores validos: {sorted(motivos_validos)}."
+                }
+            )
 
         if not fecha_retiro:
-            raise ValidationError({'fecha_retiro': 'La fecha de retiro es requerida para retirar un empleado.'})
+            raise ValidationError(
+                {"fecha_retiro": "La fecha de retiro es requerida para retirar un empleado."}
+            )
         if isinstance(fecha_retiro, str):
             from django.utils.dateparse import parse_date
+
             parsed = parse_date(fecha_retiro)
             if not parsed:
-                raise ValidationError({'fecha_retiro': 'Formato de fecha invalido.'})
+                raise ValidationError({"fecha_retiro": "Formato de fecha invalido."})
             fecha_retiro = parsed
         if fecha_retiro < empleado.fecha_ingreso:
-            raise ValidationError({'fecha_retiro': 'La fecha de retiro no puede ser anterior a la fecha de ingreso.'})
+            raise ValidationError(
+                {"fecha_retiro": "La fecha de retiro no puede ser anterior a la fecha de ingreso."}
+            )
 
         contrato = ContratoSelector.get_activo_for_empleado(empresa_id, empleado.id)
 
         indemnizacion_info = None
         if contrato:
             indemnizacion_info = NominaCalculationService.calcular_indemnizacion_despido(
-                contrato=contrato, fecha_retiro=fecha_retiro, motivo_retiro=motivo_retiro,
+                contrato=contrato,
+                fecha_retiro=fecha_retiro,
+                motivo_retiro=motivo_retiro,
             )
 
-        empleado = EmpleadoCRUDService.actualizar_empleado(empleado, {
-            'estado': 'RETIRADO',
-            'fecha_retiro': fecha_retiro,
-            'motivo_retiro': motivo_retiro,
-        })
+        empleado = EmpleadoCRUDService.actualizar_empleado(
+            empleado,
+            {
+                "estado": "RETIRADO",
+                "fecha_retiro": fecha_retiro,
+                "motivo_retiro": motivo_retiro,
+            },
+        )
 
         contrato_cancelado = False
         if contrato:
             Contrato.objects.filter(pk=contrato.pk).update(
-                estado='INACTIVO', activo=False, fecha_fin=fecha_retiro,
+                estado="INACTIVO",
+                activo=False,
+                fecha_fin=fecha_retiro,
             )
             contrato_cancelado = True
             logger.info(
@@ -178,15 +199,19 @@ class EmpleadoBusinessService:
                 f"fecha={fecha_retiro}). Contrato {contrato.id} cerrado con fecha_fin={fecha_retiro}."
             )
         else:
-            logger.info(f"[EmpleadoBusiness] Empleado {empleado.id} retirado (motivo={motivo_retiro}) sin contrato activo.")
+            logger.info(
+                f"[EmpleadoBusiness] Empleado {empleado.id} retirado (motivo={motivo_retiro}) sin contrato activo."
+            )
 
         liquidacion = None
         if contrato:
             try:
-                valor_indemnizacion = indemnizacion_info['valor'] if indemnizacion_info else Decimal('0.00')
+                valor_indemnizacion = (
+                    indemnizacion_info["valor"] if indemnizacion_info else Decimal("0.00")
+                )
                 resultado_calc = NominaCalculationService.calcular_liquidacion_prestaciones(
                     contrato=contrato,
-                    tipo_liquidacion='LIQUIDACION_DEFINITIVA',
+                    tipo_liquidacion="LIQUIDACION_DEFINITIVA",
                     fecha_corte=fecha_retiro,
                     dias_salario_pendiente=dias_salario_pendiente,
                     indemnizacion=valor_indemnizacion,
@@ -195,10 +220,9 @@ class EmpleadoBusinessService:
                 # usado en LiquidacionPrestacionViewSet.create()) -- stringificar
                 # todo Decimal antes de guardar o falla con TypeError en save().
                 desglose = {
-                    k: (str(v) if isinstance(v, Decimal) else v)
-                    for k, v in resultado_calc.items()
+                    k: (str(v) if isinstance(v, Decimal) else v) for k, v in resultado_calc.items()
                 }
-                desglose['indemnizacion_detalle'] = {
+                desglose["indemnizacion_detalle"] = {
                     k: (str(v) if isinstance(v, Decimal) else v)
                     for k, v in (indemnizacion_info or {}).items()
                 }
@@ -206,14 +230,15 @@ class EmpleadoBusinessService:
                     empresa_id=empresa_id,
                     empleado=empleado,
                     contrato=contrato,
-                    tipo_liquidacion='LIQUIDACION_DEFINITIVA',
+                    tipo_liquidacion="LIQUIDACION_DEFINITIVA",
                     fecha_corte=fecha_retiro,
-                    dias_base_calculo=resultado_calc['dias_cesantias'],
-                    base_salarial=Decimal(str(contrato.salario_mensual)) + Decimal(str(contrato.auxilio_transporte)),
-                    valor_total=resultado_calc['total_neto'],
-                    estado='PROYECTADO',
+                    dias_base_calculo=resultado_calc["dias_cesantias"],
+                    base_salarial=Decimal(str(contrato.salario_mensual))
+                    + Decimal(str(contrato.auxilio_transporte)),
+                    valor_total=resultado_calc["total_neto"],
+                    estado="PROYECTADO",
                     desglose_conceptos=desglose,
-                    observaciones=f'Generada automaticamente por retiro (motivo: {motivo_retiro}).',
+                    observaciones=f"Generada automaticamente por retiro (motivo: {motivo_retiro}).",
                 )
             except ValidationError as exc:
                 logger.warning(
@@ -222,10 +247,10 @@ class EmpleadoBusinessService:
                 )
 
         return {
-            'empleado': empleado,
-            'contrato_cancelado': contrato_cancelado,
-            'indemnizacion': indemnizacion_info,
-            'liquidacion': liquidacion,
+            "empleado": empleado,
+            "contrato_cancelado": contrato_cancelado,
+            "indemnizacion": indemnizacion_info,
+            "liquidacion": liquidacion,
         }
 
     @staticmethod
@@ -237,28 +262,32 @@ class EmpleadoBusinessService:
         DSV: verifica empresa_id si se proporciona.
         """
         if empresa_id is not None and empleado.empresa_id != empresa_id:
-            raise ValidationError('El empleado no pertenece a la empresa activa.')
-        if empleado.estado != 'RETIRADO':
+            raise ValidationError("El empleado no pertenece a la empresa activa.")
+        if empleado.estado != "RETIRADO":
             raise ValidationError(
-                f'Solo se pueden eliminar empleados con estado RETIRADO. '
-                f'Estado actual: {empleado.estado}.'
+                f"Solo se pueden eliminar empleados con estado RETIRADO. "
+                f"Estado actual: {empleado.estado}."
             )
-        if Contrato.objects.filter(empleado=empleado, estado='ACTIVO').exists() or Contrato.objects.filter(empleado=empleado, activo=True).exists():
+        if (
+            Contrato.objects.filter(empleado=empleado, estado="ACTIVO").exists()
+            or Contrato.objects.filter(empleado=empleado, activo=True).exists()
+        ):
             raise ValidationError(
-                'No se puede eliminar el empleado porque tiene un contrato activo. '
-                'Finalice o cancele el contrato primero.'
+                "No se puede eliminar el empleado porque tiene un contrato activo. "
+                "Finalice o cancele el contrato primero."
             )
         if Devengo.objects.filter(empleado=empleado, anulado=False).exists():
             raise ValidationError(
-                'No se puede eliminar el empleado porque tiene nominas activas. '
-                'Anule las nominas antes de eliminar.'
+                "No se puede eliminar el empleado porque tiene nominas activas. "
+                "Anule las nominas antes de eliminar."
             )
         from django.apps import apps as django_apps
-        TareaCorta = django_apps.get_model('tenant_proyectos', 'TareaCorta')
+
+        TareaCorta = django_apps.get_model("tenant_proyectos", "TareaCorta")
         if TareaCorta.objects.filter(empleado=empleado).exists():
             raise ValidationError(
-                'No se puede eliminar el empleado porque tiene tareas asignadas en proyectos. '
-                'Desvincule las tareas primero.'
+                "No se puede eliminar el empleado porque tiene tareas asignadas en proyectos. "
+                "Desvincule las tareas primero."
             )
         return EmpleadoCRUDService.eliminar_empleado(empleado)
 
@@ -268,17 +297,13 @@ class EmpleadoBusinessService:
         """Cancela todos los contratos activos de un empleado."""
         contratos_activos = empleado.contratos.filter(
             empresa_id=empleado.empresa_id,
-            estado='ACTIVO',
+            estado="ACTIVO",
         )
         count = contratos_activos.count()
 
         if count > 0:
             hoy = timezone.now().date()
-            contratos_activos.update(
-                estado='INACTIVO',
-                activo=False,
-                fecha_fin=hoy
-            )
+            contratos_activos.update(estado="INACTIVO", activo=False, fecha_fin=hoy)
             logger.info(
                 f"[EmpleadoBusiness] Cancelados {count} contratos del empleado {empleado.id}"
             )
@@ -297,10 +322,12 @@ class ContratoBusinessService:
         Garantiza un unico contrato activo por empleado.
         """
         # Determinar estado final
-        estado_final = data.get('estado', contrato_existente.estado if contrato_existente else 'ACTIVO')
+        estado_final = data.get(
+            "estado", contrato_existente.estado if contrato_existente else "ACTIVO"
+        )
 
         # Si el contrato quedara ACTIVO, desactivar contratos previos
-        if estado_final == 'ACTIVO':
+        if estado_final == "ACTIVO":
             ContratoCRUDService.desactivar_contratos_previos(empleado, contrato_existente)
 
         # Actualizar o crear
@@ -315,20 +342,21 @@ class ContratoBusinessService:
         prepared_data = dict(data)
 
         # Normalizar fecha_fin vacia
-        if 'fecha_fin' in prepared_data:
-            if prepared_data['fecha_fin'] == '' or prepared_data['fecha_fin'] is None:
-                prepared_data['fecha_fin'] = None
+        if "fecha_fin" in prepared_data and (
+            prepared_data["fecha_fin"] == "" or prepared_data["fecha_fin"] is None
+        ):
+            prepared_data["fecha_fin"] = None
 
         # Normalizar montos a Decimal
-        for campo in ['auxilio_transporte', 'prestamos_empresa']:
+        for campo in ["auxilio_transporte", "prestamos_empresa"]:
             if campo not in prepared_data or prepared_data[campo] is None:
-                prepared_data[campo] = Decimal('0.00')
+                prepared_data[campo] = Decimal("0.00")
             elif isinstance(prepared_data[campo], str):
-                prepared_data[campo] = Decimal(prepared_data[campo] or '0.00')
+                prepared_data[campo] = Decimal(prepared_data[campo] or "0.00")
 
         # Default estado
-        if 'estado' not in prepared_data or prepared_data['estado'] is None:
-            prepared_data['estado'] = 'ACTIVO'
+        if "estado" not in prepared_data or prepared_data["estado"] is None:
+            prepared_data["estado"] = "ACTIVO"
 
         return prepared_data
 
@@ -339,11 +367,15 @@ class DevengoBusinessService:
     @staticmethod
     def validar_contrato_activo(empleado: Empleado):
         """Valida que el empleado tenga un contrato activo."""
-        if not empleado.contratos.filter(
-            empresa_id=empleado.empresa_id,
-            activo=True,
-            estado='ACTIVO',
-        ).only('id').exists():
+        if (
+            not empleado.contratos.filter(
+                empresa_id=empleado.empresa_id,
+                activo=True,
+                estado="ACTIVO",
+            )
+            .only("id")
+            .exists()
+        ):
             raise ValidationError(
                 "No se puede registrar nomina: El empleado no tiene un contrato activo."
             )
@@ -354,7 +386,7 @@ class DevengoBusinessService:
         periodo_mes: str,
         nuevos_dias: Decimal,
         empresa_id: int,
-        devengo_id_excluir: int = None
+        devengo_id_excluir: int = None,
     ) -> dict:
         """
         Valida que la suma de dias pagados en un mes no exceda 31.
@@ -362,23 +394,20 @@ class DevengoBusinessService:
         try:
             nuevos_dias = Decimal(str(nuevos_dias))
         except (ValueError, TypeError):
-            raise ValidationError("Los dias laborados deben ser un numero valido")
+            raise ValidationError("Los dias laborados deben ser un numero valido") from None
 
         # Sumar dias existentes (no anulados)
         qs = Devengo.objects.filter(
-            empleado_id=empleado_id,
-            periodo_mes=periodo_mes,
-            anulado=False,
-            empresa_id=empresa_id
+            empleado_id=empleado_id, periodo_mes=periodo_mes, anulado=False, empresa_id=empresa_id
         )
 
         if devengo_id_excluir:
             qs = qs.exclude(pk=devengo_id_excluir)
 
-        total_dias = qs.aggregate(total=Sum('dias_laborados'))['total'] or Decimal('0')
+        total_dias = qs.aggregate(total=Sum("dias_laborados"))["total"] or Decimal("0")
         total_final = total_dias + nuevos_dias
 
-        if total_final > Decimal('31'):
+        if total_final > Decimal("31"):
             raise ValidationError(
                 f"El total de dias pagados en {periodo_mes} excederia el limite legal (31 dias). "
                 f"Ya se han registrado {total_dias} dias. Con {nuevos_dias} dias adicionales, "
@@ -386,10 +415,10 @@ class DevengoBusinessService:
             )
 
         return {
-            'total_dias': total_dias,
-            'nuevos_dias': nuevos_dias,
-            'total_final': total_final,
-            'excede_limite': False
+            "total_dias": total_dias,
+            "nuevos_dias": nuevos_dias,
+            "total_final": total_final,
+            "excede_limite": False,
         }
 
     @staticmethod
@@ -398,28 +427,32 @@ class DevengoBusinessService:
         # Normalizar fecha
         if isinstance(fecha_pago, str):
             try:
-                fecha_pago_obj = datetime.strptime(fecha_pago, '%Y-%m-%d').date()
+                fecha_pago_obj = datetime.strptime(fecha_pago, "%Y-%m-%d").date()
             except (ValueError, TypeError):
                 return None
         else:
             fecha_pago_obj = fecha_pago
 
-        existente = Devengo.objects.filter(
-            empleado_id=empleado_id,
-            periodo_mes=periodo_mes,
-            fecha_pago=fecha_pago_obj,
-            anulado=False,
-            empresa_id=empresa_id,
-        ).only('id', 'periodo_mes', 'fecha_pago').first()
+        existente = (
+            Devengo.objects.filter(
+                empleado_id=empleado_id,
+                periodo_mes=periodo_mes,
+                fecha_pago=fecha_pago_obj,
+                anulado=False,
+                empresa_id=empresa_id,
+            )
+            .only("id", "periodo_mes", "fecha_pago")
+            .first()
+        )
 
         if existente:
             return {
                 "error": "Ya existe una nomina para este empleado, periodo y fecha de pago.",
                 "detail": f"Ya existe una nomina registrada para el periodo {periodo_mes} "
-                         f"con fecha de pago {fecha_pago_obj.strftime('%Y-%m-%d')}.",
+                f"con fecha de pago {fecha_pago_obj.strftime('%Y-%m-%d')}.",
                 "devengo_existente_id": existente.id,
                 "periodo_mes": periodo_mes,
-                "fecha_pago": fecha_pago_obj.strftime('%Y-%m-%d'),
+                "fecha_pago": fecha_pago_obj.strftime("%Y-%m-%d"),
                 "code": "duplicate_nomina",
             }
         return None
@@ -443,15 +476,21 @@ class DevengoBusinessService:
         puede comparar rangos que no existen.
         """
         qs = Devengo.objects.filter(
-            empleado_id=empleado_id, empresa_id=empresa_id, anulado=False,
+            empleado_id=empleado_id,
+            empresa_id=empresa_id,
+            anulado=False,
         )
         if devengo_id_excluir:
             qs = qs.exclude(pk=devengo_id_excluir)
 
         if fecha_inicio and fecha_fin:
             qs = qs.filter(
-                Q(fecha_inicio__isnull=False, fecha_fin__isnull=False,
-                  fecha_inicio__lte=fecha_fin, fecha_fin__gte=fecha_inicio)
+                Q(
+                    fecha_inicio__isnull=False,
+                    fecha_fin__isnull=False,
+                    fecha_inicio__lte=fecha_fin,
+                    fecha_fin__gte=fecha_inicio,
+                )
             )
         else:
             qs = qs.filter(
@@ -459,14 +498,16 @@ class DevengoBusinessService:
                 periodo_mes=periodo_mes,
             )
 
-        conflicto = qs.only('id', 'periodo_mes', 'fecha_inicio', 'fecha_fin').first()
+        conflicto = qs.only("id", "periodo_mes", "fecha_inicio", "fecha_fin").first()
         if conflicto:
-            raise ValidationError({
-                'fecha_inicio': (
-                    f'Ya existe una nomina activa (ID {conflicto.id}) que cubre dias '
-                    f'solapados para este empleado en el periodo {conflicto.periodo_mes}.'
-                )
-            })
+            raise ValidationError(
+                {
+                    "fecha_inicio": (
+                        f"Ya existe una nomina activa (ID {conflicto.id}) que cubre dias "
+                        f"solapados para este empleado en el periodo {conflicto.periodo_mes}."
+                    )
+                }
+            )
 
     @staticmethod
     @transaction.atomic
@@ -475,7 +516,7 @@ class DevengoBusinessService:
         contrato: Contrato,
         data: dict,
         empresa_id: int,
-        instance: Devengo = None
+        instance: Devengo = None,
     ) -> Devengo:
         """
         Orquesta el procesamiento completo de un devengo:
@@ -486,30 +527,34 @@ class DevengoBusinessService:
         """
         # Validaciones
         if not empleado:
-            raise ValidationError({'empleado': 'Debe especificar un empleado valido.'})
+            raise ValidationError({"empleado": "Debe especificar un empleado valido."})
         if not contrato:
-            raise ValidationError({'contrato': 'Debe especificar un contrato valido.'})
+            raise ValidationError({"contrato": "Debe especificar un contrato valido."})
 
         if empleado.empresa_id != empresa_id:
-            raise ValidationError({'empleado': 'El empleado no pertenece a este tenant.'})
+            raise ValidationError({"empleado": "El empleado no pertenece a este tenant."})
 
         if contrato.empresa_id != empresa_id:
-            raise ValidationError({'contrato': 'El contrato no pertenece a este tenant.'})
+            raise ValidationError({"contrato": "El contrato no pertenece a este tenant."})
 
         if contrato.empleado_id != empleado.id:
-            raise ValidationError({'contrato': 'El contrato no pertenece al empleado indicado.'})
+            raise ValidationError({"contrato": "El contrato no pertenece al empleado indicado."})
 
-        if empleado.estado == 'RETIRADO':
-            raise ValidationError({'empleado': 'No se puede registrar nomina a un empleado retirado.'})
+        if empleado.estado == "RETIRADO":
+            raise ValidationError(
+                {"empleado": "No se puede registrar nomina a un empleado retirado."}
+            )
 
-        if contrato.estado != 'ACTIVO' or not contrato.activo:
-            raise ValidationError({
-                'contrato': f'No se puede registrar nomina: El contrato no esta activo '
-                           f'(estado actual: {contrato.estado}).'
-            })
+        if contrato.estado != "ACTIVO" or not contrato.activo:
+            raise ValidationError(
+                {
+                    "contrato": f"No se puede registrar nomina: El contrato no esta activo "
+                    f"(estado actual: {contrato.estado})."
+                }
+            )
 
         if instance and instance.anulado:
-            raise ValidationError({'anulado': 'No se puede actualizar una nomina anulada.'})
+            raise ValidationError({"anulado": "No se puede actualizar una nomina anulada."})
 
         # WARNING: mision PERIODOS-NOMINA-01 (2026-09-11): lock de fila para
         # serializar creaciones concurrentes del mismo empleado -- sin esto,
@@ -519,12 +564,12 @@ class DevengoBusinessService:
         Empleado.objects.select_for_update().get(pk=empleado.id)
 
         # Extraer datos
-        dias_laborados = data.get('dias_laborados', instance.dias_laborados if instance else 30)
-        otros_devengos = data.get('otros_devengos', Decimal('0'))
-        prestamos = data.get('prestamos', Decimal('0'))
-        periodo_mes = data.get('periodo_mes')
-        fecha_inicio = data.get('fecha_inicio', instance.fecha_inicio if instance else None)
-        fecha_fin = data.get('fecha_fin', instance.fecha_fin if instance else None)
+        dias_laborados = data.get("dias_laborados", instance.dias_laborados if instance else 30)
+        otros_devengos = data.get("otros_devengos", Decimal("0"))
+        prestamos = data.get("prestamos", Decimal("0"))
+        periodo_mes = data.get("periodo_mes")
+        fecha_inicio = data.get("fecha_inicio", instance.fecha_inicio if instance else None)
+        fecha_fin = data.get("fecha_fin", instance.fecha_fin if instance else None)
 
         # Validar limite de dias
         if periodo_mes and dias_laborados:
@@ -533,7 +578,7 @@ class DevengoBusinessService:
                 periodo_mes=periodo_mes,
                 nuevos_dias=dias_laborados,
                 empresa_id=empresa_id,
-                devengo_id_excluir=instance.pk if instance else None
+                devengo_id_excluir=instance.pk if instance else None,
             )
 
         # Validar no-solapamiento de dias laborados con otra nomina activa
@@ -552,30 +597,31 @@ class DevengoBusinessService:
             dias_laborados=dias_laborados,
             otros_devengos=otros_devengos,
             prestamos=prestamos,
-            descuentos_operativos=data.get('descuentos_operativos', Decimal('0')),
-            horas_extras_diurnas=data.get('horas_extras_diurnas', 0),
-            horas_extras_nocturnas=data.get('horas_extras_nocturnas', 0),
-            recargo_nocturno_horas=data.get('recargo_nocturno_horas', 0),
-            recargo_festivo_horas=data.get('recargo_festivo_horas', 0),
+            descuentos_operativos=data.get("descuentos_operativos", Decimal("0")),
+            horas_extras_diurnas=data.get("horas_extras_diurnas", 0),
+            horas_extras_nocturnas=data.get("horas_extras_nocturnas", 0),
+            recargo_nocturno_horas=data.get("recargo_nocturno_horas", 0),
+            recargo_festivo_horas=data.get("recargo_festivo_horas", 0),
         )
 
         # Preparar datos finales
-        data['salario_base']       = Decimal(calculo['salario_base'])
-        data['auxilio_transporte'] = Decimal(calculo['auxilio_transporte'])
-        data['valor_horas_extras'] = Decimal(calculo['valor_horas_extras'])
-        data['salud_empleado']     = Decimal(calculo['salud_empleado'])
-        data['pension_empleado']   = Decimal(calculo['pension_empleado'])
-        data['neto_pagar']         = Decimal(calculo['neto_pagar'])
+        data["salario_base"] = Decimal(calculo["salario_base"])
+        data["auxilio_transporte"] = Decimal(calculo["auxilio_transporte"])
+        data["valor_horas_extras"] = Decimal(calculo["valor_horas_extras"])
+        data["salud_empleado"] = Decimal(calculo["salud_empleado"])
+        data["pension_empleado"] = Decimal(calculo["pension_empleado"])
+        data["neto_pagar"] = Decimal(calculo["neto_pagar"])
 
         # Crear o actualizar — el @transaction.atomic del metodo ya cubre todo el bloque
         if instance:
             devengo = DevengoCRUDService.actualizar_devengo(instance, data)
         else:
             # FASE 1: Resolucion DIAN
-            from apps.tenant.empleados.models import ResolucionDIAN, TransmisionNominaDIAN
             from django.utils.dateparse import parse_date as _parse_date
 
-            fecha_pago = data.get('fecha_pago')
+            from apps.tenant.empleados.models import ResolucionDIAN, TransmisionNominaDIAN
+
+            fecha_pago = data.get("fecha_pago")
             if not fecha_pago:
                 fecha_pago = timezone.now().date()
             elif isinstance(fecha_pago, str):
@@ -587,34 +633,45 @@ class DevengoBusinessService:
             # Prioridad 1: resolución asignada específicamente al empleado
             resolucion_activa = None
             if empleado.resolucion_dian_id:
-                resolucion_activa = ResolucionDIAN.objects.filter(
-                    id=empleado.resolucion_dian_id,
-                    empresa_id=empresa_id,
-                    vigente=True,
-                    fecha_inicio__lte=fecha_pago,
-                    fecha_fin__gte=fecha_pago,
-                ).select_for_update().first()
+                resolucion_activa = (
+                    ResolucionDIAN.objects.filter(
+                        id=empleado.resolucion_dian_id,
+                        empresa_id=empresa_id,
+                        vigente=True,
+                        fecha_inicio__lte=fecha_pago,
+                        fecha_fin__gte=fecha_pago,
+                    )
+                    .select_for_update()
+                    .first()
+                )
 
             # Prioridad 2: resolución activa general de la empresa (fallback)
             if not resolucion_activa:
-                resolucion_activa = ResolucionDIAN.objects.filter(
-                    empresa_id=empresa_id,
-                    vigente=True,
-                    fecha_inicio__lte=fecha_pago,
-                    fecha_fin__gte=fecha_pago,
-                ).select_for_update().first()
+                resolucion_activa = (
+                    ResolucionDIAN.objects.filter(
+                        empresa_id=empresa_id,
+                        vigente=True,
+                        fecha_inicio__lte=fecha_pago,
+                        fecha_fin__gte=fecha_pago,
+                    )
+                    .select_for_update()
+                    .first()
+                )
 
             if not resolucion_activa:
                 logger.warning(
                     "[DIAN-NOMINA] Sin resolucion activa. empresa_id=%s | fecha_pago=%s",
-                    empresa_id, fecha_pago
+                    empresa_id,
+                    fecha_pago,
                 )
-                raise ValidationError({
-                    'resolucion': (
-                        'No existe una resolucion DIAN activa y vigente para la fecha de pago '
-                        f'{fecha_pago}. Configure una resolucion en Nomina Electronica.'
-                    )
-                })
+                raise ValidationError(
+                    {
+                        "resolucion": (
+                            "No existe una resolucion DIAN activa y vigente para la fecha de pago "
+                            f"{fecha_pago}. Configure una resolucion en Nomina Electronica."
+                        )
+                    }
+                )
 
             consecutivo_actual = resolucion_activa.consecutivo
 
@@ -624,35 +681,44 @@ class DevengoBusinessService:
                 logger.error(
                     "[DIAN-NOMINA] Consecutivo %s fuera del rango autorizado [%s-%s]. "
                     "empresa_id=%s | resolucion_uuid=%s",
-                    consecutivo_actual, resolucion_activa.rango_desde,
-                    resolucion_activa.rango_hasta, empresa_id, resolucion_activa.uuid
+                    consecutivo_actual,
+                    resolucion_activa.rango_desde,
+                    resolucion_activa.rango_hasta,
+                    empresa_id,
+                    resolucion_activa.uuid,
                 )
-                raise ValidationError({
-                    'resolucion': (
-                        f'El consecutivo actual ({consecutivo_actual}) esta por debajo del '
-                        f'rango autorizado ({resolucion_activa.rango_desde}). '
-                        'Corrija la resolucion en Configuracion > Nomina Electronica.'
-                    )
-                })
+                raise ValidationError(
+                    {
+                        "resolucion": (
+                            f"El consecutivo actual ({consecutivo_actual}) esta por debajo del "
+                            f"rango autorizado ({resolucion_activa.rango_desde}). "
+                            "Corrija la resolucion en Configuracion > Nomina Electronica."
+                        )
+                    }
+                )
 
             if consecutivo_actual > resolucion_activa.rango_hasta:
                 logger.error(
                     "[DIAN-NOMINA] Resolucion agotada. consecutivo=%s rango_hasta=%s. "
                     "empresa_id=%s | resolucion_uuid=%s",
-                    consecutivo_actual, resolucion_activa.rango_hasta,
-                    empresa_id, resolucion_activa.uuid
+                    consecutivo_actual,
+                    resolucion_activa.rango_hasta,
+                    empresa_id,
+                    resolucion_activa.uuid,
                 )
-                raise ValidationError({
-                    'resolucion': (
-                        f'La resolucion {resolucion_activa.numero_resolucion} ha agotado '
-                        f'sus consecutivos disponibles (ultimo: {resolucion_activa.rango_hasta}). '
-                        'Solicite una nueva resolucion a la DIAN.'
-                    )
-                })
+                raise ValidationError(
+                    {
+                        "resolucion": (
+                            f"La resolucion {resolucion_activa.numero_resolucion} ha agotado "
+                            f"sus consecutivos disponibles (ultimo: {resolucion_activa.rango_hasta}). "
+                            "Solicite una nueva resolucion a la DIAN."
+                        )
+                    }
+                )
 
             # Remover 'empleado' de data para evitar conflicto con crear_devengo
             data_copy = data.copy()
-            data_copy.pop('empleado', None)
+            data_copy.pop("empleado", None)
             devengo = DevengoCRUDService.crear_devengo(empleado, data_copy)
 
             # Generar numero de documento, CUNE y XML NominaIndividual firmado
@@ -661,9 +727,13 @@ class DevengoBusinessService:
             # criterio que DIANAdapter en apps/tenant/core/dian/adapters.py).
             numero_documento = resolucion_activa.formar_consecutivo(consecutivo_actual)
             xml_firmado, cune = DevengoBusinessService._generar_xml_nomina_dian(
-                devengo=devengo, empleado=empleado, contrato=contrato,
-                resolucion=resolucion_activa, numero_documento=numero_documento,
-                fecha_pago=fecha_pago, empresa_id=empresa_id,
+                devengo=devengo,
+                empleado=empleado,
+                contrato=contrato,
+                resolucion=resolucion_activa,
+                numero_documento=numero_documento,
+                fecha_pago=fecha_pago,
+                empresa_id=empresa_id,
             )
 
             TransmisionNominaDIAN.objects.create(
@@ -672,20 +742,25 @@ class DevengoBusinessService:
                 resolucion=resolucion_activa,
                 numero_documento=numero_documento,
                 cune=cune,
-                estado_dian='PENDIENTE',
+                estado_dian="PENDIENTE",
                 xml_enviado=xml_firmado,
             )
 
             # Incrementar consecutivo
             resolucion_activa.consecutivo = consecutivo_actual + 1
-            resolucion_activa.save(update_fields=['consecutivo'])
+            resolucion_activa.save(update_fields=["consecutivo"])
 
         return devengo
 
     @staticmethod
     def _generar_xml_nomina_dian(
-        devengo: Devengo, empleado: Empleado, contrato: Contrato,
-        resolucion, numero_documento: str, fecha_pago, empresa_id: int,
+        devengo: Devengo,
+        empleado: Empleado,
+        contrato: Contrato,
+        resolucion,
+        numero_documento: str,
+        fecha_pago,
+        empresa_id: int,
     ) -> tuple[str, str]:
         """
         Construye el DTO de Nomina Electronica, calcula el CUNE y genera el
@@ -704,7 +779,12 @@ class DevengoBusinessService:
         from apps.tenant.empresa.models import Empresa
 
         empresa = Empresa.objects.only(
-            "id", "nit", "dv", "razon_social", "direccion", "ciudad",
+            "id",
+            "nit",
+            "dv",
+            "razon_social",
+            "direccion",
+            "ciudad",
         ).get(id=empresa_id)
 
         ahora = timezone.now()
@@ -712,12 +792,16 @@ class DevengoBusinessService:
         hor_nie = ahora.strftime("%H:%M:%S") + "-05:00"
 
         total_devengado = (
-            devengo.salario_base + devengo.auxilio_transporte
-            + devengo.valor_horas_extras + devengo.otros_devengos
+            devengo.salario_base
+            + devengo.auxilio_transporte
+            + devengo.valor_horas_extras
+            + devengo.otros_devengos
         )
         total_deducciones = (
-            devengo.salud_empleado + devengo.pension_empleado
-            + devengo.prestamos + devengo.descuentos_operativos
+            devengo.salud_empleado
+            + devengo.pension_empleado
+            + devengo.prestamos
+            + devengo.descuentos_operativos
         )
 
         dto = {
@@ -727,15 +811,21 @@ class DevengoBusinessService:
             "tipo_xml": "102",
             "tip_amb": "2",
             "periodo": {
-                "fecha_ingreso": empleado.fecha_ingreso.isoformat() if empleado.fecha_ingreso else "",
-                "fecha_liquidacion_inicio": devengo.fecha_inicio.isoformat() if devengo.fecha_inicio else "",
+                "fecha_ingreso": empleado.fecha_ingreso.isoformat()
+                if empleado.fecha_ingreso
+                else "",
+                "fecha_liquidacion_inicio": devengo.fecha_inicio.isoformat()
+                if devengo.fecha_inicio
+                else "",
                 "fecha_liquidacion_fin": devengo.fecha_fin.isoformat() if devengo.fecha_fin else "",
                 "tiempo_laborado_dias": devengo.dias_laborados,
             },
             "empleador": {
-                "nit": empresa.nit, "dv": empresa.dv or "0",
+                "nit": empresa.nit,
+                "dv": empresa.dv or "0",
                 "razon_social": empresa.razon_social,
-                "direccion": empresa.direccion, "ciudad": empresa.ciudad,
+                "direccion": empresa.direccion,
+                "ciudad": empresa.ciudad,
             },
             "trabajador": {
                 "tipo_documento": empleado.tipo_documento,
@@ -775,10 +865,17 @@ class DevengoBusinessService:
         }
 
         cune = CuneService.calcular(
-            num_nie=numero_documento, fec_nie=fec_nie, hor_nie=hor_nie,
-            val_dev=total_devengado, val_ded=total_deducciones, val_pag=devengo.neto_pagar,
-            nit_empleador=empresa.nit, num_doc_trabajador=empleado.numero_documento,
-            cl_tec=resolucion.clave_tecnica, tipo_xml="102", tip_amb="2",
+            num_nie=numero_documento,
+            fec_nie=fec_nie,
+            hor_nie=hor_nie,
+            val_dev=total_devengado,
+            val_ded=total_deducciones,
+            val_pag=devengo.neto_pagar,
+            nit_empleador=empresa.nit,
+            num_doc_trabajador=empleado.numero_documento,
+            cl_tec=resolucion.clave_tecnica,
+            tipo_xml="102",
+            tip_amb="2",
         )
 
         xml_sin_firmar = NominaXMLBuilderService.build(dto, cune)
@@ -790,7 +887,7 @@ class DevengoBusinessService:
     def anular_devengo(devengo: Devengo, empresa_id: int) -> Devengo:
         """Anula un devengo y maneja implicaciones contables."""
         if devengo.empresa_id != empresa_id:
-            raise ValidationError({'empresa': 'La nomina no pertenece a este tenant.'})
+            raise ValidationError({"empresa": "La nomina no pertenece a este tenant."})
 
         return DevengoCRUDService.anular_devengo(devengo)
 
@@ -799,13 +896,13 @@ class DevengoBusinessService:
     def eliminar_devengo(devengo: Devengo, empresa_id: int) -> int:
         """Elimina un devengo y revierte prestamos si aplica."""
         if devengo.empresa_id != empresa_id:
-            raise ValidationError({'empresa': 'La nomina no pertenece a este tenant.'})
+            raise ValidationError({"empresa": "La nomina no pertenece a este tenant."})
 
         # Revertir prestamo si existe
         if devengo.prestamos and devengo.prestamos > 0 and devengo.contrato:
             ContratoCRUDService.actualizar_prestamo_contrato(
                 devengo.contrato,
-                -devengo.prestamos  # Sumar de vuelta (negativo del descuento)
+                -devengo.prestamos,  # Sumar de vuelta (negativo del descuento)
             )
 
         return DevengoCRUDService.eliminar_devengo(devengo)
@@ -828,24 +925,26 @@ class PeriodoNominaBusinessService:
     # validacion de estado (FASE 3/FASE 27: "nomina aprobada -> no modificar
     # libremente").
     TRANSICIONES_VALIDAS = {
-        'ABIERTO':      {'PRELIQUIDADO', 'ANULADO', 'BLOQUEADO'},
-        'PRELIQUIDADO': {'EN_REVISION', 'ABIERTO', 'ANULADO', 'BLOQUEADO'},
-        'EN_REVISION':  {'APROBADO', 'PRELIQUIDADO', 'ANULADO', 'BLOQUEADO'},
-        'APROBADO':     {'PAGADO', 'ANULADO', 'BLOQUEADO'},
-        'PAGADO':       {'CERRADO'},
-        'CERRADO':      set(),
-        'ANULADO':      set(),
-        'BLOQUEADO':    set(),  # se desbloquea con desbloquear_periodo(), no con transicionar()
+        "ABIERTO": {"PRELIQUIDADO", "ANULADO", "BLOQUEADO"},
+        "PRELIQUIDADO": {"EN_REVISION", "ABIERTO", "ANULADO", "BLOQUEADO"},
+        "EN_REVISION": {"APROBADO", "PRELIQUIDADO", "ANULADO", "BLOQUEADO"},
+        "APROBADO": {"PAGADO", "ANULADO", "BLOQUEADO"},
+        "PAGADO": {"CERRADO"},
+        "CERRADO": set(),
+        "ANULADO": set(),
+        "BLOQUEADO": set(),  # se desbloquea con desbloquear_periodo(), no con transicionar()
     }
 
     @staticmethod
     def _validar_transicion(periodo: PeriodoNomina, estado_destino: str):
         permitidos = PeriodoNominaBusinessService.TRANSICIONES_VALIDAS.get(periodo.estado, set())
         if estado_destino not in permitidos:
-            raise ValidationError({
-                'estado': f'No se puede pasar de {periodo.estado} a {estado_destino}. '
-                          f'Transiciones validas desde {periodo.estado}: {sorted(permitidos) or "ninguna"}.'
-            })
+            raise ValidationError(
+                {
+                    "estado": f'No se puede pasar de {periodo.estado} a {estado_destino}. '
+                    f'Transiciones validas desde {periodo.estado}: {sorted(permitidos) or "ninguna"}.'
+                }
+            )
 
     @staticmethod
     @transaction.atomic
@@ -856,10 +955,12 @@ class PeriodoNominaBusinessService:
         try:
             return PeriodoNominaCRUDService.crear_periodo(data, empresa, creado_por)
         except Exception as exc:
-            if 'uniq_periodo_nomina_activo_per_empresa_mes' in str(exc):
-                raise ValidationError({
-                    'periodo_mes': f"Ya existe un periodo de nomina activo para {data.get('periodo_mes')} en esta empresa."
-                })
+            if "uniq_periodo_nomina_activo_per_empresa_mes" in str(exc):
+                raise ValidationError(
+                    {
+                        "periodo_mes": f"Ya existe un periodo de nomina activo para {data.get('periodo_mes')} en esta empresa."
+                    }
+                ) from exc
             raise
 
     @staticmethod
@@ -895,7 +996,7 @@ class PeriodoNominaBusinessService:
         recomendado; preliquidar_periodo() no debe ser la unica via para
         cerrar un periodo con datos reales.
         """
-        PeriodoNominaBusinessService._validar_transicion(periodo, 'PRELIQUIDADO')
+        PeriodoNominaBusinessService._validar_transicion(periodo, "PRELIQUIDADO")
 
         empleados = EmpleadoSelector.get_disponibles_para_periodo(
             empresa_id=empresa_id,
@@ -907,7 +1008,9 @@ class PeriodoNominaBusinessService:
         for empleado in empleados:
             contrato = ContratoSelector.get_activo_for_empleado(empresa_id, empleado.id)
             if not contrato:
-                fallidos.append({'empleado_uuid': str(empleado.uuid), 'error': 'Sin contrato activo.'})
+                fallidos.append(
+                    {"empleado_uuid": str(empleado.uuid), "error": "Sin contrato activo."}
+                )
                 continue
             try:
                 with transaction.atomic():
@@ -915,49 +1018,62 @@ class PeriodoNominaBusinessService:
                         empleado=empleado,
                         contrato=contrato,
                         data={
-                            'contrato': contrato,
-                            'dias_laborados': Decimal('30'),
-                            'periodo_mes': periodo.periodo_mes,
-                            'fecha_inicio': periodo.fecha_inicio,
-                            'fecha_fin': periodo.fecha_fin,
-                            'fecha_pago': periodo.fecha_pago,
+                            "contrato": contrato,
+                            "dias_laborados": Decimal("30"),
+                            "periodo_mes": periodo.periodo_mes,
+                            "fecha_inicio": periodo.fecha_inicio,
+                            "fecha_fin": periodo.fecha_fin,
+                            "fecha_pago": periodo.fecha_pago,
                         },
                         empresa_id=empresa_id,
                     )
                     devengo.periodo = periodo
-                    devengo.save(update_fields=['periodo'])
-                creados.append({'empleado_uuid': str(empleado.uuid), 'devengo_uuid': str(devengo.uuid)})
+                    devengo.save(update_fields=["periodo"])
+                creados.append(
+                    {"empleado_uuid": str(empleado.uuid), "devengo_uuid": str(devengo.uuid)}
+                )
             except ValidationError as exc:
-                fallidos.append({'empleado_uuid': str(empleado.uuid), 'error': str(exc.detail if hasattr(exc, 'detail') else exc)})
+                fallidos.append(
+                    {
+                        "empleado_uuid": str(empleado.uuid),
+                        "error": str(exc.detail if hasattr(exc, "detail") else exc),
+                    }
+                )
 
         if not creados:
-            raise ValidationError({
-                'periodo': 'Ningun empleado elegible pudo preliquidarse. Revise los errores en "fallidos".',
-                'fallidos': fallidos,
-            })
+            raise ValidationError(
+                {
+                    "periodo": 'Ningun empleado elegible pudo preliquidarse. Revise los errores en "fallidos".',
+                    "fallidos": fallidos,
+                }
+            )
 
-        PeriodoNominaCRUDService.actualizar_estado(periodo, 'PRELIQUIDADO')
+        PeriodoNominaCRUDService.actualizar_estado(periodo, "PRELIQUIDADO")
         logger.info(
             "[PeriodoNominaBusiness] Periodo ID=%s preliquidado: %s creados, %s fallidos",
-            periodo.id, len(creados), len(fallidos)
+            periodo.id,
+            len(creados),
+            len(fallidos),
         )
-        return {'creados': creados, 'fallidos': fallidos}
+        return {"creados": creados, "fallidos": fallidos}
 
     @staticmethod
     @transaction.atomic
     def enviar_a_revision(periodo: PeriodoNomina) -> PeriodoNomina:
-        PeriodoNominaBusinessService._validar_transicion(periodo, 'EN_REVISION')
+        PeriodoNominaBusinessService._validar_transicion(periodo, "EN_REVISION")
         if not periodo.devengos.filter(anulado=False).exists():
-            raise ValidationError({'periodo': 'No hay devengos activos para revisar en este periodo.'})
-        return PeriodoNominaCRUDService.actualizar_estado(periodo, 'EN_REVISION')
+            raise ValidationError(
+                {"periodo": "No hay devengos activos para revisar en este periodo."}
+            )
+        return PeriodoNominaCRUDService.actualizar_estado(periodo, "EN_REVISION")
 
     @staticmethod
     @transaction.atomic
     def rechazar_revision(periodo: PeriodoNomina) -> PeriodoNomina:
         """Devuelve el periodo a PRELIQUIDADO para permitir corregir devengos
         puntuales (anular + recrear) antes de re-enviar a revision."""
-        PeriodoNominaBusinessService._validar_transicion(periodo, 'PRELIQUIDADO')
-        return PeriodoNominaCRUDService.actualizar_estado(periodo, 'PRELIQUIDADO')
+        PeriodoNominaBusinessService._validar_transicion(periodo, "PRELIQUIDADO")
+        return PeriodoNominaCRUDService.actualizar_estado(periodo, "PRELIQUIDADO")
 
     @staticmethod
     @transaction.atomic
@@ -968,9 +1084,12 @@ class PeriodoNominaBusinessService:
         accion con permission_classes de solo-ADMIN ademas de esta validacion
         de estado.
         """
-        PeriodoNominaBusinessService._validar_transicion(periodo, 'APROBADO')
+        PeriodoNominaBusinessService._validar_transicion(periodo, "APROBADO")
         return PeriodoNominaCRUDService.actualizar_estado(
-            periodo, 'APROBADO', aprobado_por=aprobado_por, fecha_aprobacion=timezone.now(),
+            periodo,
+            "APROBADO",
+            aprobado_por=aprobado_por,
+            fecha_aprobacion=timezone.now(),
         )
 
     @staticmethod
@@ -984,9 +1103,10 @@ class PeriodoNominaBusinessService:
         trabajo pendiente de integracion real, documentado como gap, no
         fabricado aqui.
         """
-        PeriodoNominaBusinessService._validar_transicion(periodo, 'PAGADO')
+        PeriodoNominaBusinessService._validar_transicion(periodo, "PAGADO")
         return PeriodoNominaCRUDService.actualizar_estado(
-            periodo, 'PAGADO',
+            periodo,
+            "PAGADO",
             pagado_por=pagado_por,
             fecha_pago_real=fecha_pago_real or timezone.now().date(),
         )
@@ -1008,21 +1128,23 @@ class PeriodoNominaBusinessService:
         visible en esas pantallas via PeriodoNominaSelector.get_resumen()
         para revision humana, sin bloquear las transiciones intermedias.
         """
-        PeriodoNominaBusinessService._validar_transicion(periodo, 'CERRADO')
+        PeriodoNominaBusinessService._validar_transicion(periodo, "CERRADO")
 
         pendientes = EmpleadoSelector.get_empleados_pendientes_para_periodo(periodo)
         if pendientes.exists():
             nombres = [f"{e.nombre_completo} ({e.numero_documento})" for e in pendientes[:10]]
-            raise ValidationError({
-                'periodo': (
-                    f"No se puede cerrar el periodo: {pendientes.count()} empleado(s) "
-                    f"elegible(s) todavia no tienen nomina liquidada en este periodo. "
-                    f"Preliquide o registre su nomina, o retirelos, antes de cerrar."
-                ),
-                'pendientes': nombres,
-            })
+            raise ValidationError(
+                {
+                    "periodo": (
+                        f"No se puede cerrar el periodo: {pendientes.count()} empleado(s) "
+                        f"elegible(s) todavia no tienen nomina liquidada en este periodo. "
+                        f"Preliquide o registre su nomina, o retirelos, antes de cerrar."
+                    ),
+                    "pendientes": nombres,
+                }
+            )
 
-        return PeriodoNominaCRUDService.actualizar_estado(periodo, 'CERRADO')
+        return PeriodoNominaCRUDService.actualizar_estado(periodo, "CERRADO")
 
     @staticmethod
     @transaction.atomic
@@ -1030,10 +1152,10 @@ class PeriodoNominaBusinessService:
         """Anula el periodo Y, en cascada, todos sus devengos activos (misma
         semantica de anulacion ya usada por DevengoBusinessService.anular_devengo
         -- nunca hard-delete, mismo principio de inmutabilidad/trazabilidad)."""
-        PeriodoNominaBusinessService._validar_transicion(periodo, 'ANULADO')
+        PeriodoNominaBusinessService._validar_transicion(periodo, "ANULADO")
         for devengo in periodo.devengos.filter(anulado=False):
             DevengoBusinessService.anular_devengo(devengo, empresa_id)
-        return PeriodoNominaCRUDService.actualizar_estado(periodo, 'ANULADO')
+        return PeriodoNominaCRUDService.actualizar_estado(periodo, "ANULADO")
 
     @staticmethod
     @transaction.atomic
@@ -1041,19 +1163,23 @@ class PeriodoNominaBusinessService:
         """Pausa reversible -- guarda el estado previo en observaciones para
         que desbloquear_periodo() pueda restaurarlo sin exigir que el
         llamador lo recuerde (sin agregar un campo nuevo solo para esto)."""
-        PeriodoNominaBusinessService._validar_transicion(periodo, 'BLOQUEADO')
+        PeriodoNominaBusinessService._validar_transicion(periodo, "BLOQUEADO")
         estado_previo = periodo.estado
-        periodo.observaciones = (periodo.observaciones or '') + f'\n[BLOQUEADO desde {estado_previo} en {timezone.now().isoformat()}]'
-        periodo.save(update_fields=['observaciones'])
-        return PeriodoNominaCRUDService.actualizar_estado(periodo, 'BLOQUEADO')
+        periodo.observaciones = (
+            periodo.observaciones or ""
+        ) + f"\n[BLOQUEADO desde {estado_previo} en {timezone.now().isoformat()}]"
+        periodo.save(update_fields=["observaciones"])
+        return PeriodoNominaCRUDService.actualizar_estado(periodo, "BLOQUEADO")
 
     @staticmethod
     @transaction.atomic
     def desbloquear_periodo(periodo: PeriodoNomina, estado_destino: str) -> PeriodoNomina:
-        if periodo.estado != 'BLOQUEADO':
-            raise ValidationError({'estado': 'El periodo no esta bloqueado.'})
-        if estado_destino not in {'ABIERTO', 'PRELIQUIDADO', 'EN_REVISION', 'APROBADO'}:
-            raise ValidationError({'estado_destino': f'Destino de desbloqueo invalido: {estado_destino}.'})
+        if periodo.estado != "BLOQUEADO":
+            raise ValidationError({"estado": "El periodo no esta bloqueado."})
+        if estado_destino not in {"ABIERTO", "PRELIQUIDADO", "EN_REVISION", "APROBADO"}:
+            raise ValidationError(
+                {"estado_destino": f"Destino de desbloqueo invalido: {estado_destino}."}
+            )
         return PeriodoNominaCRUDService.actualizar_estado(periodo, estado_destino)
 
 
@@ -1068,21 +1194,21 @@ class NominaCalculationService:
     # parafiscales (Ley 21/1982, Ley 89/1988), ARL por clase de riesgo
     # (Decreto 1607/2002, valores minimos de tabla).
     # ---------------------------------------------------------------
-    EPS_PATRONAL_PCT = Decimal('0.085')
-    PENSION_PATRONAL_PCT = Decimal('0.12')
-    CAJA_COMPENSACION_PCT = Decimal('0.04')
-    ICBF_PCT = Decimal('0.03')
-    SENA_PCT = Decimal('0.02')
+    EPS_PATRONAL_PCT = Decimal("0.085")
+    PENSION_PATRONAL_PCT = Decimal("0.12")
+    CAJA_COMPENSACION_PCT = Decimal("0.04")
+    ICBF_PCT = Decimal("0.03")
+    SENA_PCT = Decimal("0.02")
     ARL_PATRONAL_PCT_POR_RIESGO = {
-        'I':   Decimal('0.00522'),
-        'II':  Decimal('0.01044'),
-        'III': Decimal('0.02436'),
-        'IV':  Decimal('0.04350'),
-        'V':   Decimal('0.06960'),
+        "I": Decimal("0.00522"),
+        "II": Decimal("0.01044"),
+        "III": Decimal("0.02436"),
+        "IV": Decimal("0.04350"),
+        "V": Decimal("0.06960"),
     }
 
     @staticmethod
-    def calcular_aportes_patronales(ibc, tipo_contrato: str, nivel_riesgo_arl: str = 'I') -> dict:
+    def calcular_aportes_patronales(ibc, tipo_contrato: str, nivel_riesgo_arl: str = "I") -> dict:
         """
         Aportes de seguridad social y parafiscales a cargo del EMPLEADOR
         sobre un IBC ya calculado por calcular_liquidacion() (mismo
@@ -1105,16 +1231,19 @@ class NominaCalculationService:
         """
         ibc = _to_decimal(ibc)
         ceros = {
-            'eps_patronal': Decimal('0.00'), 'pension_patronal': Decimal('0.00'),
-            'arl_patronal': Decimal('0.00'), 'caja_compensacion': Decimal('0.00'),
-            'icbf': Decimal('0.00'), 'sena': Decimal('0.00'),
-            'total_aportes_patronales': Decimal('0.00'),
+            "eps_patronal": Decimal("0.00"),
+            "pension_patronal": Decimal("0.00"),
+            "arl_patronal": Decimal("0.00"),
+            "caja_compensacion": Decimal("0.00"),
+            "icbf": Decimal("0.00"),
+            "sena": Decimal("0.00"),
+            "total_aportes_patronales": Decimal("0.00"),
         }
-        if tipo_contrato == 'PRESTACION' or ibc <= Decimal('0'):
+        if tipo_contrato == "PRESTACION" or ibc <= Decimal("0"):
             return ceros
 
         tarifa_arl = NominaCalculationService.ARL_PATRONAL_PCT_POR_RIESGO.get(
-            nivel_riesgo_arl, NominaCalculationService.ARL_PATRONAL_PCT_POR_RIESGO['I']
+            nivel_riesgo_arl, NominaCalculationService.ARL_PATRONAL_PCT_POR_RIESGO["I"]
         )
 
         eps_patronal = ibc * NominaCalculationService.EPS_PATRONAL_PCT
@@ -1129,13 +1258,13 @@ class NominaCalculationService:
             return v.quantize(MONEY_Q, rounding=ROUND_HALF_UP)
 
         return {
-            'eps_patronal': _q(eps_patronal),
-            'pension_patronal': _q(pension_patronal),
-            'arl_patronal': _q(arl_patronal),
-            'caja_compensacion': _q(caja_compensacion),
-            'icbf': _q(icbf),
-            'sena': _q(sena),
-            'total_aportes_patronales': _q(total),
+            "eps_patronal": _q(eps_patronal),
+            "pension_patronal": _q(pension_patronal),
+            "arl_patronal": _q(arl_patronal),
+            "caja_compensacion": _q(caja_compensacion),
+            "icbf": _q(icbf),
+            "sena": _q(sena),
+            "total_aportes_patronales": _q(total),
         }
 
     @staticmethod
@@ -1159,9 +1288,11 @@ class NominaCalculationService:
         """
         # Validaciones
         if empresa_id and contrato.empresa_id != empresa_id:
-            raise ValidationError({'contrato': 'El contrato no pertenece a la empresa especificada.'})
+            raise ValidationError(
+                {"contrato": "El contrato no pertenece a la empresa especificada."}
+            )
 
-        if contrato.estado != 'ACTIVO' or not contrato.activo:
+        if contrato.estado != "ACTIVO" or not contrato.activo:
             raise ValueError("No se puede calcular nomina para un contrato inactivo")
 
         # ---------------------------------------------------------------
@@ -1172,9 +1303,9 @@ class NominaCalculationService:
         try:
             dias_laborados = _to_decimal(dias_laborados)
         except Exception:
-            raise ValueError("Los dias laborados deben ser un numero valido")
+            raise ValueError("Los dias laborados deben ser un numero valido") from None
 
-        if dias_laborados < Decimal('0.5') or dias_laborados > Decimal('31'):
+        if dias_laborados < Decimal("0.5") or dias_laborados > Decimal("31"):
             raise ValueError("Los dias laborados deben estar entre 0.5 y 31")
 
         # Salario y auxilio vienen de DecimalField — igual pasan por _to_decimal
@@ -1184,19 +1315,17 @@ class NominaCalculationService:
 
         # GUARDIA FASE 2: salario_mensual nunca debe ser 0 para evitar cálculos absurdos.
         # El modelo ya tiene MinValueValidator(0.01), pero defensa en profundidad.
-        if salario_mensual <= Decimal('0'):
-            raise ValidationError({
-                'salario_mensual': 'El salario mensual debe ser mayor a cero.'
-            })
+        if salario_mensual <= Decimal("0"):
+            raise ValidationError({"salario_mensual": "El salario mensual debe ser mayor a cero."})
 
         # Parámetros opcionales: horas y descuentos deben ser >= 0
-        h_extra_diurnas   = _to_decimal(horas_extras_diurnas)
+        h_extra_diurnas = _to_decimal(horas_extras_diurnas)
         h_extra_nocturnas = _to_decimal(horas_extras_nocturnas)
-        h_rec_nocturno    = _to_decimal(recargo_nocturno_horas)
-        h_rec_festivo     = _to_decimal(recargo_festivo_horas)
-        otros             = _to_decimal(otros_devengos)
-        p_prestamos       = _to_decimal(prestamos)
-        p_descuentos      = _to_decimal(descuentos_operativos)
+        h_rec_nocturno = _to_decimal(recargo_nocturno_horas)
+        h_rec_festivo = _to_decimal(recargo_festivo_horas)
+        otros = _to_decimal(otros_devengos)
+        p_prestamos = _to_decimal(prestamos)
+        p_descuentos = _to_decimal(descuentos_operativos)
 
         # ---------------------------------------------------------------
         # TOPES DE HORAS EXTRAS — FASE 4: prevenir ingresos absurdos
@@ -1204,32 +1333,36 @@ class NominaCalculationService:
         # Aplicamos 80h/tipo como tope generoso que atrapa errores de
         # digitación (ej. "800" en vez de "8").
         # ---------------------------------------------------------------
-        _MAX_HE_POR_TIPO = Decimal('80')
-        _MAX_HE_TOTAL    = Decimal('200')   # No más de un mes completo en H.E.
+        _MAX_HE_POR_TIPO = Decimal("80")
+        _MAX_HE_TOTAL = Decimal("200")  # No más de un mes completo en H.E.
 
         _he_map = {
-            'horas_extras_diurnas':   h_extra_diurnas,
-            'horas_extras_nocturnas': h_extra_nocturnas,
-            'recargo_nocturno_horas': h_rec_nocturno,
-            'recargo_festivo_horas':  h_rec_festivo,
+            "horas_extras_diurnas": h_extra_diurnas,
+            "horas_extras_nocturnas": h_extra_nocturnas,
+            "recargo_nocturno_horas": h_rec_nocturno,
+            "recargo_festivo_horas": h_rec_festivo,
         }
         for campo_he, val_he in _he_map.items():
             if val_he > _MAX_HE_POR_TIPO:
-                raise ValidationError({
-                    campo_he: (
-                        f'Las horas ingresadas ({val_he}h) superan el tope por tipo '
-                        f'({_MAX_HE_POR_TIPO}h). Verifique el valor.'
-                    )
-                })
+                raise ValidationError(
+                    {
+                        campo_he: (
+                            f"Las horas ingresadas ({val_he}h) superan el tope por tipo "
+                            f"({_MAX_HE_POR_TIPO}h). Verifique el valor."
+                        )
+                    }
+                )
 
         total_he = h_extra_diurnas + h_extra_nocturnas + h_rec_nocturno + h_rec_festivo
         if total_he > _MAX_HE_TOTAL:
-            raise ValidationError({
-                'horas_extras': (
-                    f'El total de horas extras y recargos ({total_he}h) supera el '
-                    f'maximo permitido de {_MAX_HE_TOTAL}h por periodo.'
-                )
-            })
+            raise ValidationError(
+                {
+                    "horas_extras": (
+                        f"El total de horas extras y recargos ({total_he}h) supera el "
+                        f"maximo permitido de {_MAX_HE_TOTAL}h por periodo."
+                    )
+                }
+            )
 
         # VALOR HORA BASE — SSoT para salario proporcional por horas Y para H.E.
         # Ley 2101/2021: base mensual = 200 horas (jornada semanal 42h × 4.76 sem/mes ≈ 200h)
@@ -1240,18 +1373,22 @@ class NominaCalculationService:
         # Modo horas: aplica cuando se registran horas efectivas (ej. contratos part-time)
         # Modo días: base comercial 30 días/mes (norma general Colombia)
         # _DIAS_MENSUALES = 30 (constante, nunca cero → sin riesgo de ZeroDivisionError)
-        h_trabajadas = _to_decimal(horas_trabajadas) if horas_trabajadas is not None else Decimal('0')
+        h_trabajadas = (
+            _to_decimal(horas_trabajadas) if horas_trabajadas is not None else Decimal("0")
+        )
 
         # TOPE: horas_trabajadas no puede superar la jornada mensual legal
         if h_trabajadas > _HORAS_MENSUALES:
-            raise ValidationError({
-                'horas_trabajadas': (
-                    f'Las horas trabajadas ({h_trabajadas}h) superan la jornada mensual '
-                    f'maxima de {_HORAS_MENSUALES}h (Ley 2101/2021).'
-                )
-            })
+            raise ValidationError(
+                {
+                    "horas_trabajadas": (
+                        f"Las horas trabajadas ({h_trabajadas}h) superan la jornada mensual "
+                        f"maxima de {_HORAS_MENSUALES}h (Ley 2101/2021)."
+                    )
+                }
+            )
 
-        if h_trabajadas > Decimal('0'):
+        if h_trabajadas > Decimal("0"):
             salario_base = valor_hora_base * h_trabajadas
         else:
             salario_base = salario_mensual * (dias_laborados / _DIAS_MENSUALES)
@@ -1259,23 +1396,23 @@ class NominaCalculationService:
         # 2. AUXILIO DE TRANSPORTE
         # Normativa: contratos PRESTACION no tienen auxilio (art. 2 Ley 1393/2010).
         # Se fuerza a 0 explícitamente para blindar el cálculo del IBC.
-        if contrato.tipo == 'PRESTACION' or auxilio_mensual <= Decimal('0'):
-            auxilio_transporte = Decimal('0')
+        if contrato.tipo == "PRESTACION" or auxilio_mensual <= Decimal("0"):
+            auxilio_transporte = Decimal("0")
         else:
             auxilio_transporte = auxilio_mensual * (dias_laborados / _DIAS_MENSUALES)
 
         # 3. IBC (Ingreso Base de Cotizacion)
         # Normativa: el auxilio de transporte NO integra salario ni hace parte del IBC.
         # (art. 30 Ley 100/1993 — excluido expresamente)
-        ibc = salario_base   # ← SOLO salario_base, NUNCA + auxilio_transporte
+        ibc = salario_base  # ← SOLO salario_base, NUNCA + auxilio_transporte
 
         # 4. DEDUCCIONES DE LEY (empleado: 4% salud + 4% pensión sobre IBC)
         # Solo aplica para contratos laborales; PRESTACION no cotiza por el empleador.
-        salud_empleado   = Decimal('0')
-        pension_empleado = Decimal('0')
-        if contrato.tipo in ('FIJO', 'INDEF', 'OBRA'):
-            salud_empleado   = ibc * Decimal('0.04')   # art. 204 Ley 100/1993
-            pension_empleado = ibc * Decimal('0.04')   # art. 20 Ley 100/1993
+        salud_empleado = Decimal("0")
+        pension_empleado = Decimal("0")
+        if contrato.tipo in ("FIJO", "INDEF", "OBRA"):
+            salud_empleado = ibc * Decimal("0.04")  # art. 204 Ley 100/1993
+            pension_empleado = ibc * Decimal("0.04")  # art. 20 Ley 100/1993
 
         # 5. HORAS EXTRAS Y RECARGOS (Decreto 2663/1950 — arts. 168, 170, 179 CST)
         # valor_hora_base ya calculado arriba (SSoT, sin recalcular).
@@ -1285,39 +1422,41 @@ class NominaCalculationService:
         #   Rec. Nocturno  × 0.35  (+35% extra sobre hora ordinaria, art. 168 CST)
         #   Rec. Festivo   × 1.75  (política empresa — homologado a H.E. nocturna)
         valor_horas_extras = (
-            h_extra_diurnas   * Decimal('1.25') +
-            h_extra_nocturnas * Decimal('1.75') +
-            h_rec_nocturno    * Decimal('0.35') +
-            h_rec_festivo     * Decimal('1.75')
+            h_extra_diurnas * Decimal("1.25")
+            + h_extra_nocturnas * Decimal("1.75")
+            + h_rec_nocturno * Decimal("0.35")
+            + h_rec_festivo * Decimal("1.75")
         ) * valor_hora_base
 
         # 6. NETO A PAGAR
-        devengos    = salario_base + auxilio_transporte + valor_horas_extras + otros
+        devengos = salario_base + auxilio_transporte + valor_horas_extras + otros
         deducciones = salud_empleado + pension_empleado + p_prestamos + p_descuentos
-        neto_pagar  = devengos - deducciones
+        neto_pagar = devengos - deducciones
 
         # FASE 4: neto negativo es un error de negocio, no solo una advertencia.
         # El operador debe ajustar descuentos o registrar descuentos parciales
         # en varios periodos antes de que el sistema persista datos incoherentes.
-        if neto_pagar < Decimal('0'):
-            raise ValidationError({
-                'neto_pagar': (
-                    f'El neto a pagar no puede ser negativo '
-                    f'(devengos: {devengos.quantize(MONEY_Q)}, '
-                    f'deducciones: {deducciones.quantize(MONEY_Q)}). '
-                    f'Reduzca los descuentos o distribuya en varios periodos.'
-                )
-            })
+        if neto_pagar < Decimal("0"):
+            raise ValidationError(
+                {
+                    "neto_pagar": (
+                        f"El neto a pagar no puede ser negativo "
+                        f"(devengos: {devengos.quantize(MONEY_Q)}, "
+                        f"deducciones: {deducciones.quantize(MONEY_Q)}). "
+                        f"Reduzca los descuentos o distribuya en varios periodos."
+                    )
+                }
+            )
 
         # Cuantizar SOLO en el retorno (no en intermedios para no acumular error de redondeo)
         return {
-            "salario_base":       str(salario_base.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "salario_base": str(salario_base.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
             "auxilio_transporte": str(auxilio_transporte.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
-            "ibc":                str(ibc.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "ibc": str(ibc.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
             "valor_horas_extras": str(valor_horas_extras.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
-            "salud_empleado":     str(salud_empleado.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
-            "pension_empleado":   str(pension_empleado.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
-            "neto_pagar":         str(neto_pagar.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "salud_empleado": str(salud_empleado.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "pension_empleado": str(pension_empleado.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
+            "neto_pagar": str(neto_pagar.quantize(MONEY_Q, rounding=ROUND_HALF_UP)),
         }
 
     @staticmethod
@@ -1345,52 +1484,52 @@ class NominaCalculationService:
         tipo_liquidacion: str,
         fecha_corte,
         dias_salario_pendiente=0,
-        indemnizacion=0
+        indemnizacion=0,
     ) -> dict:
         """
         Calcula liquidacion de prestaciones sociales (Primas, Cesantias, Intereses, Vacaciones)
         y liquidacion definitiva.
         """
         from datetime import date
+
         from django.utils.dateparse import parse_date
 
         if isinstance(fecha_corte, str):
             parsed = parse_date(fecha_corte)
-            if parsed:
-                fecha_corte = parsed
-            else:
-                fecha_corte = date.today()
+            fecha_corte = parsed if parsed else date.today()
         elif isinstance(fecha_corte, datetime):
             fecha_corte = fecha_corte.date()
 
         # Validar que el empleado tenga al menos una nomina (Devengo) activa (no anulada)
-        if not Devengo.objects.filter(contrato=contrato, empresa_id=contrato.empresa_id, anulado=False).exists():
+        if not Devengo.objects.filter(
+            contrato=contrato, empresa_id=contrato.empresa_id, anulado=False
+        ).exists():
             raise ValidationError(
                 "No es posible liquidar a un empleado que no tiene nominas activas registradas en el sistema."
             )
 
         # Si el contrato es PRESTACION, forzar a cero inmediatamente
-        if contrato.tipo == 'PRESTACION':
+        if contrato.tipo == "PRESTACION":
             return {
-                'dias_primas': 0,
-                'dias_cesantias': 0,
-                'dias_intereses': 0,
-                'dias_vacaciones': 0,
-                'valor_primas': Decimal('0.00'),
-                'valor_cesantias': Decimal('0.00'),
-                'valor_intereses': Decimal('0.00'),
-                'valor_vacaciones': Decimal('0.00'),
-                'total_prestaciones': Decimal('0.00'),
-                'dias_salario_pendiente': 0,
-                'salario_pendiente': Decimal('0.00'),
-                'indemnizacion': Decimal('0.00'),
-                'prestamos_deducidos': Decimal('0.00'),
-                'total_neto': Decimal('0.00'),
-                'fecha_inicio_contrato': contrato.fecha_inicio.strftime('%Y-%m-%d'),
-                'fecha_corte': fecha_corte.strftime('%Y-%m-%d'),
-                'fecha_inicio_primas': contrato.fecha_inicio.strftime('%Y-%m-%d'),
-                'fecha_inicio_cesantias': contrato.fecha_inicio.strftime('%Y-%m-%d'),
-                'fecha_inicio_vacaciones': contrato.fecha_inicio.strftime('%Y-%m-%d'),
+                "dias_primas": 0,
+                "dias_cesantias": 0,
+                "dias_intereses": 0,
+                "dias_vacaciones": 0,
+                "valor_primas": Decimal("0.00"),
+                "valor_cesantias": Decimal("0.00"),
+                "valor_intereses": Decimal("0.00"),
+                "valor_vacaciones": Decimal("0.00"),
+                "total_prestaciones": Decimal("0.00"),
+                "dias_salario_pendiente": 0,
+                "salario_pendiente": Decimal("0.00"),
+                "indemnizacion": Decimal("0.00"),
+                "prestamos_deducidos": Decimal("0.00"),
+                "total_neto": Decimal("0.00"),
+                "fecha_inicio_contrato": contrato.fecha_inicio.strftime("%Y-%m-%d"),
+                "fecha_corte": fecha_corte.strftime("%Y-%m-%d"),
+                "fecha_inicio_primas": contrato.fecha_inicio.strftime("%Y-%m-%d"),
+                "fecha_inicio_cesantias": contrato.fecha_inicio.strftime("%Y-%m-%d"),
+                "fecha_inicio_vacaciones": contrato.fecha_inicio.strftime("%Y-%m-%d"),
             }
 
         # Calcular dias de primas
@@ -1411,75 +1550,90 @@ class NominaCalculationService:
 
         dias_intereses = dias_cesantias
 
-        if tipo_liquidacion == 'LIQUIDACION_DEFINITIVA':
+        if tipo_liquidacion == "LIQUIDACION_DEFINITIVA":
             start_vacaciones = contrato.fecha_inicio
-            dias_vacaciones = NominaCalculationService.calcular_dias_360(start_vacaciones, fecha_corte)
+            dias_vacaciones = NominaCalculationService.calcular_dias_360(
+                start_vacaciones, fecha_corte
+            )
         else:
             start_vacaciones = start_cesantias
             dias_vacaciones = dias_cesantias
 
         # Salario Base para Prestaciones: Salario + Auxilio de Transporte
-        salario_base_liq = Decimal(str(contrato.salario_mensual)) + Decimal(str(contrato.auxilio_transporte))
+        salario_base_liq = Decimal(str(contrato.salario_mensual)) + Decimal(
+            str(contrato.auxilio_transporte)
+        )
         salario_basico = Decimal(str(contrato.salario_mensual))
 
         # Formulas legales colombianas
-        valor_primas = (salario_base_liq * Decimal(str(dias_primas))) / Decimal('360')
-        valor_cesantias = (salario_base_liq * Decimal(str(dias_cesantias))) / Decimal('360')
-        
+        valor_primas = (salario_base_liq * Decimal(str(dias_primas))) / Decimal("360")
+        valor_cesantias = (salario_base_liq * Decimal(str(dias_cesantias))) / Decimal("360")
+
         # Intereses de cesantias = (Cesantias * dias * 0.12) / 360
-        valor_intereses = (valor_cesantias * Decimal(str(dias_intereses)) * Decimal('0.12')) / Decimal('360')
-        
+        valor_intereses = (
+            valor_cesantias * Decimal(str(dias_intereses)) * Decimal("0.12")
+        ) / Decimal("360")
+
         # Vacaciones = (Salario Basico * dias) / 720
-        valor_vacaciones = (salario_basico * Decimal(str(dias_vacaciones))) / Decimal('720')
+        valor_vacaciones = (salario_basico * Decimal(str(dias_vacaciones))) / Decimal("720")
 
         total_prestaciones = valor_primas + valor_cesantias + valor_intereses + valor_vacaciones
 
         # Definir salario pendiente
         dias_sal_pend = _to_decimal(dias_salario_pendiente)
-        salario_pendiente = dias_sal_pend * (salario_basico / Decimal('30'))
+        salario_pendiente = dias_sal_pend * (salario_basico / Decimal("30"))
 
         # Definir indemnizacion
         val_indemnizacion = _to_decimal(indemnizacion)
 
         # Prestamos deducidos
-        if tipo_liquidacion == 'LIQUIDACION_DEFINITIVA':
-            prestamos_deducidos = Decimal(str(contrato.prestamos_empresa or '0.00'))
+        if tipo_liquidacion == "LIQUIDACION_DEFINITIVA":
+            prestamos_deducidos = Decimal(str(contrato.prestamos_empresa or "0.00"))
         else:
-            prestamos_deducidos = Decimal('0.00')
+            prestamos_deducidos = Decimal("0.00")
 
-        total_neto = total_prestaciones + salario_pendiente + val_indemnizacion - prestamos_deducidos
+        total_neto = (
+            total_prestaciones + salario_pendiente + val_indemnizacion - prestamos_deducidos
+        )
 
         return {
-            'dias_primas': dias_primas,
-            'dias_cesantias': dias_cesantias,
-            'dias_intereses': dias_intereses,
-            'dias_vacaciones': dias_vacaciones,
-            'valor_primas': valor_primas.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
-            'valor_cesantias': valor_cesantias.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
-            'valor_intereses': valor_intereses.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
-            'valor_vacaciones': valor_vacaciones.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
-            'total_prestaciones': total_prestaciones.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
-            'dias_salario_pendiente': int(dias_sal_pend),
-            'salario_pendiente': salario_pendiente.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
-            'indemnizacion': val_indemnizacion.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
-            'prestamos_deducidos': prestamos_deducidos.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
-            'total_neto': total_neto.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
-            'fecha_inicio_contrato': contrato.fecha_inicio.strftime('%Y-%m-%d'),
-            'fecha_corte': fecha_corte.strftime('%Y-%m-%d'),
-            'fecha_inicio_primas': start_primas.strftime('%Y-%m-%d'),
-            'fecha_inicio_cesantias': start_cesantias.strftime('%Y-%m-%d'),
-            'fecha_inicio_vacaciones': start_vacaciones.strftime('%Y-%m-%d'),
+            "dias_primas": dias_primas,
+            "dias_cesantias": dias_cesantias,
+            "dias_intereses": dias_intereses,
+            "dias_vacaciones": dias_vacaciones,
+            "valor_primas": valor_primas.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            "valor_cesantias": valor_cesantias.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            "valor_intereses": valor_intereses.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            "valor_vacaciones": valor_vacaciones.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            "total_prestaciones": total_prestaciones.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            "dias_salario_pendiente": int(dias_sal_pend),
+            "salario_pendiente": salario_pendiente.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            "indemnizacion": val_indemnizacion.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            "prestamos_deducidos": prestamos_deducidos.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            "total_neto": total_neto.quantize(MONEY_Q, rounding=ROUND_HALF_UP),
+            "fecha_inicio_contrato": contrato.fecha_inicio.strftime("%Y-%m-%d"),
+            "fecha_corte": fecha_corte.strftime("%Y-%m-%d"),
+            "fecha_inicio_primas": start_primas.strftime("%Y-%m-%d"),
+            "fecha_inicio_cesantias": start_cesantias.strftime("%Y-%m-%d"),
+            "fecha_inicio_vacaciones": start_vacaciones.strftime("%Y-%m-%d"),
         }
 
     # Motivos que NO generan indemnizacion por despido (CST art. 64): la ley
     # solo indemniza la terminacion UNILATERAL del empleador SIN justa causa.
     MOTIVOS_SIN_INDEMNIZACION_DESPIDO = {
-        'RENUNCIA', 'MUTUO_ACUERDO', 'VENCIMIENTO_TERMINO',
-        'TERMINACION_OBRA', 'JUSTA_CAUSA', 'MUERTE', 'OTRO',
+        "RENUNCIA",
+        "MUTUO_ACUERDO",
+        "VENCIMIENTO_TERMINO",
+        "TERMINACION_OBRA",
+        "JUSTA_CAUSA",
+        "MUERTE",
+        "OTRO",
     }
 
     @staticmethod
-    def calcular_indemnizacion_despido(contrato: Contrato, fecha_retiro, motivo_retiro: str) -> dict:
+    def calcular_indemnizacion_despido(
+        contrato: Contrato, fecha_retiro, motivo_retiro: str
+    ) -> dict:
         """
         Indemnizacion por terminacion unilateral del contrato SIN JUSTA CAUSA
         por parte del empleador (CST art. 64, modificado por Ley 789/2002
@@ -1511,50 +1665,52 @@ class NominaCalculationService:
         from django.conf import settings as dj_settings
 
         base = {
-            'aplica': False,
-            'dias': 0,
-            'valor': Decimal('0.00'),
-            'base_legal': 'CST art. 64 (modificado por Ley 789/2002 art. 28)',
-            'explicacion': '',
+            "aplica": False,
+            "dias": 0,
+            "valor": Decimal("0.00"),
+            "base_legal": "CST art. 64 (modificado por Ley 789/2002 art. 28)",
+            "explicacion": "",
         }
 
         if motivo_retiro in NominaCalculationService.MOTIVOS_SIN_INDEMNIZACION_DESPIDO:
-            base['explicacion'] = (
+            base["explicacion"] = (
                 f"Motivo de retiro '{motivo_retiro}' no genera indemnizacion por "
                 f"despido: el CST art. 64 solo indemniza la terminacion unilateral "
                 f"del contrato SIN JUSTA CAUSA por parte del empleador."
             )
             return base
 
-        if motivo_retiro != 'SIN_JUSTA_CAUSA':
-            base['explicacion'] = f"Motivo de retiro '{motivo_retiro}' no reconocido para calculo de indemnizacion."
+        if motivo_retiro != "SIN_JUSTA_CAUSA":
+            base["explicacion"] = (
+                f"Motivo de retiro '{motivo_retiro}' no reconocido para calculo de indemnizacion."
+            )
             return base
 
-        if contrato.tipo == 'PRESTACION':
-            base['explicacion'] = (
-                'Contrato de Prestacion de Servicios: no es un contrato laboral '
-                'bajo el CST, no genera indemnizacion por despido.'
+        if contrato.tipo == "PRESTACION":
+            base["explicacion"] = (
+                "Contrato de Prestacion de Servicios: no es un contrato laboral "
+                "bajo el CST, no genera indemnizacion por despido."
             )
             return base
 
         salario_basico = _to_decimal(contrato.salario_mensual)
         salario_diario = salario_basico / _DIAS_MENSUALES
 
-        if contrato.tipo == 'FIJO':
+        if contrato.tipo == "FIJO":
             if not contrato.fecha_fin or contrato.fecha_fin <= fecha_retiro:
-                base['explicacion'] = (
-                    'Contrato a Termino Fijo sin fecha_fin vigente posterior al '
-                    'retiro: no hay tiempo restante que indemnizar.'
+                base["explicacion"] = (
+                    "Contrato a Termino Fijo sin fecha_fin vigente posterior al "
+                    "retiro: no hay tiempo restante que indemnizar."
                 )
                 return base
             dias = NominaCalculationService.calcular_dias_360(fecha_retiro, contrato.fecha_fin)
             valor = (dias * salario_diario).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
             return {
-                'aplica': True,
-                'dias': dias,
-                'valor': valor,
-                'base_legal': base['base_legal'],
-                'explicacion': (
+                "aplica": True,
+                "dias": dias,
+                "valor": valor,
+                "base_legal": base["base_legal"],
+                "explicacion": (
                     f"Contrato a Termino Fijo, despido sin justa causa: se indemniza "
                     f"el tiempo que falta para el vencimiento pactado ({dias} dias "
                     f"hasta {contrato.fecha_fin}) a razon de salario diario "
@@ -1562,22 +1718,24 @@ class NominaCalculationService:
                 ),
             }
 
-        if contrato.tipo == 'OBRA':
+        if contrato.tipo == "OBRA":
             if not contrato.fecha_fin:
-                base['explicacion'] = (
-                    'Contrato de Obra o Labor sin fecha_fin pactada: no es posible '
+                base["explicacion"] = (
+                    "Contrato de Obra o Labor sin fecha_fin pactada: no es posible "
                     'determinar el "tiempo que falte para terminar la obra" sin ese '
-                    'dato. Ajuste manual requerido (ver desglose_conceptos).'
+                    "dato. Ajuste manual requerido (ver desglose_conceptos)."
                 )
                 return base
-            dias = max(NominaCalculationService.calcular_dias_360(fecha_retiro, contrato.fecha_fin), 15)
+            dias = max(
+                NominaCalculationService.calcular_dias_360(fecha_retiro, contrato.fecha_fin), 15
+            )
             valor = (dias * salario_diario).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
             return {
-                'aplica': True,
-                'dias': dias,
-                'valor': valor,
-                'base_legal': base['base_legal'],
-                'explicacion': (
+                "aplica": True,
+                "dias": dias,
+                "valor": valor,
+                "base_legal": base["base_legal"],
+                "explicacion": (
                     f"Contrato de Obra o Labor, despido sin justa causa: se indemniza "
                     f"el tiempo que falta para terminar la obra (minimo legal 15 dias), "
                     f"{dias} dias a razon de salario diario "
@@ -1587,27 +1745,29 @@ class NominaCalculationService:
 
         # INDEF -- escala de Ley 789/2002 art. 28 segun umbral de 10 SMLMV.
         smlmv = _to_decimal(dj_settings.SMLMV_VIGENTE)
-        umbral = smlmv * Decimal('10')
-        dias_servicio = NominaCalculationService.calcular_dias_360(contrato.fecha_inicio, fecha_retiro)
+        umbral = smlmv * Decimal("10")
+        dias_servicio = NominaCalculationService.calcular_dias_360(
+            contrato.fecha_inicio, fecha_retiro
+        )
 
         if salario_basico < umbral:
-            dias_base, dias_adicional_por_anio = Decimal('30'), Decimal('20')
+            dias_base, dias_adicional_por_anio = Decimal("30"), Decimal("20")
         else:
-            dias_base, dias_adicional_por_anio = Decimal('20'), Decimal('15')
+            dias_base, dias_adicional_por_anio = Decimal("20"), Decimal("15")
 
         if dias_servicio <= 360:
             dias = dias_base
         else:
-            anios_adicionales = (Decimal(dias_servicio) - Decimal('360')) / Decimal('360')
+            anios_adicionales = (Decimal(dias_servicio) - Decimal("360")) / Decimal("360")
             dias = dias_base + (anios_adicionales * dias_adicional_por_anio)
 
         valor = (dias * salario_diario).quantize(MONEY_Q, rounding=ROUND_HALF_UP)
         return {
-            'aplica': True,
-            'dias': float(dias.quantize(Decimal('0.01'))),
-            'valor': valor,
-            'base_legal': base['base_legal'],
-            'explicacion': (
+            "aplica": True,
+            "dias": float(dias.quantize(Decimal("0.01"))),
+            "valor": valor,
+            "base_legal": base["base_legal"],
+            "explicacion": (
                 f"Contrato a Termino Indefinido, despido sin justa causa. Salario "
                 f"({salario_basico}) {'menor' if salario_basico < umbral else 'mayor o igual'} "
                 f"a 10 SMLMV ({umbral}, SMLMV={smlmv}). {dias_servicio} dias de servicio "
@@ -1616,5 +1776,3 @@ class NominaCalculationService:
                 f"{dias:.2f} dias x salario diario ({salario_diario.quantize(MONEY_Q)}) = {valor} COP."
             ),
         }
-
-

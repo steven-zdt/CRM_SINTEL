@@ -7,6 +7,7 @@ CuentasPagarBusinessService.registrar_cuenta_pagar() salvo el endpoint
 manual). Decision explicita del usuario: el trigger es la transicion a
 estado APROBADA.
 """
+
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -21,30 +22,50 @@ class SincronizacionCuentasPagarTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Sync CxP", nit="900000940", direccion="Calle Sync CxP",
+            razon_social="Empresa Sync CxP",
+            nit="900000940",
+            direccion="Calle Sync CxP",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Sede Sync CxP")
         # plazo_pago_dias distinto del default (30) para que el test no
         # pase "por casualidad" si la fecha_vencimiento se calculara mal.
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor Sync CxP", numero_documento="SYNC-CXP-1",
-            tipo_documento="NIT", plazo_pago_dias=45,
+            empresa=self.empresa,
+            razon_social="Proveedor Sync CxP",
+            numero_documento="SYNC-CXP-1",
+            tipo_documento="NIT",
+            plazo_pago_dias=45,
         )
         self.plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla Sync CxP", prefijo="SYNCCXP",
-            rango_desde=1, rango_hasta=1000, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla Sync CxP",
+            prefijo="SYNCCXP",
+            rango_desde=1,
+            rango_hasta=1000,
+            consecutivo_actual=1,
+            vigente=True,
         )
         self.orden = OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede, proveedor=self.proveedor, plantilla=self.plantilla,
-            fecha=date(2026, 6, 1), consecutivo=1, numero_documento="SYNCCXP-1", estado="BORRADOR",
-            subtotal=Decimal("10000.00"), impuestos=Decimal("1900.00"), total=Decimal("11900.00"),
+            empresa=self.empresa,
+            sede=self.sede,
+            proveedor=self.proveedor,
+            plantilla=self.plantilla,
+            fecha=date(2026, 6, 1),
+            consecutivo=1,
+            numero_documento="SYNCCXP-1",
+            estado="BORRADOR",
+            subtotal=Decimal("10000.00"),
+            impuestos=Decimal("1900.00"),
+            total=Decimal("11900.00"),
         )
 
     def test_aprobar_orden_genera_cuenta_por_pagar(self):
         self.assertEqual(CuentasPagar.objects.filter(empresa=self.empresa).count(), 0)
 
         ok, orden, code = OrdenCompraBusinessService.cambiar_estado_orden_compra(
-            str(self.orden.uuid), "APROBADA", self.empresa.id,
+            str(self.orden.uuid),
+            "APROBADA",
+            self.empresa.id,
         )
         self.assertTrue(ok, orden)
         self.assertEqual(code, 200)
@@ -59,16 +80,23 @@ class SincronizacionCuentasPagarTests(SintelTenantTestCase):
         self.assertEqual(cxp.orden_compra_uuid, self.orden.uuid)
 
     def test_reaprobar_es_idempotente_no_duplica(self):
-        OrdenCompraBusinessService.cambiar_estado_orden_compra(str(self.orden.uuid), "APROBADA", self.empresa.id)
-        OrdenCompraBusinessService.cambiar_estado_orden_compra(str(self.orden.uuid), "APROBADA", self.empresa.id)
+        OrdenCompraBusinessService.cambiar_estado_orden_compra(
+            str(self.orden.uuid), "APROBADA", self.empresa.id
+        )
+        OrdenCompraBusinessService.cambiar_estado_orden_compra(
+            str(self.orden.uuid), "APROBADA", self.empresa.id
+        )
 
         self.assertEqual(
-            CuentasPagar.objects.filter(empresa=self.empresa, numero_factura="SYNCCXP-1").count(), 1,
+            CuentasPagar.objects.filter(empresa=self.empresa, numero_factura="SYNCCXP-1").count(),
+            1,
         )
 
     def test_transicion_a_pendiente_no_genera_cuenta_por_pagar(self):
         ok, orden, code = OrdenCompraBusinessService.cambiar_estado_orden_compra(
-            str(self.orden.uuid), "PENDIENTE", self.empresa.id,
+            str(self.orden.uuid),
+            "PENDIENTE",
+            self.empresa.id,
         )
         self.assertTrue(ok, orden)
         self.assertEqual(CuentasPagar.objects.filter(empresa=self.empresa).count(), 0)

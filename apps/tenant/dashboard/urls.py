@@ -9,7 +9,7 @@ Este archivo se mantiene vacío para evitar errores de importación.
 No debe ser incluido en config/urls_tenant.py.
 """
 
-app_name = 'tenant_dashboard'
+app_name = "tenant_dashboard"
 
 # WARNING: API-First estricto: No hay rutas aquí
 # Todas las rutas del dashboard están en /api/v1/dashboard/ (apps/tenant/dashboard/api/urls.py)

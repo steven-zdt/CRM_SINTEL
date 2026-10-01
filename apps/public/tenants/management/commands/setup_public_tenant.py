@@ -132,9 +132,7 @@ class Command(BaseCommand):
                     },
                 )
                 if created:
-                    self.stdout.write(
-                        self.style.SUCCESS("OK: Dominio adicional creado: 127.0.0.1")
-                    )
+                    self.stdout.write(self.style.SUCCESS("OK: Dominio adicional creado: 127.0.0.1"))
                 elif additional_domain_obj.tenant != tenant:
                     # Actualizar si el dominio estaba asignado a otro tenant
                     additional_domain_obj.tenant = tenant

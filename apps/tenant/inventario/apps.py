@@ -9,4 +9,5 @@ class InventarioConfig(AppConfig):
 
     def ready(self) -> None:
         from apps.tenant.inventario.reporting import register
+
         register()

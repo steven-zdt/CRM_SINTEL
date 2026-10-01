@@ -8,6 +8,7 @@ mas una reversa real de la RETEFUENTE. Verifica que el dataset da el NETO
 correcto (bruto - reversado), mismo criterio que
 RetencionesService.total_retenciones_por_documento().
 """
+
 from decimal import Decimal
 
 from rest_framework.test import APIRequestFactory
@@ -27,29 +28,50 @@ class TaxRetencionesProviderTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Tax Retenciones", nit="900000933", direccion="Calle Tax Ret",
+            razon_social="Empresa Tax Retenciones",
+            nit="900000933",
+            direccion="Calle Tax Ret",
         )
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         self.retefuente = RetencionesService.crear_retencion(
-            tipo="RETEFUENTE", porcentaje=Decimal("4.00"), base=Decimal("1000000.00"),
-            documento_origen_app="gastos", documento_origen_modelo="DocumentoSoporte", documento_origen_id=1,
-            naturaleza="COMPRA", empresa=self.empresa,
+            tipo="RETEFUENTE",
+            porcentaje=Decimal("4.00"),
+            base=Decimal("1000000.00"),
+            documento_origen_app="gastos",
+            documento_origen_modelo="DocumentoSoporte",
+            documento_origen_id=1,
+            naturaleza="COMPRA",
+            empresa=self.empresa,
         )
         RetencionesService.crear_retencion(
-            tipo="RETEICA", porcentaje=Decimal("1.00"), base=Decimal("1000000.00"),
-            documento_origen_app="gastos", documento_origen_modelo="DocumentoSoporte", documento_origen_id=1,
-            naturaleza="COMPRA", empresa=self.empresa,
+            tipo="RETEICA",
+            porcentaje=Decimal("1.00"),
+            base=Decimal("1000000.00"),
+            documento_origen_app="gastos",
+            documento_origen_modelo="DocumentoSoporte",
+            documento_origen_id=1,
+            naturaleza="COMPRA",
+            empresa=self.empresa,
         )
         RetencionesService.crear_retencion(
-            tipo="RETEFUENTE", porcentaje=Decimal("3.50"), base=Decimal("500000.00"),
-            documento_origen_app="facturas", documento_origen_modelo="Factura", documento_origen_id=99,
-            naturaleza="VENTA", empresa=self.empresa,
+            tipo="RETEFUENTE",
+            porcentaje=Decimal("3.50"),
+            base=Decimal("500000.00"),
+            documento_origen_app="facturas",
+            documento_origen_modelo="Factura",
+            documento_origen_id=99,
+            naturaleza="VENTA",
+            empresa=self.empresa,
         )
         # Reversa real de la primera RETEFUENTE (ej. nota credito).
         RetencionesService.reversar_retencion(
-            self.retefuente, documento_reversada_app="gastos",
-            documento_reversada_modelo="DocumentoSoporte", documento_reversada_id=1,
+            self.retefuente,
+            documento_reversada_app="gastos",
+            documento_reversada_modelo="DocumentoSoporte",
+            documento_reversada_id=1,
             empresa=self.empresa,
         )
 
@@ -84,7 +106,9 @@ class TaxRetencionesProviderTests(SintelTenantTestCase):
 
     def test_agrupado_por_naturaleza(self):
         request = self._authenticated_request()
-        report_request = ReportRequest(dataset_id="tax.retenciones", group_by=("naturaleza",), measures=("monto",))
+        report_request = ReportRequest(
+            dataset_id="tax.retenciones", group_by=("naturaleza",), measures=("monto",)
+        )
         result = ReportQueryEngine().execute(report_request, request)
         rows_by_naturaleza = {row["naturaleza"]: row["monto"] for row in result.rows}
         # COMPRA (practicada): RETEICA 10,000 + RETEFUENTE neta 0 = 10,000

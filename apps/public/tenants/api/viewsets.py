@@ -39,9 +39,8 @@ class ClientViewSet(viewsets.ModelViewSet):
     # Excluir el tenant público y el tenant de prueba ('test') que se crea durante
     # la ejecución de tests para evitar que aparezca en APIs públicas.
     queryset = (
-        Client.objects.exclude(schema_name__in=["public", "test"]).only(
-            "id", "schema_name", "nombre", "created_on", "is_active", "on_trial", "paid_until"
-        )
+        Client.objects.exclude(schema_name__in=["public", "test"])
+        .only("id", "schema_name", "nombre", "created_on", "is_active", "on_trial", "paid_until")
         .prefetch_related("domains")
         .order_by("-created_on")
     )
@@ -61,7 +60,9 @@ class ClientViewSet(viewsets.ModelViewSet):
         try:
             # Snapshot current clients for debug in tests (schema_name and nombre)
             snapshot = list(Client.objects.values("id", "schema_name", "nombre"))
-            logger.info("ClientViewSet.get_queryset snapshot count=%s clients=%s", len(snapshot), snapshot)
+            logger.info(
+                "ClientViewSet.get_queryset snapshot count=%s clients=%s", len(snapshot), snapshot
+            )
         except Exception:
             logger.exception("ClientViewSet.get_queryset: failed to snapshot clients")
 
@@ -74,7 +75,9 @@ class ClientViewSet(viewsets.ModelViewSet):
     ordering_fields = ["nombre", "created_on", "paid_until"]
     ordering = ["-created_on"]
 
-    def _log_console_action(self, request, *, action: str, client=None, target_user=None, metadata: dict = None):
+    def _log_console_action(
+        self, request, *, action: str, client=None, target_user=None, metadata: dict = None
+    ):
         """
         Registra una accion administrativa en ConsoleActionLog.
 
@@ -175,13 +178,21 @@ class ClientViewSet(viewsets.ModelViewSet):
             on_trial = request.data.get("on_trial", True)
 
             if not nombre or not email_admin:
-                return Response({"error": "Faltan campos requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"error": "Faltan campos requeridos"}, status=status.HTTP_400_BAD_REQUEST
+                )
 
             try:
-                payload = crear_empresa(nombre=nombre, email_admin=email_admin, dominio=dominio, on_trial=on_trial)
-                logger.info("OK: Onboarding (legacy) exitoso: nombre=%s, dominio=%s", nombre, dominio)
+                payload = crear_empresa(
+                    nombre=nombre, email_admin=email_admin, dominio=dominio, on_trial=on_trial
+                )
+                logger.info(
+                    "OK: Onboarding (legacy) exitoso: nombre=%s, dominio=%s", nombre, dominio
+                )
                 self._log_console_action(
-                    request, action="TENANT_CREATE", client=payload.get("client"),
+                    request,
+                    action="TENANT_CREATE",
+                    client=payload.get("client"),
                     metadata={"flujo": "legacy", "nombre": nombre, "dominio": dominio},
                 )
                 return Response(payload, status=status.HTTP_201_CREATED)
@@ -189,7 +200,10 @@ class ClientViewSet(viewsets.ModelViewSet):
                 return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
             except Exception as e:
                 logger.exception("Onboarding (legacy) error: %s", e)
-                return Response({"error": "Error al crear el tenant"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response(
+                    {"error": "Error al crear el tenant"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
         serializer = OnboardTenantWithOwnerSerializer(data=request.data)
         if not serializer.is_valid():
@@ -221,7 +235,9 @@ class ClientViewSet(viewsets.ModelViewSet):
             )
             client_obj = Client.objects.filter(pk=payload.get("client_id")).only("id").first()
             self._log_console_action(
-                request, action="TENANT_CREATE", client=client_obj,
+                request,
+                action="TENANT_CREATE",
+                client=client_obj,
                 metadata={
                     "flujo": "onboard",
                     "domain": payload.get("domain"),
@@ -327,7 +343,7 @@ class ClientViewSet(viewsets.ModelViewSet):
                 },
             )
 
-            serializer = self.get_serializer(client)
+            self.get_serializer(client)
             action = "activado" if client.is_active else "desactivado"
             message = f'Tenant "{client.nombre}" {action} exitosamente'
             if reactivacion_administrativa:
@@ -409,10 +425,18 @@ class ClientViewSet(viewsets.ModelViewSet):
             try:
                 dias_int = int(days)
             except (TypeError, ValueError):
-                return Response({"detail": "'days' debe ser un entero."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": "'days' debe ser un entero."}, status=status.HTTP_400_BAD_REQUEST
+                )
             if dias_int <= 0:
-                return Response({"detail": "'days' debe ser positivo."}, status=status.HTTP_400_BAD_REQUEST)
-            base = client.paid_until if (client.paid_until and client.paid_until >= timezone.localdate()) else timezone.localdate()
+                return Response(
+                    {"detail": "'days' debe ser positivo."}, status=status.HTTP_400_BAD_REQUEST
+                )
+            base = (
+                client.paid_until
+                if (client.paid_until and client.paid_until >= timezone.localdate())
+                else timezone.localdate()
+            )
             nueva_fecha = base + timezone.timedelta(days=dias_int)
 
         if nueva_fecha <= timezone.localdate():
@@ -445,7 +469,9 @@ class ClientViewSet(viewsets.ModelViewSet):
         )
         logger.info(
             "[LIFECYCLE] Trial extendido: schema=%s paid_until %s -> %s (actor=%s)",
-            client.schema_name, paid_until_antes, nueva_fecha,
+            client.schema_name,
+            paid_until_antes,
+            nueva_fecha,
             getattr(request.user, "email", "?"),
         )
 
@@ -460,7 +486,9 @@ class ClientViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @action(detail=True, methods=["post"], url_path="resend-invitation", url_name="resend-invitation")
+    @action(
+        detail=True, methods=["post"], url_path="resend-invitation", url_name="resend-invitation"
+    )
     def resend_invitation(self, request, pk=None):
         """
         Regenera y reenvía el email de invitación al admin primario del tenant.
@@ -515,11 +543,7 @@ class ClientViewSet(viewsets.ModelViewSet):
             )
 
         # Obtener dominio primario del tenant
-        domain = (
-            Domain.objects.filter(tenant=client, is_primary=True)
-            .only("domain")
-            .first()
-        )
+        domain = Domain.objects.filter(tenant=client, is_primary=True).only("domain").first()
 
         if not domain:
             return Response(
@@ -541,12 +565,15 @@ class ClientViewSet(viewsets.ModelViewSet):
             if sent:
                 logger.info(
                     "[RESEND-INVITATION] Enviada: user=%s, tenant=%s",
-                    user.email, client.schema_name,
+                    user.email,
+                    client.schema_name,
                 )
             else:
                 logger.warning(
                     "[RESEND-INVITATION] Email no enviado: user=%s, tenant=%s | url=%s",
-                    user.email, client.schema_name, activation_url,
+                    user.email,
+                    client.schema_name,
+                    activation_url,
                 )
 
             return Response(
@@ -562,7 +589,9 @@ class ClientViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(
                 "[RESEND-INVITATION] Error: tenant=%s | %s",
-                client.schema_name, str(e), exc_info=True,
+                client.schema_name,
+                str(e),
+                exc_info=True,
             )
             return Response(
                 {"detail": f"Error al reenviar invitacion: {str(e)}"},
@@ -634,7 +663,8 @@ class ClientViewSet(viewsets.ModelViewSet):
 
             logger.info(
                 "[MANUAL-ACTIVATE] URL generada sin email: user=%s, tenant=%s",
-                user.email, client.schema_name,
+                user.email,
+                client.schema_name,
             )
 
             return Response(
@@ -649,14 +679,18 @@ class ClientViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(
                 "[MANUAL-ACTIVATE] Error: tenant=%s | %s",
-                client.schema_name, str(e), exc_info=True,
+                client.schema_name,
+                str(e),
+                exc_info=True,
             )
             return Response(
                 {"detail": f"Error generando URL de activacion: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    @action(detail=True, methods=["post"], url_path="admin-set-password", url_name="admin-set-password")
+    @action(
+        detail=True, methods=["post"], url_path="admin-set-password", url_name="admin-set-password"
+    )
     def admin_set_password(self, request, pk=None):
         """
         Establece una contrasena directamente para el owner del tenant.
@@ -727,7 +761,9 @@ class ClientViewSet(viewsets.ModelViewSet):
         logger.warning(
             "[ADMIN-SET-PASSWORD] Contrasena establecida por admin de consola: "
             "user=%s, tenant=%s, admin=%s",
-            user.email, client.schema_name, request.user.email,
+            user.email,
+            client.schema_name,
+            request.user.email,
         )
 
         return Response(

@@ -1,0 +1,331 @@
+{# offcanvas_detalle_requisicion.html - Detalle + maquina de estados de RequisicionCompra #}
+<style>
+  #offcanvas-requisicion-detalle { width: 800px !important; }
+  #offcanvas-requisicion-detalle .offcanvas-body { padding: 1.5rem; }
+  #offcanvas-requisicion-detalle .section-divider { margin-bottom: 1.75rem; }
+  #offcanvas-requisicion-detalle .info-label {
+    font-size: 0.75rem; font-weight: 600; color: #6c757d; text-transform: uppercase;
+    margin-bottom: 0.15rem; letter-spacing: 0.02em;
+  }
+  #offcanvas-requisicion-detalle .info-value { font-size: 0.875rem; font-weight: 500; color: #212529; }
+  #offcanvas-requisicion-detalle .section-title {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #0d6efd; border-bottom: 2px solid #e9ecef; padding-bottom: 0.5rem; margin-bottom: 1rem;
+  }
+  #offcanvas-requisicion-detalle .offcanvas-footer {
+    border-top: 1px solid #dee2e6; padding: 1rem 1.5rem; background: #f8f9fa;
+  }
+  #offcanvas-requisicion-detalle .table-items th {
+    font-size: 0.75rem; font-weight: 600; color: #6c757d; text-transform: uppercase; background-color: #f8f9fa;
+  }
+</style>
+
+{% load currency_filters %}
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-requisicion-detalle" aria-labelledby="offcanvas-requisicion-detalle-label"
+     data-requisicion-uuid="{{ instance.uuid }}" data-requisicion-estado="{{ instance.estado }}">
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <div class="d-flex align-items-center">
+      <h5 class="offcanvas-title fw-semibold me-3" id="offcanvas-requisicion-detalle-label">
+        <i class="bi bi-file-earmark-text text-primary me-2"></i>{{ instance.numero_documento }}
+      </h5>
+      {% if instance.estado == 'BORRADOR' %}<span class="badge bg-secondary">Borrador</span>
+      {% elif instance.estado == 'PENDIENTE_APROBACION' %}<span class="badge bg-warning text-dark">Pendiente de Aprobación</span>
+      {% elif instance.estado == 'APROBADA' %}<span class="badge bg-success">Aprobada</span>
+      {% elif instance.estado == 'RECHAZADA' %}<span class="badge bg-danger">Rechazada</span>
+      {% elif instance.estado == 'CANCELADA' %}<span class="badge bg-dark">Cancelada</span>
+      {% elif instance.estado == 'EN_PROCESO_COMPRA' %}<span class="badge bg-info text-dark">En Proceso de Compra</span>
+      {% elif instance.estado == 'PARCIALMENTE_ATENDIDA' %}<span class="badge bg-info text-dark">Parcialmente Atendida</span>
+      {% elif instance.estado == 'ATENDIDA' %}<span class="badge bg-success">Atendida</span>
+      {% endif %}
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body">
+    <div class="section-divider">
+      <p class="section-title">Información General</p>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="info-label">Fecha de Solicitud</div>
+          <div class="info-value">{{ instance.fecha_solicitud|date:'d/m/Y' }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="info-label">Fecha en que se Necesita</div>
+          <div class="info-value">{{ instance.fecha_necesidad|date:'d/m/Y' }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="info-label">Prioridad</div>
+          <div class="info-value">{{ instance.get_prioridad_display }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="info-label">Solicitante</div>
+          <div class="info-value">{{ instance.solicitante }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="info-label">Sede</div>
+          <div class="info-value">{{ instance.sede.nombre }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="info-label">Cliente</div>
+          <div class="info-value">
+            {% if instance.cliente %}{{ instance.cliente.razon_social }}{% else %}<span class="text-muted small">— (histórica, sin cliente)</span>{% endif %}
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="info-label">Plantilla de Numeración</div>
+          <div class="info-value">
+            {% if instance.plantilla %}{{ instance.plantilla.nombre }}{% else %}<span class="text-muted small">— (histórica, sin plantilla)</span>{% endif %}
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="info-label">Proyecto</div>
+          <div class="info-value">
+            {% if instance.proyecto %}{{ instance.proyecto.nombre }}{% else %}<span class="text-muted small">Ninguno</span>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-divider">
+      <p class="section-title">Justificación</p>
+      <div class="p-3 bg-light rounded-3 border" style="font-size: 0.875rem;">
+        {% if instance.justificacion %}{{ instance.justificacion|linebreaksbr }}{% else %}<span class="text-muted fst-italic">Sin justificación aun</span>{% endif %}
+      </div>
+    </div>
+
+    <div class="section-divider">
+      <p class="section-title">Items Solicitados</p>
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm align-middle table-items">
+          <thead>
+            <tr>
+              <th>Descripción</th>
+              <th class="text-end">Solicitada</th>
+              <th class="text-end">Aprobada</th>
+              <th class="text-end">Ordenada</th>
+              <th class="text-end">Pendiente</th>
+              <th class="text-end">Val. Unit. Est.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in instance.items.all %}
+            <tr data-item-uuid="{{ item.uuid }}" data-item-pendiente="{{ item.cantidad_pendiente }}"
+                data-item-descripcion="{{ item.descripcion }}" data-item-valor="{{ item.valor_unitario_estimado }}"
+                data-item-iva="{{ item.porcentaje_iva }}">
+              <td class="text-wrap">{{ item.descripcion }}</td>
+              <td class="text-end">{{ item.cantidad_solicitada }}</td>
+              <td class="text-end">{{ item.cantidad_aprobada }}</td>
+              <td class="text-end">{{ item.cantidad_ordenada }}</td>
+              <td class="text-end fw-semibold">{{ item.cantidad_pendiente }}</td>
+              <td class="text-end">{{ item.valor_unitario_estimado|currency_cop }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-3">Sin items.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# ── Trazabilidad: Cotizacion/Factura de origen del Proyecto ─────── #}
+    {# Vinculadas automaticamente al crear la requisicion si tiene un      #}
+    {# Proyecto (RequisicionCompraBusinessService.                        #}
+    {# _sincronizar_trazabilidad_desde_proyecto) -- solo lectura/contexto, #}
+    {# nunca dispara efectos de negocio.                                  #}
+    <div class="section-divider">
+      <div class="d-flex justify-content-between align-items-center">
+        <p class="section-title mb-0">Trazabilidad (Cotización / Factura del Proyecto)</p>
+        <div class="d-flex gap-2">
+          {% if instance.proyecto %}
+          <button type="button" class="btn btn-outline-secondary btn-sm btn-req-sincronizar-trazabilidad" data-uuid="{{ instance.uuid }}">
+            <i class="bi bi-arrow-repeat me-1"></i>Sincronizar desde Proyecto
+          </button>
+          {% endif %}
+          <button type="button" class="btn btn-outline-primary btn-sm btn-req-mostrar-vincular-cotizacion">
+            <i class="bi bi-link-45deg me-1"></i>Vincular Cotización
+          </button>
+        </div>
+      </div>
+
+      {# ── Vincular manualmente una Cotizacion arbitraria (no derivada del  #}
+      {# Proyecto) -- usa RequisicionCompraBusinessService.vincular_        #}
+      {# cotizacion() / accion vincular-cotizacion, ya existente en la API. #}
+      <div class="d-none mt-2 p-3 bg-light rounded-3 border" id="req-vincular-cotizacion-panel">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-8">
+            <label class="form-label small mb-1">Cotización *</label>
+            {# Fase 4 (PLAN_OPTIMIZACION_COMPRAS...): buscador bajo demanda -- #}
+            {# antes <select> poblado desde /api/v1/cotizaciones/ sin         #}
+            {# `?search=`, acotado a las primeras 20 por paginacion.          #}
+            <div class="position-relative">
+              <input type="text" class="form-control form-control-sm" id="req-cotizacion-buscar"
+                     placeholder="Buscar por número o cliente..." autocomplete="off">
+              <input type="hidden" id="req-cotizacion-select" value="">
+              <div id="req-cotizacion-resultados" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1055; max-height:200px; overflow-y:auto;"></div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <button type="button" class="btn btn-primary btn-sm w-100" id="btn-confirmar-vincular-cotizacion">
+              <i class="bi bi-check-circle me-1"></i>Vincular
+            </button>
+          </div>
+        </div>
+        <div id="req-vincular-cotizacion-feedback" class="alert alert-danger d-none mt-2 mb-0 py-1 px-2 small" role="alert"></div>
+        <button type="button" class="btn btn-link btn-sm text-muted mt-1 p-0" id="btn-cancelar-vincular-cotizacion">Cancelar</button>
+      </div>
+
+      {% if instance.cotizaciones_vinculadas.all or instance.facturas_vinculadas.all %}
+        <div class="row g-2 mt-1">
+          {% for v in instance.cotizaciones_vinculadas.all %}
+          <div class="col-md-6">
+            <div class="card border border-info-subtle bg-info-subtle p-2 rounded-3 small" data-cotizacion-vinculada-uuid="{{ v.cotizacion.uuid }}">
+              <div class="fw-bold text-info-emphasis d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-file-earmark-text me-1"></i>Cotización {{ v.cotizacion.numero_cotizacion }}</span>
+                {% if v.tipo_relacion == 'ORIGEN' %}<span class="badge bg-info text-white">Origen</span>
+                {% elif v.tipo_relacion == 'ORIGEN_PROYECTO' %}<span class="badge bg-info text-white">Origen (Proyecto)</span>{% endif %}
+              </div>
+              <div class="text-muted">{{ v.cotizacion.cliente|default:"Sin cliente" }}</div>
+            </div>
+          </div>
+          {% endfor %}
+          {% for v in instance.facturas_vinculadas.all %}
+          <div class="col-md-6">
+            <div class="card border border-success-subtle bg-success-subtle p-2 rounded-3 small">
+              <div class="fw-bold text-success-emphasis"><i class="bi bi-receipt me-1"></i>Factura {{ v.factura.numero }}</div>
+              <div class="text-muted">{{ v.factura.total|currency_cop }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-muted small fst-italic mt-1 mb-0">
+          {% if instance.proyecto %}Sin cotización/factura vinculada todavía. Use "Sincronizar desde Proyecto" para intentar resolverlas.
+          {% else %}Sin proyecto asignado -- no aplica trazabilidad automática.{% endif %}
+        </p>
+      {% endif %}
+    </div>
+
+    <div class="section-divider">
+      <div class="row g-3">
+        <div class="col-md-7">
+          <div class="info-label">Observaciones</div>
+          <div class="p-3 bg-light rounded-3 border" style="min-height: 80px; font-size: 0.875rem;">
+            {% if instance.observaciones %}{{ instance.observaciones|linebreaksbr }}{% else %}<span class="text-muted fst-italic">Sin observaciones</span>{% endif %}
+          </div>
+        </div>
+        <div class="col-md-5">
+          <div class="card bg-light border-0 shadow-sm">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between mb-2 small text-muted">
+                <span>Subtotal:</span><span>{{ instance.subtotal_estimado|currency_cop }}</span>
+              </div>
+              <div class="d-flex justify-content-between mb-2 small text-muted">
+                <span>Impuestos (IVA):</span><span>{{ instance.impuestos_estimados|currency_cop }}</span>
+              </div>
+              <hr class="my-2">
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="fw-bold text-dark">Total Estimado:</span>
+                <h4 class="mb-0 fw-bold text-primary">{{ instance.total_estimado|currency_cop }}</h4>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if instance.ordenes_compra_vinculadas.all %}
+    <div class="section-divider">
+      <p class="section-title">Órdenes de Compra Generadas</p>
+      <ul class="list-unstyled mb-0">
+        {% for vinculo in instance.ordenes_compra_vinculadas.all %}
+        <li class="small mb-1"><i class="bi bi-truck text-muted me-1"></i>{{ vinculo.orden_compra.numero_documento|default:vinculo.orden_compra.consecutivo }} — {{ vinculo.orden_compra.get_estado_display }} — {{ vinculo.orden_compra.total|currency_cop }} <span class="text-muted">(asignado: {{ vinculo.monto_asignado|currency_cop }})</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {# ── Panel "Generar Orden de Compra" (solo si hay items pendientes) ── #}
+    <div class="section-divider d-none" id="req-generar-orden-panel">
+      <p class="section-title"><i class="bi bi-truck me-1"></i>Generar Orden de Compra</p>
+      <div id="req-generar-orden-feedback" class="alert alert-danger d-none mb-2 small" role="alert"></div>
+      <div class="row g-2 mb-2">
+        <div class="col-md-6">
+          <label class="form-label small">Plantilla de Numeración *</label>
+          <select class="form-select form-select-sm" id="req-orden-plantilla">
+            <option value="">Cargando plantillas...</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small">Proveedor *</label>
+          {# Fase 4 (PLAN_OPTIMIZACION_COMPRAS...): buscador bajo demanda --   #}
+          {# antes <select> poblado desde /api/v1/proveedores/ sin `?search=`, #}
+          {# que por paginacion por defecto (20) solo dejaba elegir entre los  #}
+          {# primeros 20 proveedores de la empresa.                           #}
+          <div class="position-relative">
+            <input type="text" class="form-control form-control-sm" id="req-orden-proveedor-buscar"
+                   placeholder="Buscar por razón social o NIT..." autocomplete="off">
+            <input type="hidden" id="req-orden-proveedor" value="">
+            <div id="req-orden-proveedor-resultados" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1055; max-height:200px; overflow-y:auto;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="table-responsive mb-2">
+        <table class="table table-sm table-bordered align-middle" id="req-orden-items-tabla">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="req-orden-check-all" checked></th>
+              <th>Item</th>
+              <th class="text-end">Pendiente</th>
+              <th class="text-end" style="width: 120px;">Cantidad a Ordenar</th>
+            </tr>
+          </thead>
+          <tbody id="req-orden-items-tbody"></tbody>
+        </table>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" id="btn-confirmar-generar-orden">
+        <i class="bi bi-check-circle me-1"></i>Generar Orden de Compra
+      </button>
+      <button type="button" class="btn btn-link btn-sm text-muted" id="btn-cancelar-generar-orden">Cancelar</button>
+    </div>
+
+    {# ── Motivo de Rechazo (inline, se muestra al pulsar "Rechazar") ── #}
+    <div class="section-divider d-none" id="req-rechazar-panel">
+      <p class="section-title text-danger"><i class="bi bi-x-circle me-1"></i>Motivo de Rechazo</p>
+      <textarea class="form-control form-control-sm mb-2" id="req-motivo-rechazo" rows="2"
+                placeholder="Explique por que no se aplica esta requisicion..."></textarea>
+      <button type="button" class="btn btn-danger btn-sm" id="btn-confirmar-rechazo">Confirmar Rechazo</button>
+      <button type="button" class="btn btn-link btn-sm text-muted" id="btn-cancelar-rechazo">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="offcanvas-footer">
+    <div class="d-flex justify-content-between w-100">
+      <div class="d-flex flex-wrap gap-2">
+        {% if instance.estado == 'BORRADOR' %}
+          <button type="button" class="btn btn-warning btn-sm btn-req-enviar-aprobacion" data-uuid="{{ instance.uuid }}">
+            <i class="bi bi-send me-1"></i>Enviar a Aprobación
+          </button>
+          <button type="button" class="btn btn-outline-danger btn-sm btn-req-cancelar" data-uuid="{{ instance.uuid }}">
+            <i class="bi bi-slash-circle me-1"></i>Cancelar
+          </button>
+        {% elif instance.estado == 'PENDIENTE_APROBACION' %}
+          <button type="button" class="btn btn-success btn-sm btn-req-aprobar" data-uuid="{{ instance.uuid }}">
+            <i class="bi bi-check-circle me-1"></i>Aprobar
+          </button>
+          <button type="button" class="btn btn-danger btn-sm btn-req-mostrar-rechazar">
+            <i class="bi bi-x-circle me-1"></i>Rechazar
+          </button>
+        {% elif instance.estado == 'APROBADA' or instance.estado == 'EN_PROCESO_COMPRA' or instance.estado == 'PARCIALMENTE_ATENDIDA' %}
+          <button type="button" class="btn btn-primary btn-sm btn-req-mostrar-generar-orden" data-uuid="{{ instance.uuid }}">
+            <i class="bi bi-truck me-1"></i>Generar Orden de Compra
+          </button>
+          <button type="button" class="btn btn-outline-danger btn-sm btn-req-cancelar" data-uuid="{{ instance.uuid }}">
+            <i class="bi bi-slash-circle me-1"></i>Cancelar
+          </button>
+        {% endif %}
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cerrar</button>
+    </div>
+  </div>
+</div>

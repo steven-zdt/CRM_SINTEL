@@ -10,6 +10,6 @@
 
 ## Notas sobre el flujo
 
-- La pantalla de Ventas **no pasa por la API JSON del Reporting Hub para la tabla/KPI** -- el view Django (`apps/tenant/ventas/views_reportes.py::VentaReportesView`) llama `ReportQueryEngine().execute(...)` DIRECTO en Python, server-side, y renderiza HTML. Esto es deliberado: sigue el mismo patron ya establecido por `VentaTableView` (server-rendered + HTMX), no introduce un roundtrip HTTP interno innecesario, y sigue cumpliendo Regla Absoluta #4 (la vista consume el dataset registrado via el Query Engine real, nunca ORM directo).
+- La pantalla de Ventas **no pasa por la API JSON del Reporting Hub para la tabla/KPI** -- el view Django (`apps/tenant/ventas/views_reportes.py::VentaReportesView`) llama `ReportQueryEngine().execute(...)` DIRECTO en Python, server-side, y renderiza HTML. Esto es deliberado: sigue el mismo patron ya establecido por `VentaKpisView` (server-rendered + HTMX), no introduce un roundtrip HTTP interno innecesario, y sigue cumpliendo Regla Absoluta #4 (la vista consume el dataset registrado via el Query Engine real, nunca ORM directo).
 - El **Report API Client JS** (`Sintel.Reporting.API`) SI se usa para: el catalogo (`reportes_landing.js`, JSON real) y para construir la URL de export (`reportes_ventas.js::exportUrl()`, sin round-trip -- solo arma la URL para un `<a href>`).
 - Ningun componente frontend construye SQL, nombres de modelo, ni tabla -- todo pasa por `ReportRequest`/`ReportQueryEngine`/`ReportProvider`.

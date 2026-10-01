@@ -2,9 +2,9 @@ from django.apps import AppConfig
 
 
 class FacturasConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'apps.tenant.facturas'
-    verbose_name = 'Facturas'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.tenant.facturas"
+    verbose_name = "Facturas"
 
     def ready(self) -> None:
         """
@@ -15,7 +15,9 @@ class FacturasConfig(AppConfig):
         para saber que este handler existe.
         """
         from apps.tenant.facturas.document_intake import register
+
         register()
 
         from apps.tenant.facturas.reporting import register as register_reporting
+
         register_reporting()

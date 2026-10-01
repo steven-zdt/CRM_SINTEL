@@ -1,0 +1,11 @@
+{% load sintel_ui %}
+{% load currency_filters %}
+{# kpis_extractos.html — KPIs de conciliacion de Extractos Bancarios (BAN-09) #}
+{# extraidos de la tabla al migrar a DataTables. #}
+<div class="row g-3 mb-3" id="extractos-kpis">
+  {% sintel_kpi_card icon="bar-chart-line" color="primary" value=kpis.total label="Transacciones" %}
+  {% sintel_kpi_card icon="check2-all" color="success" value=kpis.conciliadas label="Conciliadas" %}
+  {% sintel_kpi_card icon="hourglass-split" color="warning" value=kpis.pendientes label="Pendientes" %}
+  {% sintel_kpi_card icon="percent" color="info" value=kpis.pct_conciliado|stringformat:"d" label="% Conciliado" col_class="col-6 col-md-4 col-xl-3" %}
+  {% sintel_kpi_card icon="cash-coin" color="danger" value=kpis.monto_sin_conciliar|currency_cop label="Monto sin conciliar" col_class="col-6 col-md-4 col-xl-3" %}
+</div>

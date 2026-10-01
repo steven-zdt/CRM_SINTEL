@@ -7,6 +7,7 @@ agrega dependencia nueva) -- representativas de un layout de una columna
 plan explicitamente prohibe declarar soporte universal solo por un PDF
 que funcione).
 """
+
 import io
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -54,11 +55,13 @@ class PDFImporterUnitTests(SintelTenantTestCase):
         self.assertFalse(self.importer.puede_procesar("extracto.xlsx"))
 
     def test_importa_movimientos_formato_colombiano(self):
-        pdf_bytes = _pdf_desde_lineas([
-            "01/06/2026  Saldo inicial ajuste  1.400.000,00  1.400.000,00",
-            "02/06/2026  Pago cliente Acme  500.000,00  1.900.000,00",
-            "03/06/2026  Retiro cajero  -100.000,00  1.800.000,00",
-        ])
+        pdf_bytes = _pdf_desde_lineas(
+            [
+                "01/06/2026  Saldo inicial ajuste  1.400.000,00  1.400.000,00",
+                "02/06/2026  Pago cliente Acme  500.000,00  1.900.000,00",
+                "03/06/2026  Retiro cajero  -100.000,00  1.800.000,00",
+            ]
+        )
         resultado = self.importer.importar(io.BytesIO(pdf_bytes), "extracto.pdf")
         self.assertEqual(len(resultado.transactions), 3)
         self.assertEqual(str(resultado.transactions[1].valor), "500000.00")
@@ -116,12 +119,19 @@ class PDFImportEndToEndTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa PDF", nit="900000904", direccion="Calle 1",
+            razon_social="Empresa PDF",
+            nit="900000904",
+            direccion="Calle 1",
         )
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
         self.cuenta = CuentaBancaria.objects.create(
-            empresa=self.empresa, nombre="Cuenta PDF", banco="Banco Test",
-            tipo="AHORROS", numero="PDF-1",
+            empresa=self.empresa,
+            nombre="Cuenta PDF",
+            banco="Banco Test",
+            tipo="AHORROS",
+            numero="PDF-1",
         )
 
     def _crear_extracto(self, mes=1, anio=2026):
@@ -143,11 +153,13 @@ class PDFImportEndToEndTests(SintelTenantTestCase):
 
     def test_procesar_pdf_con_balance_cuadrado(self):
         extracto_uuid = self._crear_extracto()
-        pdf_bytes = _pdf_desde_lineas([
-            "01/06/2026  Deposito inicial  1.000.000,00  1.000.000,00",
-            "02/06/2026  Pago cliente  500.000,00  1.500.000,00",
-            "03/06/2026  Retiro  -200.000,00  1.300.000,00",
-        ])
+        pdf_bytes = _pdf_desde_lineas(
+            [
+                "01/06/2026  Deposito inicial  1.000.000,00  1.000.000,00",
+                "02/06/2026  Pago cliente  500.000,00  1.500.000,00",
+                "03/06/2026  Retiro  -200.000,00  1.300.000,00",
+            ]
+        )
         resp = self._procesar(extracto_uuid, pdf_bytes)
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
         self.assertEqual(resp.data["transacciones_importadas"], 3)
@@ -159,10 +171,12 @@ class PDFImportEndToEndTests(SintelTenantTestCase):
     def test_procesar_pdf_con_balance_descuadrado_no_marca_procesado(self):
         extracto_uuid = self._crear_extracto(mes=2)
         # saldo final de la ultima fila no cuadra con inicio + creditos - debitos
-        pdf_bytes = _pdf_desde_lineas([
-            "01/06/2026  Deposito  1.000.000,00  1.000.000,00",
-            "02/06/2026  Pago  500.000,00  999.999.999,00",
-        ])
+        pdf_bytes = _pdf_desde_lineas(
+            [
+                "01/06/2026  Deposito  1.000.000,00  1.000.000,00",
+                "02/06/2026  Pago  500.000,00  999.999.999,00",
+            ]
+        )
         resp = self._procesar(extracto_uuid, pdf_bytes)
         self.assertEqual(resp.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, resp.content)
 
@@ -183,14 +197,20 @@ class PDFImportEndToEndTests(SintelTenantTestCase):
 
     def test_idempotencia_reprocesar_mismo_pdf_no_duplica(self):
         extracto_uuid = self._crear_extracto(mes=5)
-        pdf_bytes = _pdf_desde_lineas([
-            "01/06/2026  Deposito  1.000.000,00  1.000.000,00",
-            "02/06/2026  Pago  500.000,00  1.500.000,00",
-        ])
+        pdf_bytes = _pdf_desde_lineas(
+            [
+                "01/06/2026  Deposito  1.000.000,00  1.000.000,00",
+                "02/06/2026  Pago  500.000,00  1.500.000,00",
+            ]
+        )
         resp1 = self._procesar(extracto_uuid, pdf_bytes)
         self.assertEqual(resp1.status_code, status.HTTP_200_OK, resp1.content)
-        self.assertEqual(TransaccionBancaria.objects.filter(extracto__uuid=extracto_uuid).count(), 2)
+        self.assertEqual(
+            TransaccionBancaria.objects.filter(extracto__uuid=extracto_uuid).count(), 2
+        )
 
         resp2 = self._procesar(extracto_uuid, pdf_bytes, forzar=True)
         self.assertEqual(resp2.status_code, status.HTTP_200_OK, resp2.content)
-        self.assertEqual(TransaccionBancaria.objects.filter(extracto__uuid=extracto_uuid).count(), 2)
+        self.assertEqual(
+            TransaccionBancaria.objects.filter(extracto__uuid=extracto_uuid).count(), 2
+        )

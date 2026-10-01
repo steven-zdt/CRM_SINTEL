@@ -176,7 +176,7 @@
           // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
           const fmtV = (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
             ? w.DOMUtils.formatCurrency(v, { maximumFractionDigits: 0 })
-            : v.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+            : v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
           return `<span class="fw-semibold text-success small">${fmtV}</span>`;
         },
       },
@@ -207,7 +207,7 @@
     // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
     const fmt = (v) => (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
       ? w.DOMUtils.formatCurrency(v, { maximumFractionDigits: 0 })
-      : v.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+      : v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
     const el = (id) => d.getElementById(id);
     if (el('ckpi-total'))    el('ckpi-total').textContent    = total;
     if (el('ckpi-monto'))    el('ckpi-monto').textContent    = fmt(monto);

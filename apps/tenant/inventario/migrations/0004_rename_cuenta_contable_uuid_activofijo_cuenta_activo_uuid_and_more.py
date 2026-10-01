@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("tenant_inventario", "0003_activofijo_cuenta_contable_uuid_and_more"),
     ]

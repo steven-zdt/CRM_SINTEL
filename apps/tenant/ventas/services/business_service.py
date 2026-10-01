@@ -19,13 +19,12 @@ presente sin modificar -- NO se elimino codigo. Lo que cambio es que
 peticion con `EMISION_FISCAL_VENTA_AUTORIZADA = False`. Ver el docstring de
 ese metodo para el detalle completo.
 """
+
 import logging
 from decimal import Decimal
-from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.utils import timezone
 
 from apps.tenant.ventas.models import Venta
 from apps.tenant.ventas.services.crud_service import VentaCRUDService
@@ -64,6 +63,7 @@ class VentaBusinessService:
     def _dsv_cliente(cliente_uuid: str, empresa_id: int):
         """Verifica que el Cliente exista y pertenezca a la empresa. Retorna instancia."""
         from apps.tenant.clientes.models import Cliente
+
         cliente = Cliente.objects.filter(uuid=cliente_uuid, empresa_id=empresa_id).first()
         if not cliente:
             raise ValueError(
@@ -89,14 +89,18 @@ class VentaBusinessService:
                 errores.append(f"Item {idx + 1}: precio_unitario debe ser mayor a cero.")
             prod_id = item.get("producto_id")
             if prod_id:
-                prod = Producto.objects.filter(uuid=prod_id, empresa_id=empresa_id).only("id").first()
+                prod = (
+                    Producto.objects.filter(uuid=prod_id, empresa_id=empresa_id).only("id").first()
+                )
                 if not prod:
                     errores.append(f"Item {idx + 1}: Producto {prod_id} no valido para la empresa.")
                 else:
                     item["producto_id"] = prod.id
             serv_id = item.get("servicio_id")
             if serv_id:
-                serv = Servicio.objects.filter(uuid=serv_id, empresa_id=empresa_id).only("id").first()
+                serv = (
+                    Servicio.objects.filter(uuid=serv_id, empresa_id=empresa_id).only("id").first()
+                )
                 if not serv:
                     errores.append(f"Item {idx + 1}: Servicio {serv_id} no valido para la empresa.")
                 else:
@@ -120,8 +124,7 @@ class VentaBusinessService:
         from apps.tenant.ventas.models import ResolucionFacturacion
 
         resolucion = (
-            ResolucionFacturacion.objects
-            .select_for_update()
+            ResolucionFacturacion.objects.select_for_update()
             .filter(uuid=resolucion_uuid, empresa_id=empresa_id)
             .first()
         )
@@ -177,7 +180,9 @@ class VentaBusinessService:
 
         return {
             "provider_id": getattr(settings, "DIAN_PROVIDER_ID", "800197268"),
-            "software_id": getattr(settings, "DIAN_SOFTWARE_ID", "00000000-0000-0000-0000-000000000000"),
+            "software_id": getattr(
+                settings, "DIAN_SOFTWARE_ID", "00000000-0000-0000-0000-000000000000"
+            ),
             "software_pin": getattr(settings, "DIAN_SOFTWARE_PIN", ""),
             "cl_tecn": getattr(settings, "DIAN_CL_TECN", ""),
             "tip_amb": getattr(settings, "DIAN_TIP_AMB", "2"),
@@ -224,6 +229,7 @@ class VentaBusinessService:
         Ref: Anexo Tecnico FE DIAN v1.9 seccion 5.2.1.
         """
         import hashlib
+
         cadena = software_id + software_pin + num_fac
         return hashlib.sha384(cadena.encode("utf-8")).hexdigest()
 
@@ -278,7 +284,9 @@ class VentaBusinessService:
 
         # -- Emisor (empresa) --
         regimen = getattr(empresa, "regimen_tributario", "") or ""
-        em_tlc, em_list_name, em_ts_id, em_ts_name = VentaBusinessService._tax_level_code_emisor(regimen)
+        em_tlc, em_list_name, em_ts_id, em_ts_name = VentaBusinessService._tax_level_code_emisor(
+            regimen
+        )
         nit_empresa = str(getattr(empresa, "nit", "") or "")
         dv_empresa = str(getattr(empresa, "dv", "") or "")
 
@@ -301,8 +309,8 @@ class VentaBusinessService:
 
         # -- Receptor (cliente) --
         tipo_doc_cliente = str(getattr(cliente, "tipo_documento", "31") or "31")
-        rc_tlc, rc_list_name, rc_ts_id, rc_ts_name, rc_add_acc = VentaBusinessService._tax_level_code_receptor(
-            tipo_doc_cliente
+        rc_tlc, rc_list_name, rc_ts_id, rc_ts_name, rc_add_acc = (
+            VentaBusinessService._tax_level_code_receptor(tipo_doc_cliente)
         )
         receptor = {
             "nit": getattr(cliente, "numero_documento", "") or "",
@@ -349,26 +357,32 @@ class VentaBusinessService:
             sub_linea = cant * pu
             iva_linea = sub_linea * (pct_iva / Decimal("100"))
             tasa_key = str(pct_iva)
-            impuestos_por_tasa[tasa_key] = impuestos_por_tasa.get(tasa_key, Decimal("0")) + iva_linea
+            impuestos_por_tasa[tasa_key] = (
+                impuestos_por_tasa.get(tasa_key, Decimal("0")) + iva_linea
+            )
 
             ts_id_linea = "01" if pct_iva > Decimal("0") else "ZZ"
             ts_name_linea = "IVA" if pct_iva > Decimal("0") else "No aplica"
 
-            lineas.append({
-                "id": str(idx + 1),
-                "descripcion": item.get("descripcion", ""),
-                "cantidad": str(cant),
-                "valor_unitario": str(pu),
-                "porcentaje_iva": str(pct_iva),
-                "subtotal": str(sub_linea),
-                "iva": str(iva_linea),
-                "total": str(sub_linea + iva_linea),
-                "unidad": "NAL",
-                "tax_scheme_id": ts_id_linea,
-                "tax_scheme_name": ts_name_linea,
-                "seller_item_id": item.get("descripcion", "")[:20].upper().replace(" ", "-"),
-                "std_item_id": str(item.get("producto_id") or item.get("servicio_id") or (idx + 1)),
-            })
+            lineas.append(
+                {
+                    "id": str(idx + 1),
+                    "descripcion": item.get("descripcion", ""),
+                    "cantidad": str(cant),
+                    "valor_unitario": str(pu),
+                    "porcentaje_iva": str(pct_iva),
+                    "subtotal": str(sub_linea),
+                    "iva": str(iva_linea),
+                    "total": str(sub_linea + iva_linea),
+                    "unidad": "NAL",
+                    "tax_scheme_id": ts_id_linea,
+                    "tax_scheme_name": ts_name_linea,
+                    "seller_item_id": item.get("descripcion", "")[:20].upper().replace(" ", "-"),
+                    "std_item_id": str(
+                        item.get("producto_id") or item.get("servicio_id") or (idx + 1)
+                    ),
+                }
+            )
 
         # -- Totales desglosados (LegalMonetaryTotal) --
         line_extension_amount = subtotal
@@ -396,13 +410,15 @@ class VentaBusinessService:
             pct_d = Decimal(pct_str)
             ts_id = "01" if pct_d > Decimal("0") else "ZZ"
             ts_name = "IVA" if pct_d > Decimal("0") else "No aplica"
-            impuestos_discriminados.append({
-                "porcentaje": pct_str,
-                "valor": str(val_imp),
-                "base": str(subtotal),
-                "tax_scheme_id": ts_id,
-                "tax_scheme_name": ts_name,
-            })
+            impuestos_discriminados.append(
+                {
+                    "porcentaje": pct_str,
+                    "valor": str(val_imp),
+                    "base": str(subtotal),
+                    "tax_scheme_id": ts_id,
+                    "tax_scheme_name": ts_name,
+                }
+            )
 
         dto = {
             # Metadatos del documento
@@ -483,7 +499,10 @@ class VentaBusinessService:
             proyecto_uuid = payload.get("proyecto")
             if proyecto_uuid:
                 from apps.tenant.proyectos.models import Proyecto
-                proyecto = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa.id).first()
+
+                proyecto = Proyecto.objects.filter(
+                    uuid=proyecto_uuid, empresa_id=empresa.id
+                ).first()
                 if not proyecto:
                     return False, {"detail": f"Proyecto {proyecto_uuid} no valido."}, 400
 
@@ -539,7 +558,10 @@ class VentaBusinessService:
                 proyecto_uuid = payload.get("proyecto")
                 if proyecto_uuid:
                     from apps.tenant.proyectos.models import Proyecto
-                    proyecto = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa_id).first()
+
+                    proyecto = Proyecto.objects.filter(
+                        uuid=proyecto_uuid, empresa_id=empresa_id
+                    ).first()
                     if not proyecto:
                         return False, {"detail": f"Proyecto {proyecto_uuid} no valido."}, 400
                     data["proyecto"] = proyecto
@@ -571,7 +593,10 @@ class VentaBusinessService:
     @staticmethod
     @transaction.atomic
     def procesar_y_facturar_venta(
-        empresa, payload: dict, sede_id: int | None = None, venta_existente: "Venta" = None,
+        empresa,
+        payload: dict,
+        sede_id: int | None = None,
+        venta_existente: "Venta" = None,
     ) -> tuple:
         """
         Flujo completo: crea Venta + genera Factura DIAN en una sola transaccion atomica.
@@ -634,13 +659,17 @@ class VentaBusinessService:
                     "esta autorizada por la DIAN para emitir facturas. empresa=%s",
                     empresa.id,
                 )
-                return False, {
-                    "detail": (
-                        "La emision de facturas electronicas no esta habilitada en "
-                        "SINTEL. Cargue el XML generado por su proveedor tecnologico "
-                        "externo en el modulo de Facturas."
-                    ),
-                }, 403
+                return (
+                    False,
+                    {
+                        "detail": (
+                            "La emision de facturas electronicas no esta habilitada en "
+                            "SINTEL. Cargue el XML generado por su proveedor tecnologico "
+                            "externo en el modulo de Facturas."
+                        ),
+                    },
+                    403,
+                )
 
             # -- Validaciones previas --
             items_data = payload.get("items", [])
@@ -663,7 +692,10 @@ class VentaBusinessService:
             proyecto_uuid = payload.get("proyecto")
             if proyecto_uuid:
                 from apps.tenant.proyectos.models import Proyecto
-                proyecto = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa.id).first()
+
+                proyecto = Proyecto.objects.filter(
+                    uuid=proyecto_uuid, empresa_id=empresa.id
+                ).first()
                 if not proyecto:
                     return False, {"detail": f"Proyecto {proyecto_uuid} no valido."}, 400
 
@@ -713,6 +745,7 @@ class VentaBusinessService:
 
             # -- Paso 5a: calcular CUFE y QR --
             from apps.tenant.facturas.services.dian.cufe import CufeService
+
             cufe = CufeService.calcular_desde_dto(dto_factura)
             qr_string = CufeService.generar_qr_string(cufe, dto_factura)
             dto_factura["cufe"] = cufe
@@ -720,17 +753,20 @@ class VentaBusinessService:
 
             # -- Paso 5b: generar XML UBL 2.1 --
             from apps.tenant.facturas.services.dian.ubl21_builder import UBL21BuilderService
+
             xml_bytes = UBL21BuilderService.build(dto_factura, cufe, qr_string)
 
             # -- Paso 5c: firmar XAdES-EPES (no-op si no hay certificado configurado) --
             # NOMINA-03: XadesSignerService/AttachedDocumentService viven en
             # apps.tenant.core.dian (genericos, compartidos con empleados/nomina).
             from apps.tenant.core.dian import XadesSignerService
+
             xml_signed = XadesSignerService.sign(xml_bytes)
 
             # -- Paso 5d: envolver en AttachedDocument + ApplicationResponse --
             from apps.tenant.core.dian import AttachedDocumentService
-            attached_doc_bytes = AttachedDocumentService.build(xml_signed, dto_factura, cufe)
+
+            AttachedDocumentService.build(xml_signed, dto_factura, cufe)
             app_response_bytes = AttachedDocumentService.build_application_response(
                 dto_factura, cufe, validation_code="02"
             )
@@ -741,6 +777,7 @@ class VentaBusinessService:
 
             # -- Paso 5e: delegar creacion de Factura a FacturaBusinessService --
             from apps.tenant.facturas.services.business_service import FacturaBusinessService
+
             factura = FacturaBusinessService.crear_factura_desde_venta(
                 empresa=empresa,
                 dto=dto_factura,
@@ -754,7 +791,9 @@ class VentaBusinessService:
             # insuficiente, producto inactivo), toda la operacion se revierte.
             # Ver documentacion/F23_SALE_INVENTORY_CONTRACT.md.
             VentaBusinessService._generar_salida_inventario(
-                venta=venta, empresa_id=empresa.id, sede_id=sede_id,
+                venta=venta,
+                empresa_id=empresa.id,
+                sede_id=sede_id,
             )
 
             logger.info(
@@ -803,29 +842,47 @@ class VentaBusinessService:
         Retorna (ok, resultado, status_code).
         """
         if not factura_uuid:
-            return False, {"error": "missing_factura_uuid", "message": "factura_uuid es requerido."}, 400
+            return (
+                False,
+                {"error": "missing_factura_uuid", "message": "factura_uuid es requerido."},
+                400,
+            )
 
         if venta.factura_asociada_id:
-            return False, {
-                "error": "venta_ya_vinculada",
-                "message": "Esta Venta ya tiene una Factura vinculada.",
-            }, 409
+            return (
+                False,
+                {
+                    "error": "venta_ya_vinculada",
+                    "message": "Esta Venta ya tiene una Factura vinculada.",
+                },
+                409,
+            )
 
         from apps.tenant.facturas.models import Factura
         from apps.tenant.facturas.services.selectors import FacturaSelectors
 
-        factura = FacturaSelectors.qs_detail(empresa_id=empresa_id).filter(uuid=factura_uuid).first()
+        factura = (
+            FacturaSelectors.qs_detail(empresa_id=empresa_id).filter(uuid=factura_uuid).first()
+        )
         if not factura:
-            return False, {
-                "error": "factura_not_found",
-                "message": "La Factura no existe o no pertenece a esta empresa.",
-            }, 404
+            return (
+                False,
+                {
+                    "error": "factura_not_found",
+                    "message": "La Factura no existe o no pertenece a esta empresa.",
+                },
+                404,
+            )
 
         if factura.naturaleza != Factura.Naturaleza.VENTA:
-            return False, {
-                "error": "naturaleza_incorrecta",
-                "message": "Solo se puede vincular una Factura de naturaleza VENTA a una Venta.",
-            }, 422
+            return (
+                False,
+                {
+                    "error": "naturaleza_incorrecta",
+                    "message": "Solo se puede vincular una Factura de naturaleza VENTA a una Venta.",
+                },
+                422,
+            )
 
         # `venta_origen` es el accessor reverso de un OneToOneField -- Django
         # lo hace compatible con hasattr() (levanta una excepcion que
@@ -833,15 +890,33 @@ class VentaBusinessService:
         # necesidad de un try/except propio ni de un "_id" que no existe
         # en el lado reverso de una OneToOne).
         if hasattr(factura, "venta_origen") and factura.venta_origen.id != venta.id:
-            return False, {
-                "error": "factura_ya_vinculada",
-                "message": "Esta Factura ya esta vinculada a otra Venta.",
-            }, 409
+            return (
+                False,
+                {
+                    "error": "factura_ya_vinculada",
+                    "message": "Esta Factura ya esta vinculada a otra Venta.",
+                },
+                409,
+            )
 
         venta = VentaCRUDService.vincular_factura(venta, factura)
+
+        # Bug real encontrado en auditoria (2026-09-26): `vincular_factura()`
+        # nunca propagaba `Factura.cotizacion_uuid` (soft-reference, ya
+        # backfileado en la Factura) hacia `Venta.cotizacion_uuid`, dejando
+        # la Venta sin su origen aunque la Factura si lo tuviera -- rompe
+        # la idempotencia de `Cotizacion.convertir_a_venta()`, que solo
+        # detecta una Venta ya existente por ese campo. Solo se backfillea
+        # si la Venta aun no tiene uno propio (nunca pisa un valor real).
+        if not venta.cotizacion_uuid and factura.cotizacion_uuid:
+            venta.cotizacion_uuid = factura.cotizacion_uuid
+            venta.save(update_fields=["cotizacion_uuid"])
+
         logger.info(
             "[VentaBS] Venta id=%s vinculada manualmente a Factura id=%s (naturaleza=%s).",
-            venta.id, factura.id, factura.naturaleza,
+            venta.id,
+            factura.id,
+            factura.naturaleza,
         )
         return True, venta, 200
 
@@ -914,15 +989,24 @@ class VentaBusinessService:
                 "fecha_emision": fecha_emision,
                 "fecha_vencimiento": factura.fecha_vencimiento,
                 "observaciones": f"Migrada automaticamente desde Factura {factura.numero} "
-                                  f"(uuid={factura.uuid}).",
+                f"(uuid={factura.uuid}).",
                 "numero_factura": factura.numero,
             },
             items_data=items_data,
         )
         venta = VentaCRUDService.vincular_factura(venta, factura)
+
+        # Mismo bug/fix que en vincular_factura_existente() -- propagar la
+        # Cotizacion de origen si la Factura ya la tiene (soft-reference,
+        # nunca bloquea nada si no existe: cotizacion_uuid sigue siendo
+        # opcional en Venta).
+        if factura.cotizacion_uuid:
+            venta.cotizacion_uuid = factura.cotizacion_uuid
+            venta.save(update_fields=["cotizacion_uuid"])
         logger.info(
             "[VentaBS] Venta id=%s creada y vinculada por migracion desde Factura id=%s.",
-            venta.id, factura.id,
+            venta.id,
+            factura.id,
         )
         return venta
 
@@ -938,7 +1022,11 @@ class VentaBusinessService:
     # ------------------------------------------------------------------
 
     GESTION_PAGO_FIELDS = (
-        "estado_pago", "forma_pago", "medio_pago_codigo", "payment_due_date", "fecha_pago",
+        "estado_pago",
+        "forma_pago",
+        "medio_pago_codigo",
+        "payment_due_date",
+        "fecha_pago",
     )
 
     @staticmethod
@@ -955,42 +1043,63 @@ class VentaBusinessService:
         Retorna (ok, resultado, status_code).
         """
         if not venta.factura_asociada_id:
-            return False, {
-                "error": "sin_factura_vinculada",
-                "message": "Esta Venta no tiene ninguna Factura vinculada todavia.",
-            }, 404
+            return (
+                False,
+                {
+                    "error": "sin_factura_vinculada",
+                    "message": "Esta Venta no tiene ninguna Factura vinculada todavia.",
+                },
+                404,
+            )
 
         from rest_framework.exceptions import ValidationError
-        from apps.tenant.facturas.services.selectors import FacturaSelectors
-        from apps.tenant.facturas.services.business_service import FacturaBusinessService
 
-        factura = FacturaSelectors.qs_detail(empresa_id=empresa_id).filter(
-            pk=venta.factura_asociada_id
-        ).first()
+        from apps.tenant.facturas.services.business_service import FacturaBusinessService
+        from apps.tenant.facturas.services.selectors import FacturaSelectors
+
+        factura = (
+            FacturaSelectors.qs_detail(empresa_id=empresa_id)
+            .filter(pk=venta.factura_asociada_id)
+            .first()
+        )
         if not factura:
-            return False, {
-                "error": "factura_not_found",
-                "message": "La Factura vinculada no existe o no pertenece a esta empresa.",
-            }, 404
+            return (
+                False,
+                {
+                    "error": "factura_not_found",
+                    "message": "La Factura vinculada no existe o no pertenece a esta empresa.",
+                },
+                404,
+            )
 
         payload_filtrado = {
-            field: data[field] for field in VentaBusinessService.GESTION_PAGO_FIELDS if field in data
+            field: data[field]
+            for field in VentaBusinessService.GESTION_PAGO_FIELDS
+            if field in data
         }
         if not payload_filtrado:
-            return False, {
-                "error": "sin_campos",
-                "message": "No se envio ningun campo de gestion manual valido.",
-            }, 400
+            return (
+                False,
+                {
+                    "error": "sin_campos",
+                    "message": "No se envio ningun campo de gestion manual valido.",
+                },
+                400,
+            )
 
         try:
-            FacturaBusinessService.actualizar_factura_limitado(factura, payload_filtrado, empresa_id)
+            FacturaBusinessService.actualizar_factura_limitado(
+                factura, payload_filtrado, empresa_id
+            )
         except ValidationError as exc:
             detail = exc.detail if hasattr(exc, "detail") else {"detail": str(exc)}
             return False, detail, 400
 
         logger.info(
             "[VentaBS] Gestion de pago actualizada para Venta id=%s (Factura id=%s): campos=%s",
-            venta.id, factura.id, list(payload_filtrado.keys()),
+            venta.id,
+            factura.id,
+            list(payload_filtrado.keys()),
         )
         return True, venta, 200
 
@@ -1014,8 +1123,7 @@ class VentaBusinessService:
         from apps.tenant.inventario.services.business_service import KardexService
 
         items_inventariables = (
-            venta.items
-            .filter(producto__isnull=False)
+            venta.items.filter(producto__isnull=False)
             .select_related("producto")
             .only("id", "producto_id", "cantidad", "producto__costo_promedio")
         )
@@ -1068,12 +1176,20 @@ class VentaBusinessService:
             if not venta:
                 return False, {"detail": "Venta no encontrada."}, 404
             if not venta.factura_asociada_id:
-                return False, {
-                    "detail": "Esta accion es solo para Ventas sincronizadas desde una Factura. "
-                               "Use anular para una Venta en Borrador.",
-                }, 400
+                return (
+                    False,
+                    {
+                        "detail": "Esta accion es solo para Ventas sincronizadas desde una Factura. "
+                        "Use anular para una Venta en Borrador.",
+                    },
+                    400,
+                )
             VentaCRUDService.eliminar_venta_sincronizada(venta)
-            return True, {"detail": "Venta sincronizada eliminada. La Factura no fue modificada."}, 200
+            return (
+                True,
+                {"detail": "Venta sincronizada eliminada. La Factura no fue modificada."},
+                200,
+            )
         except Exception as exc:
             logger.error("[VentaBS] eliminar_venta_sincronizada error: %s", exc, exc_info=True)
             return False, {"detail": "Error al eliminar la venta sincronizada."}, 500
@@ -1106,6 +1222,7 @@ class FacturaVentaSyncService:
     def listar_pendientes(empresa_id: int, search: str | None = None):
         """FASE 4/7: Facturas VENTA/FE sin Venta vinculada, filtro server-side."""
         from apps.tenant.facturas.services.selectors import FacturaSelectors
+
         return FacturaSelectors.qs_pendientes_sincronizacion_venta(empresa_id, search=search)
 
     @staticmethod
@@ -1146,34 +1263,63 @@ class FacturaVentaSyncService:
 
         from apps.tenant.facturas.models import Factura
 
-        factura = Factura.objects.select_for_update().filter(
-            uuid=factura_uuid, empresa_id=empresa_id,
-        ).first()
+        factura = (
+            Factura.objects.select_for_update()
+            .filter(
+                uuid=factura_uuid,
+                empresa_id=empresa_id,
+            )
+            .first()
+        )
         if not factura:
-            return {"factura_uuid": factura_uuid, "numero": None, "estado": "INVALIDA",
-                    "detalle": "Factura no encontrada o no pertenece a esta empresa."}
+            return {
+                "factura_uuid": factura_uuid,
+                "numero": None,
+                "estado": "INVALIDA",
+                "detalle": "Factura no encontrada o no pertenece a esta empresa.",
+            }
 
         if factura.naturaleza != Factura.Naturaleza.VENTA or factura.tipo != Factura.TipoFactura.FE:
-            return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "INVALIDA",
-                    "detalle": "Solo Facturas electronicas (FE) de naturaleza VENTA son elegibles."}
+            return {
+                "factura_uuid": factura_uuid,
+                "numero": factura.numero,
+                "estado": "INVALIDA",
+                "detalle": "Solo Facturas electronicas (FE) de naturaleza VENTA son elegibles.",
+            }
 
         if hasattr(factura, "venta_origen"):
-            return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "YA_VINCULADA",
-                    "venta_uuid": str(factura.venta_origen.uuid)}
+            return {
+                "factura_uuid": factura_uuid,
+                "numero": factura.numero,
+                "estado": "YA_VINCULADA",
+                "venta_uuid": str(factura.venta_origen.uuid),
+            }
 
-        candidata, ambigua = FacturaVentaSyncService._resolver_venta_candidata(factura.numero, empresa_id)
+        candidata, ambigua = FacturaVentaSyncService._resolver_venta_candidata(
+            factura.numero, empresa_id
+        )
         if ambigua:
-            return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "AMBIGUA",
-                    "detalle": "Mas de una Venta sin vincular comparte el mismo numero_factura."}
+            return {
+                "factura_uuid": factura_uuid,
+                "numero": factura.numero,
+                "estado": "AMBIGUA",
+                "detalle": "Mas de una Venta sin vincular comparte el mismo numero_factura.",
+            }
 
         try:
             if candidata:
                 ok, resultado, _status = VentaBusinessService.vincular_factura_existente(
-                    candidata, str(factura.uuid), empresa_id,
+                    candidata,
+                    str(factura.uuid),
+                    empresa_id,
                 )
                 if not ok:
-                    return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "ERROR",
-                            "detalle": resultado}
+                    return {
+                        "factura_uuid": factura_uuid,
+                        "numero": factura.numero,
+                        "estado": "ERROR",
+                        "detalle": resultado,
+                    }
                 venta = candidata
             else:
                 venta = VentaBusinessService.crear_venta_desde_factura(factura, empresa)
@@ -1184,10 +1330,19 @@ class FacturaVentaSyncService:
                 detalle = str(exc.detail)
             else:
                 detalle = str(exc)
-            return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "ERROR", "detalle": detalle}
+            return {
+                "factura_uuid": factura_uuid,
+                "numero": factura.numero,
+                "estado": "ERROR",
+                "detalle": detalle,
+            }
 
-        return {"factura_uuid": factura_uuid, "numero": factura.numero, "estado": "VINCULADA",
-                "venta_uuid": str(venta.uuid)}
+        return {
+            "factura_uuid": factura_uuid,
+            "numero": factura.numero,
+            "estado": "VINCULADA",
+            "venta_uuid": str(venta.uuid),
+        }
 
     @staticmethod
     def sincronizar_masivo(factura_uuids: list, empresa_id: int, empresa) -> dict:
@@ -1216,6 +1371,7 @@ class ResolucionFacturacionBusinessService:
     def crear_resolucion(empresa, payload: dict) -> tuple:
         """Crea una nueva resolucion DIAN para la empresa."""
         from apps.tenant.ventas.services.crud_service import ResolucionFacturacionCRUDService
+
         try:
             resolucion = ResolucionFacturacionCRUDService.crear_resolucion(empresa, payload)
             return True, resolucion, 201
@@ -1229,6 +1385,7 @@ class ResolucionFacturacionBusinessService:
         """Actualiza una resolucion DIAN existente."""
         from apps.tenant.ventas.models import ResolucionFacturacion
         from apps.tenant.ventas.services.crud_service import ResolucionFacturacionCRUDService
+
         try:
             resolucion = ResolucionFacturacion.objects.filter(
                 uuid=resolucion_uuid, empresa_id=empresa_id
@@ -1249,6 +1406,7 @@ class ResolucionFacturacionBusinessService:
         """Elimina una resolucion DIAN sin ventas asociadas."""
         from apps.tenant.ventas.models import ResolucionFacturacion
         from apps.tenant.ventas.services.crud_service import ResolucionFacturacionCRUDService
+
         try:
             resolucion = ResolucionFacturacion.objects.filter(
                 uuid=resolucion_uuid, empresa_id=empresa_id

@@ -23,6 +23,7 @@ alcance. La reconciliacion de un `AMBIGUO` via `transport.get_status()`
 es posible ahora que `MockTransportAdapter` la implementa -- ver
 `reconciliar()` mas abajo.
 """
+
 import logging
 
 from django.db import transaction
@@ -87,7 +88,10 @@ class ElectronicInvoiceApplicationService:
             "receptor": {"tipo_documento": "31", "nit": factura.receptor_nit},
         }
         attached_document = AttachedDocumentService.build(
-            signed_xml, dto_minimo, factura.cufe or "", document_type="Invoice",
+            signed_xml,
+            dto_minimo,
+            factura.cufe or "",
+            document_type="Invoice",
         )
 
         return ElectronicDocument(
@@ -101,20 +105,30 @@ class ElectronicInvoiceApplicationService:
         )
 
     @staticmethod
-    def _actualizar_transmision(transmision: TransmisionFactura, resultado: TransmissionResult, status: str) -> None:
+    def _actualizar_transmision(
+        transmision: TransmisionFactura, resultado: TransmissionResult, status: str
+    ) -> None:
         transmision.status = status
         transmision.responded_at = timezone.now()
         transmision.track_id = resultado.track_id
         transmision.response_code = resultado.response_code
         transmision.response_message = resultado.response_message
         transmision.raw_response = resultado.raw_response
-        transmision.save(update_fields=[
-            "status", "responded_at", "track_id", "response_code", "response_message", "raw_response",
-        ])
+        transmision.save(
+            update_fields=[
+                "status",
+                "responded_at",
+                "track_id",
+                "response_code",
+                "response_message",
+                "raw_response",
+            ]
+        )
 
     @staticmethod
     def transmitir(
-        factura: Factura, transport: "ElectronicDocumentTransportPort | None" = None,
+        factura: Factura,
+        transport: "ElectronicDocumentTransportPort | None" = None,
     ) -> dict:
         """
         Transmite `factura` (debe ser naturaleza=VENTA -- no transmitimos
@@ -131,7 +145,9 @@ class ElectronicInvoiceApplicationService:
         auditoria de cada intento, no un segundo guardian.
         """
         if factura.naturaleza != Factura.Naturaleza.VENTA:
-            raise ValueError("Solo se transmiten facturas de naturaleza VENTA (emitidas por el tenant).")
+            raise ValueError(
+                "Solo se transmiten facturas de naturaleza VENTA (emitidas por el tenant)."
+            )
 
         transport = transport or NullTransportAdapter()
 
@@ -147,8 +163,11 @@ class ElectronicInvoiceApplicationService:
             factura.estado = Factura.Estado.ENVIADA
             factura.save(update_fields=["estado"])
             transmision = TransmisionFactura.objects.create(
-                empresa_id=factura.empresa_id, factura=factura,
-                environment=_AMBIENTE_A_ENVIRONMENT.get(documento.ambiente, TransmisionFactura.Environment.TEST),
+                empresa_id=factura.empresa_id,
+                factura=factura,
+                environment=_AMBIENTE_A_ENVIRONMENT.get(
+                    documento.ambiente, TransmisionFactura.Environment.TEST
+                ),
                 status=TransmisionFactura.Status.PENDIENTE,
             )
 
@@ -163,7 +182,11 @@ class ElectronicInvoiceApplicationService:
             logger.error(
                 "[ElectronicInvoiceApplicationService] transport.send() lanzo excepcion para "
                 "factura id=%s numero=%s -- estado queda en ENVIADA (ambiguo, no reintentar "
-                "automaticamente): %s", factura.id, factura.numero, exc, exc_info=True,
+                "automaticamente): %s",
+                factura.id,
+                factura.numero,
+                exc,
+                exc_info=True,
             )
             resultado_ambiguo = TransmissionResult(
                 success=False,
@@ -176,12 +199,16 @@ class ElectronicInvoiceApplicationService:
                 errors=[str(exc)],
             )
             ElectronicInvoiceApplicationService._actualizar_transmision(
-                transmision, resultado_ambiguo, TransmisionFactura.Status.AMBIGUO,
+                transmision,
+                resultado_ambiguo,
+                TransmisionFactura.Status.AMBIGUO,
             )
             return {"factura": factura, "resultado": resultado_ambiguo, "transmision": transmision}
 
         # -- Fase 2: aplicar el resultado real + cerrar el registro del intento --
-        transmision_status = _STATUS_A_TRANSMISION_STATUS.get(resultado.status, TransmisionFactura.Status.ERROR_TRANSMISION)
+        transmision_status = _STATUS_A_TRANSMISION_STATUS.get(
+            resultado.status, TransmisionFactura.Status.ERROR_TRANSMISION
+        )
         estado_destino = _STATUS_A_ESTADO.get(resultado.status)
         with transaction.atomic():
             if estado_destino is not None:
@@ -192,13 +219,16 @@ class ElectronicInvoiceApplicationService:
                 if resultado.raw_response and hasattr(factura, "anexos"):
                     factura.anexos.application_response_xml = resultado.raw_response
                     factura.anexos.save(update_fields=["application_response_xml"])
-            ElectronicInvoiceApplicationService._actualizar_transmision(transmision, resultado, transmision_status)
+            ElectronicInvoiceApplicationService._actualizar_transmision(
+                transmision, resultado, transmision_status
+            )
 
         return {"factura": factura, "resultado": resultado, "transmision": transmision}
 
     @staticmethod
     def reconciliar(
-        factura: Factura, transport: "ElectronicDocumentTransportPort | None" = None,
+        factura: Factura,
+        transport: "ElectronicDocumentTransportPort | None" = None,
     ) -> dict:
         """
         Consulta el estado real de la ULTIMA transmision de `factura` via
@@ -215,7 +245,9 @@ class ElectronicInvoiceApplicationService:
         transport = transport or NullTransportAdapter()
         transmision = factura.transmisiones.order_by("-submitted_at").first()
         if transmision is None:
-            raise ValueError(f"Factura {factura.numero} no tiene ningun intento de transmision registrado.")
+            raise ValueError(
+                f"Factura {factura.numero} no tiene ningun intento de transmision registrado."
+            )
 
         resultado = transport.get_status(factura.cufe or "")
 
@@ -228,6 +260,8 @@ class ElectronicInvoiceApplicationService:
                 factura.estado = estado_destino
                 factura.save(update_fields=["estado"])
             if transmision_status is not None:
-                ElectronicInvoiceApplicationService._actualizar_transmision(transmision, resultado, transmision_status)
+                ElectronicInvoiceApplicationService._actualizar_transmision(
+                    transmision, resultado, transmision_status
+                )
 
         return {"factura": factura, "resultado": resultado, "transmision": transmision}

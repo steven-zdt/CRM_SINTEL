@@ -8,11 +8,13 @@ Referencias:
 - DataTables server-side: https://datatables.net/manual/server-side
 - Seguridad whitelist: https://webdevservices.in/secure-datatables-implementation/
 """
+
 import contextlib
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q, QuerySet
 from django.utils.dateparse import parse_date
 from rest_framework import status
@@ -51,16 +53,16 @@ class ColumnFilter:
 class DataTableSpec:
     """
     Especificación declarativa para un endpoint DataTables.
-    
+
     Define qué columnas son ordenables/buscables y cómo se mapean a campos ORM.
-    
+
     Args:
         fields_map: Mapeo de índice de columna (int) -> nombre de campo ORM permitido (whitelist)
         search_fields: Lista de campos ORM sobre los que aplicar búsqueda global (icontains)
         base_qs: QuerySet base (ya con only()/select_related()/prefetch_related() aplicados)
         serializer: Clase de serializador DRF para serializar 'data'
         extra_filter: Callable opcional (request, qs) -> qs (para filtros adicionales)
-        
+
     Ejemplo:
         spec = DataTableSpec(
             fields_map={0: "id", 1: "name", 2: "domain", 3: "created_at"},
@@ -69,7 +71,7 @@ class DataTableSpec:
             serializer=TenantListSerializer,
         )
     """
-    
+
     def __init__(
         self,
         fields_map: Mapping[int, str],
@@ -78,6 +80,7 @@ class DataTableSpec:
         serializer,
         extra_filter: Callable | None = None,
         column_filters: Mapping[int, "ColumnFilter"] | None = None,
+        serializer_context: Mapping[str, Any] | Callable | None = None,
     ):
         self.fields_map = dict(fields_map)
         self.search_fields = list(search_fields)
@@ -85,93 +88,102 @@ class DataTableSpec:
         self.serializer = serializer
         self.extra_filter = extra_filter
         self.column_filters = dict(column_filters or {})
+        # Opcional: dict, o callable(request, qs_paginated) -> dict, para
+        # serializers que necesitan datos precalculados en bloque (ej. un
+        # mapa cartera_map armado con UNA query agregada sobre la PAGINA
+        # actual ya paginada -- mismo patron ya usado por
+        # ClienteListSerializer.get_cartera_resumen() via context['cartera_map']).
+        # El callable recibe qs_paginated (no el qs completo) porque el
+        # calculo debe cubrir solo las filas que se van a serializar, igual
+        # que ya hace ClienteTableView/ClienteViewSet.list(). None -> {}.
+        self.serializer_context = serializer_context
 
 
 class DataTableServer:
     """
     Helper server-side para procesar requests DataTables.
-    
+
     Lee parámetros desde request.data (POST), aplica búsqueda global y orden
     solo en campos whitelisted, pagina con slice [start:start+length] (estilo DataTables),
     y responde con el contrato estándar:
-    
+
     {
         "draw": int,              # Echo del request (para sincronización)
         "recordsTotal": int,      # Total de registros (sin filtros)
         "recordsFiltered": int,   # Total después de búsqueda/filtros
         "data": List[dict]        # Datos serializados de la página actual
     }
-    
+
     Referencias:
     - Contrato DataTables: https://datatables.net/manual/server-side
     - Seguridad whitelist: https://webdevservices.in/secure-datatables-implementation/
     """
-    
+
     def __init__(self, spec: DataTableSpec):
         """
         Inicializa el helper con una especificación.
-        
+
         Args:
             spec: DataTableSpec con la configuración del endpoint
         """
         self.spec = spec
-    
+
     def _apply_search(self, qs: QuerySet, search_value: str) -> QuerySet:
         """
         Aplica búsqueda global sobre campos permitidos (whitelist).
-        
+
         Args:
             qs: QuerySet base
             search_value: Valor de búsqueda (str, puede estar vacío)
-            
+
         Returns:
             QuerySet filtrado con OR sobre search_fields
         """
         if not search_value or not self.spec.search_fields:
             return qs
-        
+
         # Construye OR dinámico sobre campos permitidos
         query = Q()
         for field in self.spec.search_fields:
             query |= Q(**{f"{field}__icontains": search_value})
-        
+
         return qs.filter(query)
-    
+
     def _apply_order(self, qs: QuerySet, order_rules: Iterable[Mapping]) -> QuerySet:
         """
         Aplica orden solo sobre columnas whitelisted.
-        
+
         Args:
             qs: QuerySet base
             order_rules: Lista de dicts con {"column": int, "dir": "asc"|"desc"}
-            
+
         Returns:
             QuerySet ordenado (solo columnas permitidas)
         """
         if not order_rules:
             return qs
-        
+
         ordering = []
         for rule in order_rules:
             try:
                 idx = int(rule.get("column", 0))
             except (TypeError, ValueError):
                 continue
-            
+
             # Whitelist: solo campos permitidos
             field = self.spec.fields_map.get(idx)
             if not field:
                 continue
-            
+
             dir_val = rule.get("dir", "asc")
             if dir_val == "desc":
                 field = f"-{field}"
-            
+
             ordering.append(field)
-        
+
         if ordering:
             return qs.order_by(*ordering)
-        
+
         return qs
 
     def _apply_column_filters(self, qs: QuerySet, columns_raw: Iterable[Mapping]) -> QuerySet:
@@ -208,13 +220,43 @@ class DataTableServer:
             if filter_type == ColumnFilterType.ICONTAINS:
                 qs = qs.filter(**{f"{field}__icontains": value})
             elif filter_type == ColumnFilterType.EXACT:
-                qs = qs.filter(**{field: value})
+                # Hallazgo real (test_cuenta_dt_filtro_columna_estado_exact/
+                # test_cuenta_dt_whitelist_columna_y_orden_no_declarados):
+                # Django BooleanField.to_python() solo acepta ("t","True","1")
+                # / ("f","False","0") literales -- "false" en minuscula (el
+                # valor mas comun que manda un <select value="false">) no
+                # calza y levantaba ValidationError sin capturar (500 real).
+                # _coerce_exact_value() normaliza esa representacion comun
+                # antes de filtrar; el suppress cubre cualquier otro valor
+                # invalido restante (mismo "nunca 500 por input de usuario"
+                # que ya aplican DATE_RANGE/NUMBER_RANGE mas abajo).
+                with contextlib.suppress(DjangoValidationError, ValueError, TypeError):
+                    qs = qs.filter(**{field: self._coerce_exact_value(value)})
             elif filter_type == ColumnFilterType.DATE_RANGE:
                 qs = self._apply_range_filter(qs, field, value, self._parse_date_strict)
             elif filter_type == ColumnFilterType.NUMBER_RANGE:
                 qs = self._apply_range_filter(qs, field, value, self._parse_decimal)
 
         return qs
+
+    @staticmethod
+    def _coerce_exact_value(value: str):
+        """
+        Normaliza representaciones comunes de booleano ("true"/"false" en
+        cualquier capitalizacion, "1"/"0") antes de filtrar EXACT. Sin esto,
+        un <select value="false"> (el patron mas usado en esta app para
+        filtros de estado activo/inactivo) rompe con ValidationError real
+        contra un BooleanField, porque Django solo acepta ("t","True","1")/
+        ("f","False","0") literales. Si el campo destino no es booleano,
+        Django simplemente usa el valor devuelto tal cual (sigue siendo un
+        string comun para CharField/choices, p.ej. "estado").
+        """
+        lowered = value.strip().lower()
+        if lowered in ("true", "1"):
+            return True
+        if lowered in ("false", "0"):
+            return False
+        return value
 
     @staticmethod
     def _parse_decimal(raw: str) -> Decimal:
@@ -227,7 +269,9 @@ class DataTableServer:
             raise ValueError(f"Fecha invalida: {raw!r}")
         return parsed
 
-    def _apply_range_filter(self, qs: QuerySet, field: str, value: str, parse: Callable) -> QuerySet:
+    def _apply_range_filter(
+        self, qs: QuerySet, field: str, value: str, parse: Callable
+    ) -> QuerySet:
         """Parsea "min~max" (cualquier lado opcional) y aplica __gte/__lte."""
         min_raw, _, max_raw = value.partition(ColumnFilterType.RANGE_SEPARATOR)
         min_raw = min_raw.strip()
@@ -244,7 +288,7 @@ class DataTableServer:
     def _parse_request(self, request) -> dict[str, Any]:
         """
         Parsea parámetros DataTables desde request.data (POST).
-        
+
         DataTables envía:
         - draw: int (echo para sincronización)
         - start: int (offset para paginación)
@@ -252,21 +296,21 @@ class DataTableServer:
         - search[value]: str (búsqueda global)
         - order[i][column]: int, order[i][dir]: "asc"|"desc" (reglas de orden)
         - columns[i][data]: str (nombre de columna, no usado en server-side)
-        
+
         Returns:
             Dict con parámetros parseados
         """
-        data = request.data if hasattr(request, 'data') else {}
-        
+        data = request.data if hasattr(request, "data") else {}
+
         # Parámetros básicos
         draw = int(data.get("draw", 0))
         start = int(data.get("start", 0))
         length = int(data.get("length", 10))
-        
+
         # Búsqueda global
         search = data.get("search", {})
         search_value = str(search.get("value", "")).strip() if isinstance(search, dict) else ""
-        
+
         # Orden (puede haber múltiples reglas)
         order_rules = []
         order_data = data.get("order", [])
@@ -288,11 +332,11 @@ class DataTableServer:
             "order_rules": order_rules,
             "columns_raw": columns_raw,
         }
-    
+
     def handle(self, request) -> Response:
         """
         Procesa request DataTables y devuelve respuesta estándar.
-        
+
         Flujo:
         1. Parsear parámetros del request
         2. Aplicar extra_filter si existe
@@ -303,26 +347,26 @@ class DataTableServer:
         7. Paginar [start:start+length]
         8. Serializar datos
         9. Responder con contrato DataTables
-        
+
         Args:
             request: HttpRequest/Request con request.data (POST)
-            
+
         Returns:
             Response con JSON: {draw, recordsTotal, recordsFiltered, data}
         """
         # 1. Parsear parámetros
         params = self._parse_request(request)
-        
+
         # 2. QuerySet base (ya con only()/select_related()/prefetch_related())
         qs = self.spec.base_qs
-        
+
         # 3. Aplicar extra_filter si existe (filtros adicionales del módulo)
         if self.spec.extra_filter:
             qs = self.spec.extra_filter(request, qs)
-        
+
         # 4. Contar total sin búsqueda
         records_total = qs.count()
-        
+
         # 5. Aplicar búsqueda global + filtros por columna
         qs_filtered = self._apply_search(qs, params["search_value"])
         qs_filtered = self._apply_column_filters(qs_filtered, params["columns_raw"])
@@ -332,15 +376,18 @@ class DataTableServer:
 
         # 7. Aplicar orden
         qs_ordered = self._apply_order(qs_filtered, params["order_rules"])
-        
+
         # 8. Paginar (estilo DataTables: [start:start+length])
         start = params["start"]
         length = params["length"]
-        qs_paginated = qs_ordered[start:start + length]
-        
-        # 9. Serializar datos
-        serializer = self.spec.serializer(qs_paginated, many=True)
-        
+        qs_paginated = qs_ordered[start : start + length]
+
+        # 9. Serializar datos (con context opcional -- ver DataTableSpec.serializer_context)
+        context = self.spec.serializer_context
+        if callable(context):
+            context = context(request, qs_paginated)
+        serializer = self.spec.serializer(qs_paginated, many=True, context=context or {})
+
         # 10. Responder con contrato DataTables
         return Response(
             {

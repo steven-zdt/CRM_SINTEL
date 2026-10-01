@@ -2,54 +2,69 @@
 import logging
 from datetime import date
 from decimal import Decimal
-from typing import List
 
 from apps.tenant.contabilidad.models import AsientoContable
 from apps.tenant.empleados.models import Devengo
-from .base import AbstractExtractor, DocumentoEnriquecido, CuentaAsignada, MovimientoResumen
+
 from ..dtos import (
-    TransaccionEconomica,
-    TipoTransaccion,
+    DocumentoOrigen,
+    LineaTransaccion,
     TerceroSnapshot,
     TipoTercero,
-    LineaTransaccion,
-    DocumentoOrigen
+    TipoTransaccion,
+    TransaccionEconomica,
 )
+from .base import AbstractExtractor, DocumentoEnriquecido, MovimientoResumen
 
 logger = logging.getLogger(__name__)
+
 
 class ExtractorNomina(AbstractExtractor):
     """
     Extractor especializado para registros de Nómina (Devengos).
-    
+
     # WARNING: ARQUITECTURA PULL: Extrae registros de la app empleados.
     # WARNING: ZERO WASTE: Solo extrae registros no anulados y no contabilizados.
     """
 
-    def extraer_pendientes(self) -> List[TransaccionEconomica]:
+    def extraer_pendientes(self) -> list[TransaccionEconomica]:
         """
         Extrae registros de nómina pendientes de contabilizar.
         """
         nomina_contabilizada = set(
             AsientoContable.objects.filter(
                 empresa_id=self.empresa_id,
-                documento_origen_app='empleados',
-                documento_origen_modelo='Devengo',
+                documento_origen_app="empleados",
+                documento_origen_modelo="Devengo",
                 documento_origen_reversado=False,
-            ).values_list('documento_origen_id', flat=True)
+            ).values_list("documento_origen_id", flat=True)
         )
 
-        registros = Devengo.objects.filter(
-            empresa_id=self.empresa_id,
-            anulado=False,
-        ).exclude(
-            id__in=nomina_contabilizada,
-        ).select_related('empleado').only(
-            'id', 'fecha_pago', 'periodo_mes',
-            'salario_base', 'auxilio_transporte', 'otros_devengos',
-            'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos',
-            'neto_pagar',
-            'empleado__numero_documento', 'empleado__primer_nombre', 'empleado__primer_apellido',
+        registros = (
+            Devengo.objects.filter(
+                empresa_id=self.empresa_id,
+                anulado=False,
+            )
+            .exclude(
+                id__in=nomina_contabilizada,
+            )
+            .select_related("empleado")
+            .only(
+                "id",
+                "fecha_pago",
+                "periodo_mes",
+                "salario_base",
+                "auxilio_transporte",
+                "otros_devengos",
+                "salud_empleado",
+                "pension_empleado",
+                "prestamos",
+                "descuentos_operativos",
+                "neto_pagar",
+                "empleado__numero_documento",
+                "empleado__primer_nombre",
+                "empleado__primer_apellido",
+            )
         )
 
         return [self._mapear_a_dto(r) for r in registros]
@@ -62,69 +77,69 @@ class ExtractorNomina(AbstractExtractor):
             tipo=TipoTercero.EMPLEADO,
             id_origen=nomina.empleado_id,
             nit=nomina.empleado.numero_documento,
-            razon_social=f"{nomina.empleado.primer_nombre} {nomina.empleado.primer_apellido}"
+            razon_social=f"{nomina.empleado.primer_nombre} {nomina.empleado.primer_apellido}",
         )
 
         lineas = []
-        
+
         # 1. Devengos (DEBE - Gasto)
         if nomina.salario_base > 0:
-            lineas.append(LineaTransaccion(
-                concepto="NOMINA_SUELDOS",
-                monto=nomina.salario_base,
-                lado='DEBE'
-            ))
-            
+            lineas.append(
+                LineaTransaccion(concepto="NOMINA_SUELDOS", monto=nomina.salario_base, lado="DEBE")
+            )
+
         if nomina.auxilio_transporte > 0:
-            lineas.append(LineaTransaccion(
-                concepto="NOMINA_AUXILIO_TRANSPORTE",
-                monto=nomina.auxilio_transporte,
-                lado='DEBE'
-            ))
+            lineas.append(
+                LineaTransaccion(
+                    concepto="NOMINA_AUXILIO_TRANSPORTE",
+                    monto=nomina.auxilio_transporte,
+                    lado="DEBE",
+                )
+            )
 
         if nomina.otros_devengos > 0:
-            lineas.append(LineaTransaccion(
-                concepto="NOMINA_OTROS_DEVENGOS",
-                monto=nomina.otros_devengos,
-                lado='DEBE'
-            ))
+            lineas.append(
+                LineaTransaccion(
+                    concepto="NOMINA_OTROS_DEVENGOS", monto=nomina.otros_devengos, lado="DEBE"
+                )
+            )
 
         # 2. Deducciones (HABER - Pasivo/Activo)
         if nomina.salud_empleado > 0:
-            lineas.append(LineaTransaccion(
-                concepto="NOMINA_APORTE_SALUD",
-                monto=nomina.salud_empleado,
-                lado='HABER'
-            ))
+            lineas.append(
+                LineaTransaccion(
+                    concepto="NOMINA_APORTE_SALUD", monto=nomina.salud_empleado, lado="HABER"
+                )
+            )
 
         if nomina.pension_empleado > 0:
-            lineas.append(LineaTransaccion(
-                concepto="NOMINA_APORTE_PENSION",
-                monto=nomina.pension_empleado,
-                lado='HABER'
-            ))
+            lineas.append(
+                LineaTransaccion(
+                    concepto="NOMINA_APORTE_PENSION", monto=nomina.pension_empleado, lado="HABER"
+                )
+            )
 
         if nomina.prestamos > 0:
             # Los préstamos suelen ser una CXC (Activo) que disminuye
-            lineas.append(LineaTransaccion(
-                concepto="NOMINA_PRESTAMOS",
-                monto=nomina.prestamos,
-                lado='HABER'
-            ))
+            lineas.append(
+                LineaTransaccion(concepto="NOMINA_PRESTAMOS", monto=nomina.prestamos, lado="HABER")
+            )
 
         if nomina.descuentos_operativos > 0:
-            lineas.append(LineaTransaccion(
-                concepto="NOMINA_DESCUENTOS",
-                monto=nomina.descuentos_operativos,
-                lado='HABER'
-            ))
+            lineas.append(
+                LineaTransaccion(
+                    concepto="NOMINA_DESCUENTOS", monto=nomina.descuentos_operativos, lado="HABER"
+                )
+            )
 
         # 3. Neto a Pagar (HABER - Pasivo) — ReglaContable resuelve cuenta via tipo NOMINA_PAGO
-        lineas.append(LineaTransaccion(
-            concepto='PASIVO_NOMINA_POR_PAGAR',
-            monto=nomina.neto_pagar,
-            lado='HABER',
-        ))
+        lineas.append(
+            LineaTransaccion(
+                concepto="PASIVO_NOMINA_POR_PAGAR",
+                monto=nomina.neto_pagar,
+                lado="HABER",
+            )
+        )
 
         return TransaccionEconomica(
             tipo=TipoTransaccion.NOMINA_PAGO,
@@ -133,63 +148,78 @@ class ExtractorNomina(AbstractExtractor):
             tercero=tercero,
             lineas=lineas,
             documento_origen=DocumentoOrigen(
-                app_label='empleados',
-                modelo='Devengo',
+                app_label="empleados",
+                modelo="Devengo",
                 id=nomina.id,
-                numero=f"{nomina.periodo_mes}-{nomina.id}"
-            )
+                numero=f"{nomina.periodo_mes}-{nomina.id}",
+            ),
         )
 
-    def get_documentos_enriquecidos(self, empresa_id: int, fecha_inicio: date, fecha_fin: date) -> List[DocumentoEnriquecido]:
+    def get_documentos_enriquecidos(
+        self, empresa_id: int, fecha_inicio: date, fecha_fin: date
+    ) -> list[DocumentoEnriquecido]:
         # 1. Obtener devengos del periodo (anulado=False para el Libro Diario activo)
-        registros = Devengo.objects.filter(
-            empresa_id=empresa_id,
-            anulado=False,
-            fecha_pago__range=(fecha_inicio, fecha_fin)
-        ).select_related('empleado').only(
-            'id', 'uuid', 'fecha_pago', 'periodo_mes',
-            'salario_base', 'auxilio_transporte', 'otros_devengos',
-            'salud_empleado', 'pension_empleado', 'prestamos', 'descuentos_operativos',
-            'neto_pagar',
-            'empleado__numero_documento', 'empleado__primer_nombre', 'empleado__primer_apellido',
-        ).order_by('fecha_pago', 'id')
-        
+        registros = (
+            Devengo.objects.filter(
+                empresa_id=empresa_id, anulado=False, fecha_pago__range=(fecha_inicio, fecha_fin)
+            )
+            .select_related("empleado")
+            .only(
+                "id",
+                "uuid",
+                "fecha_pago",
+                "periodo_mes",
+                "salario_base",
+                "auxilio_transporte",
+                "otros_devengos",
+                "salud_empleado",
+                "pension_empleado",
+                "prestamos",
+                "descuentos_operativos",
+                "neto_pagar",
+                "empleado__numero_documento",
+                "empleado__primer_nombre",
+                "empleado__primer_apellido",
+            )
+            .order_by("fecha_pago", "id")
+        )
+
         # 2. Mapear asientos
         asientos = {
-            (a.documento_origen_modelo, a.documento_origen_id): a 
+            (a.documento_origen_modelo, a.documento_origen_id): a
             for a in AsientoContable.objects.filter(
                 empresa_id=empresa_id,
-                documento_origen_app='empleados',
-                documento_origen_modelo='Devengo',
-                documento_origen_id__in=[r.id for r in registros]
-            ).prefetch_related('movimientos', 'movimientos__cuenta')
+                documento_origen_app="empleados",
+                documento_origen_modelo="Devengo",
+                documento_origen_id__in=[r.id for r in registros],
+            ).prefetch_related("movimientos", "movimientos__cuenta")
         }
-        
+
         res = []
         for r in registros:
-            asiento = asientos.get(('Devengo', r.id))
-            
+            asiento = asientos.get(("Devengo", r.id))
+
             cuentas_asignadas = []
 
             dto = DocumentoEnriquecido(
-                app_label='empleados',
-                app_display='Nómina',
-                modelo='Devengo',
+                app_label="empleados",
+                app_display="Nómina",
+                modelo="Devengo",
                 documento_id=r.id,
                 numero=f"NOM-{r.periodo_mes}-{r.id}",
                 fecha=r.fecha_pago,
-                tipo_comprobante='CN', # Nómina
-                tipo_comprobante_display='Comprobante de Nómina',
+                tipo_comprobante="CN",  # Nómina
+                tipo_comprobante_display="Comprobante de Nómina",
                 tercero_nit=r.empleado.numero_documento,
                 tercero_nombre=f"{r.empleado.primer_nombre} {r.empleado.primer_apellido}",
                 subtotal=r.neto_pagar,
-                impuestos=Decimal('0'),
+                impuestos=Decimal("0"),
                 total=r.neto_pagar,
-                cuentas_asignadas=cuentas_asignadas
+                cuentas_asignadas=cuentas_asignadas,
             )
-            
+
             if asiento:
-                dto.estado_contable = 'CONTABILIZADO'
+                dto.estado_contable = "CONTABILIZADO"
                 dto.asiento_uuid = str(asiento.uuid)
                 dto.asiento_numero = asiento.numero
                 dto.movimientos = [
@@ -197,14 +227,18 @@ class ExtractorNomina(AbstractExtractor):
                     # nunca el FK legacy `cuenta` -- leer solo m.cuenta.codigo mostraba
                     # SIN_CUENTA para todo movimiento real.
                     MovimientoResumen(
-                        cuenta_codigo=m.cuenta_codigo or (m.cuenta.codigo if m.cuenta else 'SIN_CUENTA'),
-                        cuenta_nombre=(m.cuenta.nombre if m.cuenta else (m.descripcion or 'Sin Cuenta')),
+                        cuenta_codigo=m.cuenta_codigo
+                        or (m.cuenta.codigo if m.cuenta else "SIN_CUENTA"),
+                        cuenta_nombre=(
+                            m.cuenta.nombre if m.cuenta else (m.descripcion or "Sin Cuenta")
+                        ),
                         debe=m.debe,
-                        haber=m.haber
-                    ) for m in asiento.movimientos.all()
+                        haber=m.haber,
+                    )
+                    for m in asiento.movimientos.all()
                 ]
-                dto.cuadra = (asiento.total_debe == asiento.total_haber)
-                
+                dto.cuadra = asiento.total_debe == asiento.total_haber
+
             res.append(dto)
-            
+
         return res

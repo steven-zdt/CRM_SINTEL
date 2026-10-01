@@ -4,6 +4,7 @@ Fase F7 (proyecto OSF), "Migrar Selectors a scope-aware" - Cotizacion,
 pero nunca se usaba para filtrar. NULL-safe: el 100% de las Cotizaciones
 reales tiene sede=NULL hoy.
 """
+
 from rest_framework import status
 
 from apps.tenant.cotizaciones.models import Cotizacion
@@ -16,14 +17,19 @@ class CotizacionScopeSelectorsF7Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F7 Cotizaciones", nit="900000777", direccion="Calle 1",
+            razon_social="Empresa Test F7 Cotizaciones",
+            nit="900000777",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F7 Cot")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F7 Cot")
 
     def _crear(self, numero, sede=None):
         return Cotizacion.objects.create(
-            empresa=self.empresa, numero_cotizacion=numero, fecha_vencimiento="2026-12-31", sede=sede,
+            empresa=self.empresa,
+            numero_cotizacion=numero,
+            fecha_vencimiento="2026-12-31",
+            sede=sede,
         )
 
     def test_alcance_sede_ve_sin_sede_y_su_sede_pero_no_la_de_otra(self):
@@ -32,7 +38,10 @@ class CotizacionScopeSelectorsF7Tests(SintelTenantTestCase):
         c_b = self._crear("COT-F7-B", sede=self.sede_b)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a])
 
@@ -49,7 +58,9 @@ class CotizacionScopeSelectorsF7Tests(SintelTenantTestCase):
         self._crear("COT-F7-E-B", sede=self.sede_b)
         self._crear("COT-F7-E-SIN")
 
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         resp = self.api_client.get("/api/v1/cotizaciones/")
 

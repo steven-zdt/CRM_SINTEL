@@ -4,20 +4,23 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('empresa', '0007_empresa_owner_email'),
-        ('perfil', '0005_tenantprofile_rol'),
-        ('tenant_gastos', '0005_remove_documentosoporte_unique_ds_vendedor_factura_and_more'),
+        ("empresa", "0007_empresa_owner_email"),
+        ("perfil", "0005_tenantprofile_rol"),
+        ("tenant_gastos", "0005_remove_documentosoporte_unique_ds_vendedor_factura_and_more"),
     ]
 
     operations = [
         migrations.RemoveConstraint(
-            model_name='documentosoporte',
-            name='unique_ds_vendedor_factura',
+            model_name="documentosoporte",
+            name="unique_ds_vendedor_factura",
         ),
         migrations.AddConstraint(
-            model_name='documentosoporte',
-            constraint=models.UniqueConstraint(condition=models.Q(('anulado', False)), fields=('empresa', 'vendedor_nit', 'numero_documento_proveedor'), name='unique_ds_vendedor_documento'),
+            model_name="documentosoporte",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("anulado", False)),
+                fields=("empresa", "vendedor_nit", "numero_documento_proveedor"),
+                name="unique_ds_vendedor_documento",
+            ),
         ),
     ]

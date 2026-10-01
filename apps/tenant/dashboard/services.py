@@ -2,6 +2,7 @@
 Servicios para el dashboard de tenants v3.9.4.
 Legacy facade que delega a Core Membership Bridge y BusinessService.
 """
+
 from django.conf import settings
 
 from apps.tenant.core.services.membership import (
@@ -42,25 +43,25 @@ def get_dashboard_redirect_url(user, tenant, absolute=False):
     role = get_user_role_in_tenant(user, tenant)
 
     if not role:
-        relative_url = '/dashboard/'
+        relative_url = "/dashboard/"
 
         if not absolute:
             return relative_url
 
         domain = get_primary_domain(tenant)
         if domain:
-            protocol = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'http'
+            protocol = "https" if getattr(settings, "SECURE_SSL_REDIRECT", False) else "http"
             return f"{protocol}://{domain}{relative_url}"
         else:
             return relative_url
 
     role_routes = {
-        'ADMIN': '/dashboard/admin/',
-        'STAFF': '/dashboard/staff/',
-        'USER': '/dashboard/user/',
+        "ADMIN": "/dashboard/admin/",
+        "STAFF": "/dashboard/staff/",
+        "USER": "/dashboard/user/",
     }
 
-    relative_url = role_routes.get(role, '/dashboard/')
+    relative_url = role_routes.get(role, "/dashboard/")
 
     if not absolute:
         return relative_url
@@ -69,7 +70,7 @@ def get_dashboard_redirect_url(user, tenant, absolute=False):
     if not domain:
         return relative_url
 
-    protocol = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'http'
+    protocol = "https" if getattr(settings, "SECURE_SSL_REDIRECT", False) else "http"
     absolute_url = f"{protocol}://{domain}{relative_url}"
 
     return absolute_url
@@ -89,36 +90,37 @@ def get_dashboard_context(user, tenant):
     """
     try:
         # Obtener empresa_id desde el tenant
-        empresa_id = tenant.id if hasattr(tenant, 'id') else None
+        empresa_id = tenant.id if hasattr(tenant, "id") else None
 
         if not empresa_id:
-            return {'error': 'No se pudo determinar la empresa'}
+            return {"error": "No se pudo determinar la empresa"}
 
         # Delegar a BusinessService (orquestación de extractores)
         metricas = DashboardBusinessService.obtener_metricas_consolidadas(empresa_id)
 
         # Convertir DTO a dict para compatibilidad con serializers legacy
         return {
-            'empresa_nombre': metricas.empresa_nombre,
-            'empresa_nit': metricas.empresa_nit,
-            'fecha_actualizacion': metricas.fecha_actualizacion,
-            'total_facturas': metricas.facturas.total_facturas,
-            'facturas_pendientes': metricas.facturas.facturas_pendientes,
-            'ingresos_mes': float(metricas.facturas.ingresos_mes),
-            'total_empleados': metricas.empleados.total_empleados,
-            'empleados_activos': metricas.empleados.empleados_activos,
-            'total_inventario': metricas.inventario.total_productos,
+            "empresa_nombre": metricas.empresa_nombre,
+            "empresa_nit": metricas.empresa_nit,
+            "fecha_actualizacion": metricas.fecha_actualizacion,
+            "total_facturas": metricas.facturas.total_facturas,
+            "facturas_pendientes": metricas.facturas.facturas_pendientes,
+            "ingresos_mes": float(metricas.facturas.ingresos_mes),
+            "total_empleados": metricas.empleados.total_empleados,
+            "empleados_activos": metricas.empleados.empleados_activos,
+            "total_inventario": metricas.inventario.total_productos,
         }
 
     except Exception as e:
         import logging
+
         logger = logging.getLogger(__name__)
         logger.warning(f"Error en get_dashboard_context: {str(e)}")
 
         # Retornar estructura segura
         return {
-            'error': 'Error al cargar métricas',
-            'total_facturas': 0,
-            'facturas_pendientes': 0,
-            'ingresos_mes': 0,
+            "error": "Error al cargar métricas",
+            "total_facturas": 0,
+            "facturas_pendientes": 0,
+            "ingresos_mes": 0,
         }

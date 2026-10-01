@@ -12,9 +12,10 @@ Modulos:
 # `from apps.tenant.facturas.services.dian import XadesSignerService` sigue
 # funcionando sin cambios.
 """
+
+from apps.tenant.core.dian import AttachedDocumentService, XadesSignerService
 from apps.tenant.facturas.services.dian.cufe import CufeService
 from apps.tenant.facturas.services.dian.ubl21_builder import UBL21BuilderService
-from apps.tenant.core.dian import XadesSignerService, AttachedDocumentService
 
 __all__ = [
     "CufeService",

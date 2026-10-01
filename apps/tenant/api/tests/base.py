@@ -1,6 +1,7 @@
 """
 Compatibility shim for `apps.tenant.api.tests.base` exposing SintelTenantTestCase.
 """
+
 try:
     from tests.tenant.base_test import SintelTenantTestCase, TenantTestCase
 except Exception:
@@ -8,5 +9,6 @@ except Exception:
 
     class SintelTenantTestCase(TenantTestCase):
         pass
+
 
 __all__ = ["SintelTenantTestCase", "TenantTestCase"]

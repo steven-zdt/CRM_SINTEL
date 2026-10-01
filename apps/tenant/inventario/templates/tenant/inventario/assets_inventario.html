@@ -1,6 +1,10 @@
 {% load static %}
 {# assets_inventario.html - Assets del módulo Inventario v3.5 - Nucleus #}
 
+{# DataTables 3.x (solo listado de Productos -- Categorias/Servicios/ActivosFijos siguen en django-tables2/HTMX) #}
+{% include 'tenant/inventario/assets_inventario_datatables.html' %}
+<script src="{% static 'core/js/common/datatables.factory.js' %}"></script>
+
 {# ⚠️ v3.5: Namespace unificado window.Sintel.Inventario #}
 <script src="{% static 'inventario/js/inventario.api.js' %}"></script>
 <script src="{% static 'inventario/js/inventario.utils.js' %}"></script>

@@ -1,12 +1,13 @@
 import pytest
+from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context
 from rest_framework import status
-from apps.tenant.ventas.models import Venta
+
+from apps.public.tenants.models import TenantMembership
 from apps.tenant.clientes.models import Cliente
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.perfil.models import TenantProfile
-from apps.public.tenants.models import TenantMembership
-from django.contrib.auth import get_user_model
+from apps.tenant.ventas.models import Venta
 
 User = get_user_model()
 
@@ -21,10 +22,12 @@ def test_multitenant_isolation_ventas(client, tenant1, tenant2):
     # 1. Setup Tenant 1
     with schema_context(tenant1.schema_name):
         emp1 = Empresa.objects.first()
-        user1 = User.objects.create_user(username="user1_ventas", email="u1@t.com", password="password")
+        user1 = User.objects.create_user(
+            username="user1_ventas", email="u1@t.com", password="password"
+        )
         TenantProfile.objects.create(user=user1, empresa=emp1, rol="ADMIN")
 
-        with schema_context('public'):
+        with schema_context("public"):
             TenantMembership.objects.create(client=tenant1, user=user1, rol="ADMIN")
 
         cliente1 = Cliente.objects.create(
@@ -48,10 +51,12 @@ def test_multitenant_isolation_ventas(client, tenant1, tenant2):
     # 2. Setup Tenant 2
     with schema_context(tenant2.schema_name):
         emp2 = Empresa.objects.first()
-        user2 = User.objects.create_user(username="user2_ventas", email="u2@t.com", password="password")
+        user2 = User.objects.create_user(
+            username="user2_ventas", email="u2@t.com", password="password"
+        )
         TenantProfile.objects.create(user=user2, empresa=emp2, rol="ADMIN")
 
-        with schema_context('public'):
+        with schema_context("public"):
             TenantMembership.objects.create(client=tenant2, user=user2, rol="ADMIN")
 
         cliente2 = Cliente.objects.create(
@@ -129,58 +134,77 @@ def test_multitenant_isolation_ventas(client, tenant1, tenant2):
 @pytest.mark.django_db
 def test_multitenant_isolation_ventas_tabla_html(client, tenant1, tenant2):
     """
-    Aislamiento multi-tenant de VentaTableView (django-tables2 + HTMX,
-    PLAN_UNICO_CORRECCIONES.md Fase 5-BIS). Esta vista no pasa por DRF (no es
-    un ViewSet) -- usa SintelDSVMixin directamente, asi que necesita su
-    propia verificacion, no basta con la cobertura ya existente sobre
-    /api/v1/ventas/.
-
-    Piloto DataTables (docs/ux/TABLES_FORMS_RELEASE_GATE.md): esta vista ya
-    NO renderiza la tabla (ver VentaViewSet.dt + apps/tenant/ventas/tests/
-    test_venta_dt.py, que cubre el aislamiento del listado real) -- sigue
-    viva solo para las KPIs (kpis_ventas.html), asi que el aislamiento se
-    verifica aqui via el conteo agregado (kpi_total_ventas), no via texto de
+    Aislamiento multi-tenant de VentaKpisView (HTMX, sirve solo los KPIs del
+    listado -- la tabla la sirve VentaViewSet.dt, ver
+    docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Esta vista no pasa
+    por DRF (no es un ViewSet) -- usa SintelDSVMixin directamente, asi que
+    necesita su propia verificacion, no basta con la cobertura ya existente
+    sobre /api/v1/ventas/ ni sobre apps/tenant/ventas/tests/test_venta_dt.py
+    (que cubre el aislamiento del listado real). El aislamiento aqui se
+    verifica via el conteo agregado (kpi_total_ventas), no via texto de
     cliente en el body.
     """
     with schema_context(tenant1.schema_name):
         emp1 = Empresa.objects.first()
-        user1 = User.objects.create_user(username="user1_ventas_tabla", email="u1vt@t.com", password="password")
+        user1 = User.objects.create_user(
+            username="user1_ventas_tabla", email="u1vt@t.com", password="password"
+        )
         TenantProfile.objects.create(user=user1, empresa=emp1, rol="ADMIN")
-        with schema_context('public'):
+        with schema_context("public"):
             TenantMembership.objects.create(client=tenant1, user=user1, rol="ADMIN")
 
         cliente1 = Cliente.objects.create(
-            empresa=emp1, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="9101", razon_social="Cliente Tabla Tenant Uno",
+            empresa=emp1,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="9101",
+            razon_social="Cliente Tabla Tenant Uno",
             regimen_tributario="ORDINARIO",
         )
         Venta.objects.create(
-            empresa=emp1, cliente=cliente1, fecha_emision="2026-06-01",
-            numero_factura="VENTA-TABLA-T1", subtotal="100.00", total_neto="100.00",
+            empresa=emp1,
+            cliente=cliente1,
+            fecha_emision="2026-06-01",
+            numero_factura="VENTA-TABLA-T1",
+            subtotal="100.00",
+            total_neto="100.00",
         )
 
     with schema_context(tenant2.schema_name):
         emp2 = Empresa.objects.first()
-        user2 = User.objects.create_user(username="user2_ventas_tabla", email="u2vt@t.com", password="password")
+        user2 = User.objects.create_user(
+            username="user2_ventas_tabla", email="u2vt@t.com", password="password"
+        )
         TenantProfile.objects.create(user=user2, empresa=emp2, rol="ADMIN")
-        with schema_context('public'):
+        with schema_context("public"):
             TenantMembership.objects.create(client=tenant2, user=user2, rol="ADMIN")
 
         cliente2 = Cliente.objects.create(
-            empresa=emp2, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="9102", razon_social="Cliente Tabla Tenant Dos",
+            empresa=emp2,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="9102",
+            razon_social="Cliente Tabla Tenant Dos",
             regimen_tributario="ORDINARIO",
         )
         Venta.objects.create(
-            empresa=emp2, cliente=cliente2, fecha_emision="2026-06-01",
-            numero_factura="VENTA-TABLA-T2", subtotal="200.00", total_neto="200.00",
+            empresa=emp2,
+            cliente=cliente2,
+            fecha_emision="2026-06-01",
+            numero_factura="VENTA-TABLA-T2",
+            subtotal="200.00",
+            total_neto="200.00",
         )
         # Ventas extra en tenant2 para que un conteo cruzado sea detectable
         # (si la vista de tenant1 filtrara mal, kpi_total_ventas subiria).
         for i in range(3):
             Venta.objects.create(
-                empresa=emp2, cliente=cliente2, fecha_emision="2026-06-01",
-                numero_factura=f"VENTA-TABLA-T2-EXTRA-{i}", subtotal="10.00", total_neto="10.00",
+                empresa=emp2,
+                cliente=cliente2,
+                fecha_emision="2026-06-01",
+                numero_factura=f"VENTA-TABLA-T2-EXTRA-{i}",
+                subtotal="10.00",
+                total_neto="10.00",
             )
 
     # force_login debe escribir la sesion en el esquema del tenant: sessions
@@ -197,6 +221,7 @@ def test_multitenant_isolation_ventas_tabla_html(client, tenant1, tenant2):
 
     # Sin sesion: debe redirigir a login (LoginRequiredMixin), no filtrar en silencio
     from django.test import Client
+
     anon_client = Client()
     resp = anon_client.get("/ui/ventas/tabla/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     assert resp.status_code in (status.HTTP_302_FOUND, status.HTTP_403_FORBIDDEN)

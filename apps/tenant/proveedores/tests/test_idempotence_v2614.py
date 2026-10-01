@@ -7,6 +7,7 @@ Valida:
 - Zero Trust: Validacion de empresa_id en contexto
 - Caching: @cached_property tenant_empresa
 """
+
 import json
 
 import pytest
@@ -20,10 +21,10 @@ from apps.tenant.empresa.models import Empresa
 from apps.tenant.proveedores.models import Proveedor
 from apps.tenant.proveedores.services.services import crear_proveedor
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _dns_host(schema_name):
     """
@@ -40,15 +41,19 @@ def _dns_host(schema_name):
 def tenant(django_db_setup, django_db_blocker):
     with django_db_blocker.unblock(), schema_context(get_public_schema_name()):
         schema_name = "test_proveedores_idempotence_01"
-        tenant = TenantModel.objects.filter(schema_name=schema_name).only('id', 'schema_name').first()
+        tenant = (
+            TenantModel.objects.filter(schema_name=schema_name).only("id", "schema_name").first()
+        )
         if not tenant:
-            tenant = TenantModel(schema_name=schema_name, nombre='Test Proveedor Idempotence', is_active=True)
+            tenant = TenantModel(
+                schema_name=schema_name, nombre="Test Proveedor Idempotence", is_active=True
+            )
             tenant.save()
         Domain.objects.get_or_create(
             domain=_dns_host(schema_name),
-            defaults={'tenant': tenant, 'is_primary': True},
+            defaults={"tenant": tenant, "is_primary": True},
         )
-        return TenantModel.objects.only('id', 'schema_name').get(pk=tenant.pk)
+        return TenantModel.objects.only("id", "schema_name").get(pk=tenant.pk)
 
 
 @pytest.fixture
@@ -56,29 +61,23 @@ def admin_user(django_user_model, tenant):
     from apps.public.tenants.models import TenantMembership
     from apps.tenant.perfil.models import TenantProfile
 
-    user = django_user_model.objects.filter(email='proveedores-admin@example.com').first()
+    user = django_user_model.objects.filter(email="proveedores-admin@example.com").first()
     if not user:
         user = django_user_model.objects.create_superuser(
-            username='proveedores-admin',
-            email='proveedores-admin@example.com',
-            password='secret123',
+            username="proveedores-admin",
+            email="proveedores-admin@example.com",
+            password="secret123",
             is_staff=True,
             is_superuser=True,
         )
 
     TenantMembership.objects.get_or_create(
-        client=tenant,
-        user=user,
-        defaults={'is_active': True, 'rol': 'ADMIN'}
+        client=tenant, user=user, defaults={"is_active": True, "rol": "ADMIN"}
     )
 
     with schema_context(tenant.schema_name):
         empresa = _get_or_create_empresa()
-        TenantProfile.objects.get_or_create(
-            user=user,
-            empresa=empresa,
-            defaults={'rol': 'ADMIN'}
-        )
+        TenantProfile.objects.get_or_create(user=user, empresa=empresa, defaults={"rol": "ADMIN"})
 
     return user
 
@@ -94,8 +93,8 @@ def tenant_client(tenant, admin_user):
     TenantSecurityAndURLConfMiddleware seleccione TENANT_URLCONF.
     """
     client = TenantClient(tenant)
-    client.defaults['SERVER_NAME'] = _dns_host(tenant.schema_name)
-    client.defaults['HTTP_HOST'] = _dns_host(tenant.schema_name)
+    client.defaults["SERVER_NAME"] = _dns_host(tenant.schema_name)
+    client.defaults["HTTP_HOST"] = _dns_host(tenant.schema_name)
     client.force_login(admin_user)
     return client
 
@@ -109,27 +108,28 @@ def jwt_tenant_client(tenant, admin_user):
     TenantSecurityAndURLConfMiddleware seleccione TENANT_URLCONF.
     """
     client = TenantClient(tenant)
-    client.defaults['SERVER_NAME'] = _dns_host(tenant.schema_name)
-    client.defaults['HTTP_HOST'] = _dns_host(tenant.schema_name)
+    client.defaults["SERVER_NAME"] = _dns_host(tenant.schema_name)
+    client.defaults["HTTP_HOST"] = _dns_host(tenant.schema_name)
     access_token = str(AccessToken.for_user(admin_user))
-    client.defaults['HTTP_AUTHORIZATION'] = f'Bearer {access_token}'
+    client.defaults["HTTP_AUTHORIZATION"] = f"Bearer {access_token}"
     return client
 
 
 def _get_or_create_empresa():
-    empresa = Empresa.objects.only('id', 'razon_social', 'nit').first()
+    empresa = Empresa.objects.only("id", "razon_social", "nit").first()
     if empresa:
         return empresa
     return Empresa.objects.create(
-        razon_social='EMPRESA TEST PROVEEDORES S.A.S.',
-        nit='901234567',
-        direccion='Calle Falsa 123',
+        razon_social="EMPRESA TEST PROVEEDORES S.A.S.",
+        nit="901234567",
+        direccion="Calle Falsa 123",
     )
 
 
 # ---------------------------------------------------------------------------
 # Suite 1: Idempotencia a nivel de servicio (sin HTTP)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.django_db
 class TestIdempotenciaProveedores:
@@ -241,13 +241,16 @@ class TestIdempotenciaProveedores:
 
             prov2, creado2 = crear_proveedor(empresa.id, payload2)
             assert creado2 is True
-            assert prov2.id != prov1.id, "Different documento numbers should create different records"
+            assert (
+                prov2.id != prov1.id
+            ), "Different documento numbers should create different records"
             assert Proveedor.objects.filter(empresa=empresa).count() == 2
 
 
 # ---------------------------------------------------------------------------
 # Suite 2: HTTP status codes reflejen idempotencia (201 vs 200)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.django_db(transaction=True)
 class TestHTTPStatusCodesProveedores:
@@ -281,22 +284,23 @@ class TestHTTPStatusCodesProveedores:
             # Legal (Regla Critica 3) -- ver ProveedorBusinessService.
             # crear_proveedor(). Sin esto, la API real rechaza con 400.
             "representante": {
-                "tipo_documento": "CC", "numero_documento": "1001001001",
+                "tipo_documento": "CC",
+                "numero_documento": "1001001001",
                 "nombre_completo": "Representante HTTP 201",
             },
         }
 
         response = jwt_tenant_client.post(
-            '/api/v1/proveedores/',
+            "/api/v1/proveedores/",
             data=json.dumps(payload),
-            content_type='application/json',
+            content_type="application/json",
         )
-        response_body = getattr(response, 'data', None) or getattr(response, 'content', b'')
-        assert response.status_code == 201, (
-            f"Expected 201, got {response.status_code}: {response_body}"
-        )
+        response_body = getattr(response, "data", None) or getattr(response, "content", b"")
+        assert (
+            response.status_code == 201
+        ), f"Expected 201, got {response.status_code}: {response_body}"
         data = response.json()
-        assert data.get('id') is not None, "Should return created proveedor ID"
+        assert data.get("id") is not None, "Should return created proveedor ID"
 
     def test_api_create_proveedor_http_400_second_post_duplicado(self, tenant, jwt_tenant_client):
         """
@@ -322,38 +326,40 @@ class TestHTTPStatusCodesProveedores:
             "telefono_contacto": "3002002002",
             "activo": True,
             "representante": {
-                "tipo_documento": "CC", "numero_documento": "1002002002",
+                "tipo_documento": "CC",
+                "numero_documento": "1002002002",
                 "nombre_completo": "Representante HTTP 200",
             },
         }
 
         # Primer POST: Create
         response1 = jwt_tenant_client.post(
-            '/api/v1/proveedores/',
+            "/api/v1/proveedores/",
             data=json.dumps(payload),
-            content_type='application/json',
+            content_type="application/json",
         )
-        assert response1.status_code == 201, (
-            f"First POST should return 201, got {response1.status_code}: {response1.content}"
-        )
+        assert (
+            response1.status_code == 201
+        ), f"First POST should return 201, got {response1.status_code}: {response1.content}"
 
         # Segundo POST con el mismo numero_documento: debe rechazarse (400),
         # no actualizar en silencio.
         response2 = jwt_tenant_client.post(
-            '/api/v1/proveedores/',
+            "/api/v1/proveedores/",
             data=json.dumps(payload),
-            content_type='application/json',
+            content_type="application/json",
         )
-        response2_body = getattr(response2, 'data', None) or getattr(response2, 'content', b'')
-        assert response2.status_code == 400, (
-            f"Expected 400 (documento duplicado), got {response2.status_code}: {response2_body}"
-        )
-        assert 'numero_documento' in response2.json()
+        response2_body = getattr(response2, "data", None) or getattr(response2, "content", b"")
+        assert (
+            response2.status_code == 400
+        ), f"Expected 400 (documento duplicado), got {response2.status_code}: {response2_body}"
+        assert "numero_documento" in response2.json()
 
 
 # ---------------------------------------------------------------------------
 # Suite 3: Validacion Zero Trust en contexto de empresa
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.django_db
 class TestZeroTrustValidationProveedores:
@@ -392,7 +398,7 @@ class TestZeroTrustValidationProveedores:
             empresa = _get_or_create_empresa()
 
             factory = RequestFactory()
-            request = factory.get('/')
+            request = factory.get("/")
             force_authenticate(request, user=admin_user)
 
             viewset = ProveedorViewSet()
@@ -401,5 +407,5 @@ class TestZeroTrustValidationProveedores:
 
             context = viewset.get_serializer_context()
 
-            assert 'empresa_id' in context, "Context should include empresa_id"
-            assert context['empresa_id'] == empresa.id, "empresa_id should match"
+            assert "empresa_id" in context, "Context should include empresa_id"
+            assert context["empresa_id"] == empresa.id, "empresa_id should match"

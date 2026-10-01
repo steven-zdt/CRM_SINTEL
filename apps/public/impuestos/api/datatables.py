@@ -81,7 +81,7 @@ class BaseDataTablesView(APIView):
 
         # Paginación y ordenamiento
         # DataTables envía order[0][column] y order[0][dir]
-        order_column = int(request.GET.get("order[0][column]", 0))
+        int(request.GET.get("order[0][column]", 0))
         order_dir = request.GET.get("order[0][dir]", "asc")
 
         # Aplicar orden (por ahora usar id por defecto)

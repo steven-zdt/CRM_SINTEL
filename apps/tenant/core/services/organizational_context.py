@@ -20,6 +20,7 @@ ViewSet/vista todavia (eso es Fase 3 "Organizational Resolver" y Fase 9
 "Migracion aplicacion por aplicacion"). Usarla hoy es opt-in y no afecta a
 ninguna app existente.
 """
+
 from __future__ import annotations
 
 import logging
@@ -88,9 +89,13 @@ class OrganizationalContext:
             except FieldDoesNotExist:
                 return False
 
-        sede_id = self.sede_id if (self.alcance in ("SEDE", "AREA") and _has_field("sede")) else None
+        sede_id = (
+            self.sede_id if (self.alcance in ("SEDE", "AREA") and _has_field("sede")) else None
+        )
         area_id = self.area_id if (self.alcance == "AREA" and _has_field("area")) else None
-        return filter_by_context(model.objects.all(), self.empresa_id, sede_id=sede_id, area_id=area_id)
+        return filter_by_context(
+            model.objects.all(), self.empresa_id, sede_id=sede_id, area_id=area_id
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Representacion serializable (JSON-safe) - usada por el endpoint
@@ -110,7 +115,7 @@ class OrganizationalContext:
         }
 
     @classmethod
-    def resolve(cls, request) -> "OrganizationalContext":
+    def resolve(cls, request) -> OrganizationalContext:
         """Resuelve el contexto completo desde un `request` autenticado.
 
         Unico punto de lectura de `request.user`/`request.tenant` dentro de
@@ -126,7 +131,9 @@ class OrganizationalContext:
 
         user = getattr(request, "user", None)
         if not user or not user.is_authenticated:
-            raise OrganizationalContextError("OrganizationalContext requiere un usuario autenticado.")
+            raise OrganizationalContextError(
+                "OrganizationalContext requiere un usuario autenticado."
+            )
 
         tenant = getattr(request, "tenant", None)
         tenant_schema = getattr(tenant, "schema_name", "") if tenant else ""
@@ -145,12 +152,15 @@ class OrganizationalContext:
             if empresa:
                 logger.warning(
                     "[OrganizationalContext:DEBUG] Fallback empresa_id=%s para user=%s sin tenant_profile",
-                    empresa.id, user.id,
+                    empresa.id,
+                    user.id,
                 )
                 empresa_id = empresa.id
 
         if empresa_id is None:
-            raise OrganizationalContextError("No se encontro configuracion de empresa para este tenant.")
+            raise OrganizationalContextError(
+                "No se encontro configuracion de empresa para este tenant."
+            )
 
         from apps.tenant.core.services.sede_context import resolve_sede_activa_id
 

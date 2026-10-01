@@ -73,6 +73,11 @@
     exportarPdfUrl: function (uuid) { return BASE + '/' + uuid + '/exportar-pdf/'; },
     estadisticasUrl: BASE + '/estadisticas/',
 
+    // Maquina de estados (CotizacionViewSet, business_service.py::cambiar_estado())
+    generarPdfUrl:  function (uuid) { return BASE + '/' + uuid + '/generar-pdf/'; },
+    aprobarUrl:     function (uuid) { return BASE + '/' + uuid + '/aprobar/'; },
+    rechazarUrl:    function (uuid) { return BASE + '/' + uuid + '/rechazar/'; },
+
     // URLs Configuracion
     configuracionUrl: BASE + '/configuracion/',
     configuracionDetailUrl: function (uuid) { return BASE + '/configuracion/' + uuid + '/'; },

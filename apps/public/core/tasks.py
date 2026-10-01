@@ -28,6 +28,7 @@ def _registrar_dlq(
     """Registra una tarea fallida en FailedTenantTask (Dead Letter Queue)."""
     try:
         from apps.public.tenants.models import FailedTenantTask
+
         FailedTenantTask.objects.create(
             task_id=task_id or "unknown",
             task_name=task_name,
@@ -49,55 +50,105 @@ def send_tenant_activation_email_task(self, user_id: int, tenant_id: int) -> dic
     SSoT Celery: envia email de activacion para cualquier owner de tenant privado.
     Genera el token firmado y la URL tenant-especifica internamente.
     """
-    logger.info("[send_tenant_activation_email_task] user_id=%s tenant_id=%s [retry=%s]",
-                user_id, tenant_id, self.request.retries)
+    logger.info(
+        "[send_tenant_activation_email_task] user_id=%s tenant_id=%s [retry=%s]",
+        user_id,
+        tenant_id,
+        self.request.retries,
+    )
     connection.set_schema_to_public()
     try:
         from django.contrib.auth import get_user_model
-        from apps.public.tenants.models import Client
+
         from apps.public.core.services.email_service import EmailService
+        from apps.public.tenants.models import Client
+
         User = get_user_model()
         user = User.objects.get(pk=user_id)
         tenant = Client.objects.get(pk=tenant_id)
         sent = EmailService.send_tenant_activation_email_sync(user, tenant)
         if not sent:
-            raise RuntimeError(f"send_tenant_activation_email_sync retorno False para user={user.email}")
-        logger.info("[send_tenant_activation_email_task] OK: email enviado a %s | tenant=%s", user.email, tenant.schema_name)
+            raise RuntimeError(
+                f"send_tenant_activation_email_sync retorno False para user={user.email}"
+            )
+        logger.info(
+            "[send_tenant_activation_email_task] OK: email enviado a %s | tenant=%s",
+            user.email,
+            tenant.schema_name,
+        )
         return {"status": "sent", "user": user.email, "tenant": tenant.schema_name}
     except Exception as ex:
-        logger.error("[send_tenant_activation_email_task] ERROR [retry=%s/%s]: %s",
-                     self.request.retries, self.max_retries, str(ex), exc_info=True)
+        logger.error(
+            "[send_tenant_activation_email_task] ERROR [retry=%s/%s]: %s",
+            self.request.retries,
+            self.max_retries,
+            str(ex),
+            exc_info=True,
+        )
         if self.request.retries >= self.max_retries:
-            _registrar_dlq(task_id=self.request.id, task_name=self.name,
-                           args=[user_id, tenant_id], kwargs={}, exception=ex,
-                           schema_name=None, retries=self.request.retries)
+            _registrar_dlq(
+                task_id=self.request.id,
+                task_name=self.name,
+                args=[user_id, tenant_id],
+                kwargs={},
+                exception=ex,
+                schema_name=None,
+                retries=self.request.retries,
+            )
             return {"status": "failed_dlq", "user_id": user_id, "tenant_id": tenant_id}
-        raise self.retry(exc=ex)
+        raise self.retry(exc=ex) from ex
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60, queue="high_priority")
 def send_password_reset_code_email_task(self, user_id: int, tenant_id: int, code: str) -> dict:
     """Tarea Celery: envia email de reset de contrasena con codigo de 8 chars (v3.13.0)."""
-    logger.info("[send_password_reset_code_email_task] user_id=%s tenant_id=%s [retry=%s]", user_id, tenant_id, self.request.retries)
+    logger.info(
+        "[send_password_reset_code_email_task] user_id=%s tenant_id=%s [retry=%s]",
+        user_id,
+        tenant_id,
+        self.request.retries,
+    )
     connection.set_schema_to_public()
     try:
         from django.contrib.auth import get_user_model
-        from apps.public.tenants.models import Client
+
         from apps.public.core.services.email_service import EmailService
+        from apps.public.tenants.models import Client
+
         User = get_user_model()
         user = User.objects.get(pk=user_id)
         tenant = Client.objects.get(pk=tenant_id)
         sent = EmailService.send_password_reset_code_email_sync(user, tenant, code)
         if not sent:
-            raise RuntimeError(f"send_password_reset_code_email_sync retorno False para user={user.email}")
-        logger.info("[send_password_reset_code_email_task] OK: codigo enviado a %s | tenant=%s", user.email, tenant.schema_name)
+            raise RuntimeError(
+                f"send_password_reset_code_email_sync retorno False para user={user.email}"
+            )
+        logger.info(
+            "[send_password_reset_code_email_task] OK: codigo enviado a %s | tenant=%s",
+            user.email,
+            tenant.schema_name,
+        )
         return {"status": "sent", "user": user.email, "tenant": tenant.schema_name}
     except Exception as ex:
-        logger.error("[send_password_reset_code_email_task] ERROR [retry=%s/%s]: %s", self.request.retries, self.max_retries, str(ex), exc_info=True)
+        logger.error(
+            "[send_password_reset_code_email_task] ERROR [retry=%s/%s]: %s",
+            self.request.retries,
+            self.max_retries,
+            str(ex),
+            exc_info=True,
+        )
         if self.request.retries >= self.max_retries:
-            _registrar_dlq(task_id=self.request.id, task_name=self.name, args=[user_id, tenant_id, code], kwargs={}, exception=ex, schema_name=None, retries=self.request.retries)
+            _registrar_dlq(
+                task_id=self.request.id,
+                task_name=self.name,
+                args=[user_id, tenant_id, code],
+                kwargs={},
+                exception=ex,
+                schema_name=None,
+                retries=self.request.retries,
+            )
             return {"status": "failed_dlq", "user_id": user_id, "tenant_id": tenant_id}
-        raise self.retry(exc=ex)
+        raise self.retry(exc=ex) from ex
 
 
 @shared_task(
@@ -110,27 +161,51 @@ def send_invitation_code_email_task(self, user_id: int, tenant_id: int, code: st
     """Tarea Celery asincrona para enviar el email con codigo de activacion de 6 digitos."""
     logger.info(
         "[send_invitation_code_email_task] Iniciando: user_id=%s, tenant_id=%s [retry=%s]",
-        user_id, tenant_id, self.request.retries,
+        user_id,
+        tenant_id,
+        self.request.retries,
     )
     connection.set_schema_to_public()
     try:
         from django.contrib.auth import get_user_model
-        from apps.public.tenants.models import Client
+
         from apps.public.core.services.email_service import EmailService
+        from apps.public.tenants.models import Client
+
         User = get_user_model()
         user = User.objects.get(pk=user_id)
         tenant = Client.objects.get(pk=tenant_id)
         sent = EmailService.send_invitation_code_email_sync(user, tenant, code)
         if not sent:
-            raise RuntimeError(f"send_invitation_code_email_sync retorno False para user={user.email}")
-        logger.info("[send_invitation_code_email_task] OK: Codigo enviado a %s | tenant=%s", user.email, tenant.schema_name)
+            raise RuntimeError(
+                f"send_invitation_code_email_sync retorno False para user={user.email}"
+            )
+        logger.info(
+            "[send_invitation_code_email_task] OK: Codigo enviado a %s | tenant=%s",
+            user.email,
+            tenant.schema_name,
+        )
         return {"status": "sent", "user": user.email, "tenant": tenant.schema_name}
     except Exception as ex:
-        logger.error("[send_invitation_code_email_task] ERROR [retry=%s/%s]: %s", self.request.retries, self.max_retries, str(ex), exc_info=True)
+        logger.error(
+            "[send_invitation_code_email_task] ERROR [retry=%s/%s]: %s",
+            self.request.retries,
+            self.max_retries,
+            str(ex),
+            exc_info=True,
+        )
         if self.request.retries >= self.max_retries:
-            _registrar_dlq(task_id=self.request.id, task_name=self.name, args=[user_id, tenant_id, code], kwargs={}, exception=ex, schema_name=None, retries=self.request.retries)
+            _registrar_dlq(
+                task_id=self.request.id,
+                task_name=self.name,
+                args=[user_id, tenant_id, code],
+                kwargs={},
+                exception=ex,
+                schema_name=None,
+                retries=self.request.retries,
+            )
             return {"status": "failed_dlq", "user_id": user_id, "tenant_id": tenant_id}
-        raise self.retry(exc=ex)
+        raise self.retry(exc=ex) from ex
 
 
 @shared_task(
@@ -145,15 +220,18 @@ def send_invitation_email_task(self, user_id: int, tenant_id: int, activation_ur
     """
     logger.info(
         "[send_invitation_email_task] Iniciando: user_id=%s, tenant_id=%s [retry=%s]",
-        user_id, tenant_id, self.request.retries,
+        user_id,
+        tenant_id,
+        self.request.retries,
     )
 
     connection.set_schema_to_public()
 
     try:
         from django.contrib.auth import get_user_model
-        from apps.public.tenants.models import Client
+
         from apps.public.core.services.email_service import EmailService
+        from apps.public.tenants.models import Client
 
         User = get_user_model()
         user = User.objects.get(pk=user_id)
@@ -162,20 +240,22 @@ def send_invitation_email_task(self, user_id: int, tenant_id: int, activation_ur
         sent = EmailService.send_invitation_email_sync(user, tenant, activation_url)
 
         if not sent:
-            raise RuntimeError(
-                f"send_invitation_email_sync retorno False para user={user.email}"
-            )
+            raise RuntimeError(f"send_invitation_email_sync retorno False para user={user.email}")
 
         logger.info(
             "[send_invitation_email_task] OK: Email enviado a %s | tenant=%s",
-            user.email, tenant.schema_name,
+            user.email,
+            tenant.schema_name,
         )
         return {"status": "sent", "user": user.email, "tenant": tenant.schema_name}
 
     except Exception as ex:
         logger.error(
             "[send_invitation_email_task] ERROR [retry=%s/%s]: %s",
-            self.request.retries, self.max_retries, str(ex), exc_info=True,
+            self.request.retries,
+            self.max_retries,
+            str(ex),
+            exc_info=True,
         )
 
         if self.request.retries >= self.max_retries:
@@ -190,7 +270,7 @@ def send_invitation_email_task(self, user_id: int, tenant_id: int, activation_ur
             )
             return {"status": "failed_dlq", "user_id": user_id, "tenant_id": tenant_id}
 
-        raise self.retry(exc=ex)
+        raise self.retry(exc=ex) from ex
 
 
 @shared_task(
@@ -205,15 +285,18 @@ def send_password_reset_email_task(self, user_id: int, tenant_id: int, reset_url
     """
     logger.info(
         "[send_password_reset_email_task] Iniciando: user_id=%s, tenant_id=%s [retry=%s]",
-        user_id, tenant_id, self.request.retries,
+        user_id,
+        tenant_id,
+        self.request.retries,
     )
 
     connection.set_schema_to_public()
 
     try:
         from django.contrib.auth import get_user_model
-        from apps.public.tenants.models import Client
+
         from apps.public.core.services.email_service import EmailService
+        from apps.public.tenants.models import Client
 
         User = get_user_model()
         user = User.objects.get(pk=user_id)
@@ -228,14 +311,18 @@ def send_password_reset_email_task(self, user_id: int, tenant_id: int, reset_url
 
         logger.info(
             "[send_password_reset_email_task] OK: Email enviado a %s | tenant=%s",
-            user.email, tenant.schema_name,
+            user.email,
+            tenant.schema_name,
         )
         return {"status": "sent", "user": user.email, "tenant": tenant.schema_name}
 
     except Exception as ex:
         logger.error(
             "[send_password_reset_email_task] ERROR [retry=%s/%s]: %s",
-            self.request.retries, self.max_retries, str(ex), exc_info=True,
+            self.request.retries,
+            self.max_retries,
+            str(ex),
+            exc_info=True,
         )
 
         if self.request.retries >= self.max_retries:
@@ -250,4 +337,4 @@ def send_password_reset_email_task(self, user_id: int, tenant_id: int, reset_url
             )
             return {"status": "failed_dlq", "user_id": user_id, "tenant_id": tenant_id}
 
-        raise self.retry(exc=ex)
+        raise self.retry(exc=ex) from ex

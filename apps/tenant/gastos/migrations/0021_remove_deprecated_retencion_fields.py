@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("tenant_gastos", "0020_remove_documentosoporte_cuenta_gasto_uuid"),
     ]

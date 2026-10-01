@@ -1,6 +1,10 @@
 {# assets_compras.html - Carga de assets para modulo Compras #}
 {% load static %}
 
+{# DataTables 3.x (solo Ordenes de Compra -- Plantillas sigue en django-tables2/HTMX) #}
+{% include 'tenant/compras/assets_compras_datatables.html' %}
+<script src="{% static 'core/js/common/datatables.factory.js' %}"></script>
+
 <!-- Compras API -->
 <script src="{% static 'compras/js/compras.api.js' %}"></script>
 
@@ -10,3 +14,7 @@
 <!-- Feature Modules -->
 <script src="{% static 'compras/js/features/compras_list.js' %}"></script>
 <script src="{% static 'compras/js/features/compras_editor.js' %}"></script>
+
+<!-- Requisiciones de Compra (sub-tab dentro de workspace/#compras) -->
+<script src="{% static 'compras/js/features/requisiciones_list.js' %}"></script>
+<script src="{% static 'compras/js/features/requisiciones_editor.js' %}"></script>

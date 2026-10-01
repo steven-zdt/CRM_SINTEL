@@ -29,6 +29,7 @@ De paso cubre un segundo bug encontrado en la misma revision:
 apps/tenant/facturas/api/urls.py). Este test verifica la ruta REAL que
 ambos JS (venta_editor.js y ver_detalle_factura.js, ya corregido) deben usar.
 """
+
 from decimal import Decimal
 
 from rest_framework import status
@@ -44,32 +45,50 @@ class AutorrellenoNuevaVentaSmokeTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Autorrelleno", nit="900555111", direccion="Calle AR",
+            razon_social="Empresa Autorrelleno",
+            nit="900555111",
+            direccion="Calle AR",
         )
         TenantProfile.objects.get_or_create(
-            user=self.user, empresa=self.empresa,
+            user=self.user,
+            empresa=self.empresa,
             defaults={"rol": "ADMIN", "alcance": "EMPRESA", "cargo": "Admin"},
         )
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900860947", razon_social="Focus electronic security sistem S.A.S",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900860947",
+            razon_social="Focus electronic security sistem S.A.S",
             regimen_tributario="ORDINARIO",
         )
         self.factura = Factura.objects.create(
-            empresa=self.empresa, numero="FST 375", prefijo="FST", consecutivo=375,
-            fecha_emision="2026-06-20T10:18:00Z", fecha_vencimiento="2026-07-20",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
-            receptor_nit="900860947", receptor_razon_social="Focus electronic security sistem S.A.S",
+            empresa=self.empresa,
+            numero="FST 375",
+            prefijo="FST",
+            consecutivo=375,
+            fecha_emision="2026-06-20T10:18:00Z",
+            fecha_vencimiento="2026-07-20",
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
+            receptor_nit="900860947",
+            receptor_razon_social="Focus electronic security sistem S.A.S",
             cliente_uuid=self.cliente.uuid,
-            naturaleza=Factura.Naturaleza.VENTA, estado=Factura.Estado.ACEPTADA,
-            forma_pago="Credito", medio_pago_codigo="42",
+            naturaleza=Factura.Naturaleza.VENTA,
+            estado=Factura.Estado.ACEPTADA,
+            forma_pago="Credito",
+            medio_pago_codigo="42",
         )
         ItemFactura.objects.create(
-            empresa=self.empresa, factura=self.factura,
+            empresa=self.empresa,
+            factura=self.factura,
             descripcion="SERVICIO MANO OBRA INSTALACION PP241173",
-            cantidad=Decimal("1.00"), valor_unitario=Decimal("4319257.00"),
-            porcentaje_iva=Decimal("19.00"), valor_iva=Decimal("820658.83"),
-            subtotal=Decimal("4319257.00"), total=Decimal("5139915.83"),
+            cantidad=Decimal("1.00"),
+            valor_unitario=Decimal("4319257.00"),
+            porcentaje_iva=Decimal("19.00"),
+            valor_iva=Decimal("820658.83"),
+            subtotal=Decimal("4319257.00"),
+            total=Decimal("5139915.83"),
         )
 
     def test_smoke_detalle_factura_trae_los_campos_que_el_autorrelleno_necesita(self):
@@ -138,11 +157,16 @@ class AutorrellenoNuevaVentaSmokeTests(SintelTenantTestCase):
         este test confirma que el Cliente real es encontrable por ese NIT
         (mismo criterio que ClienteSelector.get_cliente_by_documento)."""
         factura_sin_cliente_uuid = Factura.objects.create(
-            empresa=self.empresa, numero="FST-SIN-UUID", consecutivo=376,
+            empresa=self.empresa,
+            numero="FST-SIN-UUID",
+            consecutivo=376,
             fecha_emision="2026-06-20T10:18:00Z",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
-            receptor_nit="900860947", receptor_razon_social="Focus electronic security sistem S.A.S",
-            naturaleza=Factura.Naturaleza.VENTA, estado=Factura.Estado.ACEPTADA,
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
+            receptor_nit="900860947",
+            receptor_razon_social="Focus electronic security sistem S.A.S",
+            naturaleza=Factura.Naturaleza.VENTA,
+            estado=Factura.Estado.ACEPTADA,
         )
         resp = self.api_client.get(f"/api/v1/facturas/{factura_sin_cliente_uuid.uuid}/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)

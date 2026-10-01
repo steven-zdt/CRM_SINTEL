@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("tenant_inventario", "0007_add_factura_vinculacion_movimiento"),
         (

@@ -5,10 +5,10 @@ Regla ZERO-COLLISION:
 - Los *_LIST_FIELDS y *_DETAIL_FIELDS NUNCA contienen strings con '__'.
 - Los campos de relaciones van en tuplas _*_TRAVERSALS separadas.
 """
+
 from django.db.models import Q
 
-from apps.tenant.ventas.models import ResolucionFacturacion, Venta, ItemVenta
-
+from apps.tenant.ventas.models import ResolucionFacturacion, Venta
 
 # ==============================================================================
 # CONSTANTES SSoT -- Campos directos de Venta (sin __ en nombres)
@@ -112,6 +112,7 @@ RESOLUCION_DETAIL_FIELDS = RESOLUCION_LIST_FIELDS
 # SELECTORES
 # ==============================================================================
 
+
 class VentaSelector:
     """Selectores read-only para el modelo Venta."""
 
@@ -169,9 +170,8 @@ class ResolucionFacturacionSelector:
     @staticmethod
     def get_list(empresa_id: int, vigente_only: bool = False):
         """QuerySet optimizado para listado."""
-        qs = (
-            ResolucionFacturacion.objects.filter(empresa_id=empresa_id)
-            .only(*RESOLUCION_LIST_FIELDS)
+        qs = ResolucionFacturacion.objects.filter(empresa_id=empresa_id).only(
+            *RESOLUCION_LIST_FIELDS
         )
         if vigente_only:
             qs = qs.filter(vigente=True)
@@ -180,9 +180,8 @@ class ResolucionFacturacionSelector:
     @staticmethod
     def get_detail(empresa_id: int, resolucion_uuid=None):
         """QuerySet para detalle de ResolucionFacturacion."""
-        qs = (
-            ResolucionFacturacion.objects.filter(empresa_id=empresa_id)
-            .only(*RESOLUCION_DETAIL_FIELDS)
+        qs = ResolucionFacturacion.objects.filter(empresa_id=empresa_id).only(
+            *RESOLUCION_DETAIL_FIELDS
         )
         if resolucion_uuid:
             return qs.filter(uuid=resolucion_uuid)
@@ -192,6 +191,7 @@ class ResolucionFacturacionSelector:
     def get_vigentes(empresa_id: int):
         """Solo las resoluciones activas y dentro de fecha para el selector del formulario."""
         import datetime
+
         hoy = datetime.date.today()
         return (
             ResolucionFacturacion.objects.filter(

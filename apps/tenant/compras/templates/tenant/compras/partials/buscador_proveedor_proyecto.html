@@ -1,0 +1,30 @@
+{# buscador_proveedor_proyecto.html - Fase 11 (PLAN_OPTIMIZACION_COMPRAS...) #}
+{# Compartido por offcanvas_crear_compras.html / offcanvas_editar_compras.html -- #}
+{# antes duplicado casi verbatim (solo cambiaban los valores precargados).  #}
+{# Variables opcionales: `proveedor` (instancia Proveedor), `proyecto`      #}
+{# (instancia Proyecto) -- se omiten al crear (sin seleccion previa).       #}
+<div class="col-md-6">
+    <label for="proveedor-buscar" class="form-label">Proveedor *</label>
+    <div class="position-relative">
+        <input type="text" class="form-control" id="proveedor-buscar"
+               {% if proveedor %}value="{{ proveedor.razon_social }} ({{ proveedor.numero_documento }})"{% endif %}
+               placeholder="Buscar por razón social o NIT..." autocomplete="off">
+        <input type="hidden" id="proveedor" name="proveedor" value="{% if proveedor %}{{ proveedor.uuid }}{% endif %}">
+        <div id="proveedor-resultados" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1055; max-height:220px; overflow-y:auto;"></div>
+    </div>
+</div>
+<div class="col-md-6">
+    <label for="proyecto-buscar" class="form-label">Proyecto (Opcional)</label>
+    <div class="position-relative">
+        <div class="input-group">
+            <input type="text" class="form-control" id="proyecto-buscar"
+                   {% if proyecto %}value="{{ proyecto.nombre }}"{% endif %}
+                   placeholder="Buscar proyecto..." autocomplete="off">
+            <button type="button" class="btn btn-outline-secondary" id="btn-limpiar-proyecto" title="Quitar proyecto">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <input type="hidden" id="proyecto" name="proyecto" value="{% if proyecto %}{{ proyecto.uuid }}{% endif %}">
+        <div id="proyecto-resultados" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1055; max-height:220px; overflow-y:auto;"></div>
+    </div>
+</div>

@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("empresa", "0009_sedes_areas_explicit_fk"),
         ("perfil", "0006_tenantprofile_uuid_departamento_and_more"),

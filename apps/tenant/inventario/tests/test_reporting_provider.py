@@ -5,6 +5,7 @@ real de escritura, no creacion directa de MovimientoInventario) -- una
 ENTRADA_COMPRA y una SALIDA_VENTA reales, verifica que el dataset
 `inventario.movimientos` agrega correctamente por tipo.
 """
+
 from decimal import Decimal
 
 from rest_framework.test import APIRequestFactory
@@ -25,20 +26,33 @@ class InventarioReportProviderTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Reporting Inventario", nit="900000934", direccion="Calle Kardex",
+            razon_social="Empresa Reporting Inventario",
+            nit="900000934",
+            direccion="Calle Kardex",
         )
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
         self.producto = Producto.objects.create(
-            empresa=self.empresa, codigo="RPT-INV-1", nombre="Producto Reporting Inventario", stock_actual=Decimal("0"),
+            empresa=self.empresa,
+            codigo="RPT-INV-1",
+            nombre="Producto Reporting Inventario",
+            stock_actual=Decimal("0"),
         )
 
         KardexService.registrar_movimiento(
-            empresa_id=self.empresa.id, producto_id=self.producto.id, tipo="ENTRADA_COMPRA",
-            cantidad=Decimal("10"), costo_unitario=Decimal("100.00"),
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
+            tipo="ENTRADA_COMPRA",
+            cantidad=Decimal("10"),
+            costo_unitario=Decimal("100.00"),
         )
         KardexService.registrar_movimiento(
-            empresa_id=self.empresa.id, producto_id=self.producto.id, tipo="SALIDA_VENTA",
-            cantidad=Decimal("3"), costo_unitario=Decimal("100.00"),
+            empresa_id=self.empresa.id,
+            producto_id=self.producto.id,
+            tipo="SALIDA_VENTA",
+            cantidad=Decimal("3"),
+            costo_unitario=Decimal("100.00"),
         )
 
     def _authenticated_request(self):
@@ -68,7 +82,9 @@ class InventarioReportProviderTests(SintelTenantTestCase):
 
     def test_filtro_por_tipo(self):
         request = self._authenticated_request()
-        report_request = ReportRequest(dataset_id="inventario.movimientos", filters={"tipo": "ENTRADA_COMPRA"})
+        report_request = ReportRequest(
+            dataset_id="inventario.movimientos", filters={"tipo": "ENTRADA_COMPRA"}
+        )
         result = ReportQueryEngine().execute(report_request, request)
         self.assertEqual(result.count, 1)
         self.assertEqual(result.rows[0]["cantidad"], 10.0)

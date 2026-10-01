@@ -1,4 +1,5 @@
 """Mixin de inyeccion de servicios para Perfil ViewSet."""
+
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.perfil.services.business_service import PerfilBusinessService
 from apps.tenant.perfil.services.crud_service import PerfilCRUDService
@@ -19,16 +20,16 @@ class PerfilServiceMixin:
     def get_qs_list(self):
         """Retorna queryset de lista usando selector."""
         empresa_id = self._resolve_empresa_id()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
+        search = self.request.query_params.get("search") if hasattr(self, "request") else None
         return self.selector_class.get_list(empresa_id, search=search)
 
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
         empresa_id = self._resolve_empresa_id()
-        pk = self.kwargs.get('pk')
+        pk = self.kwargs.get("pk")
         return self.selector_class.get_detail(pk, empresa_id)
 
     def _resolve_empresa_id(self):
         """Resuelve empresa_id del tenant activo."""
-        empresa = Empresa.objects.only('id').first()
+        empresa = Empresa.objects.only("id").first()
         return empresa.id if empresa else None

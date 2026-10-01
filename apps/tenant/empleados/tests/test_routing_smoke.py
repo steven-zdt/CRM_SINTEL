@@ -3,6 +3,7 @@ Smoke test: Verifica que el enrutado de devengos funciona después del include e
 
 Test no invasivo que verifica que el endpoint responde correctamente.
 """
+
 from decimal import Decimal
 
 import pytest
@@ -15,7 +16,7 @@ from apps.tenant.empleados.models import Devengo, Empleado
 def test_routing_devengos_list_after_include(client, admin_user, tenant):
     """
     Verifica que el endpoint /api/v1/empleados/devengos/ responde correctamente.
-    
+
     Este test requiere que:
     1. La app esté en TENANT_APPS
     2. El include esté en config/api_urls.py
@@ -29,8 +30,10 @@ def test_routing_devengos_list_after_include(client, admin_user, tenant):
 
     # Si el include en TENANT_URLCONF está OK, debe ser 200 (aunque no haya datos)
     # Nota: El host del tenant se simula automáticamente por django-tenants en tests
-    resp = client.get("/api/v1/empleados/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
-    
+    resp = client.get(
+        "/api/v1/empleados/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
+
     # 200 si el router está incluido y funciona, 403 si falta permisos, 404 si falta include
     assert resp.status_code in (200, 403), (
         f"Expected 200 or 403, got {resp.status_code}. "
@@ -45,6 +48,7 @@ def test_routing_devengos_list_with_data(client, admin_user, tenant):
     """
     with schema_context(tenant.schema_name):
         from apps.tenant.empresa.models import Empresa
+
         empresa = Empresa.objects.first()
         e = Empleado.objects.create(
             tipo_documento="CC",
@@ -56,11 +60,17 @@ def test_routing_devengos_list_with_data(client, admin_user, tenant):
             empresa=empresa,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
         from apps.tenant.empleados.models import Contrato
+
         c = Contrato.objects.create(
-            empresa=empresa, empleado=e, tipo="FIJO", fecha_inicio="2024-01-01", salario_mensual=Decimal("1000000.00"), cargo="Analista"
+            empresa=empresa,
+            empleado=e,
+            tipo="FIJO",
+            fecha_inicio="2024-01-01",
+            salario_mensual=Decimal("1000000.00"),
+            cargo="Analista",
         )
         Devengo.objects.create(
             empresa=empresa,
@@ -76,18 +86,22 @@ def test_routing_devengos_list_with_data(client, admin_user, tenant):
             pension_empleado=Decimal("40000.00"),
             prestamos=Decimal("0.00"),
             descuentos_operativos=Decimal("0.00"),
-            neto_pagar=Decimal("1070000.00")
+            neto_pagar=Decimal("1070000.00"),
         )
-    
+
     with schema_context(tenant.schema_name):
         client.force_login(admin_user)
 
-    resp = client.get("/api/v1/empleados/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+    resp = client.get(
+        "/api/v1/empleados/devengos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
 
     if resp.status_code == 200:
         data = resp.json()
         # Verificar estructura de respuesta
-        assert "results" in data or isinstance(data, list), "La respuesta debe tener formato paginado o lista"
+        assert "results" in data or isinstance(
+            data, list
+        ), "La respuesta debe tener formato paginado o lista"
         if "results" in data:
             assert len(data["results"]) > 0, "Debe haber al menos un devengo"
     elif resp.status_code == 403:
@@ -106,7 +120,6 @@ def test_routing_resoluciones_dian_render_offcanvas_crear(client, admin_user, te
         client.force_login(admin_user)
     resp = client.get(
         "/api/v1/empleados/resoluciones-dian/render-offcanvas/crear/",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
     assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-

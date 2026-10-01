@@ -13,6 +13,7 @@ fallos por prefijos no declarados (ej. sts:).
 # WARNING: SOPORTE AttachedDocument: Si el root es AttachedDocument, extrae el Invoice
 interno desde CDATA en //cac:Attachment//cbc:Description.
 """
+
 import logging
 import re
 from datetime import date, datetime, time
@@ -31,21 +32,22 @@ logger = logging.getLogger(__name__)
 
 # --- Pre-validación de Idempotencia (Vía Rápida) ---
 
+
 def fast_get_cufe(xml_bytes: bytes) -> str | None:
     """
     # WARNING: v2.61.2: Pre-validación de Idempotencia - Extrae CUFE/CUDE usando regex rápida.
-    
+
     Busca el CUFE/CUDE en el XML usando búsqueda de texto plano (regex) antes del parsing completo.
     Esto permite verificar idempotencia sin cargar todo el XML en memoria, ejecutándose en los primeros milisegundos.
-    
+
     Busca el contenido dentro de las etiquetas <cbc:UUID> o variantes con namespaces.
-    
+
     Args:
         xml_bytes: Bytes del XML a analizar
-        
+
     Returns:
         CUFE/CUDE encontrado o None si no se encuentra
-        
+
     Example:
         >>> xml = b'<Invoice><cbc:UUID>ABC123...</cbc:UUID></Invoice>'
         >>> fast_get_cufe(xml)
@@ -53,59 +55,64 @@ def fast_get_cufe(xml_bytes: bytes) -> str | None:
     """
     if not xml_bytes:
         return None
-    
+
     # Convertir a string si es necesario (solo para búsqueda, no parsing completo)
     try:
-        xml_str = xml_bytes.decode('utf-8', errors='ignore') if isinstance(xml_bytes, bytes) else str(xml_bytes)
+        xml_str = (
+            xml_bytes.decode("utf-8", errors="ignore")
+            if isinstance(xml_bytes, bytes)
+            else str(xml_bytes)
+        )
     except Exception as e:
         logger.debug(f"[fast_get_cufe] Error decodificando XML: {e}")
         return None
-    
+
     # # WARNING: v2.61.2: Regex para buscar CUFE/CUDE en el XML
     # Busca patrones como: <cbc:UUID>CUFE_AQUI</cbc:UUID> o <UUID>CUFE_AQUI</UUID>
     # También busca con local-name() y namespaces variados
     # Prioridad: buscar primero <cbc:UUID> (más común en UBL 2.1)
     patterns = [
         # Patrón más específico: <cbc:UUID> o <cac:UUID> con cualquier atributo
-        r'<[^>]*:UUID[^>]*>([A-Za-z0-9\-]{20,})</[^>]*:UUID[^>]*>',
+        r"<[^>]*:UUID[^>]*>([A-Za-z0-9\-]{20,})</[^>]*:UUID[^>]*>",
         # Patrón genérico: <UUID> sin namespace
-        r'<UUID[^>]*>([A-Za-z0-9\-]{20,})</UUID>',
+        r"<UUID[^>]*>([A-Za-z0-9\-]{20,})</UUID>",
         # Patrón flexible: cualquier etiqueta que contenga UUID
-        r'<[^>]*UUID[^>]*>([A-Za-z0-9\-]{20,})</[^>]*>',
+        r"<[^>]*UUID[^>]*>([A-Za-z0-9\-]{20,})</[^>]*>",
         # Patrón para CDATA o contenido con UUID
-        r'UUID[^>]*>([A-Za-z0-9\-]{50,})<',
+        r"UUID[^>]*>([A-Za-z0-9\-]{50,})<",
     ]
-    
+
     for pattern in patterns:
         match = re.search(pattern, xml_str, re.IGNORECASE | re.DOTALL)
         if match:
             cufe_cude = match.group(1).strip()
             # Validar que tenga formato razonable (al menos 20 caracteres alfanuméricos)
             # Los CUFE/CUDE típicamente tienen 50+ caracteres, pero aceptamos desde 20
-            if len(cufe_cude) >= 20 and re.match(r'^[A-Za-z0-9\-]+$', cufe_cude):
+            if len(cufe_cude) >= 20 and re.match(r"^[A-Za-z0-9\-]+$", cufe_cude):
                 logger.debug(f"[fast_get_cufe] CUFE encontrado: {cufe_cude[:20]}...")
                 return cufe_cude
-    
+
     logger.debug("[fast_get_cufe] No se encontró CUFE/CUDE en el XML")
     return None
 
 
 # --- Utilidades de parsing seguras (mantenidas para compatibilidad interna) ---
 
+
 def _parse_xml(xml_input: str | bytes) -> etree._Element:
     """
     Parser robusto: acepta bytes o str, detecta encoding desde declaración XML.
-    
+
     # WARNING: FORÉNSICA: Respeta encoding declarado en XML (<?xml version="1.0" encoding="...">).
     Si es str, lo convierte a bytes asumiendo UTF-8; si es bytes, lxml detecta encoding.
-    
+
     # WARNING: NOTA: Para archivos grandes (>2MB) con AttachedDocument, el parsing optimizado se hace
     en _extraer_invoice_desde_attached_document usando iterparse. Esta función se usa para
     el parsing inicial del root, que es necesario para detectar el tipo de documento.
-    
+
     Args:
         xml_input: XML como string o bytes
-        
+
     Returns:
         Elemento raíz del XML parseado
     """
@@ -148,52 +155,52 @@ def _ns(root: etree._Element) -> dict:
 def _x(root: etree._Element, expr: str):
     """
     Helper de XPath que siempre inyecta el nsmap del documento.
-    
+
     # WARNING: DEPRECATED: Usar apps.services.xml_parser.xpath() en su lugar.
     Mantenido para compatibilidad con código existente.
-    
+
     Raises:
         ValueError: Si hay error de evaluación XPath (mapeado desde etree.XPathEvalError)
     """
     try:
         return root.xpath(expr, namespaces=_ns(root))
     except etree.XPathEvalError as e:
-        raise ValueError(f"XPath no válido o namespaces inesperados: {e}")
+        raise ValueError(f"XPath no válido o namespaces inesperados: {e}") from e
 
 
 def _aware_issue_datetime(issue_date: str | None, issue_time: str | None) -> datetime | None:
     """
     Parsea fecha/hora de emisión con manejo timezone-aware.
-    
+
     # WARNING: TIMEZONE-AWARE: Retorna datetime con timezone si está disponible.
     # WARNING: VALIDATION: Lanza ValueError genérica si la fecha no es válida (el ViewSet la convertirá a 400 minimal).
-    
+
     Args:
         issue_date: String de fecha (ej: "2024-01-15")
         issue_time: String de hora opcional (ej: "14:30:00")
-        
+
     Returns:
         Objeto datetime timezone-aware
-        
+
     Raises:
         ValueError: Si la fecha/hora no es válida (mensaje genérico)
     """
     if not issue_date and not issue_time:
         return None
-    
+
     s = issue_date or ""
     if issue_time:
         s = f"{s}T{issue_time}" if "T" not in s else s
-    
+
     dt = parse_datetime(s)
-    
+
     # Fallback: formatos manuales si parse_datetime falla
     if dt is None:
         formatos = [
-            '%Y-%m-%dT%H:%M:%S',
-            '%Y-%m-%dT%H:%M:%S.%f',
-            '%Y-%m-%d %H:%M:%S',
-            '%Y-%m-%d',
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
         ]
         for formato in formatos:
             try:
@@ -201,29 +208,29 @@ def _aware_issue_datetime(issue_date: str | None, issue_time: str | None) -> dat
                 break
             except ValueError:
                 continue
-    
+
     if dt is None:
         # ValueError genérica; el ViewSet la convertirá a 400 minimal
         raise ValueError("issue_datetime_invalid")
-    
+
     # Asegurar timezone-aware
     if timezone.is_naive(dt):
         dt = timezone.make_aware(dt, timezone.get_current_timezone())
-    
+
     return dt
 
 
 def parsear_fecha_dian(fecha_str: str, hora_str: str | None = None) -> datetime | None:
     """
     Parsea una fecha en formato DIAN con manejo de timezone.
-    
+
     # WARNING: DEPRECATED: Usar _aware_issue_datetime() para mejor manejo de errores.
     Mantenido por compatibilidad.
-    
+
     Args:
         fecha_str: String de fecha en formato DIAN (ej: "2024-01-15")
         hora_str: String de hora opcional (ej: "14:30:00")
-        
+
     Returns:
         Objeto datetime timezone-aware o None si no se puede parsear
     """
@@ -236,7 +243,7 @@ def parsear_fecha_dian(fecha_str: str, hora_str: str | None = None) -> datetime 
 def parsear_fecha_simple(fecha_str: str) -> date | None:
     """Parsea una fecha simple (sin hora)."""
     try:
-        return datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        return datetime.strptime(fecha_str, "%Y-%m-%d").date()
     except ValueError:
         return None
 
@@ -244,24 +251,26 @@ def parsear_fecha_simple(fecha_str: str) -> date | None:
 def parsear_hora(hora_str: str) -> time | None:
     """Parsea una hora."""
     try:
-        return datetime.strptime(hora_str, '%H:%M:%S').time()
+        return datetime.strptime(hora_str, "%H:%M:%S").time()
     except ValueError:
         return None
 
 
-def extraer_texto(elemento: etree._Element, ruta: str, namespaces: dict = None, default: str = '') -> str:
+def extraer_texto(
+    elemento: etree._Element, ruta: str, namespaces: dict = None, default: str = ""
+) -> str:
     """
     Extrae texto de un elemento XML usando una ruta XPath simple (sin predicados/local-name()).
-    
-    # WARNING: LIMITACIÓN: .find() no soporta XPath completo. Para rutas con predicados, local-name(), 
+
+    # WARNING: LIMITACIÓN: .find() no soporta XPath completo. Para rutas con predicados, local-name(),
     o /text(), usa extraer_texto_xpath().
-    
+
     Args:
         elemento: Elemento raíz o elemento padre
         ruta: Ruta XPath relativa simple (sin predicados)
         namespaces: Diccionario de namespaces (opcional, si no se proporciona usa _ns())
         default: Valor por defecto si no se encuentra
-        
+
     Returns:
         Texto del elemento o default
     """
@@ -273,18 +282,20 @@ def extraer_texto(elemento: etree._Element, ruta: str, namespaces: dict = None, 
     return default
 
 
-def extraer_texto_xpath(elemento: etree._Element, expr: str, namespaces: dict = None, default: str = '') -> str:
+def extraer_texto_xpath(
+    elemento: etree._Element, expr: str, namespaces: dict = None, default: str = ""
+) -> str:
     """
     Extrae texto usando XPath completo (soporta local-name(), //, text(), predicados).
-    
+
     # WARNING: FORÉNSICA: Usa .xpath() en lugar de .find() para soportar XPath completo.
-    
+
     Args:
         elemento: Elemento raíz o elemento padre
         expr: Expresión XPath completa (puede incluir local-name(), predicados, /text())
         namespaces: Diccionario de namespaces (opcional, si no se proporciona usa _ns())
         default: Valor por defecto si no se encuentra
-        
+
     Returns:
         Texto del elemento o default
     """
@@ -297,25 +308,27 @@ def extraer_texto_xpath(elemento: etree._Element, expr: str, namespaces: dict = 
         v = nodos[0]
         if isinstance(v, str):
             return v.strip()
-        if hasattr(v, 'text') and v.text:
+        if hasattr(v, "text") and v.text:
             return v.text.strip()
         return default
     except etree.XPathEvalError:
         return default
 
 
-def extraer_decimal(elemento: etree._Element, ruta: str, namespaces: dict = None, default: Decimal = Decimal('0.00')) -> Decimal:
+def extraer_decimal(
+    elemento: etree._Element, ruta: str, namespaces: dict = None, default: Decimal = Decimal("0.00")
+) -> Decimal:
     """
     Extrae un valor decimal de un elemento XML usando ruta simple.
-    
+
     # WARNING: LIMITACIÓN: .find() no soporta XPath completo. Para rutas con predicados, usa extraer_decimal_xpath().
-    
+
     Args:
         elemento: Elemento raíz o elemento padre
         ruta: Ruta XPath relativa simple (sin predicados)
         namespaces: Diccionario de namespaces (opcional, si no se proporciona usa _ns())
         default: Valor por defecto si no se encuentra
-        
+
     Returns:
         Decimal o default
     """
@@ -330,22 +343,24 @@ def extraer_decimal(elemento: etree._Element, ruta: str, namespaces: dict = None
     return default
 
 
-def extraer_decimal_xpath(elemento: etree._Element, expr: str, namespaces: dict = None, default: Decimal = Decimal('0.00')) -> Decimal:
+def extraer_decimal_xpath(
+    elemento: etree._Element, expr: str, namespaces: dict = None, default: Decimal = Decimal("0.00")
+) -> Decimal:
     """
     Extrae un valor decimal usando XPath completo (soporta local-name(), //, predicados).
-    
+
     # WARNING: FORÉNSICA: Usa .xpath() en lugar de .find() para soportar XPath completo.
-    
+
     Args:
         elemento: Elemento raíz o elemento padre
         expr: Expresión XPath completa
         namespaces: Diccionario de namespaces (opcional, si no se proporciona usa _ns())
         default: Valor por defecto si no se encuentra
-        
+
     Returns:
         Decimal o default
     """
-    texto = extraer_texto_xpath(elemento, expr, namespaces, '')
+    texto = extraer_texto_xpath(elemento, expr, namespaces, "")
     if not texto:
         return default
     try:
@@ -354,10 +369,12 @@ def extraer_decimal_xpath(elemento: etree._Element, expr: str, namespaces: dict 
         return default
 
 
-def extraer_entero(elemento: etree._Element, ruta: str, namespaces: dict = None, default: int = 0) -> int:
+def extraer_entero(
+    elemento: etree._Element, ruta: str, namespaces: dict = None, default: int = 0
+) -> int:
     """
     Extrae un valor entero de un elemento XML usando ruta simple.
-    
+
     # WARNING: LIMITACIÓN: .find() no soporta XPath completo. Para rutas con predicados, usa extraer_entero_xpath().
     """
     if namespaces is None:
@@ -371,13 +388,15 @@ def extraer_entero(elemento: etree._Element, ruta: str, namespaces: dict = None,
     return default
 
 
-def extraer_entero_xpath(elemento: etree._Element, expr: str, namespaces: dict = None, default: int = 0) -> int:
+def extraer_entero_xpath(
+    elemento: etree._Element, expr: str, namespaces: dict = None, default: int = 0
+) -> int:
     """
     Extrae un valor entero usando XPath completo (soporta local-name(), //, predicados).
-    
+
     # WARNING: FORÉNSICA: Usa .xpath() en lugar de .find() para soportar XPath completo.
     """
-    texto = extraer_texto_xpath(elemento, expr, namespaces, '')
+    texto = extraer_texto_xpath(elemento, expr, namespaces, "")
     if not texto:
         return default
     try:
@@ -389,64 +408,66 @@ def extraer_entero_xpath(elemento: etree._Element, expr: str, namespaces: dict =
 def _limpiar_cdata_eficiente(texto: str) -> str:
     """
     # WARNING: v2.61.2: Limpia marcadores CDATA de forma eficiente usando regex y buffer de memoria.
-    
+
     Usa regex para limpiar CDATA markers de forma más eficiente que reemplazo manual de strings.
     Optimizado para manejar grandes bloques de texto sin cargar todo en memoria.
-    
+
     Args:
         texto: Texto que puede contener marcadores CDATA
-        
+
     Returns:
         Texto sin marcadores CDATA
     """
     if not texto:
         return texto
-    
+
     # # WARNING: v2.61.2: Regex optimizado para limpiar CDATA - más eficiente que reemplazo manual
     # Patrón: <![CDATA[contenido]]> → contenido
     # Usa non-greedy matching (.*?) para evitar capturar múltiples bloques CDATA
-    texto_limpio = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', texto, flags=re.DOTALL)
-    
+    texto_limpio = re.sub(r"<!\[CDATA\[(.*?)\]\]>", r"\1", texto, flags=re.DOTALL)
+
     return texto_limpio
 
 
-def _extraer_invoice_desde_attached_document(root: etree._Element, xml_bytes: bytes | None = None) -> etree._Element | None:
+def _extraer_invoice_desde_attached_document(
+    root: etree._Element, xml_bytes: bytes | None = None
+) -> etree._Element | None:
     """
     Si root es AttachedDocument, extrae el Invoice interno desde CDATA o ExternalReference.
-    
+
     # WARNING: v2.61.2: OPTIMIZACIÓN - Usa iterparse para archivos grandes (>2MB) para evitar cargar todo en memoria.
     # WARNING: FORÉNSICA: Busca Invoice en múltiples ubicaciones:
     - //cac:Attachment//cbc:Description (CDATA)
     - //cac:Attachment//cac:ExternalReference//cbc:Description (texto)
-    
+
     # WARNING: LIMPIEZA CDATA: Usa función optimizada _limpiar_cdata_eficiente() con buffer de memoria.
-    
+
     Args:
         root: Elemento raíz del XML (ya parseado)
         xml_bytes: Bytes originales del XML (opcional, para usar iterparse si es grande)
-    
+
     Returns:
         Elemento Invoice/CreditNote interno o None si no se encuentra
-        
+
     Raises:
         ValueError: Si es AttachedDocument pero no se encuentra Invoice/CreditNote embebido
     """
     from io import BytesIO
 
     from lxml.etree import QName
-    
+
     local = QName(root).localname.lower()
-    
+
     _SUPPORTED_DOC_TYPES = {"invoice", "creditnote", "debitnote"}
-    
+
     if local in _SUPPORTED_DOC_TYPES:
         return root
-    
+
     if local == "attacheddocument":
         # # WARNING: v2.61.2: OPTIMIZACIÓN - Usar iterparse para archivos grandes (>2MB)
         # Si tenemos xml_bytes y es grande, usar iterparse para evitar cargar todo en memoria
         use_iterparse = xml_bytes and len(xml_bytes) > 2_000_000  # 2MB
-        
+
         if use_iterparse:
             # Usar iterparse para archivos grandes - procesamiento por chunks
             try:
@@ -460,49 +481,70 @@ def _extraer_invoice_desde_attached_document(root: etree._Element, xml_bytes: by
                     load_dtd=False,
                     no_network=True,
                 )
-                context = etree.iterparse(BytesIO(xml_bytes), events=('end',), parser=parser)
-                
+                context = etree.iterparse(BytesIO(xml_bytes), events=("end",), parser=parser)
+
                 invoice_xml_content = None
                 buffer_size = 0
                 max_buffer_size = 10_000_000  # 10MB máximo para el buffer
-                
-                for event, elem in context:
+
+                for _event, elem in context:
                     # Buscar Description que contenga Invoice/CreditNote/DebitNote
-                    if elem.tag and 'Description' in elem.tag:
-                        if elem.text:
-                            text_content = elem.text.strip()
-                            buffer_size += len(text_content)
-                            
-                            # # WARNING: v2.61.2: Limpiar CDATA con función optimizada (buffer de memoria)
-                            text_content = _limpiar_cdata_eficiente(text_content)
-                            
-                            # Verificar si contiene Invoice/CreditNote/DebitNote
-                            if text_content and any(tag in text_content for tag in ('<Invoice', '<invoice', '<CreditNote', '<creditnote', '<DebitNote', '<debitnote')):
-                                invoice_xml_content = text_content
-                                break
-                            
-                            # Protección: evitar buffer excesivo
-                            if buffer_size > max_buffer_size:
-                                logger.warning(f"[_extraer_invoice_desde_attached_document] Buffer excedido ({buffer_size} bytes), deteniendo búsqueda")
-                                break
-                    
+                    if elem.tag and "Description" in elem.tag and elem.text:
+                        text_content = elem.text.strip()
+                        buffer_size += len(text_content)
+
+                        # # WARNING: v2.61.2: Limpiar CDATA con función optimizada (buffer de memoria)
+                        text_content = _limpiar_cdata_eficiente(text_content)
+
+                        # Verificar si contiene Invoice/CreditNote/DebitNote
+                        if text_content and any(
+                            tag in text_content
+                            for tag in (
+                                "<Invoice",
+                                "<invoice",
+                                "<CreditNote",
+                                "<creditnote",
+                                "<DebitNote",
+                                "<debitnote",
+                            )
+                        ):
+                            invoice_xml_content = text_content
+                            break
+
+                        # Protección: evitar buffer excesivo
+                        if buffer_size > max_buffer_size:
+                            logger.warning(
+                                f"[_extraer_invoice_desde_attached_document] Buffer excedido ({buffer_size} bytes), deteniendo búsqueda"
+                            )
+                            break
+
                     # # WARNING: v2.61.2: Limpiar elementos procesados para liberar memoria inmediatamente
                     elem.clear()
                     while elem.getprevious() is not None:
                         del elem.getparent()[0]
-                
+
                 if invoice_xml_content:
                     try:
-                        invoice_root = _parse_xml(invoice_xml_content.encode("utf-8", errors="ignore") if isinstance(invoice_xml_content, str) else invoice_xml_content)
+                        invoice_root = _parse_xml(
+                            invoice_xml_content.encode("utf-8", errors="ignore")
+                            if isinstance(invoice_xml_content, str)
+                            else invoice_xml_content
+                        )
                         if QName(invoice_root).localname.lower() in _SUPPORTED_DOC_TYPES:
-                            logger.debug(f"[_extraer_invoice_desde_attached_document] Documento extraído exitosamente usando iterparse (tamaño: {len(invoice_xml_content)})")
+                            logger.debug(
+                                f"[_extraer_invoice_desde_attached_document] Documento extraído exitosamente usando iterparse (tamaño: {len(invoice_xml_content)})"
+                            )
                             return invoice_root
                     except Exception as e:
-                        logger.warning(f"[_extraer_invoice_desde_attached_document] Error parseando documento extraído: {e}")
+                        logger.warning(
+                            f"[_extraer_invoice_desde_attached_document] Error parseando documento extraído: {e}"
+                        )
             except Exception as e:
                 # Si iterparse falla, continuar con método normal
-                logger.warning(f"[_extraer_invoice_desde_attached_document] Error con iterparse, usando método normal: {e}")
-        
+                logger.warning(
+                    f"[_extraer_invoice_desde_attached_document] Error con iterparse, usando método normal: {e}"
+                )
+
         # Método normal (para archivos pequeños o fallback)
         # Buscar en múltiples ubicaciones
         # 1. //cac:Attachment//cbc:Description (CDATA o texto)
@@ -516,14 +558,20 @@ def _extraer_invoice_desde_attached_document(root: etree._Element, xml_bytes: by
                     invoice_xml = _limpiar_cdata_eficiente(invoice_xml)
                     if invoice_xml:
                         try:
-                            invoice_root = _parse_xml(invoice_xml.encode("utf-8", errors="ignore") if isinstance(invoice_xml, str) else invoice_xml)
+                            invoice_root = _parse_xml(
+                                invoice_xml.encode("utf-8", errors="ignore")
+                                if isinstance(invoice_xml, str)
+                                else invoice_xml
+                            )
                             if QName(invoice_root).localname.lower() in _SUPPORTED_DOC_TYPES:
                                 return invoice_root
                         except Exception:
                             continue
-            
+
             # 2. //cac:ExternalReference//cbc:Description (alternativa)
-            external_ref_nodes = xpath(attachment, ".//*[local-name()='ExternalReference']", ns=_ns(root))
+            external_ref_nodes = xpath(
+                attachment, ".//*[local-name()='ExternalReference']", ns=_ns(root)
+            )
             for ext_ref in external_ref_nodes:
                 desc_nodes = xpath(ext_ref, ".//*[local-name()='Description']", ns=_ns(root))
                 for desc in desc_nodes:
@@ -532,15 +580,21 @@ def _extraer_invoice_desde_attached_document(root: etree._Element, xml_bytes: by
                         invoice_xml = _limpiar_cdata_eficiente(invoice_xml)
                         if invoice_xml:
                             try:
-                                invoice_root = _parse_xml(invoice_xml.encode("utf-8", errors="ignore") if isinstance(invoice_xml, str) else invoice_xml)
+                                invoice_root = _parse_xml(
+                                    invoice_xml.encode("utf-8", errors="ignore")
+                                    if isinstance(invoice_xml, str)
+                                    else invoice_xml
+                                )
                                 if QName(invoice_root).localname.lower() in _SUPPORTED_DOC_TYPES:
                                     return invoice_root
                             except Exception:
                                 continue
-        
+
         # Si llegamos aquí, es AttachedDocument pero no se encontró documento soportado
-        raise ValueError("AttachedDocument: no se encontró Invoice/CreditNote/DebitNote embebido en cbc:Description")
-    
+        raise ValueError(
+            "AttachedDocument: no se encontró Invoice/CreditNote/DebitNote embebido en cbc:Description"
+        )
+
     # Si no es Invoice/CreditNote/DebitNote ni AttachedDocument, retornar None (el caller manejará)
     return None
 
@@ -548,40 +602,40 @@ def _extraer_invoice_desde_attached_document(root: etree._Element, xml_bytes: by
 def _parsear_prefijo_consecutivo(numero: str) -> tuple[str, int]:
     """
     Parsea prefijo y consecutivo desde número de factura.
-    
+
     Ejemplos:
     - "FST354" -> ("FST", 354)
     - "FV-001" -> ("FV", 1)
     - "FE-10020298" -> ("FE", 10020298)
     - "123" -> ("", 123)
     - "ABC" -> ("", 0)
-    
+
     Args:
         numero: Número de factura (ej. "FST354", "FV-001")
-        
+
     Returns:
         Tupla (prefijo, consecutivo)
     """
     if not numero:
-        return ('', 0)
-    
+        return ("", 0)
+
     numero_clean = numero.strip().upper()
-    
+
     # Regex: ^([A-Z]+)[\s\-]?(\d+)$ - soporta guiones y espacios
-    match = re.match(r'^([A-Z]+)[\s\-]?(\d+)$', numero_clean)
+    match = re.match(r"^([A-Z]+)[\s\-]?(\d+)$", numero_clean)
     if match:
         prefijo = match.group(1)
         consecutivo = int(match.group(2))
         return (prefijo, consecutivo)
-    
+
     # Si no coincide, intentar extraer número al final
-    match = re.search(r'(\d+)$', numero_clean)
+    match = re.search(r"(\d+)$", numero_clean)
     if match:
         consecutivo = int(match.group(1))
-        return ('', consecutivo)
-    
+        return ("", consecutivo)
+
     # Si no hay número, retornar 0
-    return ('', 0)
+    return ("", 0)
 
 
 def importar_factura_desde_ubl(xml_text: str, empresa_id=None, persist: bool = True):
@@ -613,76 +667,98 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None, persist: bool = T
     # Importar aquí para evitar problemas de carga circular
     from apps.tenant.facturas.models import Factura
     from apps.tenant.facturas.services.crud_service import FacturaCRUDService
-    
+
     try:
         # Parsear XML con parser robusto
         root = _parse_xml(xml_text)
-        
+
         # # WARNING: v2.61.2: Convertir xml_text a bytes para optimización con iterparse
-        xml_bytes_for_parser = xml_text.encode("utf-8") if isinstance(xml_text, str) else xml_text if isinstance(xml_text, bytes) else None
-        
+        xml_bytes_for_parser = (
+            xml_text.encode("utf-8")
+            if isinstance(xml_text, str)
+            else xml_text
+            if isinstance(xml_text, bytes)
+            else None
+        )
+
         # Detectar si es AttachedDocument y extraer Invoice interno
         try:
-            invoice_root = _extraer_invoice_desde_attached_document(root, xml_bytes=xml_bytes_for_parser)
+            invoice_root = _extraer_invoice_desde_attached_document(
+                root, xml_bytes=xml_bytes_for_parser
+            )
         except ValueError as e:
             # Re-lanzar ValueError con mensaje claro para logging forense
-            raise ValueError(str(e))
-        
+            raise ValueError(str(e)) from e
+
         if invoice_root is None:
             from lxml.etree import QName
+
             local = QName(root).localname.lower()
             if local in {"invoice", "creditnote", "debitnote"}:
                 invoice_root = root
             else:
-                raise ValueError(f"Documento no soportado: se espera Invoice, CreditNote, DebitNote o AttachedDocument, se encontró {local}")
-        
+                raise ValueError(
+                    f"Documento no soportado: se espera Invoice, CreditNote, DebitNote o AttachedDocument, se encontró {local}"
+                )
+
         # Obtener namespaces dinámicos del documento Invoice
         namespaces = _ns(invoice_root)
-        
+
         # Extraer información básica desde invoice_root
         # Número de factura: invoice_root/*[local-name()='ID']/text()
-        numero_nodes = _x(invoice_root, ".//*[local-name()='ID'][parent::*[local-name()='Invoice']]/text()")
+        numero_nodes = _x(
+            invoice_root, ".//*[local-name()='ID'][parent::*[local-name()='Invoice']]/text()"
+        )
         if not numero_nodes:
             # Fallback: buscar cualquier ID en el Invoice
             numero_nodes = _x(invoice_root, ".//*[local-name()='ID']/text()")
         numero_factura = numero_nodes[0].strip() if numero_nodes else None
         if not numero_factura:
             # Fallback: intentar con namespace explícito
-            numero_factura = extraer_texto(invoice_root, './/cbc:ID', namespaces, '')
+            numero_factura = extraer_texto(invoice_root, ".//cbc:ID", namespaces, "")
         if not numero_factura:
             raise ValueError("No se encontró número de factura en el XML")
-        
+
         # Parsear prefijo y consecutivo
         prefijo, consecutivo = _parsear_prefijo_consecutivo(numero_factura)
-        
+
         # Alternativa DIAN: sts:AuthorizedInvoices/sts:Prefix cuando exista
         if not prefijo:
-            prefix_nodes = _x(invoice_root, "//*[local-name()='AuthorizedInvoices']//*[local-name()='Prefix']/text()")
+            prefix_nodes = _x(
+                invoice_root,
+                "//*[local-name()='AuthorizedInvoices']//*[local-name()='Prefix']/text()",
+            )
             if prefix_nodes:
                 prefijo = prefix_nodes[0].strip()
-        
-        fecha_emision_str = extraer_texto(invoice_root, './/cbc:IssueDate', namespaces, '')
-        hora_emision_str = extraer_texto(invoice_root, './/cbc:IssueTime', namespaces, '')
+
+        fecha_emision_str = extraer_texto(invoice_root, ".//cbc:IssueDate", namespaces, "")
+        hora_emision_str = extraer_texto(invoice_root, ".//cbc:IssueTime", namespaces, "")
         try:
-            fecha_emision = _aware_issue_datetime(fecha_emision_str, hora_emision_str) or timezone.now()
+            fecha_emision = (
+                _aware_issue_datetime(fecha_emision_str, hora_emision_str) or timezone.now()
+            )
         except ValueError:
-            raise ValueError("issue_datetime_invalid")
-        
+            raise ValueError("issue_datetime_invalid") from None
+
         # CUFE (Código Único de Facturación Electrónica): invoice_root/*[local-name()='UUID']/text()
         # NO va en numero, va en cufe
         cufe_nodes = _x(invoice_root, ".//*[local-name()='UUID']/text()")
-        cufe = cufe_nodes[0].strip() if cufe_nodes else ''
+        cufe = cufe_nodes[0].strip() if cufe_nodes else ""
         if not cufe:
             # Fallback: intentar con namespace explícito
-            cufe = extraer_texto(invoice_root, './/cbc:UUID', namespaces, '')
-        
+            cufe = extraer_texto(invoice_root, ".//cbc:UUID", namespaces, "")
+
         # UBL Version y metadatos
-        ubl_version = extraer_texto(invoice_root, './/cbc:UBLVersionID', namespaces, '')
-        customization_id = extraer_texto(invoice_root, './/cbc:CustomizationID', namespaces, '')
-        profile_id = extraer_texto(invoice_root, './/cbc:ProfileID', namespaces, '')
-        profile_execution_id = extraer_texto(invoice_root, './/cbc:ProfileExecutionID', namespaces, '')
-        invoice_type_code = extraer_texto(invoice_root, './/cac:InvoiceTypeCode//cbc:ID', namespaces, '')
-        
+        ubl_version = extraer_texto(invoice_root, ".//cbc:UBLVersionID", namespaces, "")
+        customization_id = extraer_texto(invoice_root, ".//cbc:CustomizationID", namespaces, "")
+        profile_id = extraer_texto(invoice_root, ".//cbc:ProfileID", namespaces, "")
+        profile_execution_id = extraer_texto(
+            invoice_root, ".//cbc:ProfileExecutionID", namespaces, ""
+        )
+        invoice_type_code = extraer_texto(
+            invoice_root, ".//cac:InvoiceTypeCode//cbc:ID", namespaces, ""
+        )
+
         # Emisor (snapshot SSoT): evita prefijos rígidos, usa local-name()
         # # WARNING: v2.60: CRÍTICO - Extracción correcta del NIT del emisor es esencial para determinar naturaleza
         emisor_nit = None
@@ -694,254 +770,510 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None, persist: bool = T
             emisor_nit = emisor_nodes[0].strip()
         if not emisor_nit:
             # Fallback: intentar con namespace explícito
-            emisor_nit = extraer_texto(invoice_root, './/cac:AccountingSupplierParty//cac:Party//cac:PartyTaxScheme//cbc:CompanyID', namespaces, '')
-        
+            emisor_nit = extraer_texto(
+                invoice_root,
+                ".//cac:AccountingSupplierParty//cac:Party//cac:PartyTaxScheme//cbc:CompanyID",
+                namespaces,
+                "",
+            )
+
         # # WARNING: v2.60: Validar que el NIT del emisor se extrajo correctamente
         # Si no se puede extraer, la factura no puede determinar su naturaleza automáticamente
         if not emisor_nit or not emisor_nit.strip():
-            logger.warning("[ubl_parser] # WARNING: NIT del emisor no encontrado en XML - La naturaleza no se podrá determinar automáticamente")
-        emisor_razon_social = extraer_texto(invoice_root, './/cac:AccountingSupplierParty//cac:Party//cac:PartyLegalEntity//cbc:RegistrationName', namespaces, '')
-        emisor_direccion = extraer_texto(invoice_root, './/cac:AccountingSupplierParty//cac:Party//cac:PostalAddress//cbc:StreetName', namespaces, '')
-        emisor_email = extraer_texto(invoice_root, './/cac:AccountingSupplierParty//cac:Party//cac:Contact//cbc:ElectronicMail', namespaces, '')
-        emisor_telefono = extraer_texto(invoice_root, './/cac:AccountingSupplierParty//cac:Party//cac:Contact//cbc:Telephone', namespaces, '')
-        emisor_actividad_ciiu = extraer_texto(invoice_root, './/cac:AccountingSupplierParty//cac:Party//cac:PartyLegalEntity//cac:RegistrationAddress//cbc:CityName', namespaces, '')
-        
+            logger.warning(
+                "[ubl_parser] # WARNING: NIT del emisor no encontrado en XML - La naturaleza no se podrá determinar automáticamente"
+            )
+        emisor_razon_social = extraer_texto(
+            invoice_root,
+            ".//cac:AccountingSupplierParty//cac:Party//cac:PartyLegalEntity//cbc:RegistrationName",
+            namespaces,
+            "",
+        )
+        emisor_direccion = extraer_texto(
+            invoice_root,
+            ".//cac:AccountingSupplierParty//cac:Party//cac:PostalAddress//cbc:StreetName",
+            namespaces,
+            "",
+        )
+        emisor_email = extraer_texto(
+            invoice_root,
+            ".//cac:AccountingSupplierParty//cac:Party//cac:Contact//cbc:ElectronicMail",
+            namespaces,
+            "",
+        )
+        emisor_telefono = extraer_texto(
+            invoice_root,
+            ".//cac:AccountingSupplierParty//cac:Party//cac:Contact//cbc:Telephone",
+            namespaces,
+            "",
+        )
+        emisor_actividad_ciiu = extraer_texto(
+            invoice_root,
+            ".//cac:AccountingSupplierParty//cac:Party//cac:PartyLegalEntity//cac:RegistrationAddress//cbc:CityName",
+            namespaces,
+            "",
+        )
+
         # Receptor
-        receptor_nit = extraer_texto(invoice_root, './/cac:AccountingCustomerParty//cac:Party//cac:PartyTaxScheme//cbc:CompanyID', namespaces, '')
-        receptor_razon_social = extraer_texto(invoice_root, './/cac:AccountingCustomerParty//cac:Party//cac:PartyLegalEntity//cbc:RegistrationName', namespaces, '')
-        receptor_direccion = extraer_texto(invoice_root, './/cac:AccountingCustomerParty//cac:Party//cac:PostalAddress//cbc:StreetName', namespaces, '')
-        receptor_email = extraer_texto(invoice_root, './/cac:AccountingCustomerParty//cac:Party//cac:Contact//cbc:ElectronicMail', namespaces, '')
-        receptor_telefono = extraer_texto(invoice_root, './/cac:AccountingCustomerParty//cac:Party//cac:Contact//cbc:Telephone', namespaces, '')
-        
+        receptor_nit = extraer_texto(
+            invoice_root,
+            ".//cac:AccountingCustomerParty//cac:Party//cac:PartyTaxScheme//cbc:CompanyID",
+            namespaces,
+            "",
+        )
+        receptor_razon_social = extraer_texto(
+            invoice_root,
+            ".//cac:AccountingCustomerParty//cac:Party//cac:PartyLegalEntity//cbc:RegistrationName",
+            namespaces,
+            "",
+        )
+        receptor_direccion = extraer_texto(
+            invoice_root,
+            ".//cac:AccountingCustomerParty//cac:Party//cac:PostalAddress//cbc:StreetName",
+            namespaces,
+            "",
+        )
+        receptor_email = extraer_texto(
+            invoice_root,
+            ".//cac:AccountingCustomerParty//cac:Party//cac:Contact//cbc:ElectronicMail",
+            namespaces,
+            "",
+        )
+        receptor_telefono = extraer_texto(
+            invoice_root,
+            ".//cac:AccountingCustomerParty//cac:Party//cac:Contact//cbc:Telephone",
+            namespaces,
+            "",
+        )
+
         # Totales
-        subtotal = extraer_decimal(invoice_root, './/cac:LegalMonetaryTotal//cbc:TaxExclusiveAmount', namespaces)
-        total_impuestos = extraer_decimal(invoice_root, './/cac:LegalMonetaryTotal//cbc:TaxInclusiveAmount', namespaces)
+        subtotal = extraer_decimal(
+            invoice_root, ".//cac:LegalMonetaryTotal//cbc:TaxExclusiveAmount", namespaces
+        )
+        total_impuestos = extraer_decimal(
+            invoice_root, ".//cac:LegalMonetaryTotal//cbc:TaxInclusiveAmount", namespaces
+        )
         impuestos = total_impuestos - subtotal
-        total = extraer_decimal(invoice_root, './/cac:LegalMonetaryTotal//cbc:PayableAmount', namespaces)
-        
+        total = extraer_decimal(
+            invoice_root, ".//cac:LegalMonetaryTotal//cbc:PayableAmount", namespaces
+        )
+
         # Moneda
-        moneda = extraer_texto(invoice_root, './/cbc:DocumentCurrencyCode', namespaces, 'COP')
-        
+        moneda = extraer_texto(invoice_root, ".//cbc:DocumentCurrencyCode", namespaces, "COP")
+
         # Retenciones (v2.62.0)
-        retefuente = Decimal('0.00')
-        reteiva = Decimal('0.00')
-        reteica = Decimal('0.00')
-        
+        retefuente = Decimal("0.00")
+        reteiva = Decimal("0.00")
+        reteica = Decimal("0.00")
+
         # Las retenciones suelen venir en cac:WithholdingTaxTotal
         withholding_nodes = _x(invoice_root, ".//*[local-name()='WithholdingTaxTotal']")
         for w_tax in withholding_nodes:
             subtotal_nodes = _x(w_tax, ".//*[local-name()='TaxSubtotal']")
             for sub_node in subtotal_nodes:
-                scheme_id = extraer_texto(sub_node, ".//*[local-name()='TaxScheme']//*[local-name()='ID']", namespaces)
+                scheme_id = extraer_texto(
+                    sub_node, ".//*[local-name()='TaxScheme']//*[local-name()='ID']", namespaces
+                )
                 valor = extraer_decimal(sub_node, ".//*[local-name()='TaxAmount']", namespaces)
-                if scheme_id == '05': # Retefuente
+                if scheme_id == "05":  # Retefuente
                     retefuente += valor
-                elif scheme_id == '06': # ReteIVA
+                elif scheme_id == "06":  # ReteIVA
                     reteiva += valor
-                elif scheme_id == '07': # ReteICA
+                elif scheme_id == "07":  # ReteICA
                     reteica += valor
-        
+
         # Formas de pago
-        forma_pago = extraer_texto(invoice_root, './/cac:PaymentMeans//cbc:PaymentMeansCode', namespaces, '')
-        medio_pago_codigo = extraer_texto(invoice_root, './/cac:PaymentMeans//cac:PaymentID//cbc:ID', namespaces, '')
-        payment_due_date_str = extraer_texto(invoice_root, './/cac:PaymentTerms//cbc:PaymentDueDate', namespaces, '')
-        payment_due_date = parsear_fecha_simple(payment_due_date_str) if payment_due_date_str else None
-        
+        forma_pago = extraer_texto(
+            invoice_root, ".//cac:PaymentMeans//cbc:PaymentMeansCode", namespaces, ""
+        )
+        medio_pago_codigo = extraer_texto(
+            invoice_root, ".//cac:PaymentMeans//cac:PaymentID//cbc:ID", namespaces, ""
+        )
+        payment_due_date_str = extraer_texto(
+            invoice_root, ".//cac:PaymentTerms//cbc:PaymentDueDate", namespaces, ""
+        )
+        payment_due_date = (
+            parsear_fecha_simple(payment_due_date_str) if payment_due_date_str else None
+        )
+
         # Fecha de vencimiento
-        fecha_vencimiento_str = extraer_texto(invoice_root, './/cbc:DueDate', namespaces, '')
-        fecha_vencimiento = parsear_fecha_simple(fecha_vencimiento_str) if fecha_vencimiento_str else None
-        
+        fecha_vencimiento_str = extraer_texto(invoice_root, ".//cbc:DueDate", namespaces, "")
+        fecha_vencimiento = (
+            parsear_fecha_simple(fecha_vencimiento_str) if fecha_vencimiento_str else None
+        )
+
         # Autorización DIAN: usar local-name() para evitar fallos por prefijo sts: no declarado
         # Firma (si existe); NO usar 'sts:' en XPath: algunos proveedores no lo declaran
-        hay_firma = bool(_x(invoice_root, ".//*[local-name()='Signature']"))
-        
-        autorizacion_numero_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceControl']//*[local-name()='AuthorizationNumber']/text()")
-        autorizacion_numero = autorizacion_numero_nodes[0].strip() if autorizacion_numero_nodes else ''
-        if not autorizacion_numero:
-            # Fallback: intentar con namespace explícito si sts está disponible
-            if 'sts' in namespaces:
-                autorizacion_numero = extraer_texto(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceControl//sts:AuthorizationNumber', namespaces, '')
-        
-        autorizacion_prefijo_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceSource']//*[local-name()='IdentificationCode']/text()")
-        autorizacion_prefijo = autorizacion_prefijo_nodes[0].strip() if autorizacion_prefijo_nodes else ''
-        if not autorizacion_prefijo and 'sts' in namespaces:
-            autorizacion_prefijo = extraer_texto(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceSource//sts:IdentificationCode', namespaces, '')
-        
-        autorizacion_rango_desde_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceSource']//*[local-name()='NumericalRange']//*[local-name()='From']/text()")
-        autorizacion_rango_desde = int(autorizacion_rango_desde_nodes[0].strip()) if autorizacion_rango_desde_nodes else 0
-        if autorizacion_rango_desde == 0 and 'sts' in namespaces:
-            autorizacion_rango_desde = extraer_entero(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceSource//sts:NumericalRange//sts:From', namespaces, 0)
-        
-        autorizacion_rango_hasta_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceSource']//*[local-name()='NumericalRange']//*[local-name()='To']/text()")
-        autorizacion_rango_hasta = int(autorizacion_rango_hasta_nodes[0].strip()) if autorizacion_rango_hasta_nodes else 0
-        if autorizacion_rango_hasta == 0 and 'sts' in namespaces:
-            autorizacion_rango_hasta = extraer_entero(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceSource//sts:NumericalRange//sts:To', namespaces, 0)
-        
-        autorizacion_vigencia_inicio_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceSource']//*[local-name()='ValidityPeriod']//*[local-name()='StartDate']/text()")
-        autorizacion_vigencia_inicio_str = autorizacion_vigencia_inicio_nodes[0].strip() if autorizacion_vigencia_inicio_nodes else ''
-        if not autorizacion_vigencia_inicio_str and 'sts' in namespaces:
-            autorizacion_vigencia_inicio_str = extraer_texto(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceSource//sts:ValidityPeriod//cbc:StartDate', namespaces, '')
-        
-        autorizacion_vigencia_fin_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceSource']//*[local-name()='ValidityPeriod']//*[local-name()='EndDate']/text()")
-        autorizacion_vigencia_fin_str = autorizacion_vigencia_fin_nodes[0].strip() if autorizacion_vigencia_fin_nodes else ''
-        if not autorizacion_vigencia_fin_str and 'sts' in namespaces:
-            autorizacion_vigencia_fin_str = extraer_texto(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceSource//sts:ValidityPeriod//cbc:EndDate', namespaces, '')
-        autorizacion_vigencia_inicio = parsear_fecha_simple(autorizacion_vigencia_inicio_str) if autorizacion_vigencia_inicio_str else None
-        autorizacion_vigencia_fin = parsear_fecha_simple(autorizacion_vigencia_fin_str) if autorizacion_vigencia_fin_str else None
-        
+        bool(_x(invoice_root, ".//*[local-name()='Signature']"))
+
+        autorizacion_numero_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceControl']//*[local-name()='AuthorizationNumber']/text()",
+        )
+        autorizacion_numero = (
+            autorizacion_numero_nodes[0].strip() if autorizacion_numero_nodes else ""
+        )
+        # Fallback: intentar con namespace explícito si sts está disponible
+        if not autorizacion_numero and "sts" in namespaces:
+            autorizacion_numero = extraer_texto(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceControl//sts:AuthorizationNumber",
+                namespaces,
+                "",
+            )
+
+        autorizacion_prefijo_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceSource']//*[local-name()='IdentificationCode']/text()",
+        )
+        autorizacion_prefijo = (
+            autorizacion_prefijo_nodes[0].strip() if autorizacion_prefijo_nodes else ""
+        )
+        if not autorizacion_prefijo and "sts" in namespaces:
+            autorizacion_prefijo = extraer_texto(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceSource//sts:IdentificationCode",
+                namespaces,
+                "",
+            )
+
+        autorizacion_rango_desde_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceSource']//*[local-name()='NumericalRange']//*[local-name()='From']/text()",
+        )
+        autorizacion_rango_desde = (
+            int(autorizacion_rango_desde_nodes[0].strip()) if autorizacion_rango_desde_nodes else 0
+        )
+        if autorizacion_rango_desde == 0 and "sts" in namespaces:
+            autorizacion_rango_desde = extraer_entero(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceSource//sts:NumericalRange//sts:From",
+                namespaces,
+                0,
+            )
+
+        autorizacion_rango_hasta_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceSource']//*[local-name()='NumericalRange']//*[local-name()='To']/text()",
+        )
+        autorizacion_rango_hasta = (
+            int(autorizacion_rango_hasta_nodes[0].strip()) if autorizacion_rango_hasta_nodes else 0
+        )
+        if autorizacion_rango_hasta == 0 and "sts" in namespaces:
+            autorizacion_rango_hasta = extraer_entero(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceSource//sts:NumericalRange//sts:To",
+                namespaces,
+                0,
+            )
+
+        autorizacion_vigencia_inicio_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceSource']//*[local-name()='ValidityPeriod']//*[local-name()='StartDate']/text()",
+        )
+        autorizacion_vigencia_inicio_str = (
+            autorizacion_vigencia_inicio_nodes[0].strip()
+            if autorizacion_vigencia_inicio_nodes
+            else ""
+        )
+        if not autorizacion_vigencia_inicio_str and "sts" in namespaces:
+            autorizacion_vigencia_inicio_str = extraer_texto(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceSource//sts:ValidityPeriod//cbc:StartDate",
+                namespaces,
+                "",
+            )
+
+        autorizacion_vigencia_fin_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='InvoiceSource']//*[local-name()='ValidityPeriod']//*[local-name()='EndDate']/text()",
+        )
+        autorizacion_vigencia_fin_str = (
+            autorizacion_vigencia_fin_nodes[0].strip() if autorizacion_vigencia_fin_nodes else ""
+        )
+        if not autorizacion_vigencia_fin_str and "sts" in namespaces:
+            autorizacion_vigencia_fin_str = extraer_texto(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:InvoiceSource//sts:ValidityPeriod//cbc:EndDate",
+                namespaces,
+                "",
+            )
+        autorizacion_vigencia_inicio = (
+            parsear_fecha_simple(autorizacion_vigencia_inicio_str)
+            if autorizacion_vigencia_inicio_str
+            else None
+        )
+        autorizacion_vigencia_fin = (
+            parsear_fecha_simple(autorizacion_vigencia_fin_str)
+            if autorizacion_vigencia_fin_str
+            else None
+        )
+
         # QR Code (texto multilínea): sts:QRCode/text() — recomendado TextField
-        qr_code_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='QRCode']/text()")
-        qr_code = qr_code_nodes[0].strip() if qr_code_nodes else ''
-        if not qr_code and 'sts' in namespaces:
-            qr_code = extraer_texto(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:QRCode', namespaces, '')
-        
+        qr_code_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='QRCode']/text()",
+        )
+        qr_code = qr_code_nodes[0].strip() if qr_code_nodes else ""
+        if not qr_code and "sts" in namespaces:
+            qr_code = extraer_texto(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:QRCode",
+                namespaces,
+                "",
+            )
+
         # QR URL: última línea del QRCode si es URL válida (puede superar 200 caracteres)
-        qr_url = ''
+        qr_url = ""
         if qr_code:
             # Buscar URL en las líneas del QRCode
-            lines = qr_code.split('\n')
+            lines = qr_code.split("\n")
             for line in reversed(lines):  # Empezar desde el final
                 line = line.strip()
-                if line and (line.startswith('http://') or line.startswith('https://')):
+                if line and (line.startswith("http://") or line.startswith("https://")):
                     qr_url = line
                     break
-        
+
         # Si no se encontró en QRCode, buscar en QRCodeURL
         if not qr_url:
-            qr_url_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='QRCodeURL']/text()")
-            qr_url = qr_url_nodes[0].strip() if qr_url_nodes else ''
-            if not qr_url and 'sts' in namespaces:
-                qr_url = extraer_texto(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:QRCodeURL', namespaces, '')
-        
+            qr_url_nodes = _x(
+                invoice_root,
+                ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='QRCodeURL']/text()",
+            )
+            qr_url = qr_url_nodes[0].strip() if qr_url_nodes else ""
+            if not qr_url and "sts" in namespaces:
+                qr_url = extraer_texto(
+                    invoice_root,
+                    ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:QRCodeURL",
+                    namespaces,
+                    "",
+                )
+
         # Validación DIAN: usar local-name() para robustez
-        dian_validation_code_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='Validation']//*[local-name()='ValidationCode']/text()")
-        dian_validation_code = dian_validation_code_nodes[0].strip() if dian_validation_code_nodes else ''
-        if not dian_validation_code and 'sts' in namespaces:
-            dian_validation_code = extraer_texto(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:Validation//sts:ValidationCode', namespaces, '')
-        
-        dian_validation_desc_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='Validation']//*[local-name()='ValidationDescription']/text()")
-        dian_validation_desc = dian_validation_desc_nodes[0].strip() if dian_validation_desc_nodes else ''
-        if not dian_validation_desc and 'sts' in namespaces:
-            dian_validation_desc = extraer_texto(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:Validation//sts:ValidationDescription', namespaces, '')
-        
-        dian_validation_fecha_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='Validation']//*[local-name()='ValidationDate']/text()")
-        dian_validation_fecha_str = dian_validation_fecha_nodes[0].strip() if dian_validation_fecha_nodes else ''
-        if not dian_validation_fecha_str and 'sts' in namespaces:
-            dian_validation_fecha_str = extraer_texto(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:Validation//sts:ValidationDate', namespaces, '')
-        
-        dian_validation_hora_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='Validation']//*[local-name()='ValidationTime']/text()")
-        dian_validation_hora_str = dian_validation_hora_nodes[0].strip() if dian_validation_hora_nodes else ''
-        if not dian_validation_hora_str and 'sts' in namespaces:
-            dian_validation_hora_str = extraer_texto(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:Validation//sts:ValidationTime', namespaces, '')
-        
-        dian_validation_fecha = parsear_fecha_simple(dian_validation_fecha_str) if dian_validation_fecha_str else None
-        dian_validation_hora = parsear_hora(dian_validation_hora_str) if dian_validation_hora_str else None
-        
+        dian_validation_code_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='Validation']//*[local-name()='ValidationCode']/text()",
+        )
+        dian_validation_code = (
+            dian_validation_code_nodes[0].strip() if dian_validation_code_nodes else ""
+        )
+        if not dian_validation_code and "sts" in namespaces:
+            dian_validation_code = extraer_texto(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:Validation//sts:ValidationCode",
+                namespaces,
+                "",
+            )
+
+        dian_validation_desc_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='Validation']//*[local-name()='ValidationDescription']/text()",
+        )
+        dian_validation_desc = (
+            dian_validation_desc_nodes[0].strip() if dian_validation_desc_nodes else ""
+        )
+        if not dian_validation_desc and "sts" in namespaces:
+            dian_validation_desc = extraer_texto(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:Validation//sts:ValidationDescription",
+                namespaces,
+                "",
+            )
+
+        dian_validation_fecha_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='Validation']//*[local-name()='ValidationDate']/text()",
+        )
+        dian_validation_fecha_str = (
+            dian_validation_fecha_nodes[0].strip() if dian_validation_fecha_nodes else ""
+        )
+        if not dian_validation_fecha_str and "sts" in namespaces:
+            dian_validation_fecha_str = extraer_texto(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:Validation//sts:ValidationDate",
+                namespaces,
+                "",
+            )
+
+        dian_validation_hora_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='Validation']//*[local-name()='ValidationTime']/text()",
+        )
+        dian_validation_hora_str = (
+            dian_validation_hora_nodes[0].strip() if dian_validation_hora_nodes else ""
+        )
+        if not dian_validation_hora_str and "sts" in namespaces:
+            dian_validation_hora_str = extraer_texto(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:Validation//sts:ValidationTime",
+                namespaces,
+                "",
+            )
+
+        dian_validation_fecha = (
+            parsear_fecha_simple(dian_validation_fecha_str) if dian_validation_fecha_str else None
+        )
+        dian_validation_hora = (
+            parsear_hora(dian_validation_hora_str) if dian_validation_hora_str else None
+        )
+
         # ApplicationResponse XML (si está presente): usar local-name()
-        dian_response_xml_nodes = _x(invoice_root, ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='ApplicationResponse']/text()")
-        dian_response_xml = dian_response_xml_nodes[0].strip() if dian_response_xml_nodes else ''
-        if not dian_response_xml and 'sts' in namespaces:
-            dian_response_xml = extraer_texto(invoice_root, './/ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:ApplicationResponse', namespaces, '')
-        
+        dian_response_xml_nodes = _x(
+            invoice_root,
+            ".//*[local-name()='UBLExtensions']//*[local-name()='DianExtensions']//*[local-name()='ApplicationResponse']/text()",
+        )
+        dian_response_xml = dian_response_xml_nodes[0].strip() if dian_response_xml_nodes else ""
+        if not dian_response_xml and "sts" in namespaces:
+            dian_response_xml = extraer_texto(
+                invoice_root,
+                ".//ext:UBLExtensions//ext:UBLExtension//ext:ExtensionContent//sts:DianExtensions//sts:ApplicationResponse",
+                namespaces,
+                "",
+            )
+
         # Items: usar findall con namespaces dinámicos
         items_data = []
         # Usar xpath para InvoiceLine (soporta local-name() y namespaces dinámicos).
         # CreditNoteLine incluido: mismo esquema UBL, usado por las Notas Credito
         # (cbc:CreditedQuantity en vez de cbc:InvoicedQuantity, ver abajo).
-        invoice_lines = _x(invoice_root, ".//*[local-name()='InvoiceLine' or local-name()='CreditNoteLine']")
+        invoice_lines = _x(
+            invoice_root, ".//*[local-name()='InvoiceLine' or local-name()='CreditNoteLine']"
+        )
         for item_elem in invoice_lines:
-            linea_id = extraer_texto(item_elem, './/cbc:ID', namespaces)
-            codigo = extraer_texto(item_elem, './/cac:Item//cbc:SellersItemIdentification//cbc:ID', namespaces)
-            descripcion = extraer_texto(item_elem, './/cbc:Description', namespaces)
+            linea_id = extraer_texto(item_elem, ".//cbc:ID", namespaces)
+            codigo = extraer_texto(
+                item_elem, ".//cac:Item//cbc:SellersItemIdentification//cbc:ID", namespaces
+            )
+            descripcion = extraer_texto(item_elem, ".//cbc:Description", namespaces)
             cantidad = extraer_decimal_xpath(
-                item_elem, ".//*[local-name()='InvoicedQuantity' or local-name()='CreditedQuantity']", namespaces
+                item_elem,
+                ".//*[local-name()='InvoicedQuantity' or local-name()='CreditedQuantity']",
+                namespaces,
             )
             # Unidad de medida (usar xpath para mayor robustez)
-            unidad_medida_nodes = _x(item_elem, ".//*[local-name()='InvoicedQuantity' or local-name()='CreditedQuantity']")
+            unidad_medida_nodes = _x(
+                item_elem,
+                ".//*[local-name()='InvoicedQuantity' or local-name()='CreditedQuantity']",
+            )
             if unidad_medida_nodes:
-                unidad_medida = unidad_medida_nodes[0].get('unitCode', 'UND')
+                unidad_medida = unidad_medida_nodes[0].get("unitCode", "UND")
             else:
-                unidad_medida = 'UND'
-            valor_unitario = extraer_decimal(item_elem, './/cac:Price//cbc:PriceAmount', namespaces)
-            
+                unidad_medida = "UND"
+            valor_unitario = extraer_decimal(item_elem, ".//cac:Price//cbc:PriceAmount", namespaces)
+
             # IVA del ítem
-            porcentaje_iva = Decimal('0.00')
+            porcentaje_iva = Decimal("0.00")
             # Usar xpath para TaxSubtotal (soporta local-name())
-            tax_subtotal_nodes = _x(item_elem, ".//*[local-name()='TaxTotal']//*[local-name()='TaxSubtotal']")
+            tax_subtotal_nodes = _x(
+                item_elem, ".//*[local-name()='TaxTotal']//*[local-name()='TaxSubtotal']"
+            )
             for tax_elem in tax_subtotal_nodes:
-                tax_category_nodes = _x(tax_elem, ".//*[local-name()='TaxCategory']//*[local-name()='ID']")
-                tax_category = tax_category_nodes[0].text.strip() if tax_category_nodes and tax_category_nodes[0].text else None
-                if tax_category == '01':  # IVA
-                    porcentaje_iva = extraer_decimal(tax_elem, './/cbc:Percent', namespaces, Decimal('0.00'))
+                tax_category_nodes = _x(
+                    tax_elem, ".//*[local-name()='TaxCategory']//*[local-name()='ID']"
+                )
+                tax_category = (
+                    tax_category_nodes[0].text.strip()
+                    if tax_category_nodes and tax_category_nodes[0].text
+                    else None
+                )
+                if tax_category == "01":  # IVA
+                    porcentaje_iva = extraer_decimal(
+                        tax_elem, ".//cbc:Percent", namespaces, Decimal("0.00")
+                    )
                     break
             # Si no se encuentra en TaxTotal del item, buscar en el nivel de factura
-            if porcentaje_iva == Decimal('0.00'):
+            if porcentaje_iva == Decimal("0.00"):
                 # Usar xpath para TaxSubtotal a nivel de factura
-                tax_subtotal_nodes = _x(invoice_root, ".//*[local-name()='TaxTotal']//*[local-name()='TaxSubtotal']")
+                tax_subtotal_nodes = _x(
+                    invoice_root, ".//*[local-name()='TaxTotal']//*[local-name()='TaxSubtotal']"
+                )
                 for tax_elem in tax_subtotal_nodes:
-                    tax_category_nodes = _x(tax_elem, ".//*[local-name()='TaxCategory']//*[local-name()='ID']")
-                    tax_category = tax_category_nodes[0].text.strip() if tax_category_nodes and tax_category_nodes[0].text else None
-                    if tax_category == '01':  # IVA
-                        porcentaje_iva = extraer_decimal(tax_elem, './/cbc:Percent', namespaces, Decimal('0.00'))
+                    tax_category_nodes = _x(
+                        tax_elem, ".//*[local-name()='TaxCategory']//*[local-name()='ID']"
+                    )
+                    tax_category = (
+                        tax_category_nodes[0].text.strip()
+                        if tax_category_nodes and tax_category_nodes[0].text
+                        else None
+                    )
+                    if tax_category == "01":  # IVA
+                        porcentaje_iva = extraer_decimal(
+                            tax_elem, ".//cbc:Percent", namespaces, Decimal("0.00")
+                        )
                         break
-            
-            # Retenciones del ítem
-            p_retefuente = Decimal('0.00')
-            v_retefuente = Decimal('0.00')
-            p_reteiva = Decimal('0.00')
-            v_reteiva = Decimal('0.00')
-            p_reteica = Decimal('0.00')
-            v_reteica = Decimal('0.00')
 
-            item_w_tax_nodes = _x(item_elem, ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxSubtotal']")
+            # Retenciones del ítem
+            p_retefuente = Decimal("0.00")
+            v_retefuente = Decimal("0.00")
+            Decimal("0.00")
+            Decimal("0.00")
+            p_reteica = Decimal("0.00")
+            v_reteica = Decimal("0.00")
+
+            item_w_tax_nodes = _x(
+                item_elem, ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxSubtotal']"
+            )
             for w_node in item_w_tax_nodes:
-                scheme_id = extraer_texto(w_node, ".//*[local-name()='TaxScheme']//*[local-name()='ID']", namespaces)
-                percent = extraer_decimal(w_node, ".//*[local-name()='TaxCategory']//*[local-name()='Percent']", namespaces)
+                scheme_id = extraer_texto(
+                    w_node, ".//*[local-name()='TaxScheme']//*[local-name()='ID']", namespaces
+                )
+                percent = extraer_decimal(
+                    w_node,
+                    ".//*[local-name()='TaxCategory']//*[local-name()='Percent']",
+                    namespaces,
+                )
                 amount = extraer_decimal(w_node, ".//*[local-name()='TaxAmount']", namespaces)
-                
-                if scheme_id == '05':
+
+                if scheme_id == "05":
                     p_retefuente = percent
                     v_retefuente = amount
-                elif scheme_id == '06':
-                    p_reteiva = percent
-                    v_reteiva = amount
-                elif scheme_id == '07':
+                elif scheme_id == "06":
+                    pass
+                elif scheme_id == "07":
                     p_reteica = percent
                     v_reteica = amount
 
-            items_data.append({
-                'linea_id': linea_id,
-                'codigo': codigo,
-                'descripcion': descripcion,
-                'cantidad': cantidad,
-                'unidad_medida': unidad_medida,
-                'valor_unitario': valor_unitario,
-                'porcentaje_iva': porcentaje_iva,
-                'porcentaje_retefuente': p_retefuente,
-                'valor_retefuente': v_retefuente,
-                'porcentaje_reteica': p_reteica,
-                'valor_reteica': v_reteica,
-            })
-        
+            items_data.append(
+                {
+                    "linea_id": linea_id,
+                    "codigo": codigo,
+                    "descripcion": descripcion,
+                    "cantidad": cantidad,
+                    "unidad_medida": unidad_medida,
+                    "valor_unitario": valor_unitario,
+                    "porcentaje_iva": porcentaje_iva,
+                    "porcentaje_retefuente": p_retefuente,
+                    "valor_retefuente": v_retefuente,
+                    "porcentaje_reteica": p_reteica,
+                    "valor_reteica": v_reteica,
+                }
+            )
+
         # Determinar naturaleza (VENTA si el tenant es emisor, COMPRA si el tenant es receptor)
         # Esto se hace comparando el NIT y Razón Social del emisor con los datos de la empresa del tenant
         from apps.tenant.facturas.models import Factura
+
         # # WARNING: RESILIENCIA: Import lazy para evitar ImportError en import-time
         try:
             from apps.tenant.empresa.services import get_empresa_emisor_data
+
             empresa_data = get_empresa_emisor_data()
         except ImportError:
             # Si no está disponible, usar None (naturaleza por defecto: VENTA)
             empresa_data = None
         naturaleza = Factura.Naturaleza.VENTA  # Default
         if empresa_data:
-            tenant_nit = empresa_data.get('nit', '').strip() if empresa_data.get('nit') else ''
-            tenant_razon_social = empresa_data.get('razon_social', '').strip() if empresa_data.get('razon_social') else ''
+            tenant_nit = empresa_data.get("nit", "").strip() if empresa_data.get("nit") else ""
+            tenant_razon_social = (
+                empresa_data.get("razon_social", "").strip()
+                if empresa_data.get("razon_social")
+                else ""
+            )
             # Comparar NIT y Razón Social del emisor del XML con los datos del tenant
             # Si son IGUALES: el tenant es el emisor → VENTA
             # Si son DIFERENTES: el tenant es el receptor → COMPRA
-            emisor_nit_clean = (emisor_nit or '').strip()
-            emisor_razon_social_clean = (emisor_razon_social or '').strip()
+            emisor_nit_clean = (emisor_nit or "").strip()
+            emisor_razon_social_clean = (emisor_razon_social or "").strip()
 
             if emisor_nit_clean == tenant_nit and emisor_razon_social_clean == tenant_razon_social:
                 # El tenant es el emisor de la factura
@@ -949,73 +1281,75 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None, persist: bool = T
             else:
                 # El tenant es el receptor de la factura
                 naturaleza = Factura.Naturaleza.COMPRA
-        
+
         # Determinar categoría (PRODUCTO/SERVICIO/MIXTO) basado en items
-        es_servicio_count = sum(1 for item in items_data if item.get('unidad_medida', '').upper() in {'ZZ', 'SERVICIO'})
+        es_servicio_count = sum(
+            1 for item in items_data if item.get("unidad_medida", "").upper() in {"ZZ", "SERVICIO"}
+        )
         if es_servicio_count == 0:
             categoria = Factura.Categoria.PRODUCTO
         elif es_servicio_count == len(items_data):
             categoria = Factura.Categoria.SERVICIO
         else:
             categoria = Factura.Categoria.MIXTO
-        
+
         # Construir datos para crear factura
         factura_data = {
-            'numero': numero_factura,
-            'prefijo': prefijo,
-            'consecutivo': consecutivo,
-            'tipo': Factura.TipoFactura.FE,  # Factura Electrónica
-            'estado': Factura.Estado.ACEPTADA,  # Asumir aceptada si viene de UBL
-            'naturaleza': naturaleza,
-            'categoria': categoria,
-            'ubl_version': ubl_version,
-            'customization_id': customization_id,
-            'profile_id': profile_id,
-            'profile_execution_id': profile_execution_id,
-            'invoice_type_code': invoice_type_code,
-            'fecha_emision': fecha_emision,
-            'fecha_vencimiento': fecha_vencimiento,
-            'emisor_nit': emisor_nit,
-            'emisor_razon_social': emisor_razon_social,
-            'emisor_direccion': emisor_direccion,
-            'emisor_email': emisor_email,
-            'emisor_telefono': emisor_telefono,
-            'emisor_actividad_ciiu': emisor_actividad_ciiu,
-            'receptor_nit': receptor_nit,
-            'receptor_razon_social': receptor_razon_social,
-            'receptor_direccion': receptor_direccion,
-            'receptor_email': receptor_email,
-            'receptor_telefono': receptor_telefono,
-            'moneda': moneda,
-            'subtotal': subtotal,
-            'impuestos': impuestos,
-            'total': total,
-            'retefuente': retefuente,
-            'reteiva': reteiva,
-            'reteica': reteica,
-            'forma_pago': forma_pago,
-            'medio_pago_codigo': medio_pago_codigo,
-            'payment_due_date': payment_due_date,
-            'cufe': cufe,
-            'qr_code': qr_code,
-            'qr_url': qr_url,
-            'autorizacion_numero': autorizacion_numero,
-            'autorizacion_prefijo': autorizacion_prefijo,
-            'autorizacion_rango_desde': autorizacion_rango_desde,
-            'autorizacion_rango_hasta': autorizacion_rango_hasta,
-            'autorizacion_vigencia_inicio': autorizacion_vigencia_inicio,
-            'autorizacion_vigencia_fin': autorizacion_vigencia_fin,
-            'dian_validation_code': dian_validation_code,
-            'dian_validation_desc': dian_validation_desc,
-            'dian_validation_fecha': dian_validation_fecha,
-            'dian_validation_hora': dian_validation_hora,
-            'dian_response_xml': dian_response_xml,
-            'xml_content': xml_text,
+            "numero": numero_factura,
+            "prefijo": prefijo,
+            "consecutivo": consecutivo,
+            "tipo": Factura.TipoFactura.FE,  # Factura Electrónica
+            "estado": Factura.Estado.ACEPTADA,  # Asumir aceptada si viene de UBL
+            "naturaleza": naturaleza,
+            "categoria": categoria,
+            "ubl_version": ubl_version,
+            "customization_id": customization_id,
+            "profile_id": profile_id,
+            "profile_execution_id": profile_execution_id,
+            "invoice_type_code": invoice_type_code,
+            "fecha_emision": fecha_emision,
+            "fecha_vencimiento": fecha_vencimiento,
+            "emisor_nit": emisor_nit,
+            "emisor_razon_social": emisor_razon_social,
+            "emisor_direccion": emisor_direccion,
+            "emisor_email": emisor_email,
+            "emisor_telefono": emisor_telefono,
+            "emisor_actividad_ciiu": emisor_actividad_ciiu,
+            "receptor_nit": receptor_nit,
+            "receptor_razon_social": receptor_razon_social,
+            "receptor_direccion": receptor_direccion,
+            "receptor_email": receptor_email,
+            "receptor_telefono": receptor_telefono,
+            "moneda": moneda,
+            "subtotal": subtotal,
+            "impuestos": impuestos,
+            "total": total,
+            "retefuente": retefuente,
+            "reteiva": reteiva,
+            "reteica": reteica,
+            "forma_pago": forma_pago,
+            "medio_pago_codigo": medio_pago_codigo,
+            "payment_due_date": payment_due_date,
+            "cufe": cufe,
+            "qr_code": qr_code,
+            "qr_url": qr_url,
+            "autorizacion_numero": autorizacion_numero,
+            "autorizacion_prefijo": autorizacion_prefijo,
+            "autorizacion_rango_desde": autorizacion_rango_desde,
+            "autorizacion_rango_hasta": autorizacion_rango_hasta,
+            "autorizacion_vigencia_inicio": autorizacion_vigencia_inicio,
+            "autorizacion_vigencia_fin": autorizacion_vigencia_fin,
+            "dian_validation_code": dian_validation_code,
+            "dian_validation_desc": dian_validation_desc,
+            "dian_validation_fecha": dian_validation_fecha,
+            "dian_validation_hora": dian_validation_hora,
+            "dian_response_xml": dian_response_xml,
+            "xml_content": xml_text,
         }
-        
+
         # Inyectar empresa_id si se provee (multi-tenant seguro)
         if empresa_id is not None:
-            factura_data['empresa_id'] = empresa_id
+            factura_data["empresa_id"] = empresa_id
 
         if not persist:
             return factura_data
@@ -1031,120 +1365,160 @@ def importar_factura_desde_ubl(xml_text: str, empresa_id=None, persist: bool = T
 
             # Crear items
             from apps.tenant.facturas.models import ItemFactura
+
             for item in items_data:
                 ItemFactura.objects.create(
                     factura=factura,
                     empresa_id=factura.empresa_id,
-                    linea_id=item.get('linea_id', ''),
-                    codigo=item.get('codigo', ''),
-                    descripcion=item.get('descripcion', ''),
-                    cantidad=item.get('cantidad', 1),
-                    unidad_medida=item.get('unidad_medida', 'UND'),
-                    valor_unitario=item.get('valor_unitario', 0),
-                    porcentaje_iva=item.get('porcentaje_iva', 0),
-                    porcentaje_retefuente=item.get('porcentaje_retefuente', 0),
-                    valor_retefuente=item.get('valor_retefuente', 0),
-                    porcentaje_reteica=item.get('porcentaje_reteica', 0),
-                    valor_reteica=item.get('valor_reteica', 0),
+                    linea_id=item.get("linea_id", ""),
+                    codigo=item.get("codigo", ""),
+                    descripcion=item.get("descripcion", ""),
+                    cantidad=item.get("cantidad", 1),
+                    unidad_medida=item.get("unidad_medida", "UND"),
+                    valor_unitario=item.get("valor_unitario", 0),
+                    porcentaje_iva=item.get("porcentaje_iva", 0),
+                    porcentaje_retefuente=item.get("porcentaje_retefuente", 0),
+                    valor_retefuente=item.get("valor_retefuente", 0),
+                    porcentaje_reteica=item.get("porcentaje_reteica", 0),
+                    valor_reteica=item.get("valor_reteica", 0),
                 )
 
         return factura
-        
+
     except etree.XMLSyntaxError as e:
-        raise ValueError(f"Error al parsear XML UBL: {str(e)}")
+        raise ValueError(f"Error al parsear XML UBL: {str(e)}") from e
     except Exception as e:
-        raise ValueError(f"Error al importar factura desde UBL: {str(e)}")
+        raise ValueError(f"Error al importar factura desde UBL: {str(e)}") from e
 
 
-def parse_ubl_to_dict(root: etree._Element, xml_bytes: bytes | None = None, naturaleza: str | None = None) -> dict[str, Any]:
+def parse_ubl_to_dict(
+    root: etree._Element, xml_bytes: bytes | None = None, naturaleza: str | None = None
+) -> dict[str, Any]:
     """
     Mapea UBL 2.1 (root ya parseado) a DTO (dict) sin crear Factura.
-    
+
     # WARNING: CONSUME: apps/services/xml_parser para helpers genéricos.
     # WARNING: NO PARSEA BYTES: Acepta root ya parseado (etree._Element).
     # WARNING: TIMEZONE-AWARE: Retorna fecha_emision como datetime timezone-aware.
-    
+
     Args:
         root: Elemento raíz del XML ya parseado (etree._Element)
         xml_bytes: Bytes originales del XML (opcional, para incluir en DTO)
         naturaleza: "VENTA" | "COMPRA" (opcional, se determina automáticamente si no se proporciona)
-        
+
     Returns:
         Dict con datos de la factura (DTO) sin persistir
         - fecha_emision: datetime timezone-aware (ISO 8601 string en JSON)
-        
+
     Raises:
         ValueError: Si el XML no es válido o no se puede parsear
     """
     try:
-        
         # # WARNING: v2.61.2: Pasar xml_bytes si está disponible para optimización con iterparse
         xml_bytes_for_parser = xml_bytes if xml_bytes else None
-        
+
         # Detectar si es AttachedDocument y extraer Invoice interno
         try:
-            invoice_root = _extraer_invoice_desde_attached_document(root, xml_bytes=xml_bytes_for_parser)
+            invoice_root = _extraer_invoice_desde_attached_document(
+                root, xml_bytes=xml_bytes_for_parser
+            )
         except ValueError as e:
             # Re-lanzar ValueError con mensaje claro para logging forense
-            raise ValueError(str(e))
-        
+            raise ValueError(str(e)) from e
+
         if invoice_root is None:
             from lxml.etree import QName
+
             local = QName(root).localname.lower()
             if local in {"invoice", "creditnote", "debitnote"}:
                 invoice_root = root
             else:
-                raise ValueError(f"Documento no soportado: se espera Invoice, CreditNote, DebitNote o AttachedDocument, se encontró {local}")
-        
+                raise ValueError(
+                    f"Documento no soportado: se espera Invoice, CreditNote, DebitNote o AttachedDocument, se encontró {local}"
+                )
+
         # Obtener namespaces dinámicos
         namespaces = _ns(invoice_root)
-        
+
         # Extraer información (mismo proceso que importar_factura_desde_ubl pero sin crear Factura)
-        numero_nodes = _x(invoice_root, ".//*[local-name()='ID'][parent::*[local-name()='Invoice']]/text()")
+        numero_nodes = _x(
+            invoice_root, ".//*[local-name()='ID'][parent::*[local-name()='Invoice']]/text()"
+        )
         if not numero_nodes:
             numero_nodes = _x(invoice_root, ".//*[local-name()='ID']/text()")
         numero_factura = numero_nodes[0].strip() if numero_nodes else None
         if not numero_factura:
-            numero_factura = extraer_texto(invoice_root, './/cbc:ID', namespaces, '')
+            numero_factura = extraer_texto(invoice_root, ".//cbc:ID", namespaces, "")
         if not numero_factura:
             raise ValueError("No se encontró número de factura en el XML")
-        
+
         prefijo, consecutivo = _parsear_prefijo_consecutivo(numero_factura)
-        
+
         if not prefijo:
-            prefix_nodes = xpath(invoice_root, "//*[local-name()='AuthorizedInvoices']//*[local-name()='Prefix']/text()", ns=namespaces)
+            prefix_nodes = xpath(
+                invoice_root,
+                "//*[local-name()='AuthorizedInvoices']//*[local-name()='Prefix']/text()",
+                ns=namespaces,
+            )
             if prefix_nodes:
                 prefijo = prefix_nodes[0].strip()
-        
+
         # Fecha emisión con timezone-aware
-        fecha_emision_str = extraer_texto(invoice_root, './/cbc:IssueDate', namespaces, '')
-        hora_emision_str = extraer_texto(invoice_root, './/cbc:IssueTime', namespaces, '')
+        fecha_emision_str = extraer_texto(invoice_root, ".//cbc:IssueDate", namespaces, "")
+        hora_emision_str = extraer_texto(invoice_root, ".//cbc:IssueTime", namespaces, "")
         try:
-            fecha_emision = _aware_issue_datetime(fecha_emision_str, hora_emision_str) or timezone.now()
+            fecha_emision = (
+                _aware_issue_datetime(fecha_emision_str, hora_emision_str) or timezone.now()
+            )
         except ValueError:
-            raise ValueError("issue_datetime_invalid")
-        
+            raise ValueError("issue_datetime_invalid") from None
+
         # CUFE
         cufe_nodes = xpath(invoice_root, ".//*[local-name()='UUID']/text()", ns=namespaces)
-        cufe = cufe_nodes[0].strip() if cufe_nodes else ''
+        cufe = cufe_nodes[0].strip() if cufe_nodes else ""
         if not cufe:
-            cufe = extraer_texto(invoice_root, './/cbc:UUID', namespaces, '')
-        
+            cufe = extraer_texto(invoice_root, ".//cbc:UUID", namespaces, "")
+
         # Emisor y Receptor (usar extraer_texto_xpath para rutas con local-name() y /text())
-        emisor_nit = extraer_texto_xpath(invoice_root, ".//*[local-name()='AccountingSupplierParty']//*[local-name()='CompanyID']/text()", namespaces, '')
-        emisor_razon_social = extraer_texto_xpath(invoice_root, ".//*[local-name()='AccountingSupplierParty']//*[local-name()='RegistrationName']/text()", namespaces, '')
-        
-        receptor_nit = extraer_texto_xpath(invoice_root, ".//*[local-name()='AccountingCustomerParty']//*[local-name()='CompanyID']/text()", namespaces, '')
-        receptor_razon_social = extraer_texto_xpath(invoice_root, ".//*[local-name()='AccountingCustomerParty']//*[local-name()='RegistrationName']/text()", namespaces, '')
-        
+        emisor_nit = extraer_texto_xpath(
+            invoice_root,
+            ".//*[local-name()='AccountingSupplierParty']//*[local-name()='CompanyID']/text()",
+            namespaces,
+            "",
+        )
+        emisor_razon_social = extraer_texto_xpath(
+            invoice_root,
+            ".//*[local-name()='AccountingSupplierParty']//*[local-name()='RegistrationName']/text()",
+            namespaces,
+            "",
+        )
+
+        receptor_nit = extraer_texto_xpath(
+            invoice_root,
+            ".//*[local-name()='AccountingCustomerParty']//*[local-name()='CompanyID']/text()",
+            namespaces,
+            "",
+        )
+        receptor_razon_social = extraer_texto_xpath(
+            invoice_root,
+            ".//*[local-name()='AccountingCustomerParty']//*[local-name()='RegistrationName']/text()",
+            namespaces,
+            "",
+        )
+
         # Totales
-        subtotal = extraer_decimal(invoice_root, './/cbc:TaxExclusiveAmount', namespaces, Decimal('0.00'))
-        impuestos = extraer_decimal(invoice_root, './/cbc:TaxInclusiveAmount', namespaces, Decimal('0.00')) - subtotal
-        total = extraer_decimal(invoice_root, './/cbc:PayableAmount', namespaces, Decimal('0.00'))
-        
+        subtotal = extraer_decimal(
+            invoice_root, ".//cbc:TaxExclusiveAmount", namespaces, Decimal("0.00")
+        )
+        impuestos = (
+            extraer_decimal(invoice_root, ".//cbc:TaxInclusiveAmount", namespaces, Decimal("0.00"))
+            - subtotal
+        )
+        total = extraer_decimal(invoice_root, ".//cbc:PayableAmount", namespaces, Decimal("0.00"))
+
         # Moneda
-        moneda = extraer_texto(invoice_root, './/cbc:DocumentCurrencyCode', namespaces, 'COP')
-        
+        moneda = extraer_texto(invoice_root, ".//cbc:DocumentCurrencyCode", namespaces, "COP")
+
         # # WARNING: IMPORTANTE: La naturaleza se calcula en Service Layer, no aquí
         # Este parser solo extrae datos del XML; la lógica de negocio está en services.py
         # Si se pasa naturaleza, se usa (pero normalmente se ignora y se calcula en services)
@@ -1153,86 +1527,136 @@ def parse_ubl_to_dict(root: etree._Element, xml_bytes: bytes | None = None, natu
         else:
             # Default temporal (será sobrescrito en Service Layer)
             from apps.tenant.facturas.models import Factura
+
             naturaleza = Factura.Naturaleza.VENTA
-        
+
         # Extraer impuestos desglosados de la raiz (TaxTotal / WithholdingTaxTotal)
         impuestos_desglosados = []
-        tax_totals = invoice_root.xpath("./*[local-name()='TaxTotal' or local-name()='WithholdingTaxTotal']")
+        tax_totals = invoice_root.xpath(
+            "./*[local-name()='TaxTotal' or local-name()='WithholdingTaxTotal']"
+        )
         for tax_total in tax_totals:
             subtotals = tax_total.xpath("./*[local-name()='TaxSubtotal']")
             for subtotal_el in subtotals:
                 base_imponible_nodes = subtotal_el.xpath("./*[local-name()='TaxableAmount']/text()")
-                base_imponible = Decimal(base_imponible_nodes[0].strip()) if base_imponible_nodes else Decimal('0.00')
-                
+                base_imponible = (
+                    Decimal(base_imponible_nodes[0].strip())
+                    if base_imponible_nodes
+                    else Decimal("0.00")
+                )
+
                 valor_impuesto_nodes = subtotal_el.xpath("./*[local-name()='TaxAmount']/text()")
-                valor_impuesto = Decimal(valor_impuesto_nodes[0].strip()) if valor_impuesto_nodes else Decimal('0.00')
-                
+                valor_impuesto = (
+                    Decimal(valor_impuesto_nodes[0].strip())
+                    if valor_impuesto_nodes
+                    else Decimal("0.00")
+                )
+
                 porcentaje_nodes = subtotal_el.xpath("./*[local-name()='Percent']/text()")
-                porcentaje = Decimal(porcentaje_nodes[0].strip()) if porcentaje_nodes else Decimal('0.00')
-                
-                scheme_id_nodes = subtotal_el.xpath("./*[local-name()='TaxCategory']/*[local-name()='TaxScheme']/*[local-name()='ID']/text()")
-                scheme_name_nodes = subtotal_el.xpath("./*[local-name()='TaxCategory']/*[local-name()='TaxScheme']/*[local-name()='Name']/text()")
-                
-                scheme_id = scheme_id_nodes[0].strip().upper() if scheme_id_nodes else ''
-                scheme_name = scheme_name_nodes[0].strip().upper() if scheme_name_nodes else ''
-                
-                tipo_impuesto = 'OTRO'
-                if scheme_id == '01' or 'IVA' in scheme_name:
-                    tipo_impuesto = 'IVA'
-                elif scheme_id == '03' or 'INC' in scheme_name or 'CONSUMO' in scheme_name:
-                    tipo_impuesto = 'INC'
-                elif scheme_id == '05' or 'RETEFUENTE' in scheme_name or 'RETENCION EN LA FUENTE' in scheme_name:
-                    tipo_impuesto = 'RETEFUENTE'
-                elif scheme_id == '06' or 'RETEIVA' in scheme_name or 'RETENCION DE IVA' in scheme_name or 'RETENCION IVA' in scheme_name:
-                    tipo_impuesto = 'RETEIVA'
-                elif scheme_id == '07' or 'RETEICA' in scheme_name or 'RETENCION DE ICA' in scheme_name or 'RETENCION ICA' in scheme_name:
-                    tipo_impuesto = 'RETEICA'
-                
-                impuestos_desglosados.append({
-                    'tipo_impuesto': tipo_impuesto,
-                    'porcentaje': porcentaje,
-                    'base_imponible': base_imponible,
-                    'valor_impuesto': valor_impuesto
-                })
+                porcentaje = (
+                    Decimal(porcentaje_nodes[0].strip()) if porcentaje_nodes else Decimal("0.00")
+                )
+
+                scheme_id_nodes = subtotal_el.xpath(
+                    "./*[local-name()='TaxCategory']/*[local-name()='TaxScheme']/*[local-name()='ID']/text()"
+                )
+                scheme_name_nodes = subtotal_el.xpath(
+                    "./*[local-name()='TaxCategory']/*[local-name()='TaxScheme']/*[local-name()='Name']/text()"
+                )
+
+                scheme_id = scheme_id_nodes[0].strip().upper() if scheme_id_nodes else ""
+                scheme_name = scheme_name_nodes[0].strip().upper() if scheme_name_nodes else ""
+
+                tipo_impuesto = "OTRO"
+                if scheme_id == "01" or "IVA" in scheme_name:
+                    tipo_impuesto = "IVA"
+                elif scheme_id == "03" or "INC" in scheme_name or "CONSUMO" in scheme_name:
+                    tipo_impuesto = "INC"
+                elif (
+                    scheme_id == "05"
+                    or "RETEFUENTE" in scheme_name
+                    or "RETENCION EN LA FUENTE" in scheme_name
+                ):
+                    tipo_impuesto = "RETEFUENTE"
+                elif (
+                    scheme_id == "06"
+                    or "RETEIVA" in scheme_name
+                    or "RETENCION DE IVA" in scheme_name
+                    or "RETENCION IVA" in scheme_name
+                ):
+                    tipo_impuesto = "RETEIVA"
+                elif (
+                    scheme_id == "07"
+                    or "RETEICA" in scheme_name
+                    or "RETENCION DE ICA" in scheme_name
+                    or "RETENCION ICA" in scheme_name
+                ):
+                    tipo_impuesto = "RETEICA"
+
+                impuestos_desglosados.append(
+                    {
+                        "tipo_impuesto": tipo_impuesto,
+                        "porcentaje": porcentaje,
+                        "base_imponible": base_imponible,
+                        "valor_impuesto": valor_impuesto,
+                    }
+                )
 
         # Construir DTO
         dto = {
-            'numero': numero_factura,
-            'prefijo': prefijo,
-            'consecutivo': consecutivo,
-            'fecha_emision': fecha_emision,  # timezone-aware
-            'emisor_nit': emisor_nit,
-            'emisor_razon_social': emisor_razon_social,
-            'receptor_nit': receptor_nit,
-            'receptor_razon_social': receptor_razon_social,
-            'moneda': moneda,
-            'subtotal': subtotal,
-            'impuestos': impuestos,
-            'total': total,
-            'retefuente': extraer_decimal_xpath(invoice_root, ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxScheme'][*[local-name()='ID']='05']/../..//*[local-name()='TaxAmount']/text()", namespaces, Decimal('0.00')),
-            'reteiva': extraer_decimal_xpath(invoice_root, ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxScheme'][*[local-name()='ID']='06']/../..//*[local-name()='TaxAmount']/text()", namespaces, Decimal('0.00')),
-            'reteica': extraer_decimal_xpath(invoice_root, ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxScheme'][*[local-name()='ID']='07']/../..//*[local-name()='TaxAmount']/text()", namespaces, Decimal('0.00')),
-            'cufe': cufe,
-            'naturaleza': naturaleza,
-            'items': [],  # Items se pueden agregar si es necesario para preview
-            'impuestos_desglosados': impuestos_desglosados,
+            "numero": numero_factura,
+            "prefijo": prefijo,
+            "consecutivo": consecutivo,
+            "fecha_emision": fecha_emision,  # timezone-aware
+            "emisor_nit": emisor_nit,
+            "emisor_razon_social": emisor_razon_social,
+            "receptor_nit": receptor_nit,
+            "receptor_razon_social": receptor_razon_social,
+            "moneda": moneda,
+            "subtotal": subtotal,
+            "impuestos": impuestos,
+            "total": total,
+            "retefuente": extraer_decimal_xpath(
+                invoice_root,
+                ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxScheme'][*[local-name()='ID']='05']/../..//*[local-name()='TaxAmount']/text()",
+                namespaces,
+                Decimal("0.00"),
+            ),
+            "reteiva": extraer_decimal_xpath(
+                invoice_root,
+                ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxScheme'][*[local-name()='ID']='06']/../..//*[local-name()='TaxAmount']/text()",
+                namespaces,
+                Decimal("0.00"),
+            ),
+            "reteica": extraer_decimal_xpath(
+                invoice_root,
+                ".//*[local-name()='WithholdingTaxTotal']//*[local-name()='TaxScheme'][*[local-name()='ID']='07']/../..//*[local-name()='TaxAmount']/text()",
+                namespaces,
+                Decimal("0.00"),
+            ),
+            "cufe": cufe,
+            "naturaleza": naturaleza,
+            "items": [],  # Items se pueden agregar si es necesario para preview
+            "impuestos_desglosados": impuestos_desglosados,
         }
-        
+
         # # WARNING: XMLs pesados: incluir en DTO para guardar en FacturaAnexos (no en fila principal)
         # Convertir bytes a string si es necesario
         if xml_bytes:
-            dto['ubl_xml'] = xml_bytes.decode("utf-8", errors="ignore")
+            dto["ubl_xml"] = xml_bytes.decode("utf-8", errors="ignore")
         else:
             # Fallback: serializar root a string (menos eficiente)
-            dto['ubl_xml'] = etree.tostring(root, encoding="utf-8", pretty_print=False).decode("utf-8", errors="ignore")
-        
+            dto["ubl_xml"] = etree.tostring(root, encoding="utf-8", pretty_print=False).decode(
+                "utf-8", errors="ignore"
+            )
+
         # Si hay ApplicationResponse/AttachedDocument, extraerlo
         # (por ahora, se puede agregar lógica para extraer ApplicationResponse si existe)
-        dto['application_response_xml'] = None  # Se puede poblar si se detecta en el XML
-        
+        dto["application_response_xml"] = None  # Se puede poblar si se detecta en el XML
+
         return dto
-        
+
     except etree.XMLSyntaxError as e:
-        raise ValueError(f"Error al parsear XML UBL: {str(e)}")
+        raise ValueError(f"Error al parsear XML UBL: {str(e)}") from e
     except Exception as e:
-        raise ValueError(f"Error al parsear UBL a DTO: {str(e)}")
+        raise ValueError(f"Error al parsear UBL a DTO: {str(e)}") from e

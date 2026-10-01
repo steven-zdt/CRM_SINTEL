@@ -32,13 +32,13 @@ Settings requeridos para firma real:
   DIAN_CERT_P12       -- ruta al archivo .p12 / .pfx del certificado
   DIAN_CERT_PASSWORD  -- contrasena del .p12 en texto plano (o vacío)
 """
+
 import base64
 import hashlib
 import uuid as _uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from django.conf import settings
-
 
 # Politica de firma DIAN (XAdES)
 DIAN_POLICY_ID = "https://facturaelectronica.dian.gov.co/politicadefirma/v2/politicadefirmav2.pdf"
@@ -103,10 +103,9 @@ class XadesSignerService:
                     xades:SignerRole
                       xades:ClaimedRoles / xades:ClaimedRole -- "supplier"
         """
-        from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
         from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric import padding
-        from cryptography.x509 import load_der_x509_certificate
+        from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
 
         with open(cert_path, "rb") as f:
             p12_data = f.read()
@@ -116,12 +115,10 @@ class XadesSignerService:
 
         cert_der = certificate.public_bytes(serialization.Encoding.DER)
         cert_b64 = base64.b64encode(cert_der).decode("ascii")
-        cert_digest = base64.b64encode(
-            hashlib.sha256(cert_der).digest()
-        ).decode("ascii")
+        cert_digest = base64.b64encode(hashlib.sha256(cert_der).digest()).decode("ascii")
 
         sig_uuid = str(_uuid.uuid4()).replace("-", "")
-        signing_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        signing_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         # DigestValue del documento (sin firma)
         doc_digest_bytes = hashlib.sha256(xml_bytes).digest()
@@ -142,9 +139,9 @@ class XadesSignerService:
 
         keyinfo_id = f"xmldsig-{sig_uuid}-keyinfo"
         keyinfo_xml = f'<ds:KeyInfo Id="{keyinfo_id}"><ds:X509Data><ds:X509Certificate>{cert_b64}</ds:X509Certificate></ds:X509Data></ds:KeyInfo>'
-        ki_digest = base64.b64encode(
-            hashlib.sha256(keyinfo_xml.encode("utf-8")).digest()
-        ).decode("ascii")
+        ki_digest = base64.b64encode(hashlib.sha256(keyinfo_xml.encode("utf-8")).digest()).decode(
+            "ascii"
+        )
 
         # Construir SignedInfo canonicalizado
         signed_info = cls._build_signed_info_xml(
@@ -215,13 +212,13 @@ class XadesSignerService:
             f"<xades:CertDigest>"
             f'<ds:DigestMethod xmlns:ds="http://www.w3.org/2000/09/xmldsig#" '
             f'Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
-            f"<ds:DigestValue xmlns:ds=\"http://www.w3.org/2000/09/xmldsig#\">"
+            f'<ds:DigestValue xmlns:ds="http://www.w3.org/2000/09/xmldsig#">'
             f"{cert_digest_b64}</ds:DigestValue>"
             f"</xades:CertDigest>"
             f"<xades:IssuerSerial>"
-            f"<ds:X509IssuerName xmlns:ds=\"http://www.w3.org/2000/09/xmldsig#\">"
+            f'<ds:X509IssuerName xmlns:ds="http://www.w3.org/2000/09/xmldsig#">'
             f"{cert_issuer}</ds:X509IssuerName>"
-            f"<ds:X509SerialNumber xmlns:ds=\"http://www.w3.org/2000/09/xmldsig#\">"
+            f'<ds:X509SerialNumber xmlns:ds="http://www.w3.org/2000/09/xmldsig#">'
             f"{cert_serial}</ds:X509SerialNumber>"
             f"</xades:IssuerSerial>"
             f"</xades:Cert>"
@@ -229,13 +226,13 @@ class XadesSignerService:
             f"<xades:SignaturePolicyIdentifier>"
             f"<xades:SignaturePolicyId>"
             f"<xades:SigPolicyId>"
-            f"<xades:Identifier Qualifier=\"OIDAsURI\">{DIAN_POLICY_ID}</xades:Identifier>"
+            f'<xades:Identifier Qualifier="OIDAsURI">{DIAN_POLICY_ID}</xades:Identifier>'
             f"<xades:Description>{DIAN_POLICY_DESCRIPTION}</xades:Description>"
             f"</xades:SigPolicyId>"
             f"<xades:SigPolicyHash>"
             f'<ds:DigestMethod xmlns:ds="http://www.w3.org/2000/09/xmldsig#" '
             f'Algorithm="{DIAN_POLICY_HASH_ALG}"/>'
-            f"<ds:DigestValue xmlns:ds=\"http://www.w3.org/2000/09/xmldsig#\">"
+            f'<ds:DigestValue xmlns:ds="http://www.w3.org/2000/09/xmldsig#">'
             f"</ds:DigestValue>"
             f"</xades:SigPolicyHash>"
             f"</xades:SignaturePolicyId>"

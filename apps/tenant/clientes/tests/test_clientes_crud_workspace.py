@@ -8,10 +8,10 @@ Verifica que todos los métodos CRUD funcionen correctamente:
 - UPDATE: PATCH /api/v1/clientes/{id}/
 - DELETE: DELETE /api/v1/clientes/{id}/
 """
+
 import pytest
 from django_tenants.utils import schema_context
 
-from apps.public.tenants.models import TenantMembership
 from apps.tenant.clientes.models import Cliente
 from apps.tenant.empresa.models import Empresa
 
@@ -20,7 +20,7 @@ from apps.tenant.empresa.models import Empresa
 def test_clientes_crud_completo(client, admin_user, tenant):
     """
     Test funcional completo de CRUD de clientes.
-    
+
     Verifica:
     1. LIST: Obtener lista de clientes (vacía inicialmente)
     2. CREATE: Crear un nuevo cliente
@@ -52,13 +52,15 @@ def test_clientes_crud_completo(client, admin_user, tenant):
         "observaciones": "Cliente de prueba para tests",
         # DEUDA-C01 (mision "Clientes + Cartera", 2026-09-11): JURIDICA
         # via ViewSet (validar_representante=True) exige representante legal.
-        "contactos": [{
-            "nombre_completo": "Representante Legal Test",
-            "email": "representante.workspace@example.com",
-            "es_representante_legal": True,
-        }],
+        "contactos": [
+            {
+                "nombre_completo": "Representante Legal Test",
+                "email": "representante.workspace@example.com",
+                "es_representante_legal": True,
+            }
+        ],
     }
-    
+
     with schema_context(tenant.schema_name):
         # 1. LIST: Verificar que la lista está vacía inicialmente
         resp = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
@@ -66,13 +68,13 @@ def test_clientes_crud_completo(client, admin_user, tenant):
         data = resp.json()
         assert "results" in data or isinstance(data, list), "Response should be paginated or a list"
         initial_count = len(data.get("results", data))
-        
+
         # 2. CREATE: Crear un nuevo cliente
         resp = client.post(
             "/api/v1/clientes/",
             data=cliente_data,
             content_type="application/json",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
         )
         assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.content}"
         created = resp.json()
@@ -80,16 +82,15 @@ def test_clientes_crud_completo(client, admin_user, tenant):
         assert created["numero_documento"] == cliente_data["numero_documento"]
         cliente_id = created["id"]
         cliente_uuid = created["uuid"]
-        
+
         # Verificar que el cliente fue creado en la BD
         cliente_db = Cliente.objects.get(id=cliente_id)
         assert cliente_db.razon_social == cliente_data["razon_social"]
         assert cliente_db.email == cliente_data["email"]
-        
+
         # 3. READ: Obtener detalle del cliente
         resp = client.get(
-            f"/api/v1/clientes/{cliente_uuid}/",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+            f"/api/v1/clientes/{cliente_uuid}/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
         )
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.content}"
         detail = resp.json()
@@ -100,20 +101,20 @@ def test_clientes_crud_completo(client, admin_user, tenant):
         assert detail["direccion"] == cliente_data["direccion"]
         assert detail["ciudad"] == cliente_data["ciudad"]
         assert detail["observaciones"] == cliente_data["observaciones"]
-        
+
         # 4. UPDATE: Actualizar el cliente
         update_data = {
             "razon_social": "CLIENTE TEST ACTUALIZADO S.A.S.",
             "email": "nuevo@cliente.com",
             "telefono": "3009998888",
             "activo": False,
-            "observaciones": "Cliente actualizado en test"
+            "observaciones": "Cliente actualizado en test",
         }
         resp = client.patch(
             f"/api/v1/clientes/{cliente_uuid}/",
             data=update_data,
             content_type="application/json",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
         )
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.content}"
         updated = resp.json()
@@ -122,13 +123,13 @@ def test_clientes_crud_completo(client, admin_user, tenant):
         assert updated["telefono"] == update_data["telefono"]
         assert updated["activo"] == update_data["activo"]
         assert updated["observaciones"] == update_data["observaciones"]
-        
+
         # Verificar que el cliente fue actualizado en la BD
         cliente_db.refresh_from_db()
         assert cliente_db.razon_social == update_data["razon_social"]
         assert cliente_db.email == update_data["email"]
         assert cliente_db.activo == update_data["activo"]
-        
+
         # 5. LIST después de UPDATE: Verificar que el cliente aparece actualizado
         resp = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
         assert resp.status_code == 200
@@ -139,7 +140,7 @@ def test_clientes_crud_completo(client, admin_user, tenant):
         assert cliente_list is not None
         assert cliente_list["razon_social"] == update_data["razon_social"]
         assert cliente_list["activo"] == update_data["activo"]
-        
+
         # 6. LIST final: verificar que el cliente persiste y está inactivo
         resp = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
         assert resp.status_code == 200
@@ -154,7 +155,7 @@ def test_clientes_crud_completo(client, admin_user, tenant):
 def test_clientes_create_validaciones(client, admin_user, tenant):
     """
     Test de validaciones al crear clientes.
-    
+
     Verifica:
     - Campos requeridos
     - Unicidad de documento
@@ -169,10 +170,10 @@ def test_clientes_create_validaciones(client, admin_user, tenant):
             "/api/v1/clientes/",
             data={},
             content_type="application/json",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
         )
         assert resp.status_code == 400, "Should return 400 for missing required fields"
-        
+
         # Test: Crear cliente válido
         cliente_data = {
             "tipo_persona": "JURIDICA",
@@ -183,21 +184,23 @@ def test_clientes_create_validaciones(client, admin_user, tenant):
             "activo": True,
             # DEUDA-C01 (mision "Clientes + Cartera", 2026-09-11): JURIDICA
             # via ViewSet (validar_representante=True) exige representante legal.
-            "contactos": [{
-                "nombre_completo": "Representante Legal Test",
-                "email": "representante.validaciones@example.com",
-                "es_representante_legal": True,
-            }],
+            "contactos": [
+                {
+                    "nombre_completo": "Representante Legal Test",
+                    "email": "representante.validaciones@example.com",
+                    "es_representante_legal": True,
+                }
+            ],
         }
         resp = client.post(
             "/api/v1/clientes/",
             data=cliente_data,
             content_type="application/json",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
         )
         assert resp.status_code == 201
-        cliente_id = resp.json()["id"]
-        
+        resp.json()["id"]
+
         # Test: Intentar crear cliente duplicado (mismo documento).
         # Hallazgo real: ClienteDetailSerializer.validate() (FASE 4
         # anti-duplicidad, Zero Trust) rechaza documentos duplicados en
@@ -209,10 +212,12 @@ def test_clientes_create_validaciones(client, admin_user, tenant):
             "/api/v1/clientes/",
             data=cliente_data,
             content_type="application/json",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
         )
-        assert resp.status_code == 400, "Should reject duplicate document (Zero Trust anti-duplicidad)"
-        
+        assert (
+            resp.status_code == 400
+        ), "Should reject duplicate document (Zero Trust anti-duplicidad)"
+
         # Cleanup omitido: en este schema de pruebas no se validan cascadas de módulos externos.
 
 
@@ -234,7 +239,7 @@ def test_clientes_list_filtros_y_ordenamiento(client, admin_user, tenant):
             numero_documento="900111111",
             razon_social="Cliente A",
             regimen_tributario="ORDINARIO",
-            activo=True
+            activo=True,
         )
         Cliente.objects.create(
             empresa=empresa,
@@ -243,24 +248,23 @@ def test_clientes_list_filtros_y_ordenamiento(client, admin_user, tenant):
             numero_documento="900222222",
             razon_social="Cliente B",
             regimen_tributario="SIMPLE",
-            activo=False
+            activo=False,
         )
-        
+
         # Test: Ordenamiento
         resp = client.get(
             "/api/v1/clientes/?ordering=razon_social",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
         )
         assert resp.status_code == 200
         data = resp.json()
         items = data.get("results", data)
         razones = [c["razon_social"] for c in items if c.get("razon_social")]
         assert razones == sorted(razones), "Should be sorted by razon_social"
-        
+
         # Test: Búsqueda
         resp = client.get(
-            "/api/v1/clientes/?search=Cliente A",
-            HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+            "/api/v1/clientes/?search=Cliente A", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
         )
         assert resp.status_code == 200
         data = resp.json()

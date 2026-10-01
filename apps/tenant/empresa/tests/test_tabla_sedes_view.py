@@ -6,6 +6,7 @@ Verifica:
 2. Las sedes de la empresa se renderizan correctamente.
 3. La busqueda por nombre/direccion filtra la tabla.
 """
+
 import pytest
 from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context
@@ -20,9 +21,16 @@ User = get_user_model()
 @pytest.fixture
 def _admin_con_sedes(tenant):
     with schema_context(tenant.schema_name):
-        empresa = Empresa.objects.only('id').first()
-        Sede.objects.create(empresa=empresa, nombre='Sede Norte', direccion='Calle 100', encargado_nombre='Ana Perez')
-        Sede.objects.create(empresa=empresa, nombre='Sede Sur', direccion='Calle 1', encargado_nombre='')
+        empresa = Empresa.objects.only("id").first()
+        Sede.objects.create(
+            empresa=empresa,
+            nombre="Sede Norte",
+            direccion="Calle 100",
+            encargado_nombre="Ana Perez",
+        )
+        Sede.objects.create(
+            empresa=empresa, nombre="Sede Sur", direccion="Calle 1", encargado_nombre=""
+        )
 
         admin_user = User.objects.create(username="admin_sede", email="admin_sede@example.com")
         TenantProfile.objects.create(user=admin_user, empresa=empresa, rol="ADMIN")
@@ -51,7 +59,9 @@ def test_tabla_sedes_busqueda(client, tenant, _admin_con_sedes):
     with schema_context(tenant.schema_name):
         client.force_login(_admin_con_sedes)
 
-    r = client.get("/ui/empresa/sedes/tabla/?q=Norte", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+    r = client.get(
+        "/ui/empresa/sedes/tabla/?q=Norte", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
 
     assert r.status_code == 200
     html = r.content.decode("utf-8")

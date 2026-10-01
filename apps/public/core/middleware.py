@@ -4,12 +4,13 @@ Middleware para manejar redirecciones HTTPS -> HTTP en desarrollo y headers de s
 [WARNING] REGLA 0: Cero caracteres especiales o emojis. Solo ASCII.
 """
 
-import logging
-import uuid
 import fnmatch
+import logging
+import threading
+import uuid
 
 from django.conf import settings
-from django.http import HttpResponsePermanentRedirect, HttpResponseBadRequest
+from django.http import HttpResponseBadRequest, HttpResponsePermanentRedirect
 from django.utils.deprecation import MiddlewareMixin
 
 logger = logging.getLogger(__name__)
@@ -32,21 +33,21 @@ class ValidateALLOWED_HOSTSMiddleware:
     def _host_matches(self, host):
         """Verifica si host coincide con ALLOWED_HOSTS (con soporte para wildcards)."""
         allowed_hosts = set(settings.ALLOWED_HOSTS)
-        
-        if '*' in allowed_hosts:
+
+        if "*" in allowed_hosts:
             return True
 
         # Remover puerto si esta presente
         host_only = host.split(":")[0] if ":" in host else host
 
         for allowed_host in allowed_hosts:
-            if allowed_host == '*':
+            if allowed_host == "*":
                 return True
-            if allowed_host.startswith('.'):
+            if allowed_host.startswith("."):
                 # .sintel.net.co matches sintel.net.co and test.sintel.net.co
                 if host_only == allowed_host[1:] or host_only.endswith(allowed_host):
                     return True
-            elif '*' in allowed_host:
+            elif "*" in allowed_host:
                 if fnmatch.fnmatch(host_only, allowed_host):
                     return True
             else:
@@ -64,7 +65,7 @@ class ValidateALLOWED_HOSTSMiddleware:
             security_logger.warning(
                 "[BLOCKED] No Host header | Path: %s | IP: %s",
                 request.path,
-                self._get_client_ip(request)
+                self._get_client_ip(request),
             )
             return HttpResponseBadRequest("Invalid request: missing Host header")
 
@@ -74,7 +75,7 @@ class ValidateALLOWED_HOSTSMiddleware:
                 "[BLOCKED] Invalid Host header '%s' not in ALLOWED_HOSTS | Path: %s | IP: %s",
                 http_host,
                 request.path,
-                self._get_client_ip(request)
+                self._get_client_ip(request),
             )
             return HttpResponseBadRequest("Invalid Host header")
 
@@ -168,18 +169,17 @@ class HTTPSRedirectMiddleware:
         response = self.get_response(request)
 
         # En desarrollo, agregar headers de seguridad permisivos para evitar advertencias del navegador
-        if settings.DEBUG:
-            # Cross-Origin-Opener-Policy: Permitir en desarrollo (el navegador requiere HTTPS o localhost)
-            # Para desarrollo con dominios arbitrarios, usamos 'unsafe-none' o simplemente no lo configuramos
-            # El navegador mostrara una advertencia, pero no bloqueara la funcionalidad
-            if "Cross-Origin-Opener-Policy" not in response:
-                # Solo establecer si el origen es localhost o 127.0.0.1
-                # Acceder directamente a META para evitar validacion ALLOWED_HOSTS prematura
-                http_host = request.META.get("HTTP_HOST", "")
-                host = http_host.split(":")[0] if http_host else ""
-                if host in ["localhost", "127.0.0.1"]:
-                    response["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
-                # Para otros dominios en desarrollo, no establecer el header para evitar advertencias
+        # Cross-Origin-Opener-Policy: Permitir en desarrollo (el navegador requiere HTTPS o localhost)
+        # Para desarrollo con dominios arbitrarios, usamos 'unsafe-none' o simplemente no lo configuramos
+        # El navegador mostrara una advertencia, pero no bloqueara la funcionalidad
+        if settings.DEBUG and "Cross-Origin-Opener-Policy" not in response:
+            # Solo establecer si el origen es localhost o 127.0.0.1
+            # Acceder directamente a META para evitar validacion ALLOWED_HOSTS prematura
+            http_host = request.META.get("HTTP_HOST", "")
+            host = http_host.split(":")[0] if http_host else ""
+            if host in ["localhost", "127.0.0.1"]:
+                response["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+            # Para otros dominios en desarrollo, no establecer el header para evitar advertencias
 
         return response
 
@@ -274,8 +274,6 @@ class CSRFTrustedOriginMiddleware:
 
 
 # Thread-local storage para contexto de logging
-import threading
-
 _logging_context = threading.local()
 
 
@@ -359,6 +357,7 @@ class DebugNoCSRFMiddleware:
 
     def __call__(self, request):
         from django.conf import settings
+
         if settings.DEBUG:
             # Marcar request como si ya paso CSRF
             request._dont_enforce_csrf_checks = True

@@ -34,10 +34,8 @@
       <div class="tab-pane fade show active" id="tab-pane-gastos" role="tabpanel" 
            aria-labelledby="tab-gastos" tabindex="0">
         
-        {# Toolbar #}
-        <div class="d-flex justify-content-between align-items-center mb-3" data-module="gastos">
-          {% url 'gastos:documentos-tabla' as gastos_search_url %}
-          {% include 'tenant/core/partials/ui/filter_bar.html' with search_id="search-gasto" placeholder="Buscar gasto..." module="gastos" search_url=gastos_search_url target="#gastos-panel" %}
+        {# Toolbar -- sin buscador propio: DataTables trae su buscador nativo #}
+        <div class="d-flex justify-content-end align-items-center mb-3" data-module="gastos">
           <button class="btn btn-primary btn-sm"
                   hx-get="/api/v1/gastos/render-offcanvas/crear/"
                   hx-target="#offcanvas-container-gastos"
@@ -48,30 +46,23 @@
           </button>
         </div>
 
-        {% comment %}
-        Panel HTMX: KPIs + tabla server-rendered (django-tables2). Reemplaza el antiguo
-        #gastos-summary + spinner + #grid-gastos Tabulator (ver PLAN_UNICO_CORRECCIONES.md
-        Fase 5-BIS). Se recarga completo en cada busqueda/orden/paginacion/evento de refresco.
-        {% endcomment %}
-        <div id="gastos-panel"
-             data-grid="gastos"
+        {# KPIs -- siguen server-rendered via HTMX (kpis_gastos.html) #}
+        <div id="gastos-kpis-panel"
              hx-get="{% url 'gastos:documentos-tabla' %}"
              hx-trigger="load, gasto-created from:body, gasto-updated from:body"
              hx-target="this"
-             hx-swap="innerHTML"
-             hx-boost="true">
-          {% include 'tenant/core/partials/ui/loading_state.html' with entity="gastos" %}
-        </div>
+             hx-swap="innerHTML"></div>
+
+        {# Tabla -- esqueleto estatico, poblado via ajax por gasto_list.js #}
+        {% include 'tenant/gastos/partials/tabla_gastos.html' %}
       </div>
 
       {# TAB 2: RESOLUCIONES DIAN #}
       <div class="tab-pane fade" id="gastos-tab-pane-resoluciones" role="tabpanel"
            aria-labelledby="gastos-tab-resoluciones" tabindex="0">
         
-        {# Toolbar #}
-        <div class="d-flex justify-content-between align-items-center mb-3" data-module="resoluciones">
-          {% url 'gastos:resoluciones-tabla' as resoluciones_search_url %}
-          {% include 'tenant/core/partials/ui/filter_bar.html' with search_id="gastos-search-resolucion" placeholder="Buscar resolucion..." module="resoluciones" search_url=resoluciones_search_url target="#gastos-resoluciones-panel" %}
+        {# Toolbar -- sin buscador propio: DataTables trae su buscador nativo #}
+        <div class="d-flex justify-content-end align-items-center mb-3" data-module="resoluciones">
           <button class="btn btn-primary btn-sm"
                   hx-get="/api/v1/gastos/render-offcanvas/resolucion/"
                   hx-target="#offcanvas-container-gastos"
@@ -82,16 +73,8 @@
           </button>
         </div>
 
-        {# Panel HTMX: tabla server-rendered (django-tables2). Ver nota en la pestaña de Gastos. #}
-        <div id="gastos-resoluciones-panel"
-             data-grid="resoluciones"
-             hx-get="{% url 'gastos:resoluciones-tabla' %}"
-             hx-trigger="load, resolucion-created from:body"
-             hx-target="this"
-             hx-swap="innerHTML"
-             hx-boost="true">
-          {% include 'tenant/core/partials/ui/loading_state.html' with entity="resoluciones" %}
-        </div>
+        {# Tabla -- esqueleto estatico, poblado via ajax por gasto_list.js #}
+        {% include 'tenant/gastos/partials/tabla_resoluciones.html' %}
       </div>
     </div>
   </div>

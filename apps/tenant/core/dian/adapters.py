@@ -44,6 +44,7 @@ docs/fiscal/DIAN_TRANSPORT_AUDIT.md §3):
   DIAN_TIP_AMB                -- "2" pruebas (default) | "1" produccion,
                                   mismo setting ya usado por CufeService
 """
+
 import base64
 import io
 import logging
@@ -62,7 +63,9 @@ class DIANAdapter:
     de `zeep.Client` sin requerir un WSDL real disponible.
     """
 
-    def __init__(self, wsdl_url: str | None = None, tip_amb: str | None = None, _client_factory=None):
+    def __init__(
+        self, wsdl_url: str | None = None, tip_amb: str | None = None, _client_factory=None
+    ):
         from django.conf import settings
 
         self.tip_amb = tip_amb or getattr(settings, "DIAN_TIP_AMB", "2")
@@ -117,13 +120,18 @@ class DIANAdapter:
 
         if es_valido is True:
             return TransmissionResult(
-                success=True, status="ACEPTADO", track_id=track_id,
+                success=True,
+                status="ACEPTADO",
+                track_id=track_id,
                 response_code=str(status_code) if status_code is not None else None,
-                response_message=status_desc, raw_response=raw,
+                response_message=status_desc,
+                raw_response=raw,
             )
         if es_valido is False:
             return TransmissionResult(
-                success=True, status="RECHAZADO", track_id=track_id,
+                success=True,
+                status="RECHAZADO",
+                track_id=track_id,
                 response_code=str(status_code) if status_code is not None else None,
                 response_message=status_desc,
                 errors=[status_desc] if status_desc else [],
@@ -132,15 +140,18 @@ class DIANAdapter:
         # es_valido is None -- la respuesta no trae el campo esperado. No se
         # inventa ACEPTADO/RECHAZADO sobre un shape no reconocido.
         return TransmissionResult(
-            success=False, status="ERROR_TRANSMISION",
+            success=False,
+            status="ERROR_TRANSMISION",
             response_message="Respuesta de la DIAN con formato no reconocido -- revisar contra el WSDL real.",
-            errors=["unrecognized_response_shape"], raw_response=raw,
+            errors=["unrecognized_response_shape"],
+            raw_response=raw,
         )
 
     def send(self, document: ElectronicDocument) -> TransmissionResult:
         if not self.wsdl_url:
             return TransmissionResult(
-                success=False, status="ERROR_TRANSMISION",
+                success=False,
+                status="ERROR_TRANSMISION",
                 response_message=(
                     "DIAN_WSDL_URL_HABILITACION/DIAN_WSDL_URL_PRODUCCION no configurado. "
                     "Ver docs/fiscal/DIAN_TRANSPORT_AUDIT.md §3."
@@ -152,7 +163,8 @@ class DIANAdapter:
             cliente = self._client()
         except ImportError:
             return TransmissionResult(
-                success=False, status="ERROR_TRANSMISION",
+                success=False,
+                status="ERROR_TRANSMISION",
                 response_message="Dependencia 'zeep' no instalada.",
                 errors=["zeep_not_installed"],
             )
@@ -180,7 +192,8 @@ class DIANAdapter:
         # de "no soportado" en vez de fingir una consulta real.
         """
         return TransmissionResult(
-            success=False, status="ERROR_TRANSMISION",
+            success=False,
+            status="ERROR_TRANSMISION",
             response_message=(
                 "DIANAdapter.get_status() no esta implementado -- operacion real de "
                 "la DIAN no confirmada. Ver docs/fiscal/FISCAL_05_DIAN_ADAPTER.md."

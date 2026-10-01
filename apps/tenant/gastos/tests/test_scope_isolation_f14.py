@@ -5,6 +5,7 @@ para el contexto transversal. Este archivo cierra el gap para `gastos`:
 (1) alcance=SEDE sin sedes asignadas -> frozenset(), ve solo sin-sede; (2)
 alcance=SEDE con DOS sedes asignadas -> ve registros de ambas.
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa, Sede
@@ -18,24 +19,41 @@ class GastoIsolationF14Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F14 Gastos", nit="900000794", direccion="Calle 1",
+            razon_social="Empresa Test F14 Gastos",
+            nit="900000794",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F14 Gastos")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F14 Gastos")
         self.resolucion = ResolucionDIAN.objects.create(
-            empresa=self.empresa, numero_resolucion="RESF14", prefijo="GF14",
-            rango_desde=1, rango_hasta=1000,
-            fecha_resolucion="2026-01-01", fecha_fin="2027-01-01", vigente=True,
+            empresa=self.empresa,
+            numero_resolucion="RESF14",
+            prefijo="GF14",
+            rango_desde=1,
+            rango_hasta=1000,
+            fecha_resolucion="2026-01-01",
+            fecha_fin="2027-01-01",
+            vigente=True,
         )
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor F14 Gastos", numero_documento="F14-654", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor F14 Gastos",
+            numero_documento="F14-654",
+            tipo_documento="NIT",
         )
 
     def _crear(self, consecutivo, sede=None):
         return DocumentoSoporte.objects.create(
-            empresa=self.empresa, resolucion_dian=self.resolucion, consecutivo=consecutivo,
-            fecha="2026-05-01", proveedor=self.proveedor, subtotal=1000, total=1000,
-            descripcion="Gasto F14", categoria_contable="ARRENDAMIENTOS", sede=sede,
+            empresa=self.empresa,
+            resolucion_dian=self.resolucion,
+            consecutivo=consecutivo,
+            fecha="2026-05-01",
+            proveedor=self.proveedor,
+            subtotal=1000,
+            total=1000,
+            descripcion="Gasto F14",
+            categoria_contable="ARRENDAMIENTOS",
+            sede=sede,
         )
 
     def test_alcance_sede_sin_asignaciones_no_ve_ninguna_sede_solo_null_safe(self):
@@ -43,7 +61,10 @@ class GastoIsolationF14Tests(SintelTenantTestCase):
         d_a = self._crear(2, sede=self.sede_a)
 
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
 
         resp = self.api_client.get("/api/v1/gastos/")
@@ -60,7 +81,10 @@ class GastoIsolationF14Tests(SintelTenantTestCase):
         d_c = self._crear(5, sede=sede_c)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a, self.sede_b])
 

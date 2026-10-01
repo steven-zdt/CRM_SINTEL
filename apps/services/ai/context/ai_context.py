@@ -10,6 +10,7 @@ No incluye secretos ni datos de otro tenant -- build_context() lanza
 PermissionDeniedError si el usuario no tiene un TenantProfile valido
 en el schema actual, en vez de intentar adivinar una empresa_id.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -26,6 +27,7 @@ class AIContext:
     tool nunca puede "ampliar" su propio alcance modificando esto en
     tiempo de ejecucion.
     """
+
     user_id: int
     empresa_id: int
     schema_name: str
@@ -73,8 +75,16 @@ def build_context(request, *, screen: dict | None = None) -> AIContext:
     tenant = getattr(request, "tenant", None)
     schema_name = getattr(tenant, "schema_name", "") if tenant else ""
 
-    sede_ids = tuple(profile.sedes_asignadas.values_list("id", flat=True)) if profile.alcance == "SEDE" else ()
-    area_ids = tuple(profile.areas_asignadas.values_list("id", flat=True)) if profile.alcance == "AREA" else ()
+    sede_ids = (
+        tuple(profile.sedes_asignadas.values_list("id", flat=True))
+        if profile.alcance == "SEDE"
+        else ()
+    )
+    area_ids = (
+        tuple(profile.areas_asignadas.values_list("id", flat=True))
+        if profile.alcance == "AREA"
+        else ()
+    )
 
     screen = screen or {}
     return AIContext(

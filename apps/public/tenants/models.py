@@ -202,16 +202,22 @@ class FailedTenantTask(models.Model):
     - Al fallar definitivamente, se registra aquí para revisión manual.
     """
 
-    task_id = models.CharField(max_length=128, unique=True, db_index=True, verbose_name=_("ID de Tarea"))
+    task_id = models.CharField(
+        max_length=128, unique=True, db_index=True, verbose_name=_("ID de Tarea")
+    )
     task_name = models.CharField(max_length=255, db_index=True, verbose_name=_("Nombre de Tarea"))
     args = models.JSONField(default=dict, blank=True, verbose_name=_("Argumentos Posicionales"))
     kwargs = models.JSONField(default=dict, blank=True, verbose_name=_("Argumentos Nombrados"))
     exception = models.TextField(verbose_name=_("Excepción"))
     traceback = models.TextField(blank=True, null=True, verbose_name=_("Traceback"))
-    tenant_schema = models.CharField(max_length=63, db_index=True, blank=True, null=True, verbose_name=_("Esquema del Tenant"))
+    tenant_schema = models.CharField(
+        max_length=63, db_index=True, blank=True, null=True, verbose_name=_("Esquema del Tenant")
+    )
     status = models.CharField(max_length=20, default="FAILED", verbose_name=_("Estado"))
     retries = models.PositiveIntegerField(default=0, verbose_name=_("Reintentos Realizados"))
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name=_("Fecha de Fallo"))
+    created_at = models.DateTimeField(
+        auto_now_add=True, db_index=True, verbose_name=_("Fecha de Fallo")
+    )
 
     class Meta:
         verbose_name = _("Tarea Fallida")

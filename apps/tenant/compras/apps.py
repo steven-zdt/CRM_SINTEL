@@ -10,4 +10,5 @@ class ComprasConfig(AppConfig):
     def ready(self) -> None:
         """MAIL-16: registra PurchaseDocumentHandler en el DocumentDispatcher compartido."""
         from apps.tenant.compras.document_intake import register
+
         register()

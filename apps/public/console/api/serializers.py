@@ -53,6 +53,7 @@ class TenantDomainSerializer(serializers.ModelSerializer):
 
 class UserTenantMembershipSerializer(serializers.Serializer):
     """Miniatura de la membresia de un usuario en un tenant."""
+
     tenant_id = serializers.IntegerField(source="client.id")
     nombre = serializers.CharField(source="client.nombre")
     schema_name = serializers.CharField(source="client.schema_name")
@@ -77,6 +78,7 @@ class ConsoleUserListSerializer(serializers.ModelSerializer):
 
     def get_tenants(self, obj):
         from django.conf import settings
+
         domain_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
         protocol = getattr(settings, "SITE_PROTOCOL", "https")
 
@@ -87,15 +89,17 @@ class ConsoleUserListSerializer(serializers.ModelSerializer):
         for m in memberships:
             schema = m.client.schema_name if m.client else ""
             domain_url = f"{protocol}://{schema}.{domain_base}" if schema else ""
-            result.append({
-                "tenant_id": m.client_id,
-                "nombre": m.client.nombre if m.client else "",
-                "schema_name": schema,
-                "domain_url": domain_url,
-                "rol": m.rol,
-                "is_primary_admin": m.is_primary_admin,
-                "is_active": m.is_active,
-            })
+            result.append(
+                {
+                    "tenant_id": m.client_id,
+                    "nombre": m.client.nombre if m.client else "",
+                    "schema_name": schema,
+                    "domain_url": domain_url,
+                    "rol": m.rol,
+                    "is_primary_admin": m.is_primary_admin,
+                    "is_active": m.is_active,
+                }
+            )
         return result
 
     def get_tipo_usuario(self, obj):

@@ -106,6 +106,7 @@ class ResolucionFacturacion(SintelTenantBaseModel):
 
     def clean(self):
         from django.core.exceptions import ValidationError
+
         if self.rango_desde and self.rango_hasta and self.rango_desde > self.rango_hasta:
             raise ValidationError(
                 {"rango_hasta": _("El rango_hasta debe ser mayor o igual a rango_desde.")}
@@ -194,7 +195,9 @@ class Venta(SintelTenantBaseModel):
     )
 
     fecha_emision = models.DateField(verbose_name=_("Fecha de emision"))
-    fecha_vencimiento = models.DateField(null=True, blank=True, verbose_name=_("Fecha de vencimiento"))
+    fecha_vencimiento = models.DateField(
+        null=True, blank=True, verbose_name=_("Fecha de vencimiento")
+    )
 
     estado = models.CharField(
         max_length=16,
@@ -291,9 +294,7 @@ class ItemVenta(SintelTenantBaseModel):
         self.subtotal = cant * pu
         if not self.empresa_id and self.venta_id:
             eid = (
-                Venta.objects.filter(id=self.venta_id)
-                .values_list("empresa_id", flat=True)
-                .first()
+                Venta.objects.filter(id=self.venta_id).values_list("empresa_id", flat=True).first()
             )
             if eid:
                 self.empresa_id = eid

@@ -17,6 +17,7 @@ confundiria "cuanto se movio en el periodo" con "cuanto hay ahora". Se deja
 como un dataset futuro si hay demanda real (mismo criterio de "no inventar"
 usado en la mision Tax Service).
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -47,9 +48,19 @@ _DIMENSIONS = (
 )
 
 _MEASURES = (
-    ReportMeasure("cantidad_movimientos", "Cantidad de movimientos", FieldType.INTEGER, Aggregation.COUNT, source="id"),
-    ReportMeasure("cantidad", "Cantidad (unidades)", FieldType.DECIMAL, Aggregation.SUM, source="cantidad"),
-    ReportMeasure("costo_total", "Costo total", FieldType.DECIMAL, Aggregation.SUM, source="__costo_total__"),
+    ReportMeasure(
+        "cantidad_movimientos",
+        "Cantidad de movimientos",
+        FieldType.INTEGER,
+        Aggregation.COUNT,
+        source="id",
+    ),
+    ReportMeasure(
+        "cantidad", "Cantidad (unidades)", FieldType.DECIMAL, Aggregation.SUM, source="cantidad"
+    ),
+    ReportMeasure(
+        "costo_total", "Costo total", FieldType.DECIMAL, Aggregation.SUM, source="__costo_total__"
+    ),
 )
 
 _FILTERS = (
@@ -78,6 +89,7 @@ _DATASET = ReportDataset(
     scope_fields=("empresa", "sede"),
 )
 
+
 def _costo_total_expr() -> ExpressionWrapper:
     # WARNING: BUGFIX: confirmado en vivo -- reusar la MISMA instancia de
     # ExpressionWrapper (creada una sola vez a nivel de modulo) entre el
@@ -85,7 +97,10 @@ def _costo_total_expr() -> ExpressionWrapper:
     # "'...' is an aggregate" (Django marca/resuelve la expresion la primera
     # vez que se usa en una query; una segunda query con la misma instancia
     # ya no es valida). Se construye una instancia NUEVA en cada llamada.
-    return ExpressionWrapper(F("cantidad") * F("costo_unitario"), output_field=DecimalFieldType(max_digits=18, decimal_places=2))
+    return ExpressionWrapper(
+        F("cantidad") * F("costo_unitario"),
+        output_field=DecimalFieldType(max_digits=18, decimal_places=2),
+    )
 
 
 _AGGREGATORS = {
@@ -134,22 +149,29 @@ class InventarioReportProvider:
         def _build_annotations() -> dict:
             # Se reconstruye (no se reutiliza un dict/expresion ya armado)
             # para cada query -- ver _costo_total_expr().
-            return {f"m__{name}": _AGGREGATORS[name](_DATASET.get_measure(name).source) for name in measures}
+            return {
+                f"m__{name}": _AGGREGATORS[name](_DATASET.get_measure(name).source)
+                for name in measures
+            }
 
         values_qs = qs.values(*group_sources.values()).annotate(**_build_annotations())
 
         if request.order_by:
             order_field = request.order_by.lstrip("-")
             prefix = "-" if request.order_by.startswith("-") else ""
-            resolved = group_sources.get(order_field, order_field if order_field in measures else None)
+            resolved = group_sources.get(
+                order_field, order_field if order_field in measures else None
+            )
             if resolved:
                 values_qs = values_qs.order_by(f"{prefix}{resolved}")
         else:
-            values_qs = values_qs.order_by(*[f"-{s}" for s in group_sources.values()][:1] or ["-created_at__date"])
+            values_qs = values_qs.order_by(
+                *[f"-{s}" for s in group_sources.values()][:1] or ["-created_at__date"]
+            )
 
         count = values_qs.count()
         start = (request.page - 1) * request.page_size
-        page_rows = list(values_qs[start:start + request.page_size])
+        page_rows = list(values_qs[start : start + request.page_size])
 
         rows = []
         for raw in page_rows:
@@ -164,7 +186,7 @@ class InventarioReportProvider:
 
         totals_qs = qs.aggregate(**_build_annotations())
         totals = {
-            name[len("m__"):]: (float(value) if isinstance(value, Decimal) else value)
+            name[len("m__") :]: (float(value) if isinstance(value, Decimal) else value)
             for name, value in totals_qs.items()
         }
 

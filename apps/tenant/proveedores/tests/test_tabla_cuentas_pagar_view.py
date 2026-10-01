@@ -1,13 +1,20 @@
 """
-Test de la tabla server-rendered de Cuentas por Pagar (Fase 5-BIS,
-django-tables2 + HTMX).
+Test del endpoint DataTables server-side (manual) de Cuentas por Pagar
+(migracion DataTables 3.x, ver docs/remediation/TABLES_FORMS_MIGRATION_STATUS.md).
+
+POST /api/v1/proveedores/cuentas-pagar/dt/ -- CuentasPagarViewSet.dt().
+Reemplaza la vieja vista server-rendered `/ui/proveedores/cuentas-pagar/tabla/`
+(django-tables2 + HTMX, retirada al migrar).
 
 Verifica:
-1. La vista responde 200 tras login por sesion.
-2. Las facturas de compra (Factura.naturaleza=COMPRA) se renderizan como
-   filas de Cuentas por Pagar, con el mismo mapeo de campos que
+1. El endpoint responde 200 tras login por sesion y devuelve el contrato
+   DataTables {draw, recordsTotal, recordsFiltered, data}.
+2. Las facturas de compra (Factura.naturaleza=COMPRA) se listan como filas
+   de Cuentas por Pagar, con el mismo mapeo de campos que
    FacturaCxPListSerializer (fuente de verdad, api/serializers.py).
-3. El filtro ?estado_pago= y la busqueda ?q= funcionan.
+3. El filtro ?estado_pago= (query string, no columna DataTables -- ver
+   docstring de dt() en viewsets.py) y la busqueda global (search.value)
+   funcionan.
 
 Nota: esta migracion corrigio de paso dos bugs funcionales pre-existentes:
 - La grilla Tabulator (`cuentas_pagar_list.js`) nunca se inicializaba: su
@@ -18,6 +25,7 @@ Nota: esta migracion corrigio de paso dos bugs funcionales pre-existentes:
   soporte real de busqueda en CuentasPagarSelector.qs_list_facturas_compra()
   y en el ViewSet.
 """
+
 from decimal import Decimal
 
 import pytest
@@ -32,30 +40,61 @@ from apps.tenant.proveedores.models import CuentasPagar, Proveedor
 
 User = get_user_model()
 
+DT_URL = "/api/v1/proveedores/cuentas-pagar/dt/"
+
+
+def _dt_payload(**overrides):
+    payload = {
+        "draw": 1,
+        "start": 0,
+        "length": 10,
+        "search": {"value": ""},
+        "order": [],
+        "columns": [],
+    }
+    payload.update(overrides)
+    return payload
+
 
 @pytest.fixture
 def _admin_con_cxp(tenant):
     with schema_context(tenant.schema_name):
-        empresa = Empresa.objects.only('id').first()
+        empresa = Empresa.objects.only("id").first()
         proveedor = Proveedor.objects.create(
-            empresa=empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="800555666", razon_social="Proveedor CxP SAS",
-            regimen_tributario="ORDINARIO", activo=True,
+            empresa=empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="800555666",
+            razon_social="Proveedor CxP SAS",
+            regimen_tributario="ORDINARIO",
+            activo=True,
         )
         Factura.objects.create(
-            empresa=empresa, numero="FCOMPRA-001",
-            emisor_nit=proveedor.numero_documento, emisor_razon_social=proveedor.razon_social,
-            receptor_nit=empresa.nit, receptor_razon_social=empresa.razon_social,
-            naturaleza=Factura.Naturaleza.COMPRA, proveedor_uuid=proveedor.uuid,
-            subtotal=100000, impuestos=19000, total=119000,
+            empresa=empresa,
+            numero="FCOMPRA-001",
+            emisor_nit=proveedor.numero_documento,
+            emisor_razon_social=proveedor.razon_social,
+            receptor_nit=empresa.nit,
+            receptor_razon_social=empresa.razon_social,
+            naturaleza=Factura.Naturaleza.COMPRA,
+            proveedor_uuid=proveedor.uuid,
+            subtotal=100000,
+            impuestos=19000,
+            total=119000,
             estado_pago=Factura.EstadoPago.NO_PAGADA,
         )
         Factura.objects.create(
-            empresa=empresa, numero="FCOMPRA-002",
-            emisor_nit=proveedor.numero_documento, emisor_razon_social=proveedor.razon_social,
-            receptor_nit=empresa.nit, receptor_razon_social=empresa.razon_social,
-            naturaleza=Factura.Naturaleza.COMPRA, proveedor_uuid=proveedor.uuid,
-            subtotal=50000, impuestos=9500, total=59500,
+            empresa=empresa,
+            numero="FCOMPRA-002",
+            emisor_nit=proveedor.numero_documento,
+            emisor_razon_social=proveedor.razon_social,
+            receptor_nit=empresa.nit,
+            receptor_razon_social=empresa.razon_social,
+            naturaleza=Factura.Naturaleza.COMPRA,
+            proveedor_uuid=proveedor.uuid,
+            subtotal=50000,
+            impuestos=9500,
+            total=59500,
             estado_pago=Factura.EstadoPago.PAGADA,
         )
 
@@ -67,51 +106,64 @@ def _admin_con_cxp(tenant):
 
 
 @pytest.mark.django_db
-def test_tabla_cuentas_pagar_render(client, tenant, _admin_con_cxp):
+def test_dt_cuentas_pagar_render(client, tenant, _admin_con_cxp):
     with schema_context(tenant.schema_name):
         client.force_login(_admin_con_cxp)
 
-    r = client.get("/ui/proveedores/cuentas-pagar/tabla/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+    r = client.post(
+        DT_URL,
+        data=_dt_payload(),
+        content_type="application/json",
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
+    )
 
     assert r.status_code == 200, f"Status inesperado: {r.status_code}: {r.content[:500]}"
-    html = r.content.decode("utf-8")
-    assert "FCOMPRA-001" in html
-    assert "FCOMPRA-002" in html
-    assert "Proveedor CxP SAS" in html
-    assert "Sin Pago" in html
-    assert "Pagada" in html
+    body = r.json()
+    assert set(body.keys()) == {"draw", "recordsTotal", "recordsFiltered", "data"}
+    numeros = [row["numero_factura"] for row in body["data"]]
+    assert "FCOMPRA-001" in numeros
+    assert "FCOMPRA-002" in numeros
+    nombres = [row["proveedor_nombre"] for row in body["data"]]
+    assert "Proveedor CxP SAS" in nombres
+    estados = {row["numero_factura"]: row["estado_pago"] for row in body["data"]}
+    assert estados["FCOMPRA-001"] == "SIN_PAGO"
+    assert estados["FCOMPRA-002"] == "PAGADA"
 
 
 @pytest.mark.django_db
-def test_tabla_cuentas_pagar_filtro_estado(client, tenant, _admin_con_cxp):
+def test_dt_cuentas_pagar_filtro_estado(client, tenant, _admin_con_cxp):
     with schema_context(tenant.schema_name):
         client.force_login(_admin_con_cxp)
 
-    r = client.get(
-        "/ui/proveedores/cuentas-pagar/tabla/?estado_pago=PAGADA",
+    r = client.post(
+        f"{DT_URL}?estado_pago=PAGADA",
+        data=_dt_payload(),
+        content_type="application/json",
         HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
 
     assert r.status_code == 200
-    html = r.content.decode("utf-8")
-    assert "FCOMPRA-002" in html
-    assert "FCOMPRA-001" not in html
+    numeros = [row["numero_factura"] for row in r.json()["data"]]
+    assert "FCOMPRA-002" in numeros
+    assert "FCOMPRA-001" not in numeros
 
 
 @pytest.mark.django_db
-def test_tabla_cuentas_pagar_busqueda(client, tenant, _admin_con_cxp):
+def test_dt_cuentas_pagar_busqueda(client, tenant, _admin_con_cxp):
     with schema_context(tenant.schema_name):
         client.force_login(_admin_con_cxp)
 
-    r = client.get(
-        "/ui/proveedores/cuentas-pagar/tabla/?q=FCOMPRA-001",
+    r = client.post(
+        DT_URL,
+        data=_dt_payload(search={"value": "FCOMPRA-001"}),
+        content_type="application/json",
         HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
 
     assert r.status_code == 200
-    html = r.content.decode("utf-8")
-    assert "FCOMPRA-001" in html
-    assert "FCOMPRA-002" not in html
+    numeros = [row["numero_factura"] for row in r.json()["data"]]
+    assert "FCOMPRA-001" in numeros
+    assert "FCOMPRA-002" not in numeros
 
 
 @pytest.fixture
@@ -124,15 +176,22 @@ def _admin_con_cxp_sin_factura(tenant):
     real sin factura electronica.
     """
     with schema_context(tenant.schema_name):
-        empresa = Empresa.objects.only('id').first()
+        empresa = Empresa.objects.only("id").first()
         proveedor = Proveedor.objects.create(
-            empresa=empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="800777888", razon_social="Proveedor Sin Factura SAS",
-            regimen_tributario="ORDINARIO", activo=True,
+            empresa=empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="800777888",
+            razon_social="Proveedor Sin Factura SAS",
+            regimen_tributario="ORDINARIO",
+            activo=True,
         )
         CuentasPagar.objects.create(
-            empresa=empresa, proveedor=proveedor, numero_factura="OC-SIN-FACTURA-1",
-            fecha_emision="2026-06-01", fecha_vencimiento="2026-07-01",
+            empresa=empresa,
+            proveedor=proveedor,
+            numero_factura="OC-SIN-FACTURA-1",
+            fecha_emision="2026-06-01",
+            fecha_vencimiento="2026-07-01",
             valor_total=Decimal("11900.00"),
         )
 
@@ -144,14 +203,22 @@ def _admin_con_cxp_sin_factura(tenant):
 
 
 @pytest.mark.django_db
-def test_tabla_cuentas_pagar_incluye_cxp_sin_factura(client, tenant, _admin_con_cxp_sin_factura):
+def test_dt_cuentas_pagar_incluye_cxp_sin_factura(client, tenant, _admin_con_cxp_sin_factura):
     with schema_context(tenant.schema_name):
         client.force_login(_admin_con_cxp_sin_factura)
 
-    r = client.get("/ui/proveedores/cuentas-pagar/tabla/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+    r = client.post(
+        DT_URL,
+        data=_dt_payload(),
+        content_type="application/json",
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
+    )
 
     assert r.status_code == 200
-    html = r.content.decode("utf-8")
-    assert "OC-SIN-FACTURA-1" in html
-    assert "Proveedor Sin Factura SAS" in html
-    assert "Sin Pago" in html
+    body = r.json()
+    numeros = [row["numero_factura"] for row in body["data"]]
+    nombres = [row["proveedor_nombre"] for row in body["data"]]
+    estados = {row["numero_factura"]: row["estado_pago"] for row in body["data"]}
+    assert "OC-SIN-FACTURA-1" in numeros
+    assert "Proveedor Sin Factura SAS" in nombres
+    assert estados["OC-SIN-FACTURA-1"] == "SIN_PAGO"

@@ -5,6 +5,7 @@ debe contar TODOS los estados -- por eso incluye a proposito una factura
 RECHAZADA y verifica que SI aparece (comportamiento opuesto al de tax.iva,
 cubierto en test_tax_iva_provider.py::test_factura_rechazada_no_cuenta).
 """
+
 from decimal import Decimal
 
 from rest_framework.test import APIRequestFactory
@@ -24,36 +25,67 @@ class FacturasResumenProviderTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Reporting Facturas", nit="900000936", direccion="Calle Facturas RPT",
+            razon_social="Empresa Reporting Facturas",
+            nit="900000936",
+            direccion="Calle Facturas RPT",
         )
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         Factura.objects.create(
-            empresa=self.empresa, numero="FV-RPT-1", prefijo="FV", consecutivo=1,
-            tipo=Factura.TipoFactura.FE, estado=Factura.Estado.ACEPTADA, naturaleza=Factura.Naturaleza.VENTA,
+            empresa=self.empresa,
+            numero="FV-RPT-1",
+            prefijo="FV",
+            consecutivo=1,
+            tipo=Factura.TipoFactura.FE,
+            estado=Factura.Estado.ACEPTADA,
+            naturaleza=Factura.Naturaleza.VENTA,
             fecha_emision="2026-06-01T10:00:00Z",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
-            receptor_nit="900111222", receptor_razon_social="Cliente RPT SAS",
-            subtotal=Decimal("1000000.00"), impuestos=Decimal("190000.00"), total=Decimal("1190000.00"),
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
+            receptor_nit="900111222",
+            receptor_razon_social="Cliente RPT SAS",
+            subtotal=Decimal("1000000.00"),
+            impuestos=Decimal("190000.00"),
+            total=Decimal("1190000.00"),
             cufe="CUFE-RPT-VENTA-1",
         )
         Factura.objects.create(
-            empresa=self.empresa, numero="FC-RPT-1", prefijo="FC", consecutivo=1,
-            tipo=Factura.TipoFactura.FE, estado=Factura.Estado.ACEPTADA, naturaleza=Factura.Naturaleza.COMPRA,
+            empresa=self.empresa,
+            numero="FC-RPT-1",
+            prefijo="FC",
+            consecutivo=1,
+            tipo=Factura.TipoFactura.FE,
+            estado=Factura.Estado.ACEPTADA,
+            naturaleza=Factura.Naturaleza.COMPRA,
             fecha_emision="2026-06-02T10:00:00Z",
-            emisor_nit="900333444", emisor_razon_social="Proveedor RPT SAS",
-            receptor_nit=self.empresa.nit, receptor_razon_social=self.empresa.razon_social,
-            subtotal=Decimal("400000.00"), impuestos=Decimal("76000.00"), total=Decimal("476000.00"),
+            emisor_nit="900333444",
+            emisor_razon_social="Proveedor RPT SAS",
+            receptor_nit=self.empresa.nit,
+            receptor_razon_social=self.empresa.razon_social,
+            subtotal=Decimal("400000.00"),
+            impuestos=Decimal("76000.00"),
+            total=Decimal("476000.00"),
             cufe="CUFE-RPT-COMPRA-1",
         )
         # A diferencia de tax.iva: esta SI debe contar en facturas.resumen.
         Factura.objects.create(
-            empresa=self.empresa, numero="FV-RPT-2", prefijo="FV", consecutivo=2,
-            tipo=Factura.TipoFactura.FE, estado=Factura.Estado.RECHAZADA, naturaleza=Factura.Naturaleza.VENTA,
+            empresa=self.empresa,
+            numero="FV-RPT-2",
+            prefijo="FV",
+            consecutivo=2,
+            tipo=Factura.TipoFactura.FE,
+            estado=Factura.Estado.RECHAZADA,
+            naturaleza=Factura.Naturaleza.VENTA,
             fecha_emision="2026-06-03T10:00:00Z",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
-            receptor_nit="900111222", receptor_razon_social="Cliente RPT SAS",
-            subtotal=Decimal("500000.00"), impuestos=Decimal("95000.00"), total=Decimal("595000.00"),
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
+            receptor_nit="900111222",
+            receptor_razon_social="Cliente RPT SAS",
+            subtotal=Decimal("500000.00"),
+            impuestos=Decimal("95000.00"),
+            total=Decimal("595000.00"),
             cufe="CUFE-RPT-RECHAZADA-1",
         )
 
@@ -90,7 +122,9 @@ class FacturasResumenProviderTests(SintelTenantTestCase):
 
     def test_filtro_por_naturaleza(self):
         request = self._authenticated_request()
-        report_request = ReportRequest(dataset_id="facturas.resumen", group_by=(), filters={"naturaleza": "COMPRA"})
+        report_request = ReportRequest(
+            dataset_id="facturas.resumen", group_by=(), filters={"naturaleza": "COMPRA"}
+        )
         result = ReportQueryEngine().execute(report_request, request)
         self.assertEqual(result.totals["cantidad_documentos"], 1)
         self.assertEqual(result.totals["total"], 476000.0)

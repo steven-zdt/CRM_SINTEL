@@ -7,6 +7,7 @@ Tests tenant-aware para Fase 4: Detalle de Factura + Anexos bajo demanda.
 - Tamaños y tipos de contenido correctos
 - 200/204/404 esperados según existencia de anexos
 """
+
 from django.urls import reverse
 from django.utils import timezone
 
@@ -23,7 +24,7 @@ from tests.tenant.base_test import SintelTenantTestCase
 
 class FacturaDetailAnexosAPITests(SintelTenantTestCase):
     """Tests para detalle de factura y anexos XML."""
-    
+
     def setUp(self):
         super().setUp()
         Empresa.objects.create(
@@ -44,14 +45,14 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
             subtotal=100,
             impuestos=19,
             total=119,
-            moneda="COP"
+            moneda="COP",
         )
         FacturaAnexos.objects.create(
             factura=self.f,
-            ubl_xml="<Invoice xmlns=\"urn:oasis:names:specification:ubl:schema:xsd:Invoice-2\"><cbc:ID>DET-001</cbc:ID></Invoice>",
-            application_response_xml="<ApplicationResponse xmlns=\"urn:oasis:names:specification:ubl:schema:xsd:ApplicationResponse-2\"><cbc:ResponseCode>OK</cbc:ResponseCode></ApplicationResponse>"
+            ubl_xml='<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><cbc:ID>DET-001</cbc:ID></Invoice>',
+            application_response_xml='<ApplicationResponse xmlns="urn:oasis:names:specification:ubl:schema:xsd:ApplicationResponse-2"><cbc:ResponseCode>OK</cbc:ResponseCode></ApplicationResponse>',
         )
-    
+
     def test_retrieve_detail_has_meta(self):
         """Test: Detalle retorna metadatos de anexos sin contenido XML."""
         url = reverse("factura-detail", args=[self.f.uuid])
@@ -64,11 +65,11 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
         self.assertTrue(j["has_application_response_xml"])
         self.assertGreater(j["anexos_meta"]["ubl_size"], 0)
         self.assertGreater(j["anexos_meta"]["app_response_size"], 0)
-        
+
         # Verificar que NO incluye el contenido XML
         self.assertNotIn("ubl_xml", j)
         self.assertNotIn("application_response_xml", j)
-    
+
     def test_get_ubl_xml(self):
         """Test: GET /xml/ retorna XML con Content-Type correcto."""
         url = reverse("factura-xml-ubl", args=[self.f.uuid])
@@ -81,7 +82,7 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
         self.assertIn("<Invoice", r.content.decode("utf-8"))
         self.assertIn("X-Content-Type-Options", r)
         self.assertEqual(r["X-Content-Type-Options"], "nosniff")
-    
+
     def test_get_app_response(self):
         """Test: GET /app-response/ retorna XML con Content-Type correcto."""
         url = reverse("factura-xml-app-response", args=[self.f.uuid])
@@ -94,7 +95,7 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
         self.assertIn("<ApplicationResponse", r.content.decode("utf-8"))
         self.assertIn("X-Content-Type-Options", r)
         self.assertEqual(r["X-Content-Type-Options"], "nosniff")
-    
+
     def test_get_ubl_xml_sin_anexos(self):
         """Test: GET /xml/ retorna 204 si no hay anexos."""
         f2 = Factura.objects.create(
@@ -108,10 +109,10 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
             subtotal=100,
             impuestos=19,
             total=119,
-            moneda="COP"
+            moneda="COP",
         )
         # No crear FacturaAnexos
-        
+
         url = reverse("factura-xml-ubl", args=[f2.uuid])
         r = self.client.get(url)
         # Hallazgo real: 204 No Content no lleva body (RFC 7231), asi
@@ -121,7 +122,7 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
         # para un status 204 real.
         self.assertEqual(r.status_code, 204)
         self.assertEqual(r.content, b"")
-    
+
     def test_get_app_response_sin_contenido(self):
         """Test: GET /app-response/ retorna 204 si no hay ApplicationResponse."""
         f3 = Factura.objects.create(
@@ -135,14 +136,14 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
             subtotal=100,
             impuestos=19,
             total=119,
-            moneda="COP"
+            moneda="COP",
         )
         FacturaAnexos.objects.create(
             factura=f3,
             ubl_xml="<Invoice/>",
-            application_response_xml=None  # Sin ApplicationResponse
+            application_response_xml=None,  # Sin ApplicationResponse
         )
-        
+
         url = reverse("factura-xml-app-response", args=[f3.uuid])
         r = self.client.get(url)
         # Hallazgo real: 204 No Content no lleva body (RFC 7231), asi
@@ -150,7 +151,7 @@ class FacturaDetailAnexosAPITests(SintelTenantTestCase):
         # test_get_ubl_xml_sin_anexos.
         self.assertEqual(r.status_code, 204)
         self.assertEqual(r.content, b"")
-    
+
     def test_get_ubl_xml_404(self):
         """Test: GET /xml/ retorna 404 si la factura no existe."""
         url = reverse("factura-xml-ubl", args=[999999])

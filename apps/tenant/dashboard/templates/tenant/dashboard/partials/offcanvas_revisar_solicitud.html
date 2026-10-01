@@ -1,0 +1,85 @@
+{# offcanvas_revisar_solicitud.html -- Fase 9 del plan (#14 vista detalle,  #}
+{# #15 ruta visual). Esqueleto ESTATICO -- poblado por centro_aprobaciones.js#}
+{# via GET /api/v1/dashboard/aprobaciones/{uuid}/trazabilidad/. Ruta visual  #}
+{# implementada como lista de nodos conectados (no un grafo canvas/SVG:     #}
+{# ninguna libreria de grafos esta en el stack aprobado, ver CLAUDE.md      #}
+{# "Frontend" -- ver docs/approvals/APPROVALS_DESIGN.md Fase 9). Cada nodo  #}
+{# es interactivo (abre su propio SSoT via enlace real al workspace).      #}
+
+<style>
+#offcanvas-revisar-solicitud { width: 520px !important; }
+#offcanvas-revisar-solicitud .ca-ruta-nodo {
+    display: flex; gap: .75rem; padding: .6rem 0;
+    border-left: 2px solid #dee2e6; margin-left: .6rem; padding-left: 1rem;
+    position: relative;
+}
+#offcanvas-revisar-solicitud .ca-ruta-nodo::before {
+    content: ''; position: absolute; left: -6.5px; top: .9rem;
+    width: 11px; height: 11px; border-radius: 50%; background: #0d6efd; border: 2px solid #fff;
+}
+#offcanvas-revisar-solicitud .ca-ruta-nodo:last-child { border-left-color: transparent; }
+#offcanvas-revisar-solicitud .ca-resumen-fin dt { font-size: .78rem; color: #6c757d; }
+#offcanvas-revisar-solicitud .ca-resumen-fin dd { font-weight: 600; }
+#offcanvas-revisar-solicitud .ca-timeline-item { padding: .4rem 0; border-bottom: 1px solid #f1f1f1; font-size: .85rem; }
+</style>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-revisar-solicitud" aria-labelledby="offcanvas-revisar-solicitud-label">
+  <div class="offcanvas-header border-bottom py-3 px-4">
+    <h5 class="offcanvas-title fw-semibold" id="offcanvas-revisar-solicitud-label">
+      <i class="bi bi-clipboard-check text-primary me-2"></i>Revisar Solicitud
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+  </div>
+
+  <div class="offcanvas-body">
+    <div id="ca-revisar-feedback" class="alert alert-danger d-none mb-3" role="alert"></div>
+    <div id="ca-revisar-loading" class="text-center text-muted py-4">
+      <div class="spinner-border spinner-border-sm me-2"></div>Cargando trazabilidad...
+    </div>
+
+    <div id="ca-revisar-contenido" class="d-none">
+      {# ── Cabecera ─────────────────────────────────────────────────#}
+      <div class="mb-3">
+        <span class="badge" id="ca-revisar-estado-badge">—</span>
+        <div class="small text-muted mt-1">
+          Solicitante: <strong id="ca-revisar-solicitante">—</strong><br>
+          Enviado: <strong id="ca-revisar-fecha">—</strong>
+        </div>
+      </div>
+
+      {# ── Ruta del proceso (#15 del plan) ─────────────────────────── #}
+      <h6 class="text-uppercase small fw-bold text-muted mb-2">Ruta del Proceso</h6>
+      <div id="ca-revisar-ruta" class="mb-3"></div>
+
+      {# ── Resumen financiero ───────────────────────────────────────#}
+      <h6 class="text-uppercase small fw-bold text-muted mb-2">Resumen Financiero</h6>
+      <dl class="row ca-resumen-fin mb-1" id="ca-revisar-resumen-financiero"></dl>
+      <div id="ca-revisar-alertas" class="mb-3"></div>
+
+      {# ── Timeline ─────────────────────────────────────────────────#}
+      <h6 class="text-uppercase small fw-bold text-muted mb-2">Historial</h6>
+      <div id="ca-revisar-timeline" class="mb-3"></div>
+
+      {# ── Panel de rechazo (motivo) ────────────────────────────────#}
+      <div id="ca-revisar-rechazar-panel" class="d-none border rounded p-2 mb-3 bg-light">
+        <label class="form-label small fw-semibold">Motivo del rechazo *</label>
+        <textarea class="form-control form-control-sm" id="ca-revisar-motivo-rechazo" rows="2"></textarea>
+        <div class="d-flex justify-content-end gap-2 mt-2">
+          <button type="button" class="btn btn-sm btn-secondary" id="btn-ca-cancelar-rechazo">Cancelar</button>
+          <button type="button" class="btn btn-sm btn-danger" id="btn-ca-confirmar-rechazo">Confirmar Rechazo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="offcanvas-footer border-top p-3 bg-light d-none" id="ca-revisar-footer">
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-outline-danger btn-sm px-4" id="btn-ca-mostrar-rechazar">
+        <i class="bi bi-x-lg me-1"></i>Rechazar
+      </button>
+      <button type="button" class="btn btn-success btn-sm px-4" id="btn-ca-aprobar">
+        <i class="bi bi-check-lg me-1"></i>Aprobar
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,58 @@
+{# formulario_estilos.html - Fase 11 (PLAN_OPTIMIZACION_COMPRAS...) #}
+{# Estilos compartidos por offcanvas_crear_compras.html y                  #}
+{# offcanvas_editar_compras.html -- antes duplicados linea por linea bajo   #}
+{# dos IDs distintos (#offcanvas-compra-crear / #offcanvas-compra-editar). #}
+{# Ambos templates ahora agregan la clase .offcanvas-compra-form al div    #}
+{# raiz del offcanvas para que este unico bloque aplique a los dos.        #}
+<style>
+  .offcanvas-compra-form {
+    width: 800px !important;
+  }
+  .offcanvas-compra-form .offcanvas-body {
+    padding: 1.5rem;
+  }
+  .offcanvas-compra-form .section-divider {
+    margin-bottom: 1.75rem;
+  }
+  .offcanvas-compra-form .form-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.3rem;
+    letter-spacing: 0.01em;
+  }
+  .offcanvas-compra-form .form-control,
+  .offcanvas-compra-form .form-select {
+    font-size: 0.875rem;
+    border-radius: 6px;
+    border-color: #dee2e6;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .offcanvas-compra-form .form-control:focus,
+  .offcanvas-compra-form .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13,110,253,.12);
+  }
+  .offcanvas-compra-form .section-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #0d6efd;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .offcanvas-compra-form .offcanvas-footer {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+  }
+  .offcanvas-compra-form .table-items th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    background-color: #f8f9fa;
+  }
+</style>

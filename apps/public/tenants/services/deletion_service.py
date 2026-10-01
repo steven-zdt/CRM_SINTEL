@@ -49,7 +49,7 @@ def hard_delete_tenant(
     try:
         client = Client.objects.select_for_update().get(id=client_id)
     except Client.DoesNotExist:
-        raise ValidationError(f"El tenant con ID {client_id} no existe.")
+        raise ValidationError(f"El tenant con ID {client_id} no existe.") from None
 
     # 2) BLOQUEO ABSOLUTO DEL TENANT PÚBLICO (defensa en profundidad - PRIMERO)
     # WARNING: CRÍTICO: Esta validación debe ir ANTES de verificar is_active

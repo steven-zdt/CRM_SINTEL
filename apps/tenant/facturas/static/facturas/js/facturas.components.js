@@ -32,7 +32,10 @@
     if (currency === 'COP' && window.DOMUtils && typeof window.DOMUtils.formatCurrency === 'function') {
       return window.DOMUtils.formatCurrency(Number(value || 0));
     }
-    return new Intl.NumberFormat('es-CO', {
+    // en-US agrupa con coma/punto (convencion real que este proyecto
+    // necesita) -- se conserva `currency` dinamico tal cual (puede ser una
+    // moneda extranjera real de la factura, no siempre COP).
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency,
     }).format(Number(value || 0));

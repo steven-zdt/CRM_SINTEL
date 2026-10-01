@@ -1,4 +1,7 @@
 """Tests puros de build_context -- con dobles de request/user/profile, sin DB real."""
+
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from apps.services.ai.context import PermissionDeniedError, build_context
@@ -104,8 +107,12 @@ def test_build_context_usuario_a_tenant_a_difiere_de_usuario_b_tenant_b():
     """AI-01.3 (mision AI Engine, Fase AI-01): contexto A != contexto B, explicito."""
     profile_a = _FakeProfile(empresa_id=100, rol="ADMIN", alcance="EMPRESA")
     profile_b = _FakeProfile(empresa_id=200, rol="VISOR", alcance="EMPRESA")
-    request_a = _FakeRequest(user=_FakeUser(profile=profile_a, user_id=1), tenant=_FakeTenant("tenant_a"))
-    request_b = _FakeRequest(user=_FakeUser(profile=profile_b, user_id=2), tenant=_FakeTenant("tenant_b"))
+    request_a = _FakeRequest(
+        user=_FakeUser(profile=profile_a, user_id=1), tenant=_FakeTenant("tenant_a")
+    )
+    request_b = _FakeRequest(
+        user=_FakeUser(profile=profile_b, user_id=2), tenant=_FakeTenant("tenant_b")
+    )
 
     ctx_a = build_context(request_a)
     ctx_b = build_context(request_b)
@@ -121,5 +128,5 @@ def test_ai_context_es_inmutable():
     request = _FakeRequest(user=_FakeUser(profile=profile), tenant=_FakeTenant())
     ctx = build_context(request)
 
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         ctx.empresa_id = 1234  # frozen dataclass -- debe fallar

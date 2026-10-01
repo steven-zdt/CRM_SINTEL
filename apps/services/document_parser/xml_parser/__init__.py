@@ -7,6 +7,7 @@ WARNING: PRINCIPIOS:
 - Detecta documentos embebidos en AttachedDocument CDATA
 - Retorna DTO JSON unificado
 """
+
 from .parser import parse_to_dto
 
-__all__ = ['parse_to_dto']
+__all__ = ["parse_to_dto"]

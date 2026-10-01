@@ -1,4 +1,5 @@
 """Fase AI-03: dominio `proveedores`, mismo patron que clientes_tools.py."""
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext
@@ -25,7 +26,9 @@ class BuscarProveedorTool(BaseTool):
 
         from apps.tenant.proveedores.services.selectors import ProveedorSelector
 
-        qs = ProveedorSelector.get_list(empresa_id=context.empresa_id, search=search or None)[:limit]
+        qs = ProveedorSelector.get_list(empresa_id=context.empresa_id, search=search or None)[
+            :limit
+        ]
 
         proveedores = [
             {

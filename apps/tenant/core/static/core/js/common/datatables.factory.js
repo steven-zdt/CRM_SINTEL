@@ -64,6 +64,10 @@
       pageLength: options.pageLength || 20,
       order: options.order || [],
       columns: columns,
+      // Opcional: fn(row, data, dataIndex) para marcar el <tr> creado (ej.
+      // data-uuid, para delegacion de "click en fila abre detalle" sin
+      // depender de un objeto de fila de Tabulator -- ver proveedores_main.js).
+      createdRow: options.createdRow || undefined,
       // `layout` hace merge parcial sobre el default de DataTables
       // ({topStart:'pageLength', topEnd:'search', bottomStart:'info',
       // bottomEnd:'paging'}) -- cualquier slot no mencionado aqui conserva

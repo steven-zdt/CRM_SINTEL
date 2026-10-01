@@ -27,10 +27,7 @@ class Command(BaseCommand):
             total = res.get("hits", {}).get("total", {})
 
             # OpenSearch puede retornar total como int o dict con value
-            if isinstance(total, dict):
-                total_value = total.get("value", 0)
-            else:
-                total_value = total or 0
+            total_value = total.get("value", 0) if isinstance(total, dict) else total or 0
 
             self.stdout.write(
                 self.style.SUCCESS(

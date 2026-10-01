@@ -3,24 +3,22 @@ Business Service para Dashboard v3.9.4 — Orquestación de Métricas.
 Pull Model: Delega a extractores de cada app.
 Double Semantic Verification: Valida empresa_id en cada consulta.
 """
-from datetime import datetime
-from decimal import Decimal
 
 from django.core.cache import cache
 from django.utils import timezone
 
-from apps.tenant.dashboard.services.selectors import DashboardSelector
 from apps.tenant.dashboard.services.dtos import DashboardMetricasDTO
 from apps.tenant.dashboard.services.extractores import (
-    FacturasExtractor,
-    InventarioExtractor,
-    EmpleadosExtractor,
-    GastosExtractor,
-    ProyectosExtractor,
     ClientesExtractor,
-    SedesExtractor,
+    EmpleadosExtractor,
+    FacturasExtractor,
+    GastosExtractor,
+    InventarioExtractor,
     ProveedoresExtractor,
+    ProyectosExtractor,
+    SedesExtractor,
 )
+from apps.tenant.dashboard.services.selectors import DashboardSelector
 
 
 class DashboardBusinessService:
@@ -37,11 +35,11 @@ class DashboardBusinessService:
     def get_redirect_url_by_role(role):
         """Retorna URL de redirección según rol."""
         urls = {
-            'ADMIN': '/dashboard/admin/',
-            'STAFF': '/dashboard/staff/',
-            'USER': '/dashboard/',
+            "ADMIN": "/dashboard/admin/",
+            "STAFF": "/dashboard/staff/",
+            "USER": "/dashboard/",
         }
-        return urls.get(role, '/dashboard/')
+        return urls.get(role, "/dashboard/")
 
     @staticmethod
     def obtener_metricas_consolidadas(empresa_id: int) -> DashboardMetricasDTO:
@@ -58,6 +56,7 @@ class DashboardBusinessService:
         # Cache key incluye schema_name para aislar datos entre tenants.
         # empresa_id NO es globalmente unico — cada schema resetea el auto-increment.
         from django.db import connection
+
         cache_key = f"dashboard:metricas:{connection.schema_name}:{empresa_id}"
         cached = cache.get(cache_key)
         if cached:
@@ -66,6 +65,7 @@ class DashboardBusinessService:
         try:
             # Obtener nombre y NIT de la empresa (Double Semantic Verification)
             from apps.tenant.empresa.services.selectors import EmpresaSelector
+
             empresa = EmpresaSelector.get_by_id(empresa_id)
 
             if not empresa:
@@ -102,24 +102,32 @@ class DashboardBusinessService:
         except Exception:
             # Log del error con traceback completo (en producción, esto iría a Sentry)
             import logging
+
             logger = logging.getLogger(__name__)
             logger.exception("Error obteniendo métricas para empresa %s", empresa_id)
 
             # Retornar estructura vacía pero válida
             from decimal import Decimal
+
             from apps.tenant.dashboard.services.dtos import (
-                WidgetFacturasDTO, WidgetInventarioDTO, WidgetEmpleadosDTO,
-                WidgetGastosDTO, WidgetProveedoresDTO, WidgetProyectosDTO, WidgetClientesDTO,
+                WidgetClientesDTO,
+                WidgetEmpleadosDTO,
+                WidgetFacturasDTO,
+                WidgetGastosDTO,
+                WidgetInventarioDTO,
+                WidgetProveedoresDTO,
+                WidgetProyectosDTO,
             )
+
             return DashboardMetricasDTO(
                 empresa_nombre="-",
                 empresa_nit="-",
                 fecha_actualizacion=timezone.now().isoformat(),
-                facturas=WidgetFacturasDTO(0, 0, 0, Decimal('0'), Decimal('0')),
-                inventario=WidgetInventarioDTO(0, 0, 0, Decimal('0'), Decimal('0')),
-                empleados=WidgetEmpleadosDTO(0, 0, 0, Decimal('0')),
-                gastos=WidgetGastosDTO(Decimal('0'), 0, 0, Decimal('0')),
-                proveedores=WidgetProveedoresDTO(0, Decimal('0'), Decimal('0')),
+                facturas=WidgetFacturasDTO(0, 0, 0, Decimal("0"), Decimal("0")),
+                inventario=WidgetInventarioDTO(0, 0, 0, Decimal("0"), Decimal("0")),
+                empleados=WidgetEmpleadosDTO(0, 0, 0, Decimal("0")),
+                gastos=WidgetGastosDTO(Decimal("0"), 0, 0, Decimal("0")),
+                proveedores=WidgetProveedoresDTO(0, Decimal("0"), Decimal("0")),
                 proyectos=WidgetProyectosDTO(0, 0, 0, 0),
                 clientes=WidgetClientesDTO(0, 0, 0, 0, 0),
             )
@@ -128,6 +136,7 @@ class DashboardBusinessService:
     def invalidar_cache(empresa_id: int):
         """Invalida el cache de metricas para la empresa del tenant activo."""
         from django.db import connection
+
         cache_key = f"dashboard:metricas:{connection.schema_name}:{empresa_id}"
         cache.delete(cache_key)
 

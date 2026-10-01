@@ -2,14 +2,15 @@
 URLs de la API de Proyectos v3.3 (DRF Router)
 
 # WARNING: Arquitectura v2.40: Alineado con enfoque API-First y Multi-Tenant.
-Este archivo se incluye en el enrutador principal (config/api_urls.py) 
+Este archivo se incluye en el enrutador principal (config/api_urls.py)
 bajo el prefijo /api/v1/proyectos/
 """
+
 import logging
 
 from rest_framework.routers import DefaultRouter
 
-from .viewsets import ProyectoViewSet, ItemPresupuestoViewSet, TareaDiariaViewSet, TareaCortaViewSet
+from .viewsets import ItemPresupuestoViewSet, ProyectoViewSet, TareaCortaViewSet, TareaDiariaViewSet
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,12 @@ urlpatterns = router.urls
 
 # # WARNING: DEBUG: Validacion de inicializacion en el arranque del servidor
 if urlpatterns:
-    logger.info(f"[OK] ProyectoViewSet (v3.3) registrado correctamente. URLs generadas: {len(urlpatterns)}")
+    logger.info(
+        f"[OK] ProyectoViewSet (v3.3) registrado correctamente. URLs generadas: {len(urlpatterns)}"
+    )
     for url_pattern in urlpatterns:
         logger.debug(f"   - {url_pattern.pattern} -> {getattr(url_pattern, 'name', 'N/A')}")
 else:
-    logger.error("[ERROR] ERROR CRiTICO: El router de Proyectos no genero ninguna URL. Verifique el ViewSet.")
+    logger.error(
+        "[ERROR] ERROR CRiTICO: El router de Proyectos no genero ninguna URL. Verifique el ViewSet."
+    )

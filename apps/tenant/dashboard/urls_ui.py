@@ -7,19 +7,24 @@ Las páginas de usuario están en apps/tenant/core/static/tenant/core/dashboard/
 WARNING: DEPRECADO: Las rutas UI han sido deshabilitadas.
 Todas las rutas retornan 404.
 """
+
 from django.http import HttpResponseNotFound
 from django.urls import path
 
-app_name = 'dashboard_ui'
+app_name = "dashboard_ui"
+
 
 def deprecated_view(request):
     """Vista deprecada que retorna 404."""
-    return HttpResponseNotFound('<h1>404 - Vista deprecada</h1><p>Esta ruta ha sido movida a Core. Use /static/tenant/core/dashboard/index.html</p>')
+    return HttpResponseNotFound(
+        "<h1>404 - Vista deprecada</h1><p>Esta ruta ha sido movida a Core. Use /static/tenant/core/dashboard/index.html</p>"
+    )
+
 
 urlpatterns = [
     # WARNING: DEPRECADO: Todas las rutas retornan 404
-    path('partials/header/', deprecated_view, name='dashboard-partial-header'),
-    path('partials/kpis/', deprecated_view, name='dashboard-partial-kpis'),
-    path('partials/charts/', deprecated_view, name='dashboard-partial-charts'),
-    path('partials/table/', deprecated_view, name='dashboard-partial-table'),
+    path("partials/header/", deprecated_view, name="dashboard-partial-header"),
+    path("partials/kpis/", deprecated_view, name="dashboard-partial-kpis"),
+    path("partials/charts/", deprecated_view, name="dashboard-partial-charts"),
+    path("partials/table/", deprecated_view, name="dashboard-partial-table"),
 ]

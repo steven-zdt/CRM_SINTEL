@@ -7,6 +7,7 @@ WARNING: SINTEL v2.60: Sincronización Arquitectónica
 - Separación List/Detail: ListSerializer para tablas, DetailSerializer para formularios
 - Campos Explícitos: PROHIBIDO __all__, usar campos explícitos alineados con LIST_FIELDS y DETAIL_FIELDS
 """
+
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -34,19 +35,22 @@ class NormalizationMixin(BaseMixin):
     """
     WARNING: v2.60: Extiende mixin base con normalizaciones específicas de Inventario.
     """
+
     def _get_empresa_id(self):
         """WARNING: Zero Trust: Resuelve el ID de empresa de forma segura."""
         # 1. Intentar desde contexto (SSoT para ViewSets)
-        empresa_id = self.context.get('empresa_id')
+        empresa_id = self.context.get("empresa_id")
         if empresa_id:
             return empresa_id
 
         # 2. Fallback: Empresa Singleton del Tenant
-        empresa = Empresa.objects.only('id').first()
+        empresa = Empresa.objects.only("id").first()
         if empresa:
             return empresa.id
 
-        raise serializers.ValidationError("No se pudo identificar la configuración de Empresa para este tenant.")
+        raise serializers.ValidationError(
+            "No se pudo identificar la configuración de Empresa para este tenant."
+        )
 
 
 class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
@@ -56,25 +60,25 @@ class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
         queryset = super().get_queryset()
         if queryset is None:
             return queryset
-        root = getattr(self, 'root', None)
-        context = getattr(root, 'context', {}) if root else {}
-        empresa_id = context.get('empresa_id')
-        if empresa_id and hasattr(queryset.model, 'empresa_id'):
+        root = getattr(self, "root", None)
+        context = getattr(root, "context", {}) if root else {}
+        empresa_id = context.get("empresa_id")
+        if empresa_id and hasattr(queryset.model, "empresa_id"):
             return queryset.filter(empresa_id=empresa_id)
         return queryset
 
     def to_internal_value(self, data):
-        if data in (None, ''):
+        if data in (None, ""):
             if self.allow_null:
                 return None
-            self.fail('required')
+            self.fail("required")
         data_str = str(data)
         if not data_str.isdigit():
             queryset = self.get_queryset()
             try:
                 return queryset.get(uuid=data_str)
             except (TypeError, ValueError, queryset.model.DoesNotExist):
-                self.fail('does_not_exist', pk_value=data)
+                self.fail("does_not_exist", pk_value=data)
         return super().to_internal_value(data)
 
 
@@ -87,13 +91,14 @@ class CategoriaItemListSerializer(serializers.ModelSerializer):
     Solo incluye campos estrictamente necesarios para la tabla del frontend.
     Campos alineados con CATEGORIA_LIST_FIELDS de services.py.
     """
-    id = serializers.UUIDField(source='uuid', read_only=True)
-    pk = serializers.IntegerField(source='id', read_only=True)
+
+    id = serializers.UUIDField(source="uuid", read_only=True)
+    pk = serializers.IntegerField(source="id", read_only=True)
 
     class Meta:
         model = CategoriaItem
-        fields = ['id', 'pk', 'nombre', 'descripcion', 'aplicacion', 'activo']
-        read_only_fields = ['id', 'pk']
+        fields = ["id", "pk", "nombre", "descripcion", "aplicacion", "activo"]
+        read_only_fields = ["id", "pk"]
 
 
 class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
@@ -102,27 +107,30 @@ class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSeriali
     Campos alineados con CATEGORIA_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
-    id = serializers.UUIDField(source='uuid', read_only=True)
-    pk = serializers.IntegerField(source='id', read_only=True)
+
+    id = serializers.UUIDField(source="uuid", read_only=True)
+    pk = serializers.IntegerField(source="id", read_only=True)
 
     class Meta:
         model = CategoriaItem
         fields = [
-            'id', 'pk', 'nombre', 'descripcion', 'aplicacion', 'imagen', 'activo',
-            'created_at', 'updated_at', 
+            "id",
+            "pk",
+            "nombre",
+            "descripcion",
+            "aplicacion",
+            "imagen",
+            "activo",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = [
-            'id', 'pk', 'created_at', 'updated_at', 'empresa'
-        ]
+        read_only_fields = ["id", "pk", "created_at", "updated_at", "empresa"]
 
-
-
-    
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
-    
+
     def validate_nombre(self, value):
         """
         WARNING: v2.60: Validación estricta - Evitar nombres duplicados para la misma empresa.
@@ -130,25 +138,24 @@ class CategoriaItemDetailSerializer(NormalizationMixin, serializers.ModelSeriali
         """
         if not value:
             return value
-            
+
         # Normalizar para comparación
         nombre_clean = value.strip()
-        
+
         # SINTEL v2.60: Obtener empresa del tenant actual (SSoT)
         empresa_id = self._get_empresa_id()
-            
-        qs = CategoriaItem.objects.filter(
-            empresa_id=empresa_id,
-            nombre__iexact=nombre_clean
-        )
-        
+
+        qs = CategoriaItem.objects.filter(empresa_id=empresa_id, nombre__iexact=nombre_clean)
+
         # Si estamos editando, excluir la instancia actual
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
-            
+
         if qs.exists():
-            raise ValidationError(f"Ya existe una categoría con el nombre '{nombre_clean}'. Elija un nombre diferente.")
-            
+            raise ValidationError(
+                f"Ya existe una categoría con el nombre '{nombre_clean}'. Elija un nombre diferente."
+            )
+
         return nombre_clean
 
 
@@ -162,34 +169,59 @@ class ProductoListSerializer(serializers.ModelSerializer):
     Campos alineados con PRODUCTO_LIST_FIELDS de services.py.
     Incluye campos calculados para visualización.
     """
-    categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
-    activo_display = serializers.CharField(source='get_activo_display', read_only=True)
-    id = serializers.UUIDField(source='uuid', read_only=True)
-    pk = serializers.IntegerField(source='id', read_only=True)
-    
+
+    categoria_nombre = serializers.CharField(source="categoria.nombre", read_only=True)
+    activo_display = serializers.CharField(source="get_activo_display", read_only=True)
+    id = serializers.UUIDField(source="uuid", read_only=True)
+    pk = serializers.IntegerField(source="id", read_only=True)
+
     # WARNING: v2.60: Campos calculados (lógica en backend - Zero Trust)
-    stock_total = serializers.DecimalField(source='stock_actual', max_digits=14, decimal_places=3, read_only=True)
+    stock_total = serializers.DecimalField(
+        source="stock_actual", max_digits=14, decimal_places=3, read_only=True
+    )
     valor_inventario = serializers.SerializerMethodField()
     alerta_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Producto
         fields = [
-            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
-            'stock_actual', 'stock_total', 'stock_minimo', 'precio_venta', 'costo_promedio',
-            'valor_inventario', 'alerta_stock', 'activo', 'activo_display', 'imagen', 'unidad'
+            "id",
+            "pk",
+            "codigo",
+            "nombre",
+            "categoria",
+            "categoria_nombre",
+            "stock_actual",
+            "stock_total",
+            "stock_minimo",
+            "precio_venta",
+            "costo_promedio",
+            "valor_inventario",
+            "alerta_stock",
+            "activo",
+            "activo_display",
+            "imagen",
+            "unidad",
         ]
-        read_only_fields = ['id', 'pk', 'categoria_nombre', 'activo_display', 'stock_total', 'valor_inventario', 'alerta_stock']
-    
+        read_only_fields = [
+            "id",
+            "pk",
+            "categoria_nombre",
+            "activo_display",
+            "stock_total",
+            "valor_inventario",
+            "alerta_stock",
+        ]
+
     def get_valor_inventario(self, obj):
         """
         WARNING: v2.60: Calcula el valor total del inventario: stock_actual * costo_promedio
         Lógica en backend (Zero Trust) - No confiar en cálculos del frontend.
         """
-        stock = obj.stock_actual or Decimal('0')
-        costo = obj.costo_promedio or Decimal('0')
+        stock = obj.stock_actual or Decimal("0")
+        costo = obj.costo_promedio or Decimal("0")
         return float(stock * costo)
-    
+
     def get_alerta_stock(self, obj):
         """
         WARNING: v2.60: Retorna True si el stock actual es menor o igual al stock mínimo.
@@ -206,9 +238,10 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     Campos alineados con PRODUCTO_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
-    categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
-    id = serializers.UUIDField(source='uuid', read_only=True)
-    pk = serializers.IntegerField(source='id', read_only=True)
+
+    categoria_nombre = serializers.CharField(source="categoria.nombre", read_only=True)
+    id = serializers.UUIDField(source="uuid", read_only=True)
+    pk = serializers.IntegerField(source="id", read_only=True)
     categoria = UUIDOrPKRelatedField(
         queryset=CategoriaItem.objects.all(),
         required=False,
@@ -216,28 +249,39 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     )
 
     class Meta:
-
         model = Producto
         fields = [
-            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
-            'descripcion', 'unidad', 'imagen',
-            'precio_venta', 'costo_promedio',
-            'stock_actual', 'stock_minimo',
-            'activo', 'created_at', 'updated_at'
+            "id",
+            "pk",
+            "codigo",
+            "nombre",
+            "categoria",
+            "categoria_nombre",
+            "descripcion",
+            "unidad",
+            "imagen",
+            "precio_venta",
+            "costo_promedio",
+            "stock_actual",
+            "stock_minimo",
+            "activo",
+            "created_at",
+            "updated_at",
         ]
         read_only_fields = [
-            'id', 'pk', 'created_at', 'updated_at', 'empresa',
-            'stock_actual', 'costo_promedio'
+            "id",
+            "pk",
+            "created_at",
+            "updated_at",
+            "empresa",
+            "stock_actual",
+            "costo_promedio",
         ]
 
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
-
-
-
-
 
     def validate_categoria(self, value):
         """
@@ -254,7 +298,10 @@ class ProductoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             raise ValidationError(f"La categoría con ID {value.id} no pertenece a este tenant.")
 
         # Validar que la categoría sea aplicable a productos
-        if value.aplicacion not in [CategoriaItem.Aplicacion.PRODUCTO, CategoriaItem.Aplicacion.TODO]:
+        if value.aplicacion not in [
+            CategoriaItem.Aplicacion.PRODUCTO,
+            CategoriaItem.Aplicacion.TODO,
+        ]:
             raise ValidationError(f"La categoría '{value.nombre}' no es aplicable a productos.")
 
         return value
@@ -276,18 +323,27 @@ class ServicioListSerializer(serializers.ModelSerializer):
     Solo incluye campos estrictamente necesarios para la tabla del frontend.
     Campos alineados con SERVICIO_LIST_FIELDS de services.py.
     """
-    categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
-    activo_display = serializers.CharField(source='get_activo_display', read_only=True)
-    id = serializers.UUIDField(source='uuid', read_only=True)
-    pk = serializers.IntegerField(source='id', read_only=True)
+
+    categoria_nombre = serializers.CharField(source="categoria.nombre", read_only=True)
+    activo_display = serializers.CharField(source="get_activo_display", read_only=True)
+    id = serializers.UUIDField(source="uuid", read_only=True)
+    pk = serializers.IntegerField(source="id", read_only=True)
 
     class Meta:
         model = Servicio
         fields = [
-            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
-            'precio_venta', 'activo', 'activo_display', 'imagen'
+            "id",
+            "pk",
+            "codigo",
+            "nombre",
+            "categoria",
+            "categoria_nombre",
+            "precio_venta",
+            "activo",
+            "activo_display",
+            "imagen",
         ]
-        read_only_fields = ['id', 'pk', 'categoria_nombre', 'activo_display']
+        read_only_fields = ["id", "pk", "categoria_nombre", "activo_display"]
 
 
 class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
@@ -296,9 +352,10 @@ class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     Campos alineados con SERVICIO_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
-    categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
-    id = serializers.UUIDField(source='uuid', read_only=True)
-    pk = serializers.IntegerField(source='id', read_only=True)
+
+    categoria_nombre = serializers.CharField(source="categoria.nombre", read_only=True)
+    id = serializers.UUIDField(source="uuid", read_only=True)
+    pk = serializers.IntegerField(source="id", read_only=True)
     categoria = UUIDOrPKRelatedField(
         queryset=CategoriaItem.objects.all(),
         required=False,
@@ -306,22 +363,27 @@ class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     )
 
     class Meta:
-
         model = Servicio
         fields = [
-            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
-            'descripcion', 'imagen',
-            'precio_venta',
-            'activo', 'created_at', 'updated_at'
+            "id",
+            "pk",
+            "codigo",
+            "nombre",
+            "categoria",
+            "categoria_nombre",
+            "descripcion",
+            "imagen",
+            "precio_venta",
+            "activo",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa']
+        read_only_fields = ["id", "pk", "created_at", "updated_at", "empresa"]
 
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
-
-
 
     def validate_categoria(self, value):
         """
@@ -337,7 +399,10 @@ class ServicioDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             raise ValidationError(f"La categoría con ID {value.id} no pertenece a este tenant.")
 
         # Validar que la categoría sea aplicable a servicios
-        if value.aplicacion not in [CategoriaItem.Aplicacion.SERVICIO, CategoriaItem.Aplicacion.TODO]:
+        if value.aplicacion not in [
+            CategoriaItem.Aplicacion.SERVICIO,
+            CategoriaItem.Aplicacion.TODO,
+        ]:
             raise ValidationError(f"La categoría '{value.nombre}' no es aplicable a servicios.")
 
         return value
@@ -352,19 +417,29 @@ class ActivoFijoListSerializer(serializers.ModelSerializer):
     Solo incluye campos estrictamente necesarios para la tabla del frontend.
     Campos alineados con ACTIVO_LIST_FIELDS de services.py.
     """
-    categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
-    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
-    id = serializers.UUIDField(source='uuid', read_only=True)
-    pk = serializers.IntegerField(source='id', read_only=True)
+
+    categoria_nombre = serializers.CharField(source="categoria.nombre", read_only=True)
+    estado_display = serializers.CharField(source="get_estado_display", read_only=True)
+    id = serializers.UUIDField(source="uuid", read_only=True)
+    pk = serializers.IntegerField(source="id", read_only=True)
 
     class Meta:
         model = ActivoFijo
         fields = [
-            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
-            'fecha_adquisicion', 'costo_adquisicion',
-            'ubicacion', 'responsable', 'estado', 'estado_display'
+            "id",
+            "pk",
+            "codigo",
+            "nombre",
+            "categoria",
+            "categoria_nombre",
+            "fecha_adquisicion",
+            "costo_adquisicion",
+            "ubicacion",
+            "responsable",
+            "estado",
+            "estado_display",
         ]
-        read_only_fields = ['id', 'pk', 'categoria_nombre', 'estado_display']
+        read_only_fields = ["id", "pk", "categoria_nombre", "estado_display"]
 
 
 class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
@@ -373,10 +448,11 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
     Campos alineados con ACTIVO_DETAIL_FIELDS de services.py.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
-    categoria_nombre = serializers.CharField(source='categoria.nombre', read_only=True)
-    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
-    id = serializers.UUIDField(source='uuid', read_only=True)
-    pk = serializers.IntegerField(source='id', read_only=True)
+
+    categoria_nombre = serializers.CharField(source="categoria.nombre", read_only=True)
+    estado_display = serializers.CharField(source="get_estado_display", read_only=True)
+    id = serializers.UUIDField(source="uuid", read_only=True)
+    pk = serializers.IntegerField(source="id", read_only=True)
     categoria = UUIDOrPKRelatedField(
         queryset=CategoriaItem.objects.all(),
         required=False,
@@ -384,25 +460,33 @@ class ActivoFijoDetailSerializer(NormalizationMixin, serializers.ModelSerializer
     )
 
     class Meta:
-
         model = ActivoFijo
         fields = [
-            'id', 'pk', 'codigo', 'nombre', 'categoria', 'categoria_nombre',
-            'marca', 'modelo', 'descripcion', 'imagen',
-            'ubicacion', 'responsable',
-            'fecha_adquisicion', 'costo_adquisicion', 'estado', 'estado_display',
-            'created_at', 'updated_at'
+            "id",
+            "pk",
+            "codigo",
+            "nombre",
+            "categoria",
+            "categoria_nombre",
+            "marca",
+            "modelo",
+            "descripcion",
+            "imagen",
+            "ubicacion",
+            "responsable",
+            "fecha_adquisicion",
+            "costo_adquisicion",
+            "estado",
+            "estado_display",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa']
+        read_only_fields = ["id", "pk", "created_at", "updated_at", "empresa"]
 
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
-
-
-
-
 
     def validate_categoria(self, value):
         """
@@ -432,44 +516,76 @@ class MovimientoInventarioListSerializer(serializers.ModelSerializer):
     WARNING: v3.8.2: Serializer optimizado para LISTAS (Tabulator Factory).
     Soporta Productos y Activos Fijos con campos dinamicos item_tipo/item_nombre/item_codigo.
     """
-    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True, allow_null=True, default=None)
-    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True, allow_null=True, default=None)
-    activo_fijo_nombre = serializers.CharField(source='activo_fijo.nombre', read_only=True, allow_null=True, default=None)
-    activo_fijo_codigo = serializers.CharField(source='activo_fijo.codigo', read_only=True, allow_null=True, default=None)
-    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
-    id = serializers.UUIDField(source='uuid', read_only=True)
-    pk = serializers.IntegerField(source='id', read_only=True)
+
+    producto_nombre = serializers.CharField(
+        source="producto.nombre", read_only=True, allow_null=True, default=None
+    )
+    producto_codigo = serializers.CharField(
+        source="producto.codigo", read_only=True, allow_null=True, default=None
+    )
+    activo_fijo_nombre = serializers.CharField(
+        source="activo_fijo.nombre", read_only=True, allow_null=True, default=None
+    )
+    activo_fijo_codigo = serializers.CharField(
+        source="activo_fijo.codigo", read_only=True, allow_null=True, default=None
+    )
+    tipo_display = serializers.CharField(source="get_tipo_display", read_only=True)
+    id = serializers.UUIDField(source="uuid", read_only=True)
+    pk = serializers.IntegerField(source="id", read_only=True)
     item_tipo = serializers.SerializerMethodField()
     item_nombre = serializers.SerializerMethodField()
     item_codigo = serializers.SerializerMethodField()
     item_uuid = serializers.SerializerMethodField()
 
     # DT-SEDE-05: sede para KPIs por sede
-    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+    sede_nombre = serializers.CharField(source="sede.nombre", read_only=True, allow_null=True)
 
     class Meta:
         model = MovimientoInventario
         fields = [
-            'id', 'pk', 'created_at',
-            'producto', 'producto_codigo', 'producto_nombre',
-            'activo_fijo', 'activo_fijo_codigo', 'activo_fijo_nombre',
-            'item_tipo', 'item_nombre', 'item_codigo', 'item_uuid',
-            'tipo', 'tipo_display', 'cantidad', 'costo_unitario',
-            'origen_referencia', 'cliente_referencia', 'observaciones',
-            'factura_uuid', 'factura_numero',
-            'sede_nombre',  # DT-SEDE-05
+            "id",
+            "pk",
+            "created_at",
+            "producto",
+            "producto_codigo",
+            "producto_nombre",
+            "activo_fijo",
+            "activo_fijo_codigo",
+            "activo_fijo_nombre",
+            "item_tipo",
+            "item_nombre",
+            "item_codigo",
+            "item_uuid",
+            "tipo",
+            "tipo_display",
+            "cantidad",
+            "costo_unitario",
+            "origen_referencia",
+            "cliente_referencia",
+            "observaciones",
+            "factura_uuid",
+            "factura_numero",
+            "sede_nombre",  # DT-SEDE-05
         ]
         read_only_fields = [
-            'id', 'pk', 'producto_codigo', 'producto_nombre',
-            'activo_fijo_codigo', 'activo_fijo_nombre',
-            'item_tipo', 'item_nombre', 'item_codigo', 'item_uuid', 'tipo_display'
+            "id",
+            "pk",
+            "producto_codigo",
+            "producto_nombre",
+            "activo_fijo_codigo",
+            "activo_fijo_nombre",
+            "item_tipo",
+            "item_nombre",
+            "item_codigo",
+            "item_uuid",
+            "tipo_display",
         ]
 
     def get_item_tipo(self, obj):
         if obj.producto_id:
-            return 'PRODUCTO'
+            return "PRODUCTO"
         if obj.activo_fijo_id:
-            return 'ACTIVO_FIJO'
+            return "ACTIVO_FIJO"
         return None
 
     def get_item_nombre(self, obj):
@@ -501,31 +617,57 @@ class MovimientoInventarioDetailSerializer(NormalizationMixin, serializers.Model
     Soporta routing dinámico según categoría de origen.
     WARNING: IMPORTANTE: Los movimientos NO se pueden editar/eliminar (integridad del Kardex).
     """
-    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True, allow_null=True)
-    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True, allow_null=True)
-    activo_fijo_nombre = serializers.CharField(source='activo_fijo.nombre', read_only=True, allow_null=True)
-    activo_fijo_codigo = serializers.CharField(source='activo_fijo.codigo', read_only=True, allow_null=True)
-    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
-    id = serializers.UUIDField(source='uuid', read_only=True)
-    pk = serializers.IntegerField(source='id', read_only=True)
-    producto = UUIDOrPKRelatedField(queryset=Producto.objects.all(), required=False, allow_null=True)
-    activo_fijo = UUIDOrPKRelatedField(queryset=ActivoFijo.objects.all(), required=False, allow_null=True)
+
+    producto_nombre = serializers.CharField(
+        source="producto.nombre", read_only=True, allow_null=True
+    )
+    producto_codigo = serializers.CharField(
+        source="producto.codigo", read_only=True, allow_null=True
+    )
+    activo_fijo_nombre = serializers.CharField(
+        source="activo_fijo.nombre", read_only=True, allow_null=True
+    )
+    activo_fijo_codigo = serializers.CharField(
+        source="activo_fijo.codigo", read_only=True, allow_null=True
+    )
+    tipo_display = serializers.CharField(source="get_tipo_display", read_only=True)
+    id = serializers.UUIDField(source="uuid", read_only=True)
+    pk = serializers.IntegerField(source="id", read_only=True)
+    producto = UUIDOrPKRelatedField(
+        queryset=Producto.objects.all(), required=False, allow_null=True
+    )
+    activo_fijo = UUIDOrPKRelatedField(
+        queryset=ActivoFijo.objects.all(), required=False, allow_null=True
+    )
 
     # DT-SEDE-05: sede para KPIs por sede
-    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, allow_null=True)
+    sede_nombre = serializers.CharField(source="sede.nombre", read_only=True, allow_null=True)
 
     class Meta:
         model = MovimientoInventario
         fields = [
-            'id', 'pk', 'producto', 'producto_codigo', 'producto_nombre',
-            'activo_fijo', 'activo_fijo_codigo', 'activo_fijo_nombre',
-            'tipo', 'tipo_display', 'cantidad', 'costo_unitario',
-            'origen_referencia', 'cliente_referencia',
-            'observaciones', 'created_at', 'updated_at',
-            'factura_uuid', 'factura_numero',
-            'sede_nombre',  # DT-SEDE-05
+            "id",
+            "pk",
+            "producto",
+            "producto_codigo",
+            "producto_nombre",
+            "activo_fijo",
+            "activo_fijo_codigo",
+            "activo_fijo_nombre",
+            "tipo",
+            "tipo_display",
+            "cantidad",
+            "costo_unitario",
+            "origen_referencia",
+            "cliente_referencia",
+            "observaciones",
+            "created_at",
+            "updated_at",
+            "factura_uuid",
+            "factura_numero",
+            "sede_nombre",  # DT-SEDE-05
         ]
-        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa', 'sede_nombre']
+        read_only_fields = ["id", "pk", "created_at", "updated_at", "empresa", "sede_nombre"]
 
     def validate(self, attrs):
         """WARNING: v3.8.0: Validar exactly-one de producto/activo_fijo.
@@ -533,11 +675,11 @@ class MovimientoInventarioDetailSerializer(NormalizationMixin, serializers.Model
         """
         attrs = self.normalize_data(attrs)
 
-        producto = attrs.get('producto')
-        activo_fijo = attrs.get('activo_fijo')
+        producto = attrs.get("producto")
+        activo_fijo = attrs.get("activo_fijo")
 
         # En modo parcial (PATCH) solo validar si al menos uno viene en el payload
-        ambos_ausentes = 'producto' not in attrs and 'activo_fijo' not in attrs
+        ambos_ausentes = "producto" not in attrs and "activo_fijo" not in attrs
         if self.partial and ambos_ausentes:
             return attrs
 
@@ -579,9 +721,10 @@ class HistorialServicioDetailSerializer(NormalizationMixin, serializers.ModelSer
     WARNING: v2.60: Serializer completo para DETALLE/CREACIÓN de Historial de Servicios.
     Aplica NormalizationMixin para sanitizar datos de entrada.
     """
-    servicio_nombre = serializers.CharField(source='servicio.nombre', read_only=True)
-    id = serializers.UUIDField(source='uuid', read_only=True)
-    pk = serializers.IntegerField(source='id', read_only=True)
+
+    servicio_nombre = serializers.CharField(source="servicio.nombre", read_only=True)
+    id = serializers.UUIDField(source="uuid", read_only=True)
+    pk = serializers.IntegerField(source="id", read_only=True)
     servicio = UUIDOrPKRelatedField(queryset=Servicio.objects.all())
     proyecto_uuid = serializers.UUIDField(read_only=True, allow_null=True)
     proyecto_nombre = serializers.CharField(read_only=True, allow_null=True)
@@ -589,19 +732,36 @@ class HistorialServicioDetailSerializer(NormalizationMixin, serializers.ModelSer
     class Meta:
         model = HistorialServicio
         fields = [
-            'id', 'pk', 'servicio', 'servicio_nombre',
-            'fecha_registro', 'cantidad', 'valor_cobrado',
-            'origen_referencia', 'cliente_referencia',
-            'observaciones', 'created_at', 'updated_at',
-            'proyecto_uuid', 'proyecto_nombre'
+            "id",
+            "pk",
+            "servicio",
+            "servicio_nombre",
+            "fecha_registro",
+            "cantidad",
+            "valor_cobrado",
+            "origen_referencia",
+            "cliente_referencia",
+            "observaciones",
+            "created_at",
+            "updated_at",
+            "proyecto_uuid",
+            "proyecto_nombre",
         ]
-        read_only_fields = ['id', 'pk', 'created_at', 'updated_at', 'empresa', 'proyecto_uuid', 'proyecto_nombre']
-    
+        read_only_fields = [
+            "id",
+            "pk",
+            "created_at",
+            "updated_at",
+            "empresa",
+            "proyecto_uuid",
+            "proyecto_nombre",
+        ]
+
     def validate(self, attrs):
         """WARNING: Zero Trust: Normalización estricta antes de persistir."""
         attrs = self.normalize_data(attrs)
         return attrs
-    
+
     def validate_servicio(self, value):
         """
         WARNING: v2.60: Validación estricta - Asegurar que el servicio pertenezca al tenant actual.
@@ -609,13 +769,13 @@ class HistorialServicioDetailSerializer(NormalizationMixin, serializers.ModelSer
         """
         if value is None:
             raise ValidationError("El servicio es requerido.")
-        
+
         empresa_id = self._get_empresa_id()
-        
+
         # Validar que el servicio pertenezca al tenant
         if not Servicio.objects.filter(pk=value.id, empresa_id=empresa_id).exists():
             raise ValidationError(f"El servicio con ID {value.id} no pertenece a este tenant.")
-        
+
         return value
 
 
@@ -627,12 +787,20 @@ class ProductoCargaMasivaItemSerializer(serializers.Serializer):
 
     codigo = serializers.CharField(max_length=64)
     nombre = serializers.CharField(max_length=200)
-    categoria = serializers.CharField(max_length=100, required=False, allow_blank=True, default='General')
-    descripcion = serializers.CharField(required=False, allow_blank=True, default='')
-    unidad = serializers.CharField(max_length=16, required=False, allow_blank=True, default='UND')
-    precio_venta = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, default=0)
-    costo_promedio = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, default=0)
-    stock_actual = serializers.DecimalField(max_digits=14, decimal_places=3, required=False, default=0)
+    categoria = serializers.CharField(
+        max_length=100, required=False, allow_blank=True, default="General"
+    )
+    descripcion = serializers.CharField(required=False, allow_blank=True, default="")
+    unidad = serializers.CharField(max_length=16, required=False, allow_blank=True, default="UND")
+    precio_venta = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, default=0
+    )
+    costo_promedio = serializers.DecimalField(
+        max_digits=14, decimal_places=2, required=False, default=0
+    )
+    stock_actual = serializers.DecimalField(
+        max_digits=14, decimal_places=3, required=False, default=0
+    )
 
     def validate_codigo(self, value):
         value = value.strip()
@@ -662,18 +830,19 @@ class CargaMasivaInventarioSerializer(serializers.Serializer):
 # TIMELINE UNIFICADO — Ledger Universal (v3.9.0)
 # ==============================================================================
 
+
 class MovimientoUnificadoListSerializer(serializers.Serializer):
     """
     Read-only serializer para el Ledger Universal.
     Proyecta DTOs unificados de MovimientoInventario + HistorialServicio.
     """
+
     uuid = serializers.CharField(read_only=True)
     documento_id = serializers.IntegerField(read_only=True)
     modelo_origen = serializers.CharField(read_only=True)
     fecha = serializers.CharField(read_only=True)
     modulo_origen = serializers.ChoiceField(
-        choices=['PRODUCTO', 'ACTIVO_FIJO', 'SERVICIO'],
-        read_only=True
+        choices=["PRODUCTO", "ACTIVO_FIJO", "SERVICIO"], read_only=True
     )
     item_uuid = serializers.CharField(read_only=True)
     item_codigo = serializers.CharField(read_only=True)
@@ -684,8 +853,8 @@ class MovimientoUnificadoListSerializer(serializers.Serializer):
     valor_costo = serializers.CharField(read_only=True)
     referencia = serializers.CharField(read_only=True)
     observaciones = serializers.CharField(read_only=True)
-    proyecto_uuid = serializers.CharField(read_only=True, default='')
-    proyecto_nombre = serializers.CharField(read_only=True, default='')
+    proyecto_uuid = serializers.CharField(read_only=True, default="")
+    proyecto_nombre = serializers.CharField(read_only=True, default="")
 
 
 # ==============================================================================
@@ -706,46 +875,81 @@ HistorialServicioSerializer = HistorialServicioDetailSerializer
 # ==============================================================================
 class TrasladoInventarioListSerializer(serializers.ModelSerializer):
     """Serializer aplanado para listado de Traslados de Inventario."""
-    producto_nombre = serializers.CharField(source='producto.nombre', read_only=True)
-    producto_codigo = serializers.CharField(source='producto.codigo', read_only=True)
-    sede_origen_nombre = serializers.CharField(source='sede_origen.nombre', read_only=True)
-    sede_destino_nombre = serializers.CharField(source='sede_destino.nombre', read_only=True)
-    estado_display = serializers.CharField(source='get_estado_display', read_only=True)
+
+    producto_nombre = serializers.CharField(source="producto.nombre", read_only=True)
+    producto_codigo = serializers.CharField(source="producto.codigo", read_only=True)
+    sede_origen_nombre = serializers.CharField(source="sede_origen.nombre", read_only=True)
+    sede_destino_nombre = serializers.CharField(source="sede_destino.nombre", read_only=True)
+    estado_display = serializers.CharField(source="get_estado_display", read_only=True)
 
     class Meta:
         model = TrasladoInventario
         fields = (
-            'id', 'uuid', 'producto', 'producto_codigo', 'producto_nombre',
-            'cantidad', 'sede_origen', 'sede_origen_nombre', 'sede_destino', 'sede_destino_nombre',
-            'estado', 'estado_display', 'motivo',
-            'fecha_solicitud', 'fecha_aprobacion', 'fecha_envio', 'fecha_recepcion', 'created_at',
+            "id",
+            "uuid",
+            "producto",
+            "producto_codigo",
+            "producto_nombre",
+            "cantidad",
+            "sede_origen",
+            "sede_origen_nombre",
+            "sede_destino",
+            "sede_destino_nombre",
+            "estado",
+            "estado_display",
+            "motivo",
+            "fecha_solicitud",
+            "fecha_aprobacion",
+            "fecha_envio",
+            "fecha_recepcion",
+            "created_at",
         )
         read_only_fields = fields
 
 
 class TrasladoInventarioDetailSerializer(TrasladoInventarioListSerializer):
-    area_origen_nombre = serializers.CharField(source='area_origen.nombre', read_only=True, default='')
-    area_destino_nombre = serializers.CharField(source='area_destino.nombre', read_only=True, default='')
+    area_origen_nombre = serializers.CharField(
+        source="area_origen.nombre", read_only=True, default=""
+    )
+    area_destino_nombre = serializers.CharField(
+        source="area_destino.nombre", read_only=True, default=""
+    )
 
     class Meta(TrasladoInventarioListSerializer.Meta):
         fields = TrasladoInventarioListSerializer.Meta.fields + (
-            'area_origen', 'area_origen_nombre', 'area_destino', 'area_destino_nombre',
-            'usuario_solicita', 'usuario_aprueba', 'usuario_recibe',
+            "area_origen",
+            "area_origen_nombre",
+            "area_destino",
+            "area_destino_nombre",
+            "usuario_solicita",
+            "usuario_aprueba",
+            "usuario_recibe",
         )
         read_only_fields = fields
 
 
 class TrasladoInventarioCreateSerializer(serializers.ModelSerializer):
     """Serializer de escritura: crea un TrasladoInventario en SOLICITADO."""
+
     producto = UUIDOrPKRelatedField(queryset=Producto.objects.all())
     sede_origen = UUIDOrPKRelatedField(queryset=Sede.objects.all())
     sede_destino = UUIDOrPKRelatedField(queryset=Sede.objects.all())
     area_origen = UUIDOrPKRelatedField(queryset=Area.objects.all(), required=False, allow_null=True)
-    area_destino = UUIDOrPKRelatedField(queryset=Area.objects.all(), required=False, allow_null=True)
+    area_destino = UUIDOrPKRelatedField(
+        queryset=Area.objects.all(), required=False, allow_null=True
+    )
 
     class Meta:
         model = TrasladoInventario
-        fields = ('producto', 'cantidad', 'sede_origen', 'sede_destino', 'area_origen', 'area_destino', 'motivo')
+        fields = (
+            "producto",
+            "cantidad",
+            "sede_origen",
+            "sede_destino",
+            "area_origen",
+            "area_destino",
+            "motivo",
+        )
 
     def validate_cantidad(self, value):
         if value <= 0:
@@ -753,7 +957,11 @@ class TrasladoInventarioCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        if attrs.get('sede_origen') and attrs.get('sede_destino') and attrs['sede_origen'] == attrs['sede_destino']:
+        if (
+            attrs.get("sede_origen")
+            and attrs.get("sede_destino")
+            and attrs["sede_origen"] == attrs["sede_destino"]
+        ):
             raise serializers.ValidationError(
                 {"sede_destino": "La sede de destino debe ser distinta de la sede de origen."}
             )

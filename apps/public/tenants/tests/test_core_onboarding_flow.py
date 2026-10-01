@@ -69,7 +69,12 @@ def test_onboarding_create_no_longer_leaks_ott_then_session_auth_works(client, m
     }
 
     # Create onboarding (public)
-    r = client.post(base_create, data=json.dumps(payload), content_type="application/json", HTTP_HOST="localhost")
+    r = client.post(
+        base_create,
+        data=json.dumps(payload),
+        content_type="application/json",
+        HTTP_HOST="localhost",
+    )
     assert r.status_code == 201, f"Onboarding create failed: {r.status_code} {r.content}"
     body = r.json()
 
@@ -77,7 +82,9 @@ def test_onboarding_create_no_longer_leaks_ott_then_session_auth_works(client, m
     # redirect_url -- solo quien controla admin_email debe poder obtenerlo
     # (via el email de activacion, no cubierto en este test unitario).
     assert "ott" not in body, "Hallazgo #1 regresado: el OTT no debe viajar en la respuesta HTTP"
-    assert "redirect_url" not in body, "Hallazgo #1 regresado: el redirect_url no debe viajar en la respuesta HTTP"
+    assert (
+        "redirect_url" not in body
+    ), "Hallazgo #1 regresado: el redirect_url no debe viajar en la respuesta HTTP"
 
     # Simula "leer el email": obtener el OTT desde donde el usuario real lo
     # recibiria (aqui, el Redis simulado que el servicio ya escribio).
@@ -85,7 +92,12 @@ def test_onboarding_create_no_longer_leaks_ott_then_session_auth_works(client, m
 
     # Consume OTT en el host del tenant (deberia establecer sesion Django)
     consume_url = "/api/v1/core/auth/consume-ott/"
-    r2 = client.post(consume_url, data=json.dumps({"ott": ott}), content_type="application/json", HTTP_HOST=f"{schema}.sintel.net.co")
+    r2 = client.post(
+        consume_url,
+        data=json.dumps({"ott": ott}),
+        content_type="application/json",
+        HTTP_HOST=f"{schema}.sintel.net.co",
+    )
     assert r2.status_code == 200, f"Consume OTT failed: {r2.status_code} {r2.content}"
 
     # Respuesta debe establecer cookie de sesion Django estandar (no JWT

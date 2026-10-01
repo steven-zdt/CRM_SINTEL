@@ -1,7 +1,6 @@
 from django.db.models import Q
 
-from apps.tenant.perfil.models import TenantProfile, Departamento
-
+from apps.tenant.perfil.models import Departamento, TenantProfile
 
 DEPARTAMENTO_LIST_FIELDS = (
     "id",
@@ -64,24 +63,20 @@ class DepartamentoSelector:
     @staticmethod
     def get_list(empresa_id, search=None):
         """Retorna listado optimizado de departamentos."""
-        qs = Departamento.objects.filter(
-            empresa_id=empresa_id
-        ).only(*DEPARTAMENTO_LIST_FIELDS)
-        
+        qs = Departamento.objects.filter(empresa_id=empresa_id).only(*DEPARTAMENTO_LIST_FIELDS)
+
         if search:
-            qs = qs.filter(
-                Q(nombre__icontains=search) |
-                Q(descripcion__icontains=search)
-            )
+            qs = qs.filter(Q(nombre__icontains=search) | Q(descripcion__icontains=search))
         return qs
 
     @staticmethod
     def get_detail(uuid, empresa_id):
         """Retorna detalle de un departamento por su UUID."""
-        return Departamento.objects.filter(
-            uuid=uuid,
-            empresa_id=empresa_id
-        ).only(*DEPARTAMENTO_LIST_FIELDS).first()
+        return (
+            Departamento.objects.filter(uuid=uuid, empresa_id=empresa_id)
+            .only(*DEPARTAMENTO_LIST_FIELDS)
+            .first()
+        )
 
 
 class PerfilSelector:
@@ -90,34 +85,43 @@ class PerfilSelector:
     @staticmethod
     def get_list(empresa_id, search=None):
         """Retorna listado optimizado de perfiles."""
-        qs = TenantProfile.objects.filter(
-            empresa_id=empresa_id
-        ).select_related('user', 'departamento').prefetch_related('sedes_asignadas', 'areas_asignadas').only(*LIST_FIELDS)
-        
+        qs = (
+            TenantProfile.objects.filter(empresa_id=empresa_id)
+            .select_related("user", "departamento")
+            .prefetch_related("sedes_asignadas", "areas_asignadas")
+            .only(*LIST_FIELDS)
+        )
+
         if search:
             qs = qs.filter(
-                Q(user__email__icontains=search) |
-                Q(user__username__icontains=search) |
-                Q(user__first_name__icontains=search) |
-                Q(user__last_name__icontains=search) |
-                Q(cargo__icontains=search) |
-                Q(departamento__nombre__icontains=search)
+                Q(user__email__icontains=search)
+                | Q(user__username__icontains=search)
+                | Q(user__first_name__icontains=search)
+                | Q(user__last_name__icontains=search)
+                | Q(cargo__icontains=search)
+                | Q(departamento__nombre__icontains=search)
             )
-        
+
         return qs
 
     @staticmethod
     def get_detail(uuid, empresa_id):
         """Retorna detalle de un perfil por su UUID."""
-        return TenantProfile.objects.filter(
-            uuid=uuid,
-            empresa_id=empresa_id
-        ).select_related('user', 'departamento').prefetch_related('sedes_asignadas', 'areas_asignadas').only(*DETAIL_FIELDS).first()
+        return (
+            TenantProfile.objects.filter(uuid=uuid, empresa_id=empresa_id)
+            .select_related("user", "departamento")
+            .prefetch_related("sedes_asignadas", "areas_asignadas")
+            .only(*DETAIL_FIELDS)
+            .first()
+        )
 
     @staticmethod
     def get_by_user(user_id, empresa_id):
         """Retorna perfil por usuario y empresa."""
-        return TenantProfile.objects.filter(
-            user_id=user_id,
-            empresa_id=empresa_id
-        ).select_related('user', 'departamento').prefetch_related('sedes_asignadas', 'areas_asignadas').only(*DETAIL_FIELDS).first()
+        return (
+            TenantProfile.objects.filter(user_id=user_id, empresa_id=empresa_id)
+            .select_related("user", "departamento")
+            .prefetch_related("sedes_asignadas", "areas_asignadas")
+            .only(*DETAIL_FIELDS)
+            .first()
+        )

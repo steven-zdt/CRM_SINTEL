@@ -21,10 +21,10 @@ from dataclasses import dataclass
 class IndexableSource:
     """Un campo de texto libre autorizado para indexación semántica."""
 
-    source_type: str          # identificador estable, se guarda en AIKnowledgeDocument
-    model_label: str          # app_label.ModelName (para el pipeline de AI-VECTOR-08)
-    text_field: str           # nombre del campo de texto a indexar
-    description: str           # por qué es seguro / qué contiene
+    source_type: str  # identificador estable, se guarda en AIKnowledgeDocument
+    model_label: str  # app_label.ModelName (para el pipeline de AI-VECTOR-08)
+    text_field: str  # nombre del campo de texto a indexar
+    description: str  # por qué es seguro / qué contiene
     # Campos del modelo de origen que van a `metadata` del documento (nunca
     # texto sensible: solo ids/enums para filtrado -- sede, area, tipo).
     metadata_fields: tuple[str, ...] = ()

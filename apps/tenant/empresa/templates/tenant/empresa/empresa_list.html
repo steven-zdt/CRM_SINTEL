@@ -140,19 +140,17 @@
         <div class="card-body">
           <div id="feedback-empresa-list" class="alert d-none" role="alert" aria-live="polite"></div>
           <div class="mb-3">
-            <input type="text" id="search-empresa" class="form-control" placeholder="Buscar por NIT, razón social, dirección, teléfono o email..."
-                   hx-get="{% url 'empresa_ui:empresa-tabla' %}"
-                   hx-trigger="keyup changed delay:400ms, search"
-                   hx-target="#empresa-panel"
-                   name="q">
+            <input type="text" id="search-empresa" class="form-control" placeholder="Buscar por NIT, razón social, dirección, teléfono o email...">
           </div>
+          {# DataTables 3.x client-side (2026-09-24, ver empresa_datatable.js) -- #}
+          {# esqueleto estatico. id="empresa-panel" se preserva: la delegacion #}
+          {# de eventos de empresa_list.js (.btn-edit-empresa en ese div) sigue #}
+          {# funcionando sin cambios. #}
           <div class="card shadow-sm border-0">
             <div class="card-body p-0">
-              <div id="empresa-panel"
-                   hx-get="{% url 'empresa_ui:empresa-tabla' %}"
-                   hx-trigger="load, empresa-updated from:body"
-                   hx-target="this"
-                   style="min-height: 200px; min-width: 0;"></div>
+              <div id="empresa-panel" style="min-height: 200px; min-width: 0;">
+                <table id="tabla-empresa" class="table table-hover align-middle mb-0" style="width:100%"></table>
+              </div>
             </div>
           </div>
         </div>

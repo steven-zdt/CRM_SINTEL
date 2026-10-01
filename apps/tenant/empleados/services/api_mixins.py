@@ -5,19 +5,20 @@ SINTEL v3.10.1: Arquitectura Service Layer Modular.
 - Hereda de BaseServiceMixin (canonical, consolidado)
 - Mantiene solo métodos service_* específicos de Empleados
 """
+
 from apps.tenant.api.mixins import BaseServiceMixin
 from apps.tenant.empleados.models import Empleado
-from apps.tenant.empleados.services.selectors import (
-    ContratoSelector,
-    DevengoSelector,
-    EmpleadoSelector,
-    NominaSummarySelector,
-)
 from apps.tenant.empleados.services.business_service import (
     ContratoBusinessService,
     DevengoBusinessService,
     EmpleadoBusinessService,
     NominaCalculationService,
+)
+from apps.tenant.empleados.services.selectors import (
+    ContratoSelector,
+    DevengoSelector,
+    EmpleadoSelector,
+    NominaSummarySelector,
 )
 
 
@@ -44,14 +45,17 @@ class EmpleadoServiceMixin(BaseServiceMixin):
         )
 
         empresa_id = self._get_empresa_id_seguro()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
+        search = self.request.query_params.get("search") if hasattr(self, "request") else None
         try:
             scope = OrganizationalScope.resolve(self.request)
             sede_ids, area_ids = scope.sede_ids, scope.area_ids
         except OrganizationalScopeError:
             sede_ids, area_ids = None, None
         return self.selector_class.get_list(
-            empresa_id, search=search, sede_ids=sede_ids, area_ids=area_ids,
+            empresa_id,
+            search=search,
+            sede_ids=sede_ids,
+            area_ids=area_ids,
         )
 
     def get_qs_detail(self):
@@ -66,14 +70,16 @@ class EmpleadoServiceMixin(BaseServiceMixin):
         )
 
         empresa_id = self._get_empresa_id_seguro()
-        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field or 'pk'
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field or "pk"
         lookup_value = self.kwargs.get(lookup_url_kwarg)
         try:
             scope = OrganizationalScope.resolve(self.request)
             sede_ids, area_ids = scope.sede_ids, scope.area_ids
         except OrganizationalScopeError:
             sede_ids, area_ids = None, None
-        return self.selector_class.get_detail(empresa_id, lookup_value, sede_ids=sede_ids, area_ids=area_ids)
+        return self.selector_class.get_detail(
+            empresa_id, lookup_value, sede_ids=sede_ids, area_ids=area_ids
+        )
 
     def service_crear_empleado(self, serializer):
         """Crea empleado usando business service."""
@@ -83,14 +89,15 @@ class EmpleadoServiceMixin(BaseServiceMixin):
     def service_actualizar_empleado(self, serializer):
         """Actualiza empleado usando business service."""
         return self.business_service_class.actualizar_empleado(
-            serializer.instance,
-            serializer.validated_data
+            serializer.instance, serializer.validated_data
         )
 
     def service_eliminar_empleado_retirado(self, empleado):
         """Elimina empleado retirado usando business service. Pasa empresa_id para DSV."""
         empresa_id = self.get_empresa_id()
-        return self.business_service_class.eliminar_empleado_retirado(empleado, empresa_id=empresa_id)
+        return self.business_service_class.eliminar_empleado_retirado(
+            empleado, empresa_id=empresa_id
+        )
 
     def service_get_nomina_summary(self, request):
         """Obtiene resumen de nomina usando selector."""
@@ -112,8 +119,10 @@ class ContratoServiceMixin(BaseServiceMixin):
     def get_qs_list(self):
         """Sobrescribe para agregar parámetro empleado."""
         empresa_id = self.get_empresa_id()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
-        empleado_id = self.request.query_params.get('empleado') if hasattr(self, 'request') else None
+        search = self.request.query_params.get("search") if hasattr(self, "request") else None
+        empleado_id = (
+            self.request.query_params.get("empleado") if hasattr(self, "request") else None
+        )
         if empleado_id:
             try:
                 empleado_id = int(empleado_id)
@@ -151,9 +160,13 @@ class DevengoServiceMixin(BaseServiceMixin):
     def get_qs_list(self):
         """Sobrescribe para agregar parámetros empleado y periodo_mes."""
         empresa_id = self.get_empresa_id()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
-        empleado_id = self.request.query_params.get('empleado') if hasattr(self, 'request') else None
-        periodo_mes = self.request.query_params.get('periodo_mes') if hasattr(self, 'request') else None
+        search = self.request.query_params.get("search") if hasattr(self, "request") else None
+        empleado_id = (
+            self.request.query_params.get("empleado") if hasattr(self, "request") else None
+        )
+        periodo_mes = (
+            self.request.query_params.get("periodo_mes") if hasattr(self, "request") else None
+        )
 
         if empleado_id:
             try:
@@ -162,16 +175,13 @@ class DevengoServiceMixin(BaseServiceMixin):
                 empleado_id = None
 
         return self.selector_class.get_list(
-            empresa_id,
-            search=search,
-            empleado_id=empleado_id,
-            periodo_mes=periodo_mes
+            empresa_id, search=search, empleado_id=empleado_id, periodo_mes=periodo_mes
         )
 
     def get_historial_qs(self, empleado_id: int):
         """Retorna queryset de historial de nominas de un empleado."""
         empresa_id = self.get_empresa_id()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
+        search = self.request.query_params.get("search") if hasattr(self, "request") else None
         return self.selector_class.get_historial(empleado_id, empresa_id, search=search)
 
     def service_procesar_devengo(self, serializer, instance=None):
@@ -179,15 +189,15 @@ class DevengoServiceMixin(BaseServiceMixin):
         empresa_id = self.get_empresa_id()
         validated_data = serializer.validated_data
 
-        empleado = validated_data.get('empleado', instance.empleado if instance else None)
-        contrato = validated_data.get('contrato', instance.contrato if instance else None)
+        empleado = validated_data.get("empleado", instance.empleado if instance else None)
+        contrato = validated_data.get("contrato", instance.contrato if instance else None)
 
         return self.business_service_class.procesar_devengo(
             empleado=empleado,
             contrato=contrato,
             data=validated_data,
             empresa_id=empresa_id,
-            instance=instance
+            instance=instance,
         )
 
     def service_anular_devengo(self, devengo):
@@ -203,24 +213,24 @@ class DevengoServiceMixin(BaseServiceMixin):
     def service_validar_limite_dias(self, payload=None, *args, **kwargs):
         """Valida limite de dias en un mes. Soporta payload o argumentos directos."""
         empresa_id = self.get_empresa_id()
-        
+
         if payload:
-            empleado_id = payload.get('empleado')
-            periodo_mes = payload.get('periodo_mes')
-            dias_laborados = payload.get('dias_laborados')
-            devengo_id_excluir = payload.get('id')
+            empleado_id = payload.get("empleado")
+            periodo_mes = payload.get("periodo_mes")
+            dias_laborados = payload.get("dias_laborados")
+            devengo_id_excluir = payload.get("id")
         else:
-            empleado_id = kwargs.get('empleado_id')
-            periodo_mes = kwargs.get('periodo_mes')
-            dias_laborados = kwargs.get('dias_laborados')
-            devengo_id_excluir = kwargs.get('devengo_id_excluir')
+            empleado_id = kwargs.get("empleado_id")
+            periodo_mes = kwargs.get("periodo_mes")
+            dias_laborados = kwargs.get("dias_laborados")
+            devengo_id_excluir = kwargs.get("devengo_id_excluir")
 
         return self.business_service_class.validar_limite_dias_mes(
             empleado_id=empleado_id,
             periodo_mes=periodo_mes,
             nuevos_dias=dias_laborados,
             empresa_id=empresa_id,
-            devengo_id_excluir=devengo_id_excluir
+            devengo_id_excluir=devengo_id_excluir,
         )
 
     def service_validar_duplicado(self, payload):
@@ -238,12 +248,12 @@ class DevengoServiceMixin(BaseServiceMixin):
         mismo UUID-o-PK que el serializer resolveria, ANTES de filtrar.
         """
         empresa_id = self.get_empresa_id()
-        empleado_id = self._resolver_empleado_id(payload.get('empleado'), empresa_id)
+        empleado_id = self._resolver_empleado_id(payload.get("empleado"), empresa_id)
         return self.business_service_class.validar_duplicado(
             empleado_id=empleado_id,
-            periodo_mes=payload.get('periodo_mes'),
-            fecha_pago=payload.get('fecha_pago'),
-            empresa_id=empresa_id
+            periodo_mes=payload.get("periodo_mes"),
+            fecha_pago=payload.get("fecha_pago"),
+            empresa_id=empresa_id,
         )
 
     @staticmethod
@@ -251,13 +261,15 @@ class DevengoServiceMixin(BaseServiceMixin):
         """UUID-o-PK -> PK entero (o None si no resuelve), mismo criterio de
         deteccion que UUIDOrPKRelatedField.to_internal_value() (serializers.py):
         '-' presente y no son puros digitos => es UUID."""
-        if valor is None or valor == '':
+        if valor is None or valor == "":
             return None
         valor_str = str(valor).strip()
-        if '-' in valor_str and not valor_str.isdigit():
-            return Empleado.objects.filter(
-                empresa_id=empresa_id, uuid=valor_str
-            ).values_list('id', flat=True).first()
+        if "-" in valor_str and not valor_str.isdigit():
+            return (
+                Empleado.objects.filter(empresa_id=empresa_id, uuid=valor_str)
+                .values_list("id", flat=True)
+                .first()
+            )
         try:
             return int(valor_str)
         except (TypeError, ValueError):
@@ -266,9 +278,7 @@ class DevengoServiceMixin(BaseServiceMixin):
     def service_calcular_nomina(self, contrato, dias_laborados, **kwargs):
         """Calcula nomina usando servicio de calculo."""
         return self.calculation_service_class.calcular_liquidacion(
-            contrato=contrato,
-            dias_laborados=dias_laborados,
-            **kwargs
+            contrato=contrato, dias_laborados=dias_laborados, **kwargs
         )
 
     def get_contrato_by_id(self, contrato_id):

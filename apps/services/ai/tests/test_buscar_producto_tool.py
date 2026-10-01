@@ -2,6 +2,7 @@
 Fase AI-03.2: test de integracion real (DB) de `buscar_producto`,
 mismo patron que test_buscar_cliente_tool.py.
 """
+
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 
@@ -26,18 +27,26 @@ class BuscarProductoToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA PRODUCTOS TEST S.A.S.", nit="900555666", direccion="Calle P",
+            razon_social="EMPRESA PRODUCTOS TEST S.A.S.",
+            nit="900555666",
+            direccion="Calle P",
         )
         self.user = User.objects.create_user(email="prod_user@test.local", password="testpass123")
         TenantProfile.objects.create(user=self.user, empresa=self.empresa)
 
         Producto.objects.create(
-            empresa=self.empresa, codigo="PROD-001", nombre="Cable UTP",
-            stock_actual="150.000", precio_venta="25000.00",
+            empresa=self.empresa,
+            codigo="PROD-001",
+            nombre="Cable UTP",
+            stock_actual="150.000",
+            precio_venta="25000.00",
         )
         Producto.objects.create(
-            empresa=self.empresa, codigo="PROD-002", nombre="Switch 8 puertos",
-            stock_actual="5.000", precio_venta="180000.00",
+            empresa=self.empresa,
+            codigo="PROD-002",
+            nombre="Switch 8 puertos",
+            stock_actual="5.000",
+            precio_venta="180000.00",
         )
 
     @override_settings(**AI_FLAGS_ON)
@@ -68,7 +77,12 @@ class BuscarProductoToolTests(SintelTenantTestCase):
 
         assert result.status == "VALIDATION_ERROR"
 
+    @override_settings(AI_ENABLED=False)
     def test_buscar_producto_bloqueado_sin_ai_enabled(self):
+        """Hallazgo real (2026-09-25): sin este override, el test dependia
+        de que AI_ENABLED sea False por defecto -- falla en cualquier
+        entorno con AI_ENABLED=true en .env (este mismo). Ver
+        docs/mcp/MCP_RELEASE_GATE.md."""
         request = _FakeRequest(user=self.user, tenant=self.tenant)
 
         result = run_tool("buscar_producto", request)

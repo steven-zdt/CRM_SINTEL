@@ -15,6 +15,7 @@ Verifica:
 - DELETE: DELETE /api/v1/ventas/{uuid}/ (anula la venta)
 - Negativos: sin items, sin fecha_emision, UUID inexistente
 """
+
 from rest_framework import status
 
 from apps.tenant.clientes.models import Cliente
@@ -28,16 +29,23 @@ class VentaCrudWorkspaceTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test Ventas CRUD", nit="900555888", direccion="Calle 1",
+            razon_social="Empresa Test Ventas CRUD",
+            nit="900555888",
+            direccion="Calle 1",
         )
         TenantProfile.objects.get_or_create(
-            user=self.user, empresa=self.empresa,
+            user=self.user,
+            empresa=self.empresa,
             defaults={"rol": "ADMIN", "alcance": "EMPRESA"},
         )
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="NATURAL", tipo_documento="CC",
-            numero_documento="1000999888", razon_social="Cliente Test Ventas CRUD",
-            regimen_tributario="ORDINARIO", activo=True,
+            empresa=self.empresa,
+            tipo_persona="NATURAL",
+            tipo_documento="CC",
+            numero_documento="1000999888",
+            razon_social="Cliente Test Ventas CRUD",
+            regimen_tributario="ORDINARIO",
+            activo=True,
         )
 
     def _payload_valido(self):
@@ -45,11 +53,13 @@ class VentaCrudWorkspaceTests(SintelTenantTestCase):
             "cliente": str(self.cliente.uuid),
             "fecha_emision": "2026-06-01",
             "observaciones": "Venta de prueba CRUD",
-            "items": [{
-                "descripcion": "Item de prueba",
-                "precio_unitario": "50000.00",
-                "cantidad": "2",
-            }],
+            "items": [
+                {
+                    "descripcion": "Item de prueba",
+                    "precio_unitario": "50000.00",
+                    "cantidad": "2",
+                }
+            ],
         }
 
     def test_venta_crud_completo(self):

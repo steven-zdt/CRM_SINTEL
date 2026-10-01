@@ -14,9 +14,15 @@ VentaBusinessService.procesar_y_facturar_venta() (ver F23_FINAL_REPORT.md #3),
 detectado aqui via escaneo AST de F24 sobre los @transaction.atomic de
 compras/inventario/ventas/facturas y confirmado con reproduccion real.
 """
+
 from decimal import Decimal
 
-from apps.tenant.compras.models import ItemOrdenCompra, OrdenCompra, PlantillaOrdenCompra, RecepcionCompra
+from apps.tenant.compras.models import (
+    ItemOrdenCompra,
+    OrdenCompra,
+    PlantillaOrdenCompra,
+    RecepcionCompra,
+)
 from apps.tenant.compras.services.business_service import RecepcionCompraBusinessService
 from apps.tenant.empresa.models import Empresa, Sede
 from apps.tenant.inventario.models import MovimientoInventario, Producto
@@ -29,40 +35,73 @@ class ConfirmarRecepcionAtomicidadF24Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa F24", nit="900000524", direccion="Calle F24",
+            razon_social="Empresa F24",
+            nit="900000524",
+            direccion="Calle F24",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Sede F24")
         self.perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
         )
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor F24", numero_documento="F24-1", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor F24",
+            numero_documento="F24-1",
+            tipo_documento="NIT",
         )
         self.plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla F24", prefijo="F24",
-            rango_desde=1, rango_hasta=1000, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla F24",
+            prefijo="F24",
+            rango_desde=1,
+            rango_hasta=1000,
+            consecutivo_actual=1,
+            vigente=True,
         )
         self.producto_a = Producto.objects.create(
-            empresa=self.empresa, codigo="PROD-F24-A", nombre="Producto F24 A", stock_actual=Decimal("0"),
+            empresa=self.empresa,
+            codigo="PROD-F24-A",
+            nombre="Producto F24 A",
+            stock_actual=Decimal("0"),
         )
         self.producto_b = Producto.objects.create(
-            empresa=self.empresa, codigo="PROD-F24-B", nombre="Producto F24 B", stock_actual=Decimal("0"),
+            empresa=self.empresa,
+            codigo="PROD-F24-B",
+            nombre="Producto F24 B",
+            stock_actual=Decimal("0"),
         )
         self.orden = OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede, proveedor=self.proveedor, plantilla=self.plantilla,
-            fecha="2026-06-01", consecutivo=1, numero_documento="F24-OC-1", estado="APROBADA",
+            empresa=self.empresa,
+            sede=self.sede,
+            proveedor=self.proveedor,
+            plantilla=self.plantilla,
+            fecha="2026-06-01",
+            consecutivo=1,
+            numero_documento="F24-OC-1",
+            estado="APROBADA",
         )
         self.item_a = ItemOrdenCompra.objects.create(
-            empresa=self.empresa, orden_compra=self.orden, descripcion="Item F24 A",
+            empresa=self.empresa,
+            orden_compra=self.orden,
+            descripcion="Item F24 A",
             item_inventario_uuid=self.producto_a.uuid,
-            cantidad=Decimal("100"), valor_unitario=Decimal("10.00"),
-            subtotal=Decimal("1000.00"), total=Decimal("1000.00"),
+            cantidad=Decimal("100"),
+            valor_unitario=Decimal("10.00"),
+            subtotal=Decimal("1000.00"),
+            total=Decimal("1000.00"),
         )
         self.item_b = ItemOrdenCompra.objects.create(
-            empresa=self.empresa, orden_compra=self.orden, descripcion="Item F24 B",
+            empresa=self.empresa,
+            orden_compra=self.orden,
+            descripcion="Item F24 B",
             item_inventario_uuid=self.producto_b.uuid,
-            cantidad=Decimal("50"), valor_unitario=Decimal("5.00"),
-            subtotal=Decimal("250.00"), total=Decimal("250.00"),
+            cantidad=Decimal("50"),
+            valor_unitario=Decimal("5.00"),
+            subtotal=Decimal("250.00"),
+            total=Decimal("250.00"),
         )
 
     def test_fallo_en_segundo_item_revierte_por_completo_el_primero(self):
@@ -84,7 +123,11 @@ class ConfirmarRecepcionAtomicidadF24Tests(SintelTenantTestCase):
             {"item_orden_compra": self.item_b, "cantidad_recibida": Decimal("10")},
         ]
         ok, recepcion, code = RecepcionCompraBusinessService.crear_recepcion(
-            data, items_data, self.empresa, self.sede, self.perfil,
+            data,
+            items_data,
+            self.empresa,
+            self.sede,
+            self.perfil,
         )
         self.assertTrue(ok, recepcion)
 
@@ -93,7 +136,8 @@ class ConfirmarRecepcionAtomicidadF24Tests(SintelTenantTestCase):
         ItemOrdenCompra.objects.filter(pk=self.item_b.pk).update(cantidad_recibida=Decimal("45.00"))
 
         ok, resultado, code = RecepcionCompraBusinessService.confirmar_recepcion(
-            recepcion.uuid, self.empresa.id,
+            recepcion.uuid,
+            self.empresa.id,
         )
         self.assertFalse(ok, resultado)
         self.assertEqual(code, 400)
@@ -113,7 +157,8 @@ class ConfirmarRecepcionAtomicidadF24Tests(SintelTenantTestCase):
         self.assertEqual(self.producto_a.stock_actual, Decimal("0"))
         self.assertEqual(
             MovimientoInventario.objects.filter(
-                empresa=self.empresa, producto=self.producto_a,
+                empresa=self.empresa,
+                producto=self.producto_a,
                 tipo=MovimientoInventario.TipoMovimiento.ENTRADA_COMPRA,
             ).count(),
             0,
@@ -129,12 +174,17 @@ class ConfirmarRecepcionAtomicidadF24Tests(SintelTenantTestCase):
             {"item_orden_compra": self.item_b, "cantidad_recibida": Decimal("10")},
         ]
         ok, recepcion, code = RecepcionCompraBusinessService.crear_recepcion(
-            data, items_data, self.empresa, self.sede, self.perfil,
+            data,
+            items_data,
+            self.empresa,
+            self.sede,
+            self.perfil,
         )
         self.assertTrue(ok, recepcion)
 
         ok, recepcion, code = RecepcionCompraBusinessService.confirmar_recepcion(
-            recepcion.uuid, self.empresa.id,
+            recepcion.uuid,
+            self.empresa.id,
         )
         self.assertTrue(ok, recepcion)
         self.assertEqual(recepcion.estado, RecepcionCompra.Estado.CONFIRMADA)
@@ -145,7 +195,8 @@ class ConfirmarRecepcionAtomicidadF24Tests(SintelTenantTestCase):
         self.assertEqual(self.item_b.cantidad_recibida, Decimal("10.00"))
         self.assertEqual(
             MovimientoInventario.objects.filter(
-                empresa=self.empresa, tipo=MovimientoInventario.TipoMovimiento.ENTRADA_COMPRA,
+                empresa=self.empresa,
+                tipo=MovimientoInventario.TipoMovimiento.ENTRADA_COMPRA,
             ).count(),
             2,
         )

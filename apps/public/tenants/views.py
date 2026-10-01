@@ -115,6 +115,7 @@ class ActivateAccountView(View):
         """Procesa activacion: valida email + codigo de 6 digitos + establece contrasena."""
         import json
         import os
+
         from django.conf import settings
 
         try:
@@ -127,17 +128,26 @@ class ActivateAccountView(View):
         password = data.get("password") or ""
 
         if not email or not code or not password:
-            return JsonResponse({"success": False, "error": "Email, codigo y contrasena son obligatorios"}, status=400)
+            return JsonResponse(
+                {"success": False, "error": "Email, codigo y contrasena son obligatorios"},
+                status=400,
+            )
 
         if len(code) != 8:
-            return JsonResponse({"success": False, "error": "El codigo debe tener exactamente 8 caracteres"}, status=400)
+            return JsonResponse(
+                {"success": False, "error": "El codigo debe tener exactamente 8 caracteres"},
+                status=400,
+            )
 
         # Validar codigo en Redis (uso unico — lo elimina al consumir)
         from apps.public.tenants.services.invitations import validate_activation_code
+
         payload = validate_activation_code(code)
 
         if not payload:
-            return JsonResponse({"success": False, "error": "Codigo invalido o expirado"}, status=400)
+            return JsonResponse(
+                {"success": False, "error": "Codigo invalido o expirado"}, status=400
+            )
 
         # Verificar que el email coincide con el usuario del payload
         try:
@@ -146,7 +156,10 @@ class ActivateAccountView(View):
             return JsonResponse({"success": False, "error": "Usuario no encontrado"}, status=404)
 
         if user.email.lower() != email:
-            return JsonResponse({"success": False, "error": "El email no coincide con el codigo de activacion"}, status=400)
+            return JsonResponse(
+                {"success": False, "error": "El email no coincide con el codigo de activacion"},
+                status=400,
+            )
 
         # Establecer contrasena y activar
         user.set_password(password)
@@ -156,6 +169,7 @@ class ActivateAccountView(View):
         # Audit
         try:
             from apps.public.console.models import ConsoleActionLog
+
             ConsoleActionLog.objects.create(
                 action="USER_ACTIVATE",
                 actor=user,
@@ -169,6 +183,7 @@ class ActivateAccountView(View):
 
         # Construir redirect_url al tenant
         from apps.public.tenants.models import Client
+
         login_url = "/"
         try:
             tenant = Client.objects.get(pk=payload["tenant_id"])
@@ -184,4 +199,6 @@ class ActivateAccountView(View):
         except Client.DoesNotExist:
             logger.warning("Tenant id=%s no encontrado tras activacion", payload.get("tenant_id"))
 
-        return JsonResponse({"success": True, "message": "Cuenta activada exitosamente", "redirect_url": login_url})
+        return JsonResponse(
+            {"success": True, "message": "Cuenta activada exitosamente", "redirect_url": login_url}
+        )

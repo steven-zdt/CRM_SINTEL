@@ -29,27 +29,9 @@
         </div>
     </div>
 
-    <div class="mb-3">
-        <input type="text"
-               id="search-servicio"
-               class="form-control"
-               placeholder="Buscar por código, nombre o categoría..."
-               hx-get="{% url 'inventario:servicio-tabla' %}"
-               hx-trigger="keyup changed delay:400ms, search"
-               hx-target="#servicios-panel"
-               name="q">
-    </div>
-
-    {# Tabla server-rendered (django-tables2 + HTMX) #}
-    <div id="servicios-panel"
-         class="flex-grow-1"
-         style="min-width:0;overflow:hidden;"
-         hx-get="{% url 'inventario:servicio-tabla' %}"
-         hx-trigger="load, servicio-updated from:body"
-         hx-target="this"
-         hx-swap="innerHTML"
-         hx-boost="true">
-    </div>
+    {# Tabla -- esqueleto estatico, poblado via ajax por servicios_list.js. #}
+    {# Sin buscador propio: DataTables trae su buscador nativo. #}
+    {% include 'tenant/inventario/partials/tabla_servicios.html' %}
 </div>
 
 {# Contenedores definidos en list_inventario.html — NO duplicar aqui #}

@@ -48,7 +48,10 @@ export function renderKPIs(kpis) {
         },
         {
             label: 'Ingresos del Mes',
-            value: new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(kpis.ingresos_mes || 0),
+            // en-US agrupa con coma/punto (convencion real que este proyecto
+            // necesita); currency:'USD' es solo el simbolo "$", el valor sigue
+            // siendo COP real -- mismo truco documentado en dom-utils.js.
+            value: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(kpis.ingresos_mes || 0),
             icon: 'fa-dollar-sign',
             color: 'purple',
         },

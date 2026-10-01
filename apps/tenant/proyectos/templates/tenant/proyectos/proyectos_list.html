@@ -47,47 +47,29 @@
             <i class="bi bi-arrow-clockwise"></i>
           </button>
         </div>
-        <div class="input-group input-group-sm" style="max-width:320px;">
-          <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-          <input type="text" id="search-proyecto" class="form-control border-start-0 ps-0"
-                 placeholder="Buscar proyecto, codigo, cliente..."
-                 hx-get="{% url 'proyectos:proyecto-tabla' %}"
-                 hx-trigger="keyup changed delay:400ms, search"
-                 hx-target="#proyectos-panel"
-                 hx-include="#filtros-fase-proyectos .active"
-                 name="q">
-        </div>
       </div>
 
-      {# === Filtros por Fase === #}
+      {# === Filtros por Fase -- DataTables (columnSearch), ver proyectos_list.js === #}
       <div class="d-flex gap-2 flex-wrap mb-3" id="filtros-fase-proyectos">
-        <button class="btn btn-sm btn-outline-dark active" data-fase=""
-                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
-                hx-include="#search-proyecto" name="fase" value="">
+        <button class="btn btn-sm btn-outline-dark active" data-fase="">
           <i class="bi bi-grid-3x3-gap me-1"></i>Todos
         </button>
-        <button class="btn btn-sm btn-outline-secondary" data-fase="BORRADOR"
-                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
-                hx-include="#search-proyecto" name="fase" value="BORRADOR">Borrador</button>
-        <button class="btn btn-sm btn-outline-info" data-fase="INICIO"
-                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
-                hx-include="#search-proyecto" name="fase" value="INICIO">Inicio</button>
-        <button class="btn btn-sm btn-outline-primary" data-fase="PLANEACION"
-                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
-                hx-include="#search-proyecto" name="fase" value="PLANEACION">Planeacion</button>
-        <button class="btn btn-sm btn-outline-warning" data-fase="EJECUCION"
-                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
-                hx-include="#search-proyecto" name="fase" value="EJECUCION">Ejecucion</button>
-        <button class="btn btn-sm btn-outline-success" data-fase="CIERRE"
-                hx-get="{% url 'proyectos:proyecto-tabla' %}" hx-target="#proyectos-panel"
-                hx-include="#search-proyecto" name="fase" value="CIERRE">Cierre</button>
+        <button class="btn btn-sm btn-outline-secondary" data-fase="BORRADOR">Borrador</button>
+        <button class="btn btn-sm btn-outline-info" data-fase="INICIO">Inicio</button>
+        <button class="btn btn-sm btn-outline-primary" data-fase="PLANEACION">Planeacion</button>
+        <button class="btn btn-sm btn-outline-warning" data-fase="EJECUCION">Ejecucion</button>
+        <button class="btn btn-sm btn-outline-success" data-fase="CIERRE">Cierre</button>
       </div>
 
-      {# === Panel KPIs + Grid (django-tables2 + HTMX) — Fase 5-BIS === #}
-      <div id="proyectos-panel"
+      {# KPIs -- siguen server-rendered via HTMX (kpis_proyectos.html) #}
+      <div id="proyectos-kpis-panel"
            hx-get="{% url 'proyectos:proyecto-tabla' %}"
            hx-trigger="load, proyecto-updated from:body"
-           hx-target="this"></div>
+           hx-target="this"
+           hx-swap="innerHTML"></div>
+
+      {# Tabla -- esqueleto estatico, poblado via ajax por proyectos_list.js #}
+      {% include 'tenant/proyectos/partials/tabla_proyectos.html' %}
     </div>
 
     <div class="tab-pane fade" id="tab-pane-proyectos-nueva-tarea" role="tabpanel" aria-labelledby="tab-proyectos-nueva-tarea" tabindex="0">

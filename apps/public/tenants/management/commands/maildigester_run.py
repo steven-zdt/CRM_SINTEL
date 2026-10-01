@@ -120,4 +120,4 @@ class Command(BaseCommand):
             )
 
         except Exception as e:
-            raise CommandError(f"Error al encolar la tarea: {e}")
+            raise CommandError(f"Error al encolar la tarea: {e}") from e

@@ -5,18 +5,18 @@ WARNING: PRINCIPIOS:
 - DTOs específicos para el módulo de cotizaciones
 - Estructuras específicas para catálogos de productos
 """
+
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 # Tipos de documentos específicos de cotizaciones
-CotizacionesDocumentType = Literal[
-    "inventario.catalogo",
-]
+CotizacionesDocumentType = Literal["inventario.catalogo",]
 
 
 @dataclass
 class ProductoDTO:
     """DTO para un producto en un catálogo."""
+
     codigo: str
     nombre: str
     marca: str | None = None
@@ -24,7 +24,7 @@ class ProductoDTO:
     unidad: str = "UND"
     precio_venta: str = "0.00"
     descripcion: str | None = None
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         return {k: v for k, v in asdict(self).items() if v is not None}
@@ -33,15 +33,16 @@ class ProductoDTO:
 @dataclass
 class CatalogoDTO:
     """DTO para un catálogo de productos."""
+
     document_type: str = "inventario.catalogo"
     type: str = "inventario"
     items: list[dict[str, Any]] = None
     mapping_metadata: dict[str, Any] | None = None
-    
+
     def __post_init__(self):
         if self.items is None:
             self.items = []
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convierte a dict JSON-serializable."""
         result = {
@@ -55,7 +56,7 @@ class CatalogoDTO:
 
 
 __all__ = [
-    'ProductoDTO',
-    'CatalogoDTO',
-    'CotizacionesDocumentType',
+    "ProductoDTO",
+    "CatalogoDTO",
+    "CotizacionesDocumentType",
 ]

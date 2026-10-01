@@ -5,6 +5,7 @@ llamar a una tool directamente, siempre pasan por aqui, para que los
 feature flags (Fase 63) y el enforcement WRITE (Regla Absoluta 6/26)
 sean estructurales y no una convencion que alguien puede olvidar.
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,9 +35,30 @@ class AIEngine:
     """
 
     @staticmethod
-    def run_tool(tool_name: str, request, *, screen: dict | None = None, **kwargs) -> ToolResult:
+    def run_tool(
+        tool_name: str,
+        request,
+        *,
+        screen: dict | None = None,
+        context: AIContext | None = None,
+        **kwargs,
+    ) -> ToolResult:
+        """
+        `context`: solo para callers que ya construyeron un AIContext real
+        por su cuenta sin pasar por un request de navegador autenticado --
+        hoy el unico caso real es el gateway ADK (Fase 4 del plan de
+        integracion, ver docs/adk/), que re-deriva el contexto desde BD
+        (nunca del payload del caller) en `apps/services/ai/adk_gateway/`.
+        Si se pasa `context`, `request`/`screen` se ignoran para la
+        construccion del contexto (pero `request` puede seguir siendo
+        `None` con seguridad). Callers normales (HTTP real, orquestador)
+        no deben pasar este parametro -- `build_context(request)` sigue
+        siendo el camino por defecto.
+        """
         if not _flag("AI_ENABLED"):
-            return ToolResult(status="PERMISSION_DENIED", message="AI Engine deshabilitado en este entorno.")
+            return ToolResult(
+                status="PERMISSION_DENIED", message="AI Engine deshabilitado en este entorno."
+            )
 
         tool = get_tool(tool_name)
         if tool is None:
@@ -66,21 +88,33 @@ class AIEngine:
                 message="Las herramientas WRITE requieren un flujo de aprobacion aun no implementado.",
             )
 
-        try:
-            context = build_context(request, screen=screen)
-        except PermissionDeniedError as exc:
-            return ToolResult(status="PERMISSION_DENIED", message=str(exc))
+        if context is None:
+            try:
+                context = build_context(request, screen=screen)
+            except PermissionDeniedError as exc:
+                return ToolResult(status="PERMISSION_DENIED", message=str(exc))
 
         try:
             result = tool.run(context, **kwargs)
         except Exception:
             # Nunca propagar traceback/SQL/secretos al modelo (Fase 34).
-            logger.exception("ai_engine.tool_error tool=%s user=%s empresa=%s", tool_name, context.user_id, context.empresa_id)
-            return ToolResult(status="INTERNAL_ERROR", message="Error interno ejecutando la herramienta.")
+            logger.exception(
+                "ai_engine.tool_error tool=%s user=%s empresa=%s",
+                tool_name,
+                context.user_id,
+                context.empresa_id,
+            )
+            return ToolResult(
+                status="INTERNAL_ERROR", message="Error interno ejecutando la herramienta."
+            )
 
         logger.info(
             "ai_engine.tool_call tool=%s kind=%s status=%s user=%s empresa=%s",
-            tool_name, tool.kind.value, result.status, context.user_id, context.empresa_id,
+            tool_name,
+            tool.kind.value,
+            result.status,
+            context.user_id,
+            context.empresa_id,
         )
         return result
 

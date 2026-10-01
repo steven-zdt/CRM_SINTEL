@@ -18,6 +18,7 @@ tomada en ADR-003/ADR-004):
   - Middleware: implicito en el round-trip JWT real (pasa por
     TenantMainMiddleware/AuthenticationMiddleware sin cambios).
 """
+
 from django.http import JsonResponse
 from django.test import RequestFactory
 from django.views import View
@@ -51,11 +52,16 @@ class OrganizationalResolverIntegrationTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase3", nit="900000222", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase3",
+            nit="900000222",
+            direccion="Calle 1",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Principal")
         self.perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
         )
 
     def test_contexto_endpoint_via_jwt_real_http_roundtrip(self):
@@ -94,12 +100,14 @@ class OrganizationalResolverIntegrationTests(SintelTenantTestCase):
         request.user = self.user
         request.tenant = self.tenant
         from django.contrib.sessions.backends.db import SessionStore
+
         request.session = SessionStore()
 
         response = _PlainHtmxStyleView.as_view()(request)
 
         self.assertEqual(response.status_code, 200)
         import json
+
         data = json.loads(response.content)
         self.assertEqual(data["empresa_id"], self.empresa.id)
         self.assertEqual(data["sede_id"], self.sede.id)
@@ -122,7 +130,8 @@ class OrganizationalResolverIntegrationTests(SintelTenantTestCase):
         self.assertEqual(data["sede_id"], self.sede.id)
         # Scope (OSF F3): el conjunto COMPLETO de sedes asignadas, no una sola.
         self.assertEqual(
-            set(data["scope"]["sede_ids"]), {self.sede.id, otra_sede.id},
+            set(data["scope"]["sede_ids"]),
+            {self.sede.id, otra_sede.id},
         )
         self.assertEqual(data["scope"]["empresa_id"], self.empresa.id)
         self.assertEqual(data["scope"]["alcance"], "SEDE")
@@ -144,6 +153,7 @@ class OrganizationalResolverIntegrationTests(SintelTenantTestCase):
         request.user = self.user
         request.tenant = self.tenant
         from django.contrib.sessions.backends.db import SessionStore
+
         request.session = SessionStore()
 
         host = _PlainHtmxStyleView()

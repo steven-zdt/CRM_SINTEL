@@ -1,4 +1,5 @@
 import uuid
+
 from django.db import models
 
 from apps.tenant.core.models import SintelTenantBaseModel
@@ -32,15 +33,23 @@ class Cliente(SintelTenantBaseModel):
     razon_social = models.CharField(max_length=180)
     nombre_comercial = models.CharField(max_length=180, blank=True)
     regimen_tributario = models.CharField(max_length=15, choices=REGIMEN)
-    
+
     # Retenciones (NUEVO v3.5.0)
     es_retenedor = models.BooleanField(default=False, verbose_name="Es Agente Retenedor")
-    aplica_retefuente = models.BooleanField(default=False, verbose_name="Aplica Retención en la Fuente")
-    retefuente_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name="Porcentaje Retefuente")
+    aplica_retefuente = models.BooleanField(
+        default=False, verbose_name="Aplica Retención en la Fuente"
+    )
+    retefuente_porcentaje = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0, verbose_name="Porcentaje Retefuente"
+    )
     aplica_reteica = models.BooleanField(default=False, verbose_name="Aplica Retención de ICA")
-    reteica_porcentaje = models.DecimalField(max_digits=5, decimal_places=3, default=0, verbose_name="Porcentaje ReteICA")
+    reteica_porcentaje = models.DecimalField(
+        max_digits=5, decimal_places=3, default=0, verbose_name="Porcentaje ReteICA"
+    )
     aplica_reteiva = models.BooleanField(default=False, verbose_name="Aplica Retención de IVA")
-    reteiva_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name="Porcentaje ReteIVA")
+    reteiva_porcentaje = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0, verbose_name="Porcentaje ReteIVA"
+    )
     email = models.EmailField(blank=True)
     telefono = models.CharField(max_length=32, blank=True)
     direccion = models.CharField(max_length=255, blank=True)
@@ -120,6 +129,7 @@ class Cartera(SintelTenantBaseModel):
     """
     Cartera (Cuentas por Cobrar) del Cliente.
     """
+
     ESTADO_PAGO = [
         ("SIN_PAGO", "Sin pago"),
         ("PARCIAL", "Pago parcial"),
@@ -133,7 +143,7 @@ class Cartera(SintelTenantBaseModel):
         editable=False,
     )
     empresa = models.ForeignKey(
-        'empresa.Empresa',
+        "empresa.Empresa",
         on_delete=models.PROTECT,
         related_name="carteras",
         db_index=True,
@@ -154,30 +164,18 @@ class Cartera(SintelTenantBaseModel):
         db_index=True,
         help_text="UUID de la factura de venta (referencia blanda)",
     )
-    fecha_emision = models.DateField(
-        help_text="Fecha de emision de la factura"
-    )
+    fecha_emision = models.DateField(help_text="Fecha de emision de la factura")
     fecha_vencimiento = models.DateField(
-        db_index=True,
-        help_text="Fecha de vencimiento de la obligacion"
+        db_index=True, help_text="Fecha de vencimiento de la obligacion"
     )
     valor_total = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        help_text="Monto total de la deuda"
+        max_digits=18, decimal_places=2, help_text="Monto total de la deuda"
     )
     valor_pagado = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        help_text="Monto pagado"
+        max_digits=18, decimal_places=2, default=0, help_text="Monto pagado"
     )
     saldo = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        default=0,
-        editable=False,
-        help_text="Saldo pendiente"
+        max_digits=18, decimal_places=2, default=0, editable=False, help_text="Saldo pendiente"
     )
     estado_pago = models.CharField(
         max_length=15,
@@ -239,6 +237,7 @@ class CarteraNota(SintelTenantBaseModel):
     inmutabilidad ya usada para `Devengo`/historial de estados en otras
     apps de este proyecto).
     """
+
     TIPO = [
         ("SEGUIMIENTO", "Seguimiento"),
         ("PROMESA_PAGO", "Promesa de pago"),
@@ -248,16 +247,25 @@ class CarteraNota(SintelTenantBaseModel):
 
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
     empresa = models.ForeignKey(
-        'empresa.Empresa', on_delete=models.PROTECT, related_name="cartera_notas", db_index=True,
+        "empresa.Empresa",
+        on_delete=models.PROTECT,
+        related_name="cartera_notas",
+        db_index=True,
     )
     cartera = models.ForeignKey(
-        Cartera, on_delete=models.CASCADE, related_name="notas", db_index=True,
+        Cartera,
+        on_delete=models.CASCADE,
+        related_name="notas",
+        db_index=True,
     )
     # FK a perfil.TenantProfile (nunca al modelo de usuario global, AGENTS.md)
     # -- SET_NULL: conserva la nota aunque el perfil que la escribio sea
     # eliminado despues.
     usuario = models.ForeignKey(
-        'perfil.TenantProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        "perfil.TenantProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="cartera_notas",
     )
     tipo = models.CharField(max_length=20, choices=TIPO, default="SEGUIMIENTO")

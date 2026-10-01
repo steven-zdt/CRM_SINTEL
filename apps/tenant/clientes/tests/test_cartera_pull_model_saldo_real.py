@@ -12,6 +12,7 @@ $1.000.000" -- IGNORANDO el abono ya registrado. Este archivo demuestra el
 escenario corregido: list()/kpis() ahora reflejan el saldo real de
 Cartera cuando existe una obligacion vinculada a esa factura.
 """
+
 from decimal import Decimal
 
 import pytest
@@ -31,28 +32,43 @@ def test_list_y_kpis_reflejan_abono_parcial_real_de_cartera(client, admin_user, 
     with schema_context(tenant.schema_name):
         empresa = Empresa.objects.first()
         cliente = Cliente.objects.create(
-            empresa=empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900222333", razon_social="Cliente Saldo Real",
-            regimen_tributario="ORDINARIO", activo=True,
+            empresa=empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900222333",
+            razon_social="Cliente Saldo Real",
+            regimen_tributario="ORDINARIO",
+            activo=True,
         )
         factura = Factura.objects.create(
-            empresa=empresa, numero="FE-SALDO-1", consecutivo=999,
+            empresa=empresa,
+            numero="FE-SALDO-1",
+            consecutivo=999,
             naturaleza=Factura.Naturaleza.VENTA,
             estado_pago=Factura.EstadoPago.PAGO_PARCIAL,
-            emisor_nit=empresa.nit, emisor_razon_social=empresa.razon_social,
-            receptor_nit=cliente.numero_documento, receptor_razon_social=cliente.razon_social,
+            emisor_nit=empresa.nit,
+            emisor_razon_social=empresa.razon_social,
+            receptor_nit=cliente.numero_documento,
+            receptor_razon_social=cliente.razon_social,
             cliente_uuid=cliente.uuid,
-            fecha_emision="2026-06-01T00:00:00Z", payment_due_date="2026-07-01",
-            subtotal=Decimal("1000000.00"), total=Decimal("1000000.00"),
+            fecha_emision="2026-06-01T00:00:00Z",
+            payment_due_date="2026-07-01",
+            subtotal=Decimal("1000000.00"),
+            total=Decimal("1000000.00"),
         )
         cartera = Cartera.objects.create(
-            empresa=empresa, cliente=cliente, numero_factura="FE-SALDO-1",
+            empresa=empresa,
+            cliente=cliente,
+            numero_factura="FE-SALDO-1",
             factura_uuid=str(factura.uuid),
-            fecha_emision="2026-06-01", fecha_vencimiento="2026-07-01",
+            fecha_emision="2026-06-01",
+            fecha_vencimiento="2026-07-01",
             valor_total=Decimal("1000000.00"),
         )
         CarteraBusinessService.registrar_abono(
-            empresa_id=empresa.id, cartera_uuid=cartera.uuid, monto=Decimal("300000.00"),
+            empresa_id=empresa.id,
+            cartera_uuid=cartera.uuid,
+            monto=Decimal("300000.00"),
         )
 
     resp = client.get("/api/v1/clientes/cartera/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
@@ -65,7 +81,9 @@ def test_list_y_kpis_reflejan_abono_parcial_real_de_cartera(client, admin_user, 
     assert Decimal(row["saldo"]) == Decimal("700000.00")
     assert row["estado_pago"] == "PARCIAL"
 
-    resp_kpis = client.get("/api/v1/clientes/cartera/kpis/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+    resp_kpis = client.get(
+        "/api/v1/clientes/cartera/kpis/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
     assert resp_kpis.status_code == 200
     kpis = resp_kpis.json()
     # Antes del fix: pendiente_monto contaba el total completo (1.000.000).
@@ -83,19 +101,29 @@ def test_list_sin_cartera_asociada_mantiene_fallback_anterior(client, admin_user
     with schema_context(tenant.schema_name):
         empresa = Empresa.objects.first()
         cliente = Cliente.objects.create(
-            empresa=empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900222334", razon_social="Cliente Sin Cartera",
-            regimen_tributario="ORDINARIO", activo=True,
+            empresa=empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900222334",
+            razon_social="Cliente Sin Cartera",
+            regimen_tributario="ORDINARIO",
+            activo=True,
         )
         Factura.objects.create(
-            empresa=empresa, numero="FE-SALDO-2", consecutivo=1000,
+            empresa=empresa,
+            numero="FE-SALDO-2",
+            consecutivo=1000,
             naturaleza=Factura.Naturaleza.VENTA,
             estado_pago=Factura.EstadoPago.NO_PAGADA,
-            emisor_nit=empresa.nit, emisor_razon_social=empresa.razon_social,
-            receptor_nit=cliente.numero_documento, receptor_razon_social=cliente.razon_social,
+            emisor_nit=empresa.nit,
+            emisor_razon_social=empresa.razon_social,
+            receptor_nit=cliente.numero_documento,
+            receptor_razon_social=cliente.razon_social,
             cliente_uuid=cliente.uuid,
-            fecha_emision="2026-06-01T00:00:00Z", payment_due_date="2026-07-01",
-            subtotal=Decimal("500000.00"), total=Decimal("500000.00"),
+            fecha_emision="2026-06-01T00:00:00Z",
+            payment_due_date="2026-07-01",
+            subtotal=Decimal("500000.00"),
+            total=Decimal("500000.00"),
         )
 
     resp = client.get("/api/v1/clientes/cartera/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")

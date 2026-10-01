@@ -5,15 +5,19 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('tenant_ai_knowledge', '0001_initial'),
+        ("tenant_ai_knowledge", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='aiknowledgechunk',
-            name='embedding',
-            field=pgvector.django.vector.VectorField(blank=True, dimensions=768, help_text='Vector de embedding del `content` (768d, jina-v2-es). NULL hasta que se genere.', null=True),
+            model_name="aiknowledgechunk",
+            name="embedding",
+            field=pgvector.django.vector.VectorField(
+                blank=True,
+                dimensions=768,
+                help_text="Vector de embedding del `content` (768d, jina-v2-es). NULL hasta que se genere.",
+                null=True,
+            ),
         ),
     ]

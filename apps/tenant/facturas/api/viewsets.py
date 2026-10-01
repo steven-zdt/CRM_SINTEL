@@ -9,30 +9,54 @@ ViewSets para la app facturas.
 
 Referencia: https://www.django-rest-framework.org/api-guide/viewsets/
 """
-import base64
+
 import logging
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import IntegrityError, connection, transaction
+from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError, Q
-from django.http import Http404
+
+# # WARNING: DEPRECATED v2.40: DataTableSpec y DataTableServer eliminados - usar StandardResultsSetPagination
+from django.http import Http404, HttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, status, viewsets
+from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
 
 from apps.config.api.pagination import StandardResultsSetPagination
-from apps.tenant.api.permissions import IsTenantMember, IsTenantAdminOrReadOnly
+from apps.shared.datatable import ColumnFilter, ColumnFilterType, DataTableServer, DataTableSpec
+from apps.tenant.api.base import BaseTenantViewSet
+from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.empresa.models import Empresa
+from apps.tenant.facturas.api.mixins import FacturaMailMixin, FacturaUBLMixin, FacturaXMLMixin
 from apps.tenant.facturas.models import Factura, ItemFactura, NotaCredito
+from apps.tenant.facturas.services import (
+    FacturaBusinessService,
+    FacturaCRUDService,
+    FacturaSelectors,
+    FacturaServiceMixin,
+)
+from apps.tenant.facturas.services.electronic_invoice_service import (
+    ElectronicInvoiceApplicationService,
+)
+
+from .serializers import (
+    FacturaDetailSerializer,
+    FacturaListSerializer,
+    FacturaWriteSerializer,
+    ItemFacturaSerializer,
+    NotaCreditoDetailSerializer,
+    NotaCreditoListSerializer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,16 +65,35 @@ log_up = logging.getLogger("facturas")
 
 # Claves estándar de LogRecord que NO se pueden pisar
 _RESERVED = {
-    "name", "msg", "args", "levelname", "levelno", "pathname", "filename", "module",
-    "exc_info", "exc_text", "stack_info", "lineno", "funcName", "created", "msecs",
-    "relativeCreated", "thread", "threadName", "processName", "process", "asctime",
-    "message"
+    "name",
+    "msg",
+    "args",
+    "levelname",
+    "levelno",
+    "pathname",
+    "filename",
+    "module",
+    "exc_info",
+    "exc_text",
+    "stack_info",
+    "lineno",
+    "funcName",
+    "created",
+    "msecs",
+    "relativeCreated",
+    "thread",
+    "threadName",
+    "processName",
+    "process",
+    "asctime",
+    "message",
 }
+
 
 def safe_extra(d: dict) -> dict:
     """
     Devuelve un nuevo dict sin colisión con LogRecord; renombra claves reservadas añadiendo sufijo '_x'.
-    
+
     # WARNING: FORÉNSICA: Evita KeyError "Attempt to overwrite ..." cuando una clave en 'extra'
     colisiona con atributos estándar de LogRecord.
     """
@@ -61,31 +104,11 @@ def safe_extra(d: dict) -> dict:
         out[k + "_x" if k in _RESERVED else k] = v
     return out
 
-from django.conf import settings
-
-# # WARNING: DEPRECATED v2.40: DataTableSpec y DataTableServer eliminados - usar StandardResultsSetPagination
-from django.http import HttpResponse
-
-from apps.tenant.api.base import BaseTenantViewSet
-from apps.tenant.facturas.api.mixins import FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin
-from apps.tenant.facturas.inbox_state import update_inbox_state
-from apps.tenant.facturas.services import FacturaSelectors, FacturaServiceMixin, FacturaBusinessService, FacturaCRUDService
-from apps.tenant.facturas.services.electronic_invoice_service import ElectronicInvoiceApplicationService
-from apps.tenant.facturas.utils.ubl_parser import fast_get_cufe
-from .serializers import (
-    FacturaDetailSerializer,
-    FacturaListSerializer,
-    FacturaWriteSerializer,
-    ItemFacturaSerializer,
-    NotaCreditoDetailSerializer,
-    NotaCreditoListSerializer,
-)
-
 
 def mini_error(message: str, code: str, status_code: int) -> Response:
     """
     Helper minimalista para respuestas de error.
-    
+
     Formato: {"error": code, "message": message}
     """
     return Response({"error": code, "message": message}, status=status_code)
@@ -117,8 +140,14 @@ def resolve_empresa_id_from_request(request: Request) -> int:
     raise ValidationError({"empresa": "No se pudo resolver la empresa activa del tenant."})
 
 
-class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin, FacturaServiceMixin, BaseTenantViewSet):
-
+class FacturaViewSet(
+    OrganizationalContextMixin,
+    FacturaUBLMixin,
+    FacturaMailMixin,
+    FacturaXMLMixin,
+    FacturaServiceMixin,
+    BaseTenantViewSet,
+):
     """
     Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
     get_queryset() no migrado a OrganizationalContext.resolve() -
@@ -134,7 +163,7 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
     un registro sin sede queda visible para todos los alcances.
 
     FACTURAS MODULE — CONTROL CONTABLE
-    
+
     # WARNING: REGLAS DE NEGOCIO v2.95:
     Las facturas son documentos históricos importados desde sistemas externos.
     - [OK] ELIMINACIÓN: Se habilita la eliminación directa sin restricciones.
@@ -142,7 +171,7 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
     - [OK] No hay validaciones que bloqueen la eliminación por vínculos contables o documentos relacionados.
     - # WARNING: EDICIÓN: NUNCA se pueden editar, actualizar o modificar (inmutabilidad solo para edición).
     - Las correcciones fiscales se realizan mediante Notas Crédito/Débito.
-    
+
     Endpoints permitidos:
     - GET /facturas/ → Lista de facturas (paginada)
     - GET /facturas/{id}/ → Detalle de factura (read-only)
@@ -154,35 +183,40 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
     Endpoints bloqueados:
     - POST /facturas/ → 405 Method Not Allowed (solo importación vía upload-ubl)
     - PUT /facturas/{id}/ → 405 Method Not Allowed (uso PATCH en su lugar)
-    
+
     # WARNING: OPTIMIZACIÓN: NO usa .all(), usa only() para reducir SELECT.
     [OK] Escalable (millones de facturas)
     [OK] Perfecto para supervisión contable
     """
+
     """
     # WARNING: v2.40: ViewSet para Facturas con Tabulator Factory.
     Usa StandardResultsSetPagination para paginación remota.
     """
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     pagination_class = StandardResultsSetPagination
-    parser_classes = [JSONParser, FormParser, MultiPartParser]  # # WARNING: v2.40: JSON (principal) + FormParser (legacy) + MultiPartParser (upload)
+    parser_classes = [
+        JSONParser,
+        FormParser,
+        MultiPartParser,
+    ]  # # WARNING: v2.40: JSON (principal) + FormParser (legacy) + MultiPartParser (upload)
     renderer_classes = [JSONRenderer]  # # WARNING: v2.40: Solo JSON (no BrowsableAPIRenderer)
 
     # # WARNING: v2.95: EDICIÓN LIMITADA - PATCH permite cambios en campos específicos (vencimiento, estado, retenciones, formas de pago)
     # GET, DELETE y POST (solo upload-ubl) permitidos. PATCH permitido con restricciones en allowed_fields
-    http_method_names = ['get', 'head', 'options', 'post', 'patch', 'delete']
-    
+    http_method_names = ["get", "head", "options", "post", "patch", "delete"]
+
     # # WARNING: NO usar queryset = Factura.objects.all()
     # Se define en get_queryset() con only() para optimización
-    
+
     # Filtros y búsqueda
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = {
         "estado": ["exact"],
         "estado_pago": ["exact"],
         "naturaleza": ["exact"],
-        "origen": ["exact"],          # Facturas Hub FASE 26
-        "source_system": ["exact"],   # Facturas Hub FASE 26
+        "origen": ["exact"],  # Facturas Hub FASE 26
+        "source_system": ["exact"],  # Facturas Hub FASE 26
         "fecha_emision": ["date__gte", "date__lte", "date", "gte", "lte", "exact"],
         "cliente_uuid": ["exact"],
         "proveedor_uuid": ["exact"],
@@ -190,7 +224,7 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
     search_fields = ["numero", "cufe", "receptor_razon_social", "emisor_razon_social"]
     ordering_fields = ["fecha_emision", "consecutivo", "total"]
     ordering = ["-fecha_emision", "-consecutivo"]
-    
+
     def get_queryset(self):
         """
         QuerySet optimizado usando qs_list() y qs_detail() del service.
@@ -212,7 +246,7 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         - search: busqueda general (Tabulator)
         """
         empresa_id = resolve_empresa_id_from_request(self.request)
-        search = self.request.query_params.get('search', None)
+        search = self.request.query_params.get("search", None)
 
         # [OSF Fase F11] Resuelto una sola vez para TODAS las acciones a
         # nivel de objeto, no solo "list" (gap de F7): antes de esta fase,
@@ -225,6 +259,7 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
             OrganizationalScope,
             OrganizationalScopeError,
         )
+
         try:
             sede_ids = OrganizationalScope.resolve(self.request).sede_ids
         except OrganizationalScopeError:
@@ -235,7 +270,9 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         elif self.action == "retrieve":
             qs = self.get_qs_detail(sede_ids=sede_ids).filter(empresa_id=empresa_id)
         elif self.action == "destroy":
-            qs = Factura.objects.filter(empresa_id=empresa_id).only('id', 'estado', 'empresa_id', 'sede_id')
+            qs = Factura.objects.filter(empresa_id=empresa_id).only(
+                "id", "estado", "empresa_id", "sede_id"
+            )
             if sede_ids is not None:
                 qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
         elif self.action in ("partial_update", "update", "cambiar_estado"):
@@ -247,9 +284,8 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
 
         request = self.request
 
-        if nat := request.GET.get("naturaleza"):
-            if nat in ("VENTA", "COMPRA"):
-                qs = qs.filter(naturaleza=nat)
+        if (nat := request.GET.get("naturaleza")) and nat in ("VENTA", "COMPRA"):
+            qs = qs.filter(naturaleza=nat)
 
         if nit := request.GET.get("nit"):
             qs = qs.filter(Q(emisor_nit__icontains=nit) | Q(receptor_nit__icontains=nit))
@@ -261,6 +297,69 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
             qs = qs.filter(impuestos_desglosados__tipo_impuesto=tipo_impuesto).distinct()
 
         return qs.order_by("-fecha_emision", "-id")
+
+    @action(detail=False, methods=["post"], url_path="dt")
+    def dt(self, request):
+        """
+        DataTables 3.x server-side (mismo patron ya validado en Ventas/Bancos
+        -- ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Sirve
+        las 2 pestanas del listado (Ventas/Compras de Facturas) via el query
+        param ?naturaleza=venta|compra en la URL del ajax (fijo por pestana,
+        no un filtro editable por el usuario -- distinto de columns[i] que
+        si lo son). Reemplaza FacturaTable/FacturaTableView (django-tables2,
+        retirados) para la grilla.
+        """
+        empresa_id = resolve_empresa_id_from_request(request)
+        if not empresa_id:
+            return Response(
+                {
+                    "draw": int(request.data.get("draw", 0)) if hasattr(request, "data") else 0,
+                    "recordsTotal": 0,
+                    "recordsFiltered": 0,
+                    "data": [],
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+
+        try:
+            sede_ids = OrganizationalScope.resolve(request).sede_ids
+        except OrganizationalScopeError:
+            sede_ids = None
+
+        naturaleza = (request.query_params.get("naturaleza") or "venta").upper()
+        if naturaleza not in (Factura.Naturaleza.VENTA, Factura.Naturaleza.COMPRA):
+            naturaleza = Factura.Naturaleza.VENTA
+
+        base_qs = self.get_qs_list(empresa_id=empresa_id, sede_ids=sede_ids).filter(
+            naturaleza=naturaleza
+        )
+
+        spec = DataTableSpec(
+            fields_map={
+                0: "numero",
+                2: "payment_due_date",
+                3: "total",
+                4: "estado",
+                5: "estado_pago",
+            },
+            search_fields=["numero", "cufe", "receptor_razon_social", "emisor_razon_social"],
+            base_qs=base_qs,
+            serializer=FacturaListSerializer,
+            column_filters={
+                0: ColumnFilter("numero", ColumnFilterType.ICONTAINS),
+                2: ColumnFilter("payment_due_date", ColumnFilterType.DATE_RANGE),
+                3: ColumnFilter("total", ColumnFilterType.NUMBER_RANGE),
+                4: ColumnFilter("estado", ColumnFilterType.EXACT),
+                5: ColumnFilter("estado_pago", ColumnFilterType.EXACT),
+                6: ColumnFilter("cotizacion_numero", ColumnFilterType.ICONTAINS),
+            },
+        )
+        return DataTableServer(spec).handle(request)
 
     # WARNING: [PERF-N1] N+1 en el listado: FacturaListSerializer.get_retefuente/
     # get_reteica/get_reteiva llamaban a obj.total_retencion_fuente/etc (una query
@@ -288,10 +387,11 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         if not empresa_id:
             return {}
         from apps.tenant.contabilidad.services.retenciones_service import RetencionesService
+
         try:
             return RetencionesService.totales_retenciones_por_documentos(
-                documento_origen_app='facturas',
-                documento_origen_modelo='Factura',
+                documento_origen_app="facturas",
+                documento_origen_modelo="Factura",
                 documento_origen_ids=ids,
                 empresa_id=empresa_id,
             )
@@ -300,8 +400,8 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
-        if hasattr(self, '_retenciones_map'):
-            ctx['retenciones_map'] = self._retenciones_map
+        if hasattr(self, "_retenciones_map"):
+            ctx["retenciones_map"] = self._retenciones_map
         return ctx
 
     def get_serializer_class(self):
@@ -312,9 +412,19 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         # WARNING: v2.95: PATCH (partial_update) usa FacturaWriteSerializer con permisos de escritura
         """
         # # WARNING: v2.61.2: Acciones que no usan serializer (trabajan directamente con request.data)
-        if self.action in ['create-from-dto', 'upload-ubl', 'upload-document',
-                           'summary', 'xml', 'app-response', 'update-inbox-state', 'gestor-offcanvas',
-                           'lista-centro-costos', 'por_estado', 'cambiar_estado']:
+        if self.action in [
+            "create-from-dto",
+            "upload-ubl",
+            "upload-document",
+            "summary",
+            "xml",
+            "app-response",
+            "update-inbox-state",
+            "gestor-offcanvas",
+            "lista-centro-costos",
+            "por_estado",
+            "cambiar_estado",
+        ]:
             return None
 
         if self.action == "list":
@@ -322,7 +432,7 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         elif self.action in ["partial_update", "update"]:
             return FacturaWriteSerializer
         return FacturaDetailSerializer
-    
+
     def get_serializer(self, *args, **kwargs):
         """
         # WARNING: v2.61.2: Si get_serializer_class retorna None, no crear serializer.
@@ -332,25 +442,25 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         if serializer_class is None:
             return None
         return super().get_serializer(*args, **kwargs)
-    
+
     def update(self, request: Request, *args, **kwargs) -> Response:
         """
         Bloqueado: Las facturas son inmutables.
-        
+
         # WARNING: IMPORTANTE: Las facturas NO pueden ser editadas.
         Las correcciones se realizan mediante Notas Crédito/Débito.
-        
+
         Returns:
             405 Method Not Allowed
         """
         return Response(
             {
                 "detail": "Las facturas son documentos contables inmutables. "
-                         "Las correcciones se realizan mediante Notas Crédito/Débito."
+                "Las correcciones se realizan mediante Notas Crédito/Débito."
             },
-            status=status.HTTP_405_METHOD_NOT_ALLOWED
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
         )
-    
+
     def partial_update(self, request: Request, *args, **kwargs) -> Response:
         """
         Edición limitada: Solo campos permitidos via Service Layer.
@@ -366,6 +476,7 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
             OrganizationalScope,
             OrganizationalScopeError,
         )
+
         try:
             sede_ids = OrganizationalScope.resolve(request).sede_ids
         except OrganizationalScopeError:
@@ -386,38 +497,45 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         except ValidationError as e:
             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         except DjangoValidationError as e:
-            msgs = e.messages if hasattr(e, 'messages') else [str(e)]
-            return Response({"error": "validation_error", "detail": msgs}, status=status.HTTP_400_BAD_REQUEST)
+            msgs = e.messages if hasattr(e, "messages") else [str(e)]
+            return Response(
+                {"error": "validation_error", "detail": msgs}, status=status.HTTP_400_BAD_REQUEST
+            )
         except (ValueError, IntegrityError, ProtectedError) as e:
             return Response(
-                {"error": "update_failed", "detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "update_failed", "detail": str(e)}, status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            log_up.error(f"[facturas:partial_update] Unexpected error: {str(e)}", extra={"factura_id": factura.id})
-            return Response(
-                {"error": "internal_error", "detail": "Ocurrió un error inesperado al actualizar la factura."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            log_up.error(
+                f"[facturas:partial_update] Unexpected error: {str(e)}",
+                extra={"factura_id": factura.id},
             )
-            
+            return Response(
+                {
+                    "error": "internal_error",
+                    "detail": "Ocurrió un error inesperado al actualizar la factura.",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
     def create(self, request: Request, *args, **kwargs) -> Response:
         """
         Bloqueado: Las facturas solo se crean mediante importación UBL.
-        
+
         # WARNING: IMPORTANTE: Las facturas son documentos históricos importados.
         No se pueden crear manualmente. Use /upload-ubl/ o /create-from-dto/.
-        
+
         Returns:
             405 Method Not Allowed
         """
         return Response(
             {
                 "detail": "Las facturas son documentos históricos importados. "
-                         "Use /api/v1/facturas/upload-ubl/ para importar desde XML UBL."
+                "Use /api/v1/facturas/upload-ubl/ para importar desde XML UBL."
             },
-            status=status.HTTP_405_METHOD_NOT_ALLOWED
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
         )
-    
+
     def destroy(self, request: Request, *args, **kwargs) -> Response:
         """
         Eliminación directa de facturas — SOLO para facturas en BORRADOR.
@@ -451,7 +569,7 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
             500 Internal Server Error solo para errores inesperados
         """
         log_del = logging.getLogger("facturas.delete")
-        
+
         try:
             instance = self.get_object()  # Si no existe -> DRF lanza 404 automáticamente
 
@@ -468,36 +586,57 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
             # Eliminar usando servicio (a través del mixin de herencia)
             self.service_eliminar(instance)
 
-            log_del.info("delete_ok", extra=safe_extra({
-                "id": factura_id,
-                "numero": factura_numero,
-                "cufe": factura_cufe,
-                "estado": factura_estado,
-            }))
-            
+            log_del.info(
+                "delete_ok",
+                extra=safe_extra(
+                    {
+                        "id": factura_id,
+                        "numero": factura_numero,
+                        "cufe": factura_cufe,
+                        "estado": factura_estado,
+                    }
+                ),
+            )
+
             resp = Response(status=status.HTTP_204_NO_CONTENT)
             resp["HX-Trigger"] = "listaFacturasChanged"
             return resp
-            
+
         except Http404:
             raise
         except ProtectedError as ex:
             # Solo errores de integridad a nivel de BD (muy raro, solo si hay FK con PROTECT)
-            log_del.warning("protected_relation", extra=safe_extra({
-                "error": str(ex)[:200],
-            }))
+            log_del.warning(
+                "protected_relation",
+                extra=safe_extra(
+                    {
+                        "error": str(ex)[:200],
+                    }
+                ),
+            )
             return Response(
-                {"error": "protected_relation", "message": "Existen registros relacionados que impiden la eliminación a nivel de base de datos."},
-                status=status.HTTP_409_CONFLICT
+                {
+                    "error": "protected_relation",
+                    "message": "Existen registros relacionados que impiden la eliminación a nivel de base de datos.",
+                },
+                status=status.HTTP_409_CONFLICT,
             )
         except IntegrityError as ex:
             # Solo errores de integridad a nivel de BD
-            log_del.warning("integrity_error", extra=safe_extra({
-                "error": str(ex)[:200],
-            }))
+            log_del.warning(
+                "integrity_error",
+                extra=safe_extra(
+                    {
+                        "error": str(ex)[:200],
+                    }
+                ),
+            )
             return Response(
-                {"error": "integrity_error", "message": "No se puede eliminar por restricciones de integridad de base de datos."},
-                status=status.HTTP_409_CONFLICT
+                {
+                    "error": "integrity_error",
+                    "message": "No se puede eliminar por restricciones de integridad de base de datos.",
+                },
+                status=status.HTTP_409_CONFLICT,
             )
         except ValidationError as ex:
             # REM P0-01: FacturaBusinessService.eliminar_factura() bloquea el
@@ -505,21 +644,25 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
             # except Exception generico de abajo la convertia en un 500
             # enganoso ("No fue posible eliminar la factura") en vez de un
             # 400 con el mensaje real ("use anulacion, no DELETE").
-            log_del.info("delete_blocked_by_estado", extra=safe_extra({
-                "detail": str(ex.detail)[:200],
-            }))
+            log_del.info(
+                "delete_blocked_by_estado",
+                extra=safe_extra(
+                    {
+                        "detail": str(ex.detail)[:200],
+                    }
+                ),
+            )
             return Response(
-                {"error": "invalid_state", "message": ex.detail},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "invalid_state", "message": ex.detail}, status=status.HTTP_400_BAD_REQUEST
             )
         except Exception:
             # Loggea el ex pero no expongas detalles sensibles
             log_del.exception("delete_failed")
             return Response(
                 {"error": "delete_failed", "message": "No fue posible eliminar la factura."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-    
+
     @action(detail=False, methods=["get"], url_path="por-estado")
     def por_estado(self, request: Request) -> Response:
         """
@@ -544,7 +687,10 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         valid_states = {choice[0] for choice in Factura.Estado.choices}
         if estado not in valid_states:
             return Response(
-                {"error": "invalid_estado", "detail": f"Estado invalido. Opciones: {sorted(valid_states)}"},
+                {
+                    "error": "invalid_estado",
+                    "detail": f"Estado invalido. Opciones: {sorted(valid_states)}",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -582,7 +728,10 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         valid_states = {choice[0] for choice in Factura.Estado.choices}
         if nuevo_estado not in valid_states:
             return Response(
-                {"error": "invalid_estado", "detail": f"Estado invalido. Opciones: {sorted(valid_states)}"},
+                {
+                    "error": "invalid_estado",
+                    "detail": f"Estado invalido. Opciones: {sorted(valid_states)}",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -604,6 +753,7 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         # el portal DIAN, no una "edicion" de negocio del documento.
         if nuevo_estado == Factura.Estado.ANULADA:
             from apps.tenant.contabilidad.services.selectors import verificar_periodo_cerrado
+
             cerrado, periodo_nombre = verificar_periodo_cerrado(factura.fecha_emision, empresa_id)
             if cerrado:
                 return Response(
@@ -621,7 +771,9 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         try:
             factura = FacturaCRUDService.actualizar(factura, {"estado": nuevo_estado})
         except Exception as e:
-            log_up.error(f"[facturas:cambiar_estado] Error: {e}", extra={"factura_uuid": str(factura.uuid)})
+            log_up.error(
+                f"[facturas:cambiar_estado] Error: {e}", extra={"factura_uuid": str(factura.uuid)}
+            )
             return Response(
                 {"error": "update_failed", "detail": str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -643,6 +795,7 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         mock_scenario = request.query_params.get("_mock_scenario")
         if mock_scenario and getattr(settings, "FISCAL_ALLOW_MOCK_TRANSPORT", False):
             from apps.tenant.core.dian import MockTransportAdapter
+
             return MockTransportAdapter(scenario=mock_scenario)
         return None
 
@@ -666,7 +819,9 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
                 "status": transmision.status,
                 "submitted_at": transmision.submitted_at,
                 "responded_at": transmision.responded_at,
-            } if transmision else None,
+            }
+            if transmision
+            else None,
         }
 
     @action(detail=True, methods=["post"], url_path="transmitir")
@@ -692,10 +847,14 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
 
         try:
             resultado = ElectronicInvoiceApplicationService.transmitir(
-                factura, transport=self._resolver_transporte_dian(request),
+                factura,
+                transport=self._resolver_transporte_dian(request),
             )
         except ValueError as exc:
-            return Response({"error": "invalid_operation", "detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "invalid_operation", "detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         return Response(
             self._serializar_resultado_transmision(resultado["factura"], resultado, request),
@@ -721,10 +880,13 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
 
         try:
             resultado = ElectronicInvoiceApplicationService.reconciliar(
-                factura, transport=self._resolver_transporte_dian(request),
+                factura,
+                transport=self._resolver_transporte_dian(request),
             )
         except ValueError as exc:
-            return Response({"error": "no_transmission", "detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "no_transmission", "detail": str(exc)}, status=status.HTTP_404_NOT_FOUND
+            )
 
         return Response(
             self._serializar_resultado_transmision(resultado["factura"], resultado, request),
@@ -735,10 +897,10 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
     def summary(self, request: Request) -> Response:
         """
         Endpoint para obtener resumen de facturación neta.
-        
+
         # WARNING: v2.40: Excluye facturas con Nota de Crédito asociada.
         Retorna desglose por naturaleza (VENTA/COMPRA) con subtotal, impuestos y total neto.
-        
+
         Returns:
             {
                 "ventas": {
@@ -758,29 +920,34 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         try:
             # Obtener empresa del tenant (opcional, para filtrado futuro)
             empresa_id = None
-            if hasattr(request.user, 'empresa_id'):
+            if hasattr(request.user, "empresa_id"):
                 empresa_id = request.user.empresa_id
-            
+
             summary = self.get_summary(empresa_id=empresa_id)
-            
+
             summary_serialized = {
-                "ventas": {k: str(v) if isinstance(v, Decimal) else v for k, v in summary["ventas"].items()},
-                "compras": {k: str(v) if isinstance(v, Decimal) else v for k, v in summary["compras"].items()}
+                "ventas": {
+                    k: str(v) if isinstance(v, Decimal) else v for k, v in summary["ventas"].items()
+                },
+                "compras": {
+                    k: str(v) if isinstance(v, Decimal) else v
+                    for k, v in summary["compras"].items()
+                },
             }
-            
+
             return Response(summary_serialized, status=status.HTTP_200_OK)
         except Exception as e:
             log_up.error(f"Error obteniendo resumen de facturación: {e}", exc_info=True)
             return Response(
                 {"error": "error_calculando_resumen", "message": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    @action(detail=False, methods=['get'], url_path='lista-centro-costos')
+    @action(detail=False, methods=["get"], url_path="lista-centro-costos")
     def lista_centro_costos(self, request):
         """
         Endpoint ligero para selección de centros de costo en Proyectos.
-        
+
         # WARNING: v3.5 Zero Waste:
         - Usa selector optimizado qs_centros_costo()
         - Retorna solo ID, Número y Receptor
@@ -789,9 +956,9 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         empresa_id = resolve_empresa_id_from_request(request)
 
         qs = FacturaSelectors.qs_centros_costo().filter(empresa_id=empresa_id)
-        
+
         # Serialización ligera para máxima velocidad
-        data = list(qs.values('id', 'numero', 'receptor_razon_social'))
+        data = list(qs.values("id", "numero", "receptor_razon_social"))
         return Response(data)
 
     def retrieve(self, request, *args, **kwargs):
@@ -800,168 +967,226 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         # select_related(nota_credito, anexos) con .only(*DETAIL_FIELDS). No sobreescribir self.queryset.
         self.serializer_class = FacturaDetailSerializer
         return super().retrieve(request, *args, **kwargs)
-    
+
     # # WARNING: FASE 4: Acciones detail para anexos XML y Buzón IMAP delegadas a mixins (FacturaXMLMixin, FacturaMailMixin)
-    
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='gestor-offcanvas')
+
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="gestor-offcanvas",
+    )
     def gestor_offcanvas(self, request):
         """
         # WARNING: v2.60: Devuelve el HTML del formulario de factura para HTMX Offcanvas.
-        
+
         Endpoint: GET /api/v1/facturas/gestor-offcanvas/?id=<factura_id>
-        
+
         Reglas:
         - Si recibe `id`, devuelve la factura en modo lectura (ReadOnly) si ya está emitida,
           o permite edición si es borrador.
         - Si no recibe `id`, devuelve formulario vacío para nueva factura.
-        
+
         # WARNING: ZERO TRUST: Valida que la factura pertenezca al tenant del usuario.
         # WARNING: ZERO WASTE: Solo carga campos necesarios para el visualizador.
-        
+
         Returns:
             HTML template con el formulario Offcanvas (ruta centralizada en core)
         """
         # Acepta ?id= (cargarOffcanvas) o ?uuid= (btn Ver legacy)
-        factura_id = request.query_params.get('id') or request.query_params.get('uuid')
+        factura_id = request.query_params.get("id") or request.query_params.get("uuid")
         context = {}
 
         # # WARNING: v2.60: Determinar qué template usar según el modo
         # - Modo simple (subida/detalle): tenant/facturas/partials/offcanvas_factura.html
         # - Modo edición completa: tenant/facturas/partials/offcanvas_form.html
-        use_simple_template = request.query_params.get('simple', 'true').lower() == 'true'
+        use_simple_template = request.query_params.get("simple", "true").lower() == "true"
 
         if factura_id:
             try:
                 # # WARNING: ZERO TRUST: Validar que la factura pertenece al tenant
                 # Obtener empresa del tenant (patrón Singleton)
-                empresa = Empresa.objects.only('id').first()
+                empresa = Empresa.objects.only("id").first()
                 if not empresa:
-                    context['error'] = "No se encontró la empresa (SSoT) configurada para este tenant."
-                    template_name = 'tenant/facturas/offcanvas_crear_factura.html' if use_simple_template else 'tenant/facturas/offcanvas_editar_factura.html'
+                    context["error"] = (
+                        "No se encontró la empresa (SSoT) configurada para este tenant."
+                    )
+                    template_name = (
+                        "tenant/facturas/offcanvas_crear_factura.html"
+                        if use_simple_template
+                        else "tenant/facturas/offcanvas_editar_factura.html"
+                    )
                     return Response(context, template_name=template_name)
 
                 # # WARNING: ZERO WASTE: Solo cargar campos necesarios para el visualizador
                 # # WARNING: v2.61.2: Si es modo readonly, cargar también items para el template de solo lectura
-                readonly_mode = request.query_params.get('readonly', 'false').lower() == 'true'
+                readonly_mode = request.query_params.get("readonly", "false").lower() == "true"
                 if use_simple_template:
                     if readonly_mode:
                         # Template de solo lectura: cargar campos básicos + items
-                        factura = Factura.objects.select_related('anexos').prefetch_related('items').filter(
-                            empresa=empresa,
-                            uuid=factura_id
-                        ).only(
-                            'id',
-                            'numero',
-                            'emisor_razon_social',
-                            'emisor_nit',
-                            'receptor_razon_social',
-                            'receptor_nit',
-                            'subtotal',
-                            'impuestos',
-                            'total',
-                            'moneda',
-                            'estado',
-                            'fecha_emision',
-                            'cufe',
-                            'anexos__pdf_file',
-                            'anexos__ubl_xml'
-                        ).first()
+                        factura = (
+                            Factura.objects.select_related("anexos")
+                            .prefetch_related("items")
+                            .filter(empresa=empresa, uuid=factura_id)
+                            .only(
+                                "id",
+                                "numero",
+                                "emisor_razon_social",
+                                "emisor_nit",
+                                "receptor_razon_social",
+                                "receptor_nit",
+                                "subtotal",
+                                "impuestos",
+                                "total",
+                                "moneda",
+                                "estado",
+                                "fecha_emision",
+                                "cufe",
+                                "anexos__pdf_file",
+                                "anexos__ubl_xml",
+                            )
+                            .first()
+                        )
                     else:
                         # Template simple: solo campos básicos para detalle/subida
-                        factura = Factura.objects.select_related('anexos').filter(
-                            empresa=empresa,
-                            uuid=factura_id
-                        ).only(
-                            'id',
-                            'numero',
-                            'receptor_razon_social',
-                            'receptor_nit',
-                            'total',
-                            'moneda',
-                            'estado',
-                            'fecha_emision',
-                            'cufe',
-                            'anexos__pdf_file',
-                            'anexos__ubl_xml'
-                        ).first()
+                        factura = (
+                            Factura.objects.select_related("anexos")
+                            .filter(empresa=empresa, uuid=factura_id)
+                            .only(
+                                "id",
+                                "numero",
+                                "receptor_razon_social",
+                                "receptor_nit",
+                                "total",
+                                "moneda",
+                                "estado",
+                                "fecha_emision",
+                                "cufe",
+                                "anexos__pdf_file",
+                                "anexos__ubl_xml",
+                            )
+                            .first()
+                        )
                 else:
                     # Template completo: mas campos para edicion
                     # # WARNING: v2.61.5: Zero Waste - .only() con campos necesarios para el editor
-                    factura = Factura.objects.select_related('anexos').prefetch_related('items').filter(
-                        empresa=empresa,
-                        uuid=factura_id
-                    ).only(
-                        'id', 'uuid', 'numero', 'prefijo', 'consecutivo', 'tipo', 'estado', 'estado_pago', 'naturaleza',
-                        'fecha_emision', 'fecha_vencimiento',
-                        'emisor_nit', 'emisor_razon_social', 'emisor_direccion', 'emisor_email', 'emisor_telefono',
-                        'receptor_nit', 'receptor_razon_social', 'receptor_direccion', 'receptor_email', 'receptor_telefono',
-                        'moneda', 'categoria', 'forma_pago', 'medio_pago_codigo', 'payment_due_date',
-                        'subtotal', 'impuestos', 'total',
-                        'cotizacion_uuid', 'cotizacion_numero',
-                        'cliente_uuid', 'proveedor_uuid',
-                        'cufe', 'qr_url',
-                        'dian_validation_code', 'dian_validation_desc', 'dian_validation_fecha',
-                        'anexos__pdf_file', 'anexos__ubl_xml', 'anexos__application_response_xml',
-                    ).first()
+                    factura = (
+                        Factura.objects.select_related("anexos")
+                        .prefetch_related("items")
+                        .filter(empresa=empresa, uuid=factura_id)
+                        .only(
+                            "id",
+                            "uuid",
+                            "numero",
+                            "prefijo",
+                            "consecutivo",
+                            "tipo",
+                            "estado",
+                            "estado_pago",
+                            "naturaleza",
+                            "fecha_emision",
+                            "fecha_vencimiento",
+                            "emisor_nit",
+                            "emisor_razon_social",
+                            "emisor_direccion",
+                            "emisor_email",
+                            "emisor_telefono",
+                            "receptor_nit",
+                            "receptor_razon_social",
+                            "receptor_direccion",
+                            "receptor_email",
+                            "receptor_telefono",
+                            "moneda",
+                            "categoria",
+                            "forma_pago",
+                            "medio_pago_codigo",
+                            "payment_due_date",
+                            "subtotal",
+                            "impuestos",
+                            "total",
+                            "cotizacion_uuid",
+                            "cotizacion_numero",
+                            "cliente_uuid",
+                            "proveedor_uuid",
+                            "cufe",
+                            "qr_url",
+                            "dian_validation_code",
+                            "dian_validation_desc",
+                            "dian_validation_fecha",
+                            "anexos__pdf_file",
+                            "anexos__ubl_xml",
+                            "anexos__application_response_xml",
+                        )
+                        .first()
+                    )
 
                 if not factura:
-                    context['error'] = "Factura no encontrada o no pertenece a este tenant."
-                    return Response(context, template_name='tenant/facturas/offcanvas_crear_factura.html')
+                    context["error"] = "Factura no encontrada o no pertenece a este tenant."
+                    return Response(
+                        context, template_name="tenant/facturas/offcanvas_crear_factura.html"
+                    )
 
-                context['factura'] = factura
+                context["factura"] = factura
 
                 # Resolver fichas de cliente/proveedor via Bridge (sin N+1)
                 from apps.tenant.facturas.services.selectors import ClienteBridge, ProveedorBridge
+
                 if factura.cliente_uuid:
-                    context['cliente_info'] = ClienteBridge.obtener_cliente_por_uuid(
+                    context["cliente_info"] = ClienteBridge.obtener_cliente_por_uuid(
                         str(factura.cliente_uuid), empresa.id
                     )
                 if factura.proveedor_uuid:
-                    context['proveedor_info'] = ProveedorBridge.obtener_proveedor_por_uuid(
+                    context["proveedor_info"] = ProveedorBridge.obtener_proveedor_por_uuid(
                         str(factura.proveedor_uuid), empresa.id
                     )
 
                 # Determinar si es modo lectura o edición
                 # # WARNING: REGLA: Solo borradores pueden editarse
-                context['readonly'] = factura.estado != Factura.Estado.BORRADOR
-                context['es_emitida'] = factura.estado in [
+                context["readonly"] = factura.estado != Factura.Estado.BORRADOR
+                context["es_emitida"] = factura.estado in [
                     Factura.Estado.ENVIADA,
                     Factura.Estado.ACEPTADA,
                     Factura.Estado.RECHAZADA,
-                    Factura.Estado.ANULADA
+                    Factura.Estado.ANULADA,
                 ]
-                
+
                 # # WARNING: v2.61.2: Si es modo simple y readonly, usar template de solo lectura
-                readonly_mode = request.query_params.get('readonly', 'false').lower() == 'true'
-                if use_simple_template and (context['es_emitida'] or readonly_mode):
+                readonly_mode = request.query_params.get("readonly", "false").lower() == "true"
+                if use_simple_template and (context["es_emitida"] or readonly_mode):
                     # Usar template de solo lectura si está en modo readonly o la factura está emitida
                     if readonly_mode:
-                        return Response(context, template_name='tenant/facturas/offcanvas_detalle_factura.html')
-                    return Response(context, template_name='tenant/facturas/offcanvas_crear_factura.html')
+                        return Response(
+                            context, template_name="tenant/facturas/offcanvas_detalle_factura.html"
+                        )
+                    return Response(
+                        context, template_name="tenant/facturas/offcanvas_crear_factura.html"
+                    )
             except Exception as e:
                 log_up.warning(f"Error al obtener factura para Offcanvas: {e}", exc_info=True)
-                context['error'] = "No se pudo cargar la factura."
+                context["error"] = "No se pudo cargar la factura."
         else:
             # Modo creación (subida de archivo)
-            context['factura'] = None
-            context['readonly'] = False
-            context['es_emitida'] = False
-            
+            context["factura"] = None
+            context["readonly"] = False
+            context["es_emitida"] = False
+
             # Si es modo simple, usar template simple para subida
             if use_simple_template:
-                return Response(context, template_name='tenant/facturas/offcanvas_crear_factura.html')
-        
+                return Response(
+                    context, template_name="tenant/facturas/offcanvas_crear_factura.html"
+                )
+
         # Pasar choices para selects (solo necesario para template completo)
-        context['tipos_factura'] = Factura.TipoFactura.choices
-        context['estados'] = Factura.Estado.choices
-        context['estados_pago'] = Factura.EstadoPago.choices
-        context['naturalezas'] = Factura.Naturaleza.choices
-        context['categorias'] = Factura.Categoria.choices
+        context["tipos_factura"] = Factura.TipoFactura.choices
+        context["estados"] = Factura.Estado.choices
+        context["estados_pago"] = Factura.EstadoPago.choices
+        context["naturalezas"] = Factura.Naturaleza.choices
+        context["categorias"] = Factura.Categoria.choices
 
         # Template completo para edición
-        return Response(context, template_name='tenant/facturas/offcanvas_editar_factura.html')
+        return Response(context, template_name="tenant/facturas/offcanvas_editar_factura.html")
 
-    @action(detail=False, methods=['get'], url_path='buscar-para-movimiento')
+    @action(detail=False, methods=["get"], url_path="buscar-para-movimiento")
     def buscar_para_movimiento(self, request):
         """
         Busqueda generica de Facturas ya persistidas -- usada hoy por
@@ -980,36 +1205,63 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
         (ese solo filtra, `Factura.naturaleza` ya viene resuelta por
         FacturaBusinessService._resolver_naturaleza(), SSoT).
         """
-        query = request.query_params.get('q', '').strip()
-        naturaleza = request.query_params.get('naturaleza', '').strip()
+        query = request.query_params.get("q", "").strip()
+        naturaleza = request.query_params.get("naturaleza", "").strip()
+        excluir_vinculadas = request.query_params.get("excluir_vinculadas", "").strip()
+        # PLAN_VINCULAR_FACTURA_COMPRA_COMPRAS: opt-in (no cambia el
+        # comportamiento por defecto de otros consumidores, ej. Inventario/
+        # Ventas) -- Compras pide buscar solo por numero o proveedor
+        # (nombre/NIT), nunca por CUFE (identificador DIAN largo/opaco, no
+        # es lo que un usuario "busca por nombre").
+        sin_cufe = request.query_params.get("sin_cufe", "").strip() == "1"
 
         if len(query) < 2:
             return Response([], status=status.HTTP_200_OK)
 
         empresa_id = resolve_empresa_id_from_request(request)
         qs = Factura.objects.filter(empresa_id=empresa_id).only(
-            'uuid', 'numero', 'fecha_emision', 'cufe',
-            'emisor_razon_social', 'emisor_nit',
-            'receptor_razon_social', 'receptor_nit',
-            'total', 'naturaleza'
+            "uuid",
+            "numero",
+            "fecha_emision",
+            "cufe",
+            "emisor_razon_social",
+            "emisor_nit",
+            "receptor_razon_social",
+            "receptor_nit",
+            "total",
+            "naturaleza",
         )
 
-        # Busqueda por numero, CUFE, o tercero (emisor O receptor -- FASE 21)
-        qs = qs.filter(
-            Q(numero__icontains=query) |
-            Q(cufe__icontains=query) |
-            Q(emisor_razon_social__icontains=query) |
-            Q(emisor_nit__icontains=query) |
-            Q(receptor_razon_social__icontains=query) |
-            Q(receptor_nit__icontains=query)
+        # Busqueda por numero, CUFE (salvo sin_cufe=1), o tercero (emisor O
+        # receptor -- FASE 21)
+        filtro_busqueda = (
+            Q(numero__icontains=query)
+            | Q(emisor_razon_social__icontains=query)
+            | Q(emisor_nit__icontains=query)
+            | Q(receptor_razon_social__icontains=query)
+            | Q(receptor_nit__icontains=query)
         )
+        if not sin_cufe:
+            filtro_busqueda |= Q(cufe__icontains=query)
+        qs = qs.filter(filtro_busqueda)
 
         # Filtro por naturaleza si se proporciona
-        if naturaleza in ('VENTA', 'COMPRA'):
+        if naturaleza in ("VENTA", "COMPRA"):
             qs = qs.filter(naturaleza=naturaleza)
 
+        # PLAN_VINCULAR_FACTURA_COMPRA_COMPRAS Fase 9: opt-in (no cambia el
+        # comportamiento por defecto de otros consumidores, ej. Inventario)
+        # -- excluye del buscador las Facturas que ya tienen un vinculo 1:1
+        # operacional (OrdenCompra.factura_asociada / Venta.factura_asociada)
+        # para no ofrecer como "disponible" algo que la vinculacion real
+        # rechazaria de todos modos con 409.
+        if excluir_vinculadas == "compra":
+            qs = qs.filter(orden_compra_origen__isnull=True)
+        elif excluir_vinculadas == "venta":
+            qs = qs.filter(venta_origen__isnull=True)
+
         # Ordenar por fecha descendente, límite 20 resultados
-        qs = qs.order_by('-fecha_emision')[:20]
+        qs = qs.order_by("-fecha_emision")[:20]
 
         resultados = []
         for f in qs:
@@ -1019,18 +1271,21 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
                 tercero, nit = f.emisor_razon_social, f.emisor_nit
             else:
                 tercero, nit = f.receptor_razon_social, f.receptor_nit
-            resultados.append({
-                'uuid': str(f.uuid),
-                'numero': f.numero,
-                'fecha': f.fecha_emision.strftime('%d/%m/%Y') if f.fecha_emision else '',
-                'tercero': tercero or nit or 'N/A',
-                'cliente': tercero or nit or 'N/A',  # compat: consumidor existente (inventario)
-                'nit': nit or '',
-                'total': str(f.total),
-                'naturaleza': f.naturaleza,
-            })
+            resultados.append(
+                {
+                    "uuid": str(f.uuid),
+                    "numero": f.numero,
+                    "fecha": f.fecha_emision.strftime("%d/%m/%Y") if f.fecha_emision else "",
+                    "tercero": tercero or nit or "N/A",
+                    "cliente": tercero or nit or "N/A",  # compat: consumidor existente (inventario)
+                    "nit": nit or "",
+                    "total": str(f.total),
+                    "naturaleza": f.naturaleza,
+                }
+            )
 
         return Response(resultados, status=status.HTTP_200_OK)
+
 
 class ItemFacturaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
@@ -1048,10 +1303,11 @@ class ItemFacturaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     - PATCH /api/v1/items-factura/{uuid}/ (actualizar ítem — campos item_inventario_* v3.9.2+)
     - DELETE /api/v1/items-factura/{uuid}/ (eliminar un ítem)
     """
+
     permission_classes = [IsTenantMember, IsAuthenticated]
     serializer_class = ItemFacturaSerializer
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['factura_id']
+    filterset_fields = ["factura_id"]
     http_method_names = ["get", "head", "options", "patch", "delete"]
 
     def get_queryset(self):
@@ -1063,111 +1319,168 @@ class ItemFacturaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         empresa_id = resolve_empresa_id_from_request(self.request)
 
         qs = ItemFactura.objects.filter(empresa_id=empresa_id).only(
-            "id", "uuid", "empresa_id", "factura_id", "linea_id", "codigo", "descripcion",
-            "cantidad", "unidad_medida", "valor_unitario", "porcentaje_iva",
-            "valor_iva", "porcentaje_retefuente", "valor_retefuente",
-            "porcentaje_reteiva", "valor_reteiva", "porcentaje_reteica", "valor_reteica",
-            "subtotal", "total", "es_servicio", "orden",
-            "item_inventario_uuid", "item_inventario_tipo", "item_inventario_codigo"
+            "id",
+            "uuid",
+            "empresa_id",
+            "factura_id",
+            "linea_id",
+            "codigo",
+            "descripcion",
+            "cantidad",
+            "unidad_medida",
+            "valor_unitario",
+            "porcentaje_iva",
+            "valor_iva",
+            "porcentaje_retefuente",
+            "valor_retefuente",
+            "porcentaje_reteiva",
+            "valor_reteiva",
+            "porcentaje_reteica",
+            "valor_reteica",
+            "subtotal",
+            "total",
+            "es_servicio",
+            "orden",
+            "item_inventario_uuid",
+            "item_inventario_tipo",
+            "item_inventario_codigo",
         )
 
         # Filtro por factura (soporta 'factura' o 'factura_id' en query params)
-        factura_id = self.request.query_params.get('factura') or self.request.query_params.get('factura_id')
+        factura_id = self.request.query_params.get("factura") or self.request.query_params.get(
+            "factura_id"
+        )
         if factura_id:
             qs = qs.filter(factura_id=factura_id)
 
-        return qs.order_by('orden')
+        return qs.order_by("orden")
 
 
 class NotaCreditoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     NOTAS CRÉDITO — Endpoints para gestión de notas crédito.
-    
+
     # WARNING: REGLAS DE NEGOCIO:
     Las notas crédito son documentos históricos que corrigen facturas.
     - Solo se pueden eliminar para corregir un error de carga (rollback técnico).
     - NUNCA se pueden editar, actualizar o modificar.
     - Se crean únicamente mediante importación XML UBL (pipeline canónico).
-    
+
     Endpoints permitidos:
     - GET /notas-credito/ → Lista de notas crédito (paginada)
     - GET /notas-credito/{uuid}/ → Detalle de nota crédito (read-only)
     - GET /notas-credito/{uuid}/xml/ → XML de nota crédito (artefacto pesado)
     - DELETE /notas-credito/{uuid}/ → Eliminar nota crédito (rollback de error de carga)
-    
+
     Endpoints bloqueados:
     - POST /notas-credito/ → 405 Method Not Allowed (solo importación vía pipeline XML)
     - PUT /notas-credito/{uuid}/ → 405 Method Not Allowed
     - PATCH /notas-credito/{uuid}/ → 405 Method Not Allowed
-    
+
     # WARNING: OPTIMIZACIÓN: NO usa .all(), usa only() para reducir SELECT.
     [OK] Escalable (millones de notas crédito)
     [OK] Artefactos pesados (XML) solo en endpoint /xml/
     """
+
     permission_classes = [IsTenantMember, IsAuthenticated]
-    http_method_names = ["get", "head", "options", "delete"]  # # WARNING: v2.40: POST eliminado (datatables deprecated)
-    
+    http_method_names = [
+        "get",
+        "head",
+        "options",
+        "delete",
+    ]  # # WARNING: v2.40: POST eliminado (datatables deprecated)
+
     def get_serializer_class(self):
         """Usa ListSerializer para list, DetailSerializer para retrieve."""
         if self.action == "list":
             return NotaCreditoListSerializer
         return NotaCreditoDetailSerializer
-    
+
     def get_queryset(self):
         """
         QuerySet optimizado - NO usa .all().
-        
+
         # WARNING: OPTIMIZACIÓN: Para list, solo campos esenciales (sin xml_content).
         """
         empresa_id = resolve_empresa_id_from_request(self.request)
 
         if self.action == "list":
-            return NotaCredito.objects.select_related("factura").filter(empresa_id=empresa_id).only(
-                "id", "uuid", "empresa_id", "numero", "cude", "fecha_emision", "moneda",
-                "subtotal", "impuestos", "total", "motivo",
-                "ref_factura_numero", "ref_factura_cufe",
-                "factura__numero", "factura__cufe",
-                "created_at"
+            return (
+                NotaCredito.objects.select_related("factura")
+                .filter(empresa_id=empresa_id)
+                .only(
+                    "id",
+                    "uuid",
+                    "empresa_id",
+                    "numero",
+                    "cude",
+                    "fecha_emision",
+                    "moneda",
+                    "subtotal",
+                    "impuestos",
+                    "total",
+                    "motivo",
+                    "ref_factura_numero",
+                    "ref_factura_cufe",
+                    "factura__numero",
+                    "factura__cufe",
+                    "created_at",
+                )
             )
         # Para retrieve, incluir más campos pero aún sin xml_content
-        return NotaCredito.objects.select_related("factura").prefetch_related("items").filter(empresa_id=empresa_id).only(
-            "id", "uuid", "empresa_id", "numero", "cude", "fecha_emision", "moneda",
-            "subtotal", "impuestos", "total", "motivo",
-            "ref_factura_numero", "ref_factura_cufe",
-            "factura__id", "factura__numero", "factura__cufe",
-            "created_at", "updated_at"
+        return (
+            NotaCredito.objects.select_related("factura")
+            .prefetch_related("items")
+            .filter(empresa_id=empresa_id)
+            .only(
+                "id",
+                "uuid",
+                "empresa_id",
+                "numero",
+                "cude",
+                "fecha_emision",
+                "moneda",
+                "subtotal",
+                "impuestos",
+                "total",
+                "motivo",
+                "ref_factura_numero",
+                "ref_factura_cufe",
+                "factura__id",
+                "factura__numero",
+                "factura__cufe",
+                "created_at",
+                "updated_at",
+            )
         )
-    
+
     # # WARNING: DEPRECATED v2.40: Método datatables() eliminado - usar GET /api/v1/facturas/notas-credito/ con StandardResultsSetPagination
-    
+
     @action(detail=True, methods=["get"], url_path="xml")
     def xml(self, request, uuid=None):
         """
         Endpoint dedicado para XML completo (artefacto pesado).
-        
+
         # WARNING: ARQUITECTURA: Artefactos pesados solo en endpoints /xml/
         [OK] No se incluye en listas/detalles (optimización)
         """
         nota = self.get_object()
-        
+
         if not nota.xml_content:
-            return Response({
-                "error": "not_found",
-                "message": "No se encontró XML para esta nota crédito."
-            }, status=status.HTTP_404_NOT_FOUND)
-        
+            return Response(
+                {"error": "not_found", "message": "No se encontró XML para esta nota crédito."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
         # Retornar XML como HttpResponse para archivos grandes
-        response = HttpResponse(
-            nota.xml_content,
-            content_type="application/xml; charset=utf-8"
-        )
+        response = HttpResponse(nota.xml_content, content_type="application/xml; charset=utf-8")
         response["Content-Disposition"] = f'inline; filename="nota_credito_{nota.numero}.xml"'
         return response
-    
+
     def destroy(self, request, *args, **kwargs):
         """
         DELETE /notas-credito/{id}/ → Eliminar nota crédito (rollback técnico).
-        
+
         # WARNING: REGLA: Solo para corregir errores de carga.
         # WARNING: PROTECCIÓN: OneToOneField con PROTECT evita borrado accidental de factura.
         """
@@ -1177,7 +1490,10 @@ class NotaCreditoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except ProtectedError as e:
             log_up.warning(f"Intento de borrar nota crédito {kwargs.get('pk')} protegida: {str(e)}")
-            return Response({
-                "error": "protected",
-                "message": "No se puede eliminar esta nota crédito porque está protegida."
-            }, status=status.HTTP_409_CONFLICT)
+            return Response(
+                {
+                    "error": "protected",
+                    "message": "No se puede eliminar esta nota crédito porque está protegida.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )

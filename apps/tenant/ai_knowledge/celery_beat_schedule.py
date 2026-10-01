@@ -6,6 +6,7 @@ Registrar en config/celery.py:
 
 Mismo patron que apps/tenant/dashboard/celery_beat_schedule.py.
 """
+
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {

@@ -10,6 +10,7 @@ para el contexto transversal. Este archivo cierra 3 gaps para `empleados`
     F13 solo probo SEDE a nivel de objeto - la combinacion AREA+retrieve
     nunca se habia verificado.
 """
+
 from rest_framework import status
 
 from apps.tenant.empleados.models import Empleado
@@ -22,17 +23,27 @@ class EmpleadoIsolationF14Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F14 Empleados", nit="900000797", direccion="Calle 1",
+            razon_social="Empresa Test F14 Empleados",
+            nit="900000797",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F14 Empl")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F14 Empl")
 
     def _crear(self, doc, sede=None, area=None):
         return Empleado.objects.create(
-            empresa=self.empresa, tipo_documento="CC", numero_documento=doc,
-            primer_nombre="Test", primer_apellido="F14", email=f"f14emp{doc}@test.com",
-            estado="ACTIVO", fecha_ingreso="2024-01-01", eps="EPS004", afp="AFP001",
-            sede=sede, area=area,
+            empresa=self.empresa,
+            tipo_documento="CC",
+            numero_documento=doc,
+            primer_nombre="Test",
+            primer_apellido="F14",
+            email=f"f14emp{doc}@test.com",
+            estado="ACTIVO",
+            fecha_ingreso="2024-01-01",
+            eps="EPS004",
+            afp="AFP001",
+            sede=sede,
+            area=area,
         )
 
     def test_alcance_sede_sin_asignaciones_no_ve_ninguna_sede_solo_null_safe(self):
@@ -40,7 +51,10 @@ class EmpleadoIsolationF14Tests(SintelTenantTestCase):
         e_a = self._crear("F14-A", sede=self.sede_a)
 
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
 
         resp = self.api_client.get("/api/v1/empleados/")
@@ -57,7 +71,10 @@ class EmpleadoIsolationF14Tests(SintelTenantTestCase):
         e_c = self._crear("F14-DOBLE-C", sede=sede_c)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a, self.sede_b])
 
@@ -71,15 +88,24 @@ class EmpleadoIsolationF14Tests(SintelTenantTestCase):
 
     def test_alcance_area_no_puede_ver_por_uuid_directo_empleado_de_otra_area(self):
         area_x = Area.objects.create(
-            empresa=self.empresa, sede=self.sede_a, nombre="Area X F14 Empl", codigo_funcionamiento="AXE-F14",
+            empresa=self.empresa,
+            sede=self.sede_a,
+            nombre="Area X F14 Empl",
+            codigo_funcionamiento="AXE-F14",
         )
         area_y = Area.objects.create(
-            empresa=self.empresa, sede=self.sede_a, nombre="Area Y F14 Empl", codigo_funcionamiento="AYE-F14",
+            empresa=self.empresa,
+            sede=self.sede_a,
+            nombre="Area Y F14 Empl",
+            codigo_funcionamiento="AYE-F14",
         )
         e_area_y = self._crear("F14-AREA-Y", sede=self.sede_a, area=area_y)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="AREA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="AREA",
         )
         perfil.sedes_asignadas.set([self.sede_a])
         perfil.areas_asignadas.set([area_x])
@@ -90,12 +116,18 @@ class EmpleadoIsolationF14Tests(SintelTenantTestCase):
 
     def test_alcance_area_puede_ver_por_uuid_directo_empleado_de_su_propia_area(self):
         area_x = Area.objects.create(
-            empresa=self.empresa, sede=self.sede_a, nombre="Area X2 F14 Empl", codigo_funcionamiento="AX2E-F14",
+            empresa=self.empresa,
+            sede=self.sede_a,
+            nombre="Area X2 F14 Empl",
+            codigo_funcionamiento="AX2E-F14",
         )
         e_area_x = self._crear("F14-AREA-X", sede=self.sede_a, area=area_x)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="AREA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="AREA",
         )
         perfil.sedes_asignadas.set([self.sede_a])
         perfil.areas_asignadas.set([area_x])

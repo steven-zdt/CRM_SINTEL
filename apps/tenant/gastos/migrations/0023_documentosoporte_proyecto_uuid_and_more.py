@@ -4,22 +4,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('empresa', '0009_sedes_areas_explicit_fk'),
-        ('perfil', '0008_add_alcance_and_sede_area_context'),
-        ('tenant_gastos', '0022_add_sede_to_documentosoporte'),
-        ('tenant_proveedores', '0019_cuentaspagar_orden_compra_uuid_and_more'),
+        ("empresa", "0009_sedes_areas_explicit_fk"),
+        ("perfil", "0008_add_alcance_and_sede_area_context"),
+        ("tenant_gastos", "0022_add_sede_to_documentosoporte"),
+        ("tenant_proveedores", "0019_cuentaspagar_orden_compra_uuid_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='documentosoporte',
-            name='proyecto_uuid',
-            field=models.UUIDField(blank=True, db_index=True, help_text='Vinculacion opcional al Proyecto (Pull Model, UUID opaco)', null=True),
+            model_name="documentosoporte",
+            name="proyecto_uuid",
+            field=models.UUIDField(
+                blank=True,
+                db_index=True,
+                help_text="Vinculacion opcional al Proyecto (Pull Model, UUID opaco)",
+                null=True,
+            ),
         ),
         migrations.AddIndex(
-            model_name='documentosoporte',
-            index=models.Index(fields=['empresa', 'proyecto_uuid'], name='idx_gastos_proyecto'),
+            model_name="documentosoporte",
+            index=models.Index(fields=["empresa", "proyecto_uuid"], name="idx_gastos_proyecto"),
         ),
     ]

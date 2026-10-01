@@ -1,0 +1,22 @@
+{# kpis_productos.html — Fragmento HTMX: solo KPIs (la tabla ya no vive #}
+{# aqui, ver partials/tabla_productos.html -- DataTables). #}
+<div id="prod-kpis" class="d-flex gap-2 mb-2 flex-wrap">
+  <div class="kpi-card">
+    <div class="kpi-label">SKUs</div>
+    <div class="kpi-val">{{ kpi_skus }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Activos</div>
+    <div class="kpi-val text-success">{{ kpi_activos }}</div>
+  </div>
+  {% if kpi_alertas > 0 %}
+  <div class="kpi-card border-danger">
+    <div class="kpi-label text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>Stock Bajo</div>
+    <div class="kpi-val text-danger">{{ kpi_alertas }}</div>
+  </div>
+  {% endif %}
+  <div class="kpi-card">
+    <div class="kpi-label">Valor Inventario</div>
+    <div class="kpi-val">${{ kpi_valor_total|floatformat:0 }}</div>
+  </div>
+</div>

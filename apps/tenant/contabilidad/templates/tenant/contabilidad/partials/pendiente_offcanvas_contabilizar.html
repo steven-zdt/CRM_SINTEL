@@ -409,7 +409,7 @@ inyectar JS arbitrario.
         '<td class="py-1 font-monospace small">' + (l.cuenta_codigo || '-') + '</td>' +
         '<td class="py-1 small">' + (l.cuenta_nombre || '') + '</td>' +
         '<td class="py-1 small text-muted">' + (_ORIGEN_LABELS[l.origen_valor] || l.origen_valor) + '</td>' +
-        '<td class="py-1 text-end small">$ ' + monto.toLocaleString('es-CO', {minimumFractionDigits:2}) + '</td>' +
+        '<td class="py-1 text-end small">$ ' + monto.toLocaleString('en-US', {minimumFractionDigits:2}) + '</td>' +
         '</tr>';
     }).join('');
     return '<table class="table table-xs table-bordered mb-0" style="font-size:.78rem">' +
@@ -942,8 +942,8 @@ inyectar JS arbitrario.
       debe += parseFloat(tr.querySelector('.debe-input')?.value || 0) || 0;
       haber += parseFloat(tr.querySelector('.haber-input')?.value || 0) || 0;
     });
-    totalDebeEl.textContent = `$ ${debe.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`;
-    totalHaberEl.textContent = `$ ${haber.toLocaleString('es-CO', { minimumFractionDigits: 2 })}`;
+    totalDebeEl.textContent = `$ ${debe.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    totalHaberEl.textContent = `$ ${haber.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
     const cuadrado = Math.abs(debe - haber) < 0.01 && debe > 0;
     const comprobanteSeleccionado = selectComprobante.value !== "";
     const periodoSeleccionado = selectPeriodo.value !== "";

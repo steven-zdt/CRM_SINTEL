@@ -12,6 +12,7 @@ Prueba con datos reales (no mocks) que:
    para demostrar que la interseccion ocurre en el Scope Engine, no
    depende de que el Provider filtre por sede.
 """
+
 from rest_framework.test import APIRequestFactory
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -31,25 +32,46 @@ class VentasReportProviderTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Reporting Test", nit="900000930", direccion="Calle Reporting",
+            razon_social="Empresa Reporting Test",
+            nit="900000930",
+            direccion="Calle Reporting",
         )
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="RPT-1", razon_social="Cliente Reporting", regimen_tributario="ORDINARIO",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="RPT-1",
+            razon_social="Cliente Reporting",
+            regimen_tributario="ORDINARIO",
         )
         Venta.objects.create(
-            empresa=self.empresa, cliente=self.cliente, fecha_emision="2026-06-01",
-            estado="BORRADOR", numero_factura="RPT-V-1", subtotal="100.00", impuestos="19.00", total_neto="119.00",
+            empresa=self.empresa,
+            cliente=self.cliente,
+            fecha_emision="2026-06-01",
+            estado="BORRADOR",
+            numero_factura="RPT-V-1",
+            subtotal="100.00",
+            impuestos="19.00",
+            total_neto="119.00",
         )
         Venta.objects.create(
-            empresa=self.empresa, cliente=self.cliente, fecha_emision="2026-06-02",
-            estado="BORRADOR", numero_factura="RPT-V-2", subtotal="200.00", impuestos="38.00", total_neto="238.00",
+            empresa=self.empresa,
+            cliente=self.cliente,
+            fecha_emision="2026-06-02",
+            estado="BORRADOR",
+            numero_factura="RPT-V-2",
+            subtotal="200.00",
+            impuestos="38.00",
+            total_neto="238.00",
         )
 
     def _authenticated_request(self, alcance="EMPRESA", sedes_asignadas=None):
         TenantProfile.objects.filter(user=self.user).delete()
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance=alcance,
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance=alcance,
         )
         if sedes_asignadas:
             perfil.sedes_asignadas.set(sedes_asignadas)
@@ -99,7 +121,9 @@ class VentasReportProviderTests(SintelTenantTestCase):
         sede_propia = Sede.objects.create(empresa=self.empresa, nombre="Sede Propia RPT 2")
         request = self._authenticated_request(alcance="SEDE", sedes_asignadas=[sede_propia])
 
-        report_request = ReportRequest(dataset_id="ventas.resumen", filters={"sede": sede_propia.id})
+        report_request = ReportRequest(
+            dataset_id="ventas.resumen", filters={"sede": sede_propia.id}
+        )
         # No debe lanzar ScopeViolationError -- Venta no tiene campo `sede`
         # asi que los datos no se filtran por sede, pero el Scope Engine
         # debe permitir la solicitud (esta dentro del alcance del perfil).

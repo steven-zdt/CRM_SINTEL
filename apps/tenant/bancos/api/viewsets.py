@@ -8,6 +8,7 @@ from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
+from apps.shared.datatable import ColumnFilter, ColumnFilterType, DataTableServer, DataTableSpec
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
@@ -37,7 +38,7 @@ from apps.tenant.bancos.services.api_mixins import (
 from apps.tenant.bancos.services.export_service import ExtractoBancarioExportService
 from apps.tenant.bancos.services.matching_service import BankTransactionMatchingService
 from apps.tenant.bancos.services.selectors import (
-    ExtractoBancarioKpiSelector,
+    CuentaBancariaSelector,
     MovimientoBancarioAplicacionSelector,
     TerceroDisplaySelector,
 )
@@ -60,7 +61,10 @@ TIPOS_CUENTA_CHOICES = [
     ("CORRIENTE", "Corriente"),
 ]
 
-class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+
+class CuentaBancariaViewSet(
+    OrganizationalContextMixin, CuentaBancariaServiceMixin, SintelDSVMixin, BaseTenantViewSet
+):
     """
     ViewSet to manage CuentaBancaria.
 
@@ -71,6 +75,7 @@ class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMix
     usan el selector con sus propios .only(), y context.filter() generico
     no los replica.
     """
+
     queryset = CuentaBancaria.objects.none()
     serializer_class = CuentaBancariaSerializer
     http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
@@ -99,11 +104,50 @@ class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMix
             context["empresa_id"] = None
         return context
 
+    @action(detail=False, methods=["post"], url_path="dt")
+    def dt(self, request):
+        """
+        DataTables 3.x server-side (mismo patron ya validado en Ventas --
+        gate visual cerrado, ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md).
+        Reemplaza CuentaBancariaTableView/CuentaBancariaTable (django-tables2,
+        retirados). Ver apps/shared/datatable.py para el contrato server-side.
+        """
+        empresa_id = self._get_empresa_id_seguro()
+        if not empresa_id:
+            return Response(
+                {
+                    "draw": int(request.data.get("draw", 0)) if hasattr(request, "data") else 0,
+                    "recordsTotal": 0,
+                    "recordsFiltered": 0,
+                    "data": [],
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        base_qs = CuentaBancariaSelector.get_list(empresa_id=empresa_id)
+
+        spec = DataTableSpec(
+            fields_map={0: "nombre", 1: "banco"},
+            search_fields=["nombre", "banco", "numero"],
+            base_qs=base_qs,
+            serializer=CuentaBancariaSerializer,
+            column_filters={
+                0: ColumnFilter("nombre", ColumnFilterType.ICONTAINS),
+                1: ColumnFilter("banco", ColumnFilterType.EXACT),
+                2: ColumnFilter("tipo", ColumnFilterType.EXACT),
+                3: ColumnFilter("numero", ColumnFilterType.ICONTAINS),
+                4: ColumnFilter("activo", ColumnFilterType.EXACT),
+            },
+        )
+        return DataTableServer(spec).handle(request)
+
     def create(self, request, *args, **kwargs):
         try:
-            serializer = CuentaBancariaSerializer(data=request.data, context=self.get_serializer_context())
+            serializer = CuentaBancariaSerializer(
+                data=request.data, context=self.get_serializer_context()
+            )
             serializer.is_valid(raise_exception=True)
-            
+
             cuenta = self.service_crear_cuenta(serializer.validated_data)
             response_serializer = self.get_serializer(cuenta)
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
@@ -113,9 +157,11 @@ class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMix
     def update(self, request, *args, **kwargs):
         try:
             instance = self.get_object()
-            serializer = CuentaBancariaSerializer(instance, data=request.data, partial=True, context=self.get_serializer_context())
+            serializer = CuentaBancariaSerializer(
+                instance, data=request.data, partial=True, context=self.get_serializer_context()
+            )
             serializer.is_valid(raise_exception=True)
-            
+
             cuenta = self.service_editar_cuenta(instance, serializer.validated_data)
             response_serializer = self.get_serializer(cuenta)
             return Response(response_serializer.data, status=status.HTTP_200_OK)
@@ -152,7 +198,12 @@ class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMix
 
     # --- UI / HTMX Offcanvas Actions ---
 
-    @action(detail=False, methods=["get"], renderer_classes=[TemplateHTMLRenderer], url_path="render-offcanvas/crear")
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/crear",
+    )
     def render_offcanvas_crear(self, request):
         """Renders HTMX offcanvas to create a new bank account."""
         context = {
@@ -162,7 +213,12 @@ class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMix
         }
         return Response(context, template_name="tenant/bancos/offcanvas_crear_cuenta.html")
 
-    @action(detail=True, methods=["get"], renderer_classes=[TemplateHTMLRenderer], url_path="render-offcanvas/editar")
+    @action(
+        detail=True,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/editar",
+    )
     def render_offcanvas_editar(self, request, uuid=None):
         """Renders HTMX offcanvas to edit a bank account."""
         cuenta = self.get_object()
@@ -175,12 +231,13 @@ class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMix
         return Response(context, template_name="tenant/bancos/offcanvas_editar_cuenta.html")
 
 
-
-
-class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class ExtractoBancarioViewSet(
+    OrganizationalContextMixin, ExtractoBancarioServiceMixin, SintelDSVMixin, BaseTenantViewSet
+):
     """
     ViewSet to manage ExtractoBancario and execute statement processing.
     """
+
     queryset = ExtractoBancario.objects.none()
     serializer_class = ExtractoBancarioDetailSerializer
     http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
@@ -216,13 +273,43 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
             context["empresa_id"] = None
         return context
 
+    @action(detail=False, methods=["post"], url_path="dt")
+    def dt(self, request):
+        """
+        DataTables 3.x server-side (mismo patron ya validado en Ventas/
+        Bancos-Cuentas/Facturas/Clientes/Proveedores/Compras/Gastos/
+        Empleados/Proyectos/Inventario -- ver
+        docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Reemplaza
+        ExtractoBancarioTable/ExtractoBancarioTableView (django-tables2,
+        retirados). Los KPIs de conciliacion (BAN-09) se extraen a
+        ExtractoBancarioKpisView (mismo patron ya usado en Ventas/Compras/
+        Gastos/Proyectos/Inventario). base_qs reutiliza get_qs_list()
+        (mismas anotaciones total_transacciones/tx_conciliadas que ya usa
+        "list").
+        """
+        base_qs = self.get_qs_list()
+
+        spec = DataTableSpec(
+            fields_map={0: "cuenta__nombre", 3: "procesado"},
+            search_fields=["cuenta__nombre", "cuenta__numero"],
+            base_qs=base_qs,
+            serializer=ExtractoBancarioListSerializer,
+            column_filters={
+                0: ColumnFilter("cuenta__nombre", ColumnFilterType.ICONTAINS),
+                3: ColumnFilter("procesado", ColumnFilterType.EXACT),
+            },
+        )
+        return DataTableServer(spec).handle(request)
+
     def create(self, request, *args, **kwargs):
         try:
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
 
             extracto = self.service_crear_extracto(serializer.validated_data)
-            response_serializer = ExtractoBancarioDetailSerializer(extracto, context=self.get_serializer_context())
+            response_serializer = ExtractoBancarioDetailSerializer(
+                extracto, context=self.get_serializer_context()
+            )
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         except Exception as e:
             return self.handle_service_error(e)
@@ -265,24 +352,38 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
         extracto = self.get_object()
         empresa_id = self.get_empresa_id()
         contenido = ExtractoBancarioExportService.generar_csv_conciliacion(empresa_id, extracto)
-        nombre_archivo = f"conciliacion_{extracto.cuenta.numero}_{extracto.anio}{extracto.mes:02d}.csv"
+        nombre_archivo = (
+            f"conciliacion_{extracto.cuenta.numero}_{extracto.anio}{extracto.mes:02d}.csv"
+        )
         response = HttpResponse(contenido, content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = f'attachment; filename="{nombre_archivo}"'
         return response
 
     # --- UI / HTMX Offcanvas Actions ---
 
-    @action(detail=False, methods=["get"], renderer_classes=[TemplateHTMLRenderer], url_path="render-offcanvas/crear")
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/crear",
+    )
     def render_offcanvas_crear(self, request):
         """Renders HTMX offcanvas to upload a statement."""
         empresa_id = self.get_empresa_id()
-        cuentas = CuentaBancaria.objects.filter(empresa_id=empresa_id).only("id", "uuid", "nombre", "numero")
+        cuentas = CuentaBancaria.objects.filter(empresa_id=empresa_id).only(
+            "id", "uuid", "nombre", "numero"
+        )
         context = {
             "cuentas": cuentas,
         }
         return Response(context, template_name="tenant/bancos/offcanvas_crear_extracto.html")
 
-    @action(detail=True, methods=["get"], renderer_classes=[TemplateHTMLRenderer], url_path="render-offcanvas/detalle")
+    @action(
+        detail=True,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/detalle",
+    )
     def render_offcanvas_detalle(self, request, uuid=None):
         """Renders HTMX offcanvas displaying details of the statement and transactions."""
         extracto = self.get_object()
@@ -290,16 +391,24 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
 
         # Pre-cargar transacciones con DSV empresa_id explicito (no confiar solo en la FK de extracto)
         transacciones = (
-            TransaccionBancaria.objects
-            .filter(extracto=extracto, empresa_id=empresa_id)
+            TransaccionBancaria.objects.filter(extracto=extracto, empresa_id=empresa_id)
             .only(
-                'id', 'uuid', 'fecha', 'descripcion', 'sucursal', 'dcto',
-                'valor', 'saldo', 'conciliado',
-                'factura_uuid', 'proveedor_uuid', 'cliente_uuid',
-                'notas_conciliacion',
-                'empresa_id',
+                "id",
+                "uuid",
+                "fecha",
+                "descripcion",
+                "sucursal",
+                "dcto",
+                "valor",
+                "saldo",
+                "conciliado",
+                "factura_uuid",
+                "proveedor_uuid",
+                "cliente_uuid",
+                "notas_conciliacion",
+                "empresa_id",
             )
-            .order_by('-fecha', '-created_at')
+            .order_by("-fecha", "-created_at")
         )
 
         # Fase 19: KPI resumido del extracto (ingresos/egresos/neto/pendientes/conciliados).
@@ -311,10 +420,12 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
         cero_decimal = Value(Decimal("0.00"), output_field=DecimalField())
         kpis = transacciones.aggregate(
             ingresos=Coalesce(
-                Sum(Case(When(valor__gte=0, then="valor"), output_field=DecimalField())), cero_decimal
+                Sum(Case(When(valor__gte=0, then="valor"), output_field=DecimalField())),
+                cero_decimal,
             ),
             egresos=Coalesce(
-                Sum(Case(When(valor__lt=0, then=-1 * F("valor")), output_field=DecimalField())), cero_decimal
+                Sum(Case(When(valor__lt=0, then=-1 * F("valor")), output_field=DecimalField())),
+                cero_decimal,
             ),
             total=Count("id"),
             conciliadas=Count("id", filter=Q(conciliado=True)),
@@ -334,7 +445,9 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
         )
         for t in transacciones:
             t.factura_display = display_map.get(str(t.factura_uuid)) if t.factura_uuid else None
-            t.proveedor_display = display_map.get(str(t.proveedor_uuid)) if t.proveedor_uuid else None
+            t.proveedor_display = (
+                display_map.get(str(t.proveedor_uuid)) if t.proveedor_uuid else None
+            )
             t.cliente_display = display_map.get(str(t.cliente_uuid)) if t.cliente_uuid else None
 
         context = {
@@ -346,7 +459,9 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
         return Response(context, template_name="tenant/bancos/offcanvas_detalle_extracto.html")
 
 
-class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancariaServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class TransaccionBancariaViewSet(
+    OrganizationalContextMixin, TransaccionBancariaServiceMixin, SintelDSVMixin, BaseTenantViewSet
+):
     """
     ViewSet para TransaccionBancaria.
     Lectura: GET list/detail con filtros por extracto_uuid, tipo_movimiento, conciliado.
@@ -354,6 +469,7 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
     Busqueda: GET /search-facturas/ y /search-proveedores/ para autocomplete.
     Mutaciones de datos solo via ETL (action procesar del ExtractoViewSet).
     """
+
     queryset = TransaccionBancaria.objects.none()
     serializer_class = TransaccionBancariaDetailSerializer
     http_method_names = ["get", "post", "patch", "head", "options"]
@@ -398,8 +514,7 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
             serializer.is_valid(raise_exception=True)
             transaccion = self.service_conciliar_transaccion(transaccion, serializer.validated_data)
             return Response(
-                TransaccionBancariaDetailSerializer(transaccion).data,
-                status=status.HTTP_200_OK
+                TransaccionBancariaDetailSerializer(transaccion).data, status=status.HTTP_200_OK
             )
         except Exception as e:
             return self.handle_service_error(e)
@@ -432,7 +547,9 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
             empresa_id = self.get_empresa_id()
 
             if request.method == "GET":
-                qs = MovimientoBancarioAplicacionSelector.get_list(empresa_id, transaccion_uuid=transaccion.uuid)
+                qs = MovimientoBancarioAplicacionSelector.get_list(
+                    empresa_id, transaccion_uuid=transaccion.uuid
+                )
                 serializer = MovimientoBancarioAplicacionSerializer(qs, many=True)
                 return Response({"results": serializer.data}, status=status.HTTP_200_OK)
 
@@ -440,7 +557,8 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
             serializer.is_valid(raise_exception=True)
             aplicacion = self.service_crear_aplicacion(transaccion, serializer.validated_data)
             return Response(
-                MovimientoBancarioAplicacionSerializer(aplicacion).data, status=status.HTTP_201_CREATED
+                MovimientoBancarioAplicacionSerializer(aplicacion).data,
+                status=status.HTTP_201_CREATED,
             )
         except Exception as e:
             return self.handle_service_error(e)
@@ -460,69 +578,79 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
         from apps.tenant.facturas.models import Factura
 
         empresa_id = self.get_empresa_id()
-        q          = request.query_params.get('q', '').strip()
-        naturaleza = request.query_params.get('naturaleza', '').upper()
-        page_size  = min(int(request.query_params.get('page_size', 15)), 30)
+        q = request.query_params.get("q", "").strip()
+        naturaleza = request.query_params.get("naturaleza", "").upper()
+        page_size = min(int(request.query_params.get("page_size", 15)), 30)
 
         qs = (
-            Factura.objects
-            .filter(empresa_id=empresa_id)
+            Factura.objects.filter(empresa_id=empresa_id)
             .only(
-                'id', 'uuid', 'numero', 'prefijo', 'naturaleza', 'tipo',
-                'estado', 'estado_pago',
-                'receptor_nit', 'receptor_razon_social',
-                'emisor_nit',   'emisor_razon_social',
-                'total', 'fecha_emision',
+                "id",
+                "uuid",
+                "numero",
+                "prefijo",
+                "naturaleza",
+                "tipo",
+                "estado",
+                "estado_pago",
+                "receptor_nit",
+                "receptor_razon_social",
+                "emisor_nit",
+                "emisor_razon_social",
+                "total",
+                "fecha_emision",
             )
-            .order_by('-fecha_emision')
+            .order_by("-fecha_emision")
         )
 
         # Filtrar por naturaleza (VENTA | COMPRA)
-        if naturaleza in ('VENTA', 'COMPRA'):
+        if naturaleza in ("VENTA", "COMPRA"):
             qs = qs.filter(naturaleza=naturaleza)
 
         # Busqueda por texto: numero, NITs y razones sociales de ambas partes.
         if q:
             qs = qs.filter(
-                Q(numero__icontains=q)                |
-                Q(receptor_nit__icontains=q)          |
-                Q(receptor_razon_social__icontains=q) |
-                Q(emisor_nit__icontains=q)            |
-                Q(emisor_razon_social__icontains=q)
+                Q(numero__icontains=q)
+                | Q(receptor_nit__icontains=q)
+                | Q(receptor_razon_social__icontains=q)
+                | Q(emisor_nit__icontains=q)
+                | Q(emisor_razon_social__icontains=q)
             )
 
         results = []
         for f in qs[:page_size]:
             # Para VENTA el tercero relevante es el receptor.
             # Para COMPRA el tercero relevante es el emisor.
-            if f.naturaleza == 'VENTA':
-                nit    = f.receptor_nit
+            if f.naturaleza == "VENTA":
+                nit = f.receptor_nit
                 nombre = f.receptor_razon_social
             else:
-                nit    = f.emisor_nit
+                nit = f.emisor_nit
                 nombre = f.emisor_razon_social
 
             tipo_display = {
-                'FE': 'Factura Electronica',
-                'NC': 'Nota Credito',
-                'ND': 'Nota Debito',
+                "FE": "Factura Electronica",
+                "NC": "Nota Credito",
+                "ND": "Nota Debito",
             }.get(f.tipo, f.tipo)
 
-            results.append({
-                'uuid':         str(f.uuid),
-                'numero':       f.numero  or '',
-                'prefijo':      f.prefijo or '',
-                'naturaleza':   f.naturaleza or '',
-                'tipo':         f.tipo    or '',
-                'tipo_display': tipo_display,
-                'estado':       f.estado     or '',
-                'estado_pago':  f.estado_pago or '',
-                'nit':          nit    or '',
-                'nombre':       nombre or '',
-                'total':        str(f.total),
-                'fecha':        f.fecha_emision.strftime('%d/%m/%Y') if f.fecha_emision else '',
-            })
-        return Response({'results': results}, status=status.HTTP_200_OK)
+            results.append(
+                {
+                    "uuid": str(f.uuid),
+                    "numero": f.numero or "",
+                    "prefijo": f.prefijo or "",
+                    "naturaleza": f.naturaleza or "",
+                    "tipo": f.tipo or "",
+                    "tipo_display": tipo_display,
+                    "estado": f.estado or "",
+                    "estado_pago": f.estado_pago or "",
+                    "nit": nit or "",
+                    "nombre": nombre or "",
+                    "total": str(f.total),
+                    "fecha": f.fecha_emision.strftime("%d/%m/%Y") if f.fecha_emision else "",
+                }
+            )
+        return Response({"results": results}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="search-proveedores")
     def search_proveedores(self, request):
@@ -535,39 +663,47 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
         from apps.tenant.proveedores.models import Proveedor
 
         empresa_id = self.get_empresa_id()
-        q          = request.query_params.get('q', '').strip()
-        page_size  = min(int(request.query_params.get('page_size', 10)), 20)
+        q = request.query_params.get("q", "").strip()
+        page_size = min(int(request.query_params.get("page_size", 10)), 20)
 
         qs = Proveedor.objects.filter(empresa_id=empresa_id, activo=True).only(
-            'id', 'uuid', 'tipo_documento', 'numero_documento', 'razon_social',
-            'nombre_comercial', 'email_contacto', 'ciudad',
-            'banco', 'tipo_cuenta', 'numero_cuenta',
+            "id",
+            "uuid",
+            "tipo_documento",
+            "numero_documento",
+            "razon_social",
+            "nombre_comercial",
+            "email_contacto",
+            "ciudad",
+            "banco",
+            "tipo_cuenta",
+            "numero_cuenta",
         )
 
         if q:
             qs = qs.filter(
-                Q(numero_documento__icontains=q) |
-                Q(razon_social__icontains=q) |
-                Q(nombre_comercial__icontains=q) |
-                Q(ciudad__icontains=q)
+                Q(numero_documento__icontains=q)
+                | Q(razon_social__icontains=q)
+                | Q(nombre_comercial__icontains=q)
+                | Q(ciudad__icontains=q)
             )
 
         results = [
             {
-                'uuid':             str(p.uuid),
-                'tipo_documento':   p.tipo_documento,
-                'numero_documento': p.numero_documento,
-                'razon_social':     p.razon_social,
-                'nombre_comercial': p.nombre_comercial or '',
-                'email':            p.email_contacto or '',
-                'ciudad':           p.ciudad or '',
-                'banco':            p.banco or '',
-                'tipo_cuenta':      p.tipo_cuenta or '',
-                'numero_cuenta':    p.numero_cuenta or '',
+                "uuid": str(p.uuid),
+                "tipo_documento": p.tipo_documento,
+                "numero_documento": p.numero_documento,
+                "razon_social": p.razon_social,
+                "nombre_comercial": p.nombre_comercial or "",
+                "email": p.email_contacto or "",
+                "ciudad": p.ciudad or "",
+                "banco": p.banco or "",
+                "tipo_cuenta": p.tipo_cuenta or "",
+                "numero_cuenta": p.numero_cuenta or "",
             }
             for p in qs[:page_size]
         ]
-        return Response({'results': results}, status=status.HTTP_200_OK)
+        return Response({"results": results}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="search-clientes")
     def search_clientes(self, request):
@@ -580,38 +716,47 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
         from apps.tenant.clientes.models import Cliente
 
         empresa_id = self.get_empresa_id()
-        q          = request.query_params.get('q', '').strip()
-        page_size  = min(int(request.query_params.get('page_size', 10)), 20)
+        q = request.query_params.get("q", "").strip()
+        page_size = min(int(request.query_params.get("page_size", 10)), 20)
 
         qs = Cliente.objects.filter(empresa_id=empresa_id, activo=True).only(
-            'id', 'uuid', 'tipo_documento', 'numero_documento',
-            'razon_social', 'nombre_comercial', 'email', 'ciudad',
+            "id",
+            "uuid",
+            "tipo_documento",
+            "numero_documento",
+            "razon_social",
+            "nombre_comercial",
+            "email",
+            "ciudad",
         )
         if q:
             qs = qs.filter(
-                Q(numero_documento__icontains=q) |
-                Q(razon_social__icontains=q) |
-                Q(nombre_comercial__icontains=q) |
-                Q(ciudad__icontains=q)
+                Q(numero_documento__icontains=q)
+                | Q(razon_social__icontains=q)
+                | Q(nombre_comercial__icontains=q)
+                | Q(ciudad__icontains=q)
             )
 
         results = [
             {
-                'uuid': str(c.uuid),
-                'tipo_documento':   c.tipo_documento,
-                'numero_documento': c.numero_documento,
-                'razon_social':     c.razon_social,
-                'nombre_comercial': c.nombre_comercial or '',
-                'email':            c.email or '',
-                'ciudad':           c.ciudad or '',
+                "uuid": str(c.uuid),
+                "tipo_documento": c.tipo_documento,
+                "numero_documento": c.numero_documento,
+                "razon_social": c.razon_social,
+                "nombre_comercial": c.nombre_comercial or "",
+                "email": c.email or "",
+                "ciudad": c.ciudad or "",
             }
             for c in qs[:page_size]
         ]
-        return Response({'results': results}, status=status.HTTP_200_OK)
+        return Response({"results": results}, status=status.HTTP_200_OK)
 
 
 class MovimientoBancarioAplicacionViewSet(
-    OrganizationalContextMixin, MovimientoBancarioAplicacionServiceMixin, SintelDSVMixin, BaseTenantViewSet
+    OrganizationalContextMixin,
+    MovimientoBancarioAplicacionServiceMixin,
+    SintelDSVMixin,
+    BaseTenantViewSet,
 ):
     """
     Editar/eliminar una aplicacion puntual (Fase 5-7).
@@ -622,6 +767,7 @@ class MovimientoBancarioAplicacionViewSet(
     cubre GET/PATCH/DELETE directos por uuid de la aplicacion (ej. desde un
     listado propio de "todas mis aplicaciones pendientes").
     """
+
     queryset = MovimientoBancarioAplicacion.objects.none()
     serializer_class = MovimientoBancarioAplicacionSerializer
     http_method_names = ["get", "patch", "delete", "head", "options"]

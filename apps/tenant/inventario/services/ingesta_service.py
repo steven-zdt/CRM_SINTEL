@@ -2,7 +2,8 @@
 # v3.10.4: Servicio de materializacion masiva e idempotente de catalogo (DT-INV-05)
 
 from decimal import Decimal
-from typing import Dict, Any, List
+from typing import Any
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
@@ -14,6 +15,7 @@ from apps.tenant.inventario.models import (
     Producto,
     Servicio,
 )
+
 from .business_service import KardexService
 
 
@@ -28,7 +30,7 @@ def materializar_inventario_desde_dto(dto: dict) -> tuple:
     Returns:
         Tuple (payload, status_code): 201 (creado), 200 (actualizado), 422 (error).
     """
-    empresa = Empresa.objects.only('id').first()
+    empresa = Empresa.objects.only("id").first()
     if not empresa:
         return {
             "error": "empresa_no_configurada",
@@ -49,35 +51,39 @@ def materializar_inventario_desde_dto(dto: dict) -> tuple:
     try:
         with transaction.atomic():
             # SINTEL v3.5: Idempotencia Garantizada - Busqueda insensitiva manual
-            categoria = CategoriaItem.objects.filter(
-                empresa=empresa,
-                nombre__iexact=categoria_nombre
-            ).only('id', 'empresa_id', 'nombre', 'aplicacion').first()
+            categoria = (
+                CategoriaItem.objects.filter(empresa=empresa, nombre__iexact=categoria_nombre)
+                .only("id", "empresa_id", "nombre", "aplicacion")
+                .first()
+            )
 
             if not categoria:
                 categoria = CategoriaItem.objects.create(
                     empresa=empresa,
                     nombre=categoria_nombre,
                     aplicacion=(
-                        CategoriaItem.Aplicacion.PRODUCTO if tipo == "producto"
-                        else CategoriaItem.Aplicacion.SERVICIO if tipo == "servicio"
+                        CategoriaItem.Aplicacion.PRODUCTO
+                        if tipo == "producto"
+                        else CategoriaItem.Aplicacion.SERVICIO
+                        if tipo == "servicio"
                         else CategoriaItem.Aplicacion.ACTIVO
                     ),
-                    descripcion='Auto-generada desde DTO',
+                    descripcion="Auto-generada desde DTO",
                 )
 
             if tipo == "producto":
                 producto, created = Producto.objects.update_or_create(
-                    empresa=empresa, codigo=codigo,
+                    empresa=empresa,
+                    codigo=codigo,
                     defaults={
-                        'nombre': nombre,
-                        'categoria': categoria,
-                        'descripcion': dto.get("descripcion", ""),
-                        'unidad': dto.get("unidad", "UND"),
-                        'precio_venta': Decimal(str(dto.get("precio_venta", "0"))),
-                        'costo_promedio': Decimal(str(dto.get("costo_promedio", "0"))),
-                        'activo': True,
-                    }
+                        "nombre": nombre,
+                        "categoria": categoria,
+                        "descripcion": dto.get("descripcion", ""),
+                        "unidad": dto.get("unidad", "UND"),
+                        "precio_venta": Decimal(str(dto.get("precio_venta", "0"))),
+                        "costo_promedio": Decimal(str(dto.get("costo_promedio", "0"))),
+                        "activo": True,
+                    },
                 )
                 if created and dto.get("stock_actual"):
                     stock_inicial = Decimal(str(dto.get("stock_actual", "0")))
@@ -89,35 +95,52 @@ def materializar_inventario_desde_dto(dto: dict) -> tuple:
                             cantidad=stock_inicial,
                             observaciones="Carga desde DTO",
                         )
-                return {"id": producto.id, "codigo": producto.codigo, "nombre": producto.nombre, "created": created}, 201 if created else 200
+                return {
+                    "id": producto.id,
+                    "codigo": producto.codigo,
+                    "nombre": producto.nombre,
+                    "created": created,
+                }, 201 if created else 200
 
             elif tipo == "servicio":
                 servicio, created = Servicio.objects.update_or_create(
-                    empresa=empresa, codigo=codigo,
+                    empresa=empresa,
+                    codigo=codigo,
                     defaults={
-                        'nombre': nombre,
-                        'categoria': categoria,
-                        'descripcion': dto.get("descripcion", ""),
-                        'precio_venta': Decimal(str(dto.get("precio_venta", "0"))),
-                        'activo': True,
-                    }
+                        "nombre": nombre,
+                        "categoria": categoria,
+                        "descripcion": dto.get("descripcion", ""),
+                        "precio_venta": Decimal(str(dto.get("precio_venta", "0"))),
+                        "activo": True,
+                    },
                 )
-                return {"id": servicio.id, "codigo": servicio.codigo, "nombre": servicio.nombre, "created": created}, 201 if created else 200
+                return {
+                    "id": servicio.id,
+                    "codigo": servicio.codigo,
+                    "nombre": servicio.nombre,
+                    "created": created,
+                }, 201 if created else 200
 
             elif tipo == "activo":
                 activo, created = ActivoFijo.objects.update_or_create(
-                    empresa=empresa, codigo=codigo,
+                    empresa=empresa,
+                    codigo=codigo,
                     defaults={
-                        'nombre': nombre,
-                        'categoria': categoria,
-                        'descripcion': dto.get("descripcion", ""),
-                        'costo_adquisicion': Decimal(str(dto.get("costo_adquisicion", "0"))),
-                        'estado': dto.get("estado", ActivoFijo.Estado.ACTIVO),
-                        'ubicacion': dto.get("ubicacion"),
-                        'responsable': dto.get("responsable"),
-                    }
+                        "nombre": nombre,
+                        "categoria": categoria,
+                        "descripcion": dto.get("descripcion", ""),
+                        "costo_adquisicion": Decimal(str(dto.get("costo_adquisicion", "0"))),
+                        "estado": dto.get("estado", ActivoFijo.Estado.ACTIVO),
+                        "ubicacion": dto.get("ubicacion"),
+                        "responsable": dto.get("responsable"),
+                    },
                 )
-                return {"id": activo.id, "codigo": activo.codigo, "nombre": activo.nombre, "created": created}, 201 if created else 200
+                return {
+                    "id": activo.id,
+                    "codigo": activo.codigo,
+                    "nombre": activo.nombre,
+                    "created": created,
+                }, 201 if created else 200
 
             return {
                 "error": "invalid_type",
@@ -125,7 +148,10 @@ def materializar_inventario_desde_dto(dto: dict) -> tuple:
             }, 422
 
     except Exception as e:
-        return {"error": "materialization_error", "message": f"Error al materializar inventario: {str(e)}"}, 422
+        return {
+            "error": "materialization_error",
+            "message": f"Error al materializar inventario: {str(e)}",
+        }, 422
 
 
 def materializar_carga_masiva_productos(empresa_id, lista_datos, usuario=None):
@@ -140,53 +166,54 @@ def materializar_carga_masiva_productos(empresa_id, lista_datos, usuario=None):
     Returns:
         dict: Resumen (creados, actualizados, errores).
     """
-    resumen: Dict[str, Any] = {"creados": 0, "actualizados": 0, "errores": []}
+    resumen: dict[str, Any] = {"creados": 0, "actualizados": 0, "errores": []}
 
     try:
-        empresa = Empresa.objects.only('id').get(id=empresa_id)
+        empresa = Empresa.objects.only("id").get(id=empresa_id)
     except Empresa.DoesNotExist:
-        raise ValidationError(f"La empresa con ID {empresa_id} no existe.")
+        raise ValidationError(f"La empresa con ID {empresa_id} no existe.") from None
 
     with transaction.atomic():
         for index, fila in enumerate(lista_datos):
             codigo = None
             try:
-                codigo = fila.get('codigo')
-                nombre = fila.get('nombre')
-                categoria_nombre = fila.get('categoria', 'General')
+                codigo = fila.get("codigo")
+                nombre = fila.get("nombre")
+                categoria_nombre = fila.get("categoria", "General")
 
                 if not codigo or not nombre:
                     resumen["errores"].append(f"Fila {index + 1}: Falta codigo o nombre.")
                     continue
 
                 # SINTEL v3.5: Idempotencia Garantizada - Busqueda insensitiva manual
-                categoria = CategoriaItem.objects.filter(
-                    empresa=empresa,
-                    nombre__iexact=categoria_nombre
-                ).only('id', 'empresa_id', 'nombre', 'aplicacion').first()
+                categoria = (
+                    CategoriaItem.objects.filter(empresa=empresa, nombre__iexact=categoria_nombre)
+                    .only("id", "empresa_id", "nombre", "aplicacion")
+                    .first()
+                )
 
                 if not categoria:
                     categoria = CategoriaItem.objects.create(
                         empresa=empresa,
                         nombre=categoria_nombre,
                         aplicacion=CategoriaItem.Aplicacion.PRODUCTO,
-                        descripcion='Auto-generada por carga masiva',
+                        descripcion="Auto-generada por carga masiva",
                     )
 
-                stock_inicial = Decimal(str(fila.get('stock_actual', '0')))
+                stock_inicial = Decimal(str(fila.get("stock_actual", "0")))
 
                 producto, created = Producto.objects.update_or_create(
                     empresa=empresa,
                     codigo=codigo,
                     defaults={
-                        'nombre': nombre,
-                        'categoria': categoria,
-                        'descripcion': fila.get('descripcion', ''),
-                        'unidad': fila.get('unidad', 'UND'),
-                        'precio_venta': Decimal(str(fila.get('precio_venta', '0'))),
-                        'costo_promedio': Decimal(str(fila.get('costo_promedio', '0'))),
-                        'activo': True,
-                    }
+                        "nombre": nombre,
+                        "categoria": categoria,
+                        "descripcion": fila.get("descripcion", ""),
+                        "unidad": fila.get("unidad", "UND"),
+                        "precio_venta": Decimal(str(fila.get("precio_venta", "0"))),
+                        "costo_promedio": Decimal(str(fila.get("costo_promedio", "0"))),
+                        "activo": True,
+                    },
                 )
 
                 if created:

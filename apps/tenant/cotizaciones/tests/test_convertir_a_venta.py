@@ -7,6 +7,7 @@ convertir_a_venta(). COTIZACIONES-02 (mismo dia): la condicion de entrada
 cambio de ACEPTADA a APROBADA (rename de estados, 0 filas reales
 afectadas).
 """
+
 import datetime
 from decimal import Decimal
 
@@ -25,17 +26,27 @@ def _crear_cotizacion_aprobada(empresa, cliente, con_items=True):
     ConfiguracionCotizacion.objects.get_or_create(
         empresa=empresa,
         defaults={
-            'dias_validez': 15, 'nombre_configuracion': 'Perfil General', 'es_activo': True,
+            "dias_validez": 15,
+            "nombre_configuracion": "Perfil General",
+            "es_activo": True,
         },
     )
     payload = {
-        'cliente': cliente.id,
-        'fecha_emision': datetime.date(2026, 3, 30),
-        'items': [{
-            'tipo_item': 'PRODUCTO', 'descripcion': 'Router empresarial',
-            'cantidad': 2, 'costo_unitario': 500, 'porcentaje_utilidad': 20,
-            'unidad': 'UND', 'orden': 1,
-        }] if con_items else [],
+        "cliente": cliente.id,
+        "fecha_emision": datetime.date(2026, 3, 30),
+        "items": [
+            {
+                "tipo_item": "PRODUCTO",
+                "descripcion": "Router empresarial",
+                "cantidad": 2,
+                "costo_unitario": 500,
+                "porcentaje_utilidad": 20,
+                "unidad": "UND",
+                "orden": 1,
+            }
+        ]
+        if con_items
+        else [],
     }
     cotizacion = CotizacionService.crear_preforma(empresa, payload)
     CotizacionService.cambiar_estado(cotizacion, Cotizacion.Estado.ENVIADA)
@@ -92,13 +103,30 @@ def test_no_se_puede_convertir_desde_borrador(tenant, factory_empresa, factory_c
 
         ConfiguracionCotizacion.objects.get_or_create(
             empresa=empresa,
-            defaults={'dias_validez': 15, 'nombre_configuracion': 'Perfil General', 'es_activo': True},
+            defaults={
+                "dias_validez": 15,
+                "nombre_configuracion": "Perfil General",
+                "es_activo": True,
+            },
         )
-        cotizacion = CotizacionService.crear_preforma(empresa, {
-            'cliente': cliente.id, 'fecha_emision': datetime.date(2026, 3, 30),
-            'items': [{'tipo_item': 'PRODUCTO', 'descripcion': 'X', 'cantidad': 1,
-                       'costo_unitario': 10, 'porcentaje_utilidad': 0, 'unidad': 'UND', 'orden': 1}],
-        })
+        cotizacion = CotizacionService.crear_preforma(
+            empresa,
+            {
+                "cliente": cliente.id,
+                "fecha_emision": datetime.date(2026, 3, 30),
+                "items": [
+                    {
+                        "tipo_item": "PRODUCTO",
+                        "descripcion": "X",
+                        "cantidad": 1,
+                        "costo_unitario": 10,
+                        "porcentaje_utilidad": 0,
+                        "unidad": "UND",
+                        "orden": 1,
+                    }
+                ],
+            },
+        )
         assert cotizacion.estado == Cotizacion.Estado.BORRADOR
 
         with pytest.raises(ValidationError):
@@ -115,13 +143,30 @@ def test_no_se_puede_convertir_desde_enviada(tenant, factory_empresa, factory_cl
 
         ConfiguracionCotizacion.objects.get_or_create(
             empresa=empresa,
-            defaults={'dias_validez': 15, 'nombre_configuracion': 'Perfil General', 'es_activo': True},
+            defaults={
+                "dias_validez": 15,
+                "nombre_configuracion": "Perfil General",
+                "es_activo": True,
+            },
         )
-        cotizacion = CotizacionService.crear_preforma(empresa, {
-            'cliente': cliente.id, 'fecha_emision': datetime.date(2026, 3, 30),
-            'items': [{'tipo_item': 'PRODUCTO', 'descripcion': 'X', 'cantidad': 1,
-                       'costo_unitario': 10, 'porcentaje_utilidad': 0, 'unidad': 'UND', 'orden': 1}],
-        })
+        cotizacion = CotizacionService.crear_preforma(
+            empresa,
+            {
+                "cliente": cliente.id,
+                "fecha_emision": datetime.date(2026, 3, 30),
+                "items": [
+                    {
+                        "tipo_item": "PRODUCTO",
+                        "descripcion": "X",
+                        "cantidad": 1,
+                        "costo_unitario": 10,
+                        "porcentaje_utilidad": 0,
+                        "unidad": "UND",
+                        "orden": 1,
+                    }
+                ],
+            },
+        )
         CotizacionService.cambiar_estado(cotizacion, Cotizacion.Estado.ENVIADA)
 
         with pytest.raises(ValidationError):

@@ -6,6 +6,7 @@ DocumentHandler de dominio registrado para ese tipo, y lo ejecuta. NO
 contiene logica fiscal, contable, ni de ningun dominio especifico -- eso
 vive exclusivamente en cada handler (apps/tenant/<dominio>/document_intake/).
 """
+
 from __future__ import annotations
 
 import logging

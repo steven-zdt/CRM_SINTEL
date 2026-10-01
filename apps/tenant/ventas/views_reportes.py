@@ -2,7 +2,7 @@
 Vista HTML server-rendered para el reporte "Resumen de Ventas" -- consume
 el Reporting Hub (apps/services/reporting/), no re-implementa la agregacion.
 
-Mismo patron que views.py::VentaTableView (LoginRequiredMixin + fragmento
+Mismo patron que views.py::VentaKpisView (LoginRequiredMixin + fragmento
 HTMX), pero la fuente de datos es ReportQueryEngine (dataset
 `ventas.resumen`) en vez de VentaSelector directo -- este es el reporte
 transversal, no el listado operativo de Ventas.
@@ -14,6 +14,7 @@ django-tables2 declara sus columnas de forma estatica en Python, ajena a
 un dataset declarativo. Ver docs/reporting/FRONTEND_REPORTING_ARCHITECTURE.md
 para la justificacion completa de esta decision de diseño.
 """
+
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render
 from django.views.generic import View

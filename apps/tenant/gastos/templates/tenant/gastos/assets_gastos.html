@@ -1,6 +1,10 @@
 {# assets_gastos.html - Carga de assets para módulo Gastos #}
 {% load static %}
 
+{# DataTables 3.x (Documentos Soporte + Resoluciones DIAN) #}
+{% include 'tenant/gastos/assets_gastos_datatables.html' %}
+<script src="{% static 'core/js/common/datatables.factory.js' %}"></script>
+
 <!-- Gastos API -->
 <script src="{% static 'gastos/js/gastos.api.js' %}"></script>
 

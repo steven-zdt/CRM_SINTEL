@@ -1,8 +1,10 @@
 """
 Selectores para Empresa v3.5 - Zero Waste Queries.
 """
+
 from django.db.models import Q
-from apps.tenant.empresa.models import Empresa, Sede, Area, MailInboxConfig
+
+from apps.tenant.empresa.models import Area, Empresa, MailInboxConfig, Sede
 
 # Campos canónicos alineados con los serializers y UI
 LIST_FIELDS = (
@@ -55,7 +57,7 @@ SEDE_DETAIL_FIELDS = SEDE_LIST_FIELDS
 AREA_LIST_FIELDS = (
     "id",
     "uuid",
-    "sede_id",          # FK id autogenerado — valido en ambos contextos
+    "sede_id",  # FK id autogenerado — valido en ambos contextos
     "nombre",
     "codigo_funcionamiento",
     "created_at",
@@ -89,9 +91,9 @@ class EmpresaSelector:
         qs = Empresa.objects.only(*LIST_FIELDS)
         if search:
             qs = qs.filter(
-                Q(razon_social__icontains=search) |
-                Q(nit__icontains=search) |
-                Q(email_contacto__icontains=search)
+                Q(razon_social__icontains=search)
+                | Q(nit__icontains=search)
+                | Q(email_contacto__icontains=search)
             )
         return qs
 
@@ -115,16 +117,18 @@ class SedeSelector:
         qs = Sede.objects.filter(empresa_id=empresa_id).only(*SEDE_LIST_FIELDS)
         if search:
             qs = qs.filter(
-                Q(nombre__icontains=search) |
-                Q(direccion__icontains=search) |
-                Q(encargado_nombre__icontains=search)
+                Q(nombre__icontains=search)
+                | Q(direccion__icontains=search)
+                | Q(encargado_nombre__icontains=search)
             )
         return qs
 
     @staticmethod
     def get_by_uuid(empresa_id, uuid):
         """Retorna una sede especifica por su UUID y empresa_id (anti-IDOR)."""
-        return Sede.objects.filter(empresa_id=empresa_id, uuid=uuid).only(*SEDE_DETAIL_FIELDS).first()
+        return (
+            Sede.objects.filter(empresa_id=empresa_id, uuid=uuid).only(*SEDE_DETAIL_FIELDS).first()
+        )
 
 
 class AreaSelector:
@@ -133,23 +137,28 @@ class AreaSelector:
     @staticmethod
     def get_list(empresa_id, search=None):
         """Retorna listado optimizado de areas con relacion de sede."""
-        qs = Area.objects.filter(empresa_id=empresa_id).select_related('sede').only(
-            *AREA_LIST_FIELDS, *_SEDE_AREA_TRAVERSALS
+        qs = (
+            Area.objects.filter(empresa_id=empresa_id)
+            .select_related("sede")
+            .only(*AREA_LIST_FIELDS, *_SEDE_AREA_TRAVERSALS)
         )
         if search:
             qs = qs.filter(
-                Q(nombre__icontains=search) |
-                Q(codigo_funcionamiento__icontains=search) |
-                Q(sede__nombre__icontains=search)
+                Q(nombre__icontains=search)
+                | Q(codigo_funcionamiento__icontains=search)
+                | Q(sede__nombre__icontains=search)
             )
         return qs
 
     @staticmethod
     def get_by_uuid(empresa_id, uuid):
         """Retorna una area especifica por su UUID."""
-        return Area.objects.filter(empresa_id=empresa_id, uuid=uuid).select_related('sede').only(
-            *AREA_DETAIL_FIELDS, *_SEDE_AREA_TRAVERSALS
-        ).first()
+        return (
+            Area.objects.filter(empresa_id=empresa_id, uuid=uuid)
+            .select_related("sede")
+            .only(*AREA_DETAIL_FIELDS, *_SEDE_AREA_TRAVERSALS)
+            .first()
+        )
 
 
 class MailInboxConfigSelector:
@@ -158,13 +167,14 @@ class MailInboxConfigSelector:
     @staticmethod
     def get_list(empresa_id, search=None):
         """Retorna listado optimizado de configuraciones de buzon para una empresa."""
-        qs = MailInboxConfig.objects.filter(empresa_id=empresa_id).only(*MAILINBOXCONFIG_LIST_FIELDS)
+        qs = MailInboxConfig.objects.filter(empresa_id=empresa_id).only(
+            *MAILINBOXCONFIG_LIST_FIELDS
+        )
         if search:
             qs = qs.filter(
-                Q(nombre__icontains=search) |
-                Q(email_address__icontains=search) |
-                Q(imap_host__icontains=search) |
-                Q(provider__icontains=search)
+                Q(nombre__icontains=search)
+                | Q(email_address__icontains=search)
+                | Q(imap_host__icontains=search)
+                | Q(provider__icontains=search)
             )
         return qs
-

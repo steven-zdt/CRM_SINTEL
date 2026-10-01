@@ -16,6 +16,7 @@ necesita un reporte de conciliacion bancaria por factura, ese dataset
 deberia vivir del lado de Bancos (que ya expone `MovimientoBancarioAplicacion`
 y `TransaccionBancaria.conciliado`), no aqui.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -44,7 +45,13 @@ _DIMENSIONS = (
 )
 
 _MEASURES = (
-    ReportMeasure("cantidad_documentos", "Cantidad de documentos", FieldType.INTEGER, Aggregation.COUNT, source="id"),
+    ReportMeasure(
+        "cantidad_documentos",
+        "Cantidad de documentos",
+        FieldType.INTEGER,
+        Aggregation.COUNT,
+        source="id",
+    ),
     ReportMeasure("subtotal", "Subtotal", FieldType.DECIMAL, Aggregation.SUM, source="subtotal"),
     ReportMeasure("impuestos", "Impuestos", FieldType.DECIMAL, Aggregation.SUM, source="impuestos"),
     ReportMeasure("total", "Total", FieldType.DECIMAL, Aggregation.SUM, source="total"),
@@ -117,22 +124,29 @@ class FacturasResumenReportProvider:
         # en inventario.movimientos: alias de medida colisionando con un
         # campo real del modelo dentro de una expresion compuesta).
         def _build_annotations() -> dict:
-            return {f"m__{name}": _AGGREGATORS[name](_DATASET.get_measure(name).source) for name in measures}
+            return {
+                f"m__{name}": _AGGREGATORS[name](_DATASET.get_measure(name).source)
+                for name in measures
+            }
 
         values_qs = qs.values(*group_sources.values()).annotate(**_build_annotations())
 
         if request.order_by:
             order_field = request.order_by.lstrip("-")
             prefix = "-" if request.order_by.startswith("-") else ""
-            resolved = group_sources.get(order_field, order_field if order_field in measures else None)
+            resolved = group_sources.get(
+                order_field, order_field if order_field in measures else None
+            )
             if resolved:
                 values_qs = values_qs.order_by(f"{prefix}{resolved}")
         else:
-            values_qs = values_qs.order_by(*[f"-{s}" for s in group_sources.values()][:1] or ["-fecha_emision"])
+            values_qs = values_qs.order_by(
+                *[f"-{s}" for s in group_sources.values()][:1] or ["-fecha_emision"]
+            )
 
         count = values_qs.count()
         start = (request.page - 1) * request.page_size
-        page_rows = list(values_qs[start:start + request.page_size])
+        page_rows = list(values_qs[start : start + request.page_size])
 
         rows = []
         for raw in page_rows:
@@ -147,7 +161,7 @@ class FacturasResumenReportProvider:
 
         totals_qs = qs.aggregate(**_build_annotations())
         totals = {
-            name[len("m__"):]: (float(value) if isinstance(value, Decimal) else value)
+            name[len("m__") :]: (float(value) if isinstance(value, Decimal) else value)
             for name, value in totals_qs.items()
         }
 

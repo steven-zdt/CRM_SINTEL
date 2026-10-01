@@ -15,12 +15,19 @@ class BalanceValidationTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Balance", nit="900000902", direccion="Calle 1",
+            razon_social="Empresa Balance",
+            nit="900000902",
+            direccion="Calle 1",
         )
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
         self.cuenta = CuentaBancaria.objects.create(
-            empresa=self.empresa, nombre="Cuenta Balance", banco="Banco Test",
-            tipo="AHORROS", numero="BAL-1",
+            empresa=self.empresa,
+            nombre="Cuenta Balance",
+            banco="Banco Test",
+            tipo="AHORROS",
+            numero="BAL-1",
         )
         resp = self.api_client.post(
             "/api/v1/bancos/extractos/",

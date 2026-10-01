@@ -7,6 +7,7 @@ Valida que:
 2. El handler NO redirija a login cuando hay sesión activa y SessionAuthentication está configurado
 3. Los módulos no críticos manejen 401 localmente sin expulsar del workspace
 """
+
 import pytest
 from django_tenants.utils import schema_context
 
@@ -14,23 +15,20 @@ from apps.public.tenants.models import TenantMembership
 
 
 @pytest.mark.django_db
-def test_workspace_401_handler_does_not_redirect_for_noncritical_modules(client, django_user_model, tenant):
+def test_workspace_401_handler_does_not_redirect_for_noncritical_modules(
+    client, django_user_model, tenant
+):
     """
     Verifica que tras login, los endpoints de módulos no críticos NO devuelvan 401.
-    
+
     Si los ViewSets aceptan SessionAuthentication, NO deben devolver 401 tras login.
     """
     # Crear usuario
     user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    
+
     # Crear membresía activa en el tenant
-    TenantMembership.objects.create(
-        client=tenant,
-        user=user,
-        is_active=True,
-        rol="ADMIN"
-    )
-    
+    TenantMembership.objects.create(client=tenant, user=user, is_active=True, rol="ADMIN")
+
     # Autenticar usuario (simula login con sesión). django.contrib.sessions esta
     # en TENANT_APPS (sesiones aisladas por esquema) y el request real solo lee
     # la sesion despues de que TenantMainMiddleware cambia al esquema del
@@ -43,7 +41,7 @@ def test_workspace_401_handler_does_not_redirect_for_noncritical_modules(client,
     r1 = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     r2 = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
     r3 = client.get("/api/v1/proveedores/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
-    
+
     # Nunca deben ser 401 si la sesión está activa y SessionAuthentication está configurado
     assert r1.status_code != 401, (
         f"El endpoint de gastos devolvió 401 tras login. "
@@ -60,7 +58,7 @@ def test_workspace_401_handler_does_not_redirect_for_noncritical_modules(client,
         f"Verifica que ProveedorViewSet tenga authentication_classes = [SessionAuthentication]. "
         f"Status recibido: {r3.status_code}"
     )
-    
+
     # Deben ser 200 (si funciona) o 404 (si falta include en TENANT_URLCONF)
     assert r1.status_code in (200, 404), (
         f"Status inesperado para gastos: {r1.status_code}. "

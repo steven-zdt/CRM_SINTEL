@@ -57,7 +57,9 @@ class AIKnowledgeCRUDService:
 
     @staticmethod
     @transaction.atomic
-    def replace_chunks(*, document: AIKnowledgeDocument, contents: list[str]) -> list[AIKnowledgeChunk]:
+    def replace_chunks(
+        *, document: AIKnowledgeDocument, contents: list[str]
+    ) -> list[AIKnowledgeChunk]:
         """Reemplaza por completo los chunks de un documento (sin embeddings).
 
         Idempotente a nivel de contenido: borra los chunks previos y crea los
@@ -76,9 +78,7 @@ class AIKnowledgeCRUDService:
         for chunk in chunks:
             chunk.full_clean(exclude=["embedding"])
         AIKnowledgeChunk.objects.bulk_create(chunks)
-        logger.info(
-            "[AIKnowledgeCRUD] %d chunks para document id=%s", len(chunks), document.id
-        )
+        logger.info("[AIKnowledgeCRUD] %d chunks para document id=%s", len(chunks), document.id)
         return chunks
 
     @staticmethod
@@ -149,7 +149,5 @@ class AIKnowledgeCRUDService:
         if settings_row.retrieval_enabled != enabled:
             settings_row.retrieval_enabled = enabled
             settings_row.save(update_fields=["retrieval_enabled", "updated_at"])
-        logger.info(
-            "[AIKnowledgeCRUD] retrieval_enabled=%s para empresa=%s", enabled, empresa.id
-        )
+        logger.info("[AIKnowledgeCRUD] retrieval_enabled=%s para empresa=%s", enabled, empresa.id)
         return settings_row

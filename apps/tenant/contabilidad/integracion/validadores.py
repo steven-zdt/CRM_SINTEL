@@ -23,9 +23,7 @@ def validar_cuadratura(debe: Decimal, haber: Decimal) -> None:
         AsientoNoCuadradoError: If debe != haber
     """
     if debe != haber:
-        raise AsientoNoCuadradoError(
-            f"Asiento no cuadra: DEBE={debe} != HABER={haber}"
-        )
+        raise AsientoNoCuadradoError(f"Asiento no cuadra: DEBE={debe} != HABER={haber}")
 
 
 def validar_periodo_abierto(periodo: PeriodoContable) -> None:
@@ -38,7 +36,7 @@ def validar_periodo_abierto(periodo: PeriodoContable) -> None:
     Raises:
         PeriodoCerradoError: If period is closed
     """
-    if periodo.estado == 'CERRADO':
+    if periodo.estado == "CERRADO":
         raise PeriodoCerradoError(
             f"Periodo {periodo.periodo} esta cerrado. No se pueden crear asientos nuevos."
         )
@@ -57,5 +55,3 @@ def validar_no_vacio(debe: Decimal, haber: Decimal) -> None:
     """
     if debe == 0 and haber == 0:
         raise AsientoNoCuadradoError("Asiento vacio: no tiene movimientos")
-
-

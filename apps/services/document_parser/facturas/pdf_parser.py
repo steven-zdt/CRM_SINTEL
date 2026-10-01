@@ -6,6 +6,7 @@ WARNING: PRINCIPIOS:
 - Lógica separada del parser genérico de PDF
 - Retorna DTO específico para facturas/notas crédito
 """
+
 import re
 from typing import Any
 
@@ -18,23 +19,21 @@ from apps.services.document_parser.normalizers import (
 
 
 def parse_factura_pdf_to_dto(
-    file_bytes: bytes,
-    filename: str | None = None,
-    kind_hint: str | None = None
+    file_bytes: bytes, filename: str | None = None, kind_hint: str | None = None
 ) -> dict[str, Any]:
     """
     Parsea un PDF de factura/nota crédito para Facturas.
-    
+
     WARNING: v2.40: Parser específico para el módulo de facturas.
-    
+
     Args:
         file_bytes: Contenido del archivo PDF en bytes
         filename: Nombre del archivo (opcional)
         kind_hint: Tipo sugerido (opcional, se ignora para facturas)
-        
+
     Returns:
         Dict con estructura DTO JSON unificado para facturas/notas crédito
-        
+
     Raises:
         ValueError: Si el PDF no es válido o no se puede parsear
     """
@@ -42,47 +41,47 @@ def parse_factura_pdf_to_dto(
     try:
         pdf_text = extract_text_from_pdf(file_bytes)
     except Exception as e:
-        raise ValueError(f"Error al extraer texto del PDF: {str(e)}")
-    
+        raise ValueError(f"Error al extraer texto del PDF: {str(e)}") from e
+
     if not pdf_text:
         raise ValueError("No se pudo extraer texto del PDF")
-    
+
     # Detectar tipo de documento (Invoice o CreditNote) por heurísticas
     is_credit_note = _is_credit_note(pdf_text)
     document_type = "creditnote.ubl21" if is_credit_note else "invoice.ubl21"
-    
+
     # Extraer datos usando regex (patrones DIAN)
     numero = _extract_numero(pdf_text)
     cufe = _extract_cufe(pdf_text)
     fecha_emision = _extract_fecha_emision(pdf_text)
-    
+
     # Emisor
     emisor_nit = _extract_emisor_nit(pdf_text)
     emisor_razon_social = _extract_emisor_razon_social(pdf_text)
-    
+
     # Receptor
     receptor_nit = _extract_receptor_nit(pdf_text)
     receptor_razon_social = _extract_receptor_razon_social(pdf_text)
-    
+
     # Totales
     totales = _extract_totales(pdf_text)
-    
+
     # Referencia (solo para CreditNote)
     referencia = None
     motivo = ""
     if is_credit_note:
         referencia = _extract_referencia(pdf_text)
         motivo = _extract_motivo(pdf_text)
-    
+
     # Construir DTO (FASE 3: incluir type base para compatibilidad)
     # Extraer tipo base del document_type (ej: "invoice.ubl21" -> "invoice")
-    type_base = document_type.split('.')[0] if '.' in document_type else document_type
-    
+    type_base = document_type.split(".")[0] if "." in document_type else document_type
+
     # Normalizar valores para campos planos
     nit_emisor_normalized = normalize_nit(emisor_nit) or ""
     total_normalized = normalize_numeric_to_decimal_string(totales.get("total", "0.00"))
     referencia_factura = referencia.get("numero", "") if referencia else ""
-    
+
     dto = {
         "document_type": document_type,
         "type": type_base,  # Tipo base para router de validaciones
@@ -112,25 +111,25 @@ def parse_factura_pdf_to_dto(
             "total": total_normalized,
         },
     }
-    
+
     if referencia:
         dto["referencia"] = referencia
-    
+
     if motivo:
         dto["motivo"] = motivo
-    
+
     return dto
 
 
 def _is_credit_note(text: str) -> bool:
     """Detecta si el PDF es una Nota Crédito."""
     patterns = [
-        r'nota\s*cr[ée]dito',
-        r'credit\s*note',
-        r'nc\s*\d+',
-        r'nota\s*de\s*cr[ée]dito',
-        r'documento\s*equivalente\s*a\s*nota\s*cr[ée]dito',
-        r'tipo\s*de\s*documento.*?nota\s*cr[ée]dito',
+        r"nota\s*cr[ée]dito",
+        r"credit\s*note",
+        r"nc\s*\d+",
+        r"nota\s*de\s*cr[ée]dito",
+        r"documento\s*equivalente\s*a\s*nota\s*cr[ée]dito",
+        r"tipo\s*de\s*documento.*?nota\s*cr[ée]dito",
     ]
     text_lower = text.lower()
     return any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in patterns)
@@ -139,12 +138,12 @@ def _is_credit_note(text: str) -> bool:
 def _extract_numero(text: str) -> str | None:
     """Extrae número de factura/nota crédito."""
     patterns = [
-        r'(?:nota\s*cr[ée]dito|nc)\s*(?:n[úu]m[ée]ro|no\.?|#)?\s*[-:]?\s*([A-Z0-9\-]+)',
-        r'(?:nota\s*cr[ée]dito|nc)\s*[-:]?\s*([A-Z0-9\-]+)',
-        r'factura\s*(?:n[úu]m[ée]ro|no\.?|#)\s*:?\s*([A-Z0-9\-]+)',
-        r'numero\s*(?:de\s*(?:factura|documento))?\s*:?\s*([A-Z0-9\-]+)',
-        r'no\.?\s*:?\s*([A-Z0-9\-]+)',
-        r'documento\s*(?:n[úu]m[ée]ro|no\.?|#)\s*:?\s*([A-Z0-9\-]+)',
+        r"(?:nota\s*cr[ée]dito|nc)\s*(?:n[úu]m[ée]ro|no\.?|#)?\s*[-:]?\s*([A-Z0-9\-]+)",
+        r"(?:nota\s*cr[ée]dito|nc)\s*[-:]?\s*([A-Z0-9\-]+)",
+        r"factura\s*(?:n[úu]m[ée]ro|no\.?|#)\s*:?\s*([A-Z0-9\-]+)",
+        r"numero\s*(?:de\s*(?:factura|documento))?\s*:?\s*([A-Z0-9\-]+)",
+        r"no\.?\s*:?\s*([A-Z0-9\-]+)",
+        r"documento\s*(?:n[úu]m[ée]ro|no\.?|#)\s*:?\s*([A-Z0-9\-]+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
@@ -158,9 +157,9 @@ def _extract_numero(text: str) -> str | None:
 def _extract_cufe(text: str) -> str | None:
     """Extrae CUFE/CUDE."""
     patterns = [
-        r'cufe\s*:?\s*([A-Z0-9\-]+)',
-        r'cude\s*:?\s*([A-Z0-9\-]+)',
-        r'uuid\s*:?\s*([A-Z0-9\-]+)',
+        r"cufe\s*:?\s*([A-Z0-9\-]+)",
+        r"cude\s*:?\s*([A-Z0-9\-]+)",
+        r"uuid\s*:?\s*([A-Z0-9\-]+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
@@ -172,18 +171,18 @@ def _extract_cufe(text: str) -> str | None:
 def _extract_fecha_emision(text: str) -> str | None:
     """Extrae fecha de emisión."""
     patterns = [
-        r'fecha\s*(?:de\s*)?emisi[óo]n\s*:?\s*(\d{4}[-/]\d{2}[-/]\d{2})',
-        r'fecha\s*(?:de\s*)?emisi[óo]n\s*:?\s*(\d{2}[-/]\d{2}[-/]\d{4})',
-        r'(\d{4}[-/]\d{2}[-/]\d{2})',
-        r'(\d{2}[-/]\d{2}[-/]\d{4})',
+        r"fecha\s*(?:de\s*)?emisi[óo]n\s*:?\s*(\d{4}[-/]\d{2}[-/]\d{2})",
+        r"fecha\s*(?:de\s*)?emisi[óo]n\s*:?\s*(\d{2}[-/]\d{2}[-/]\d{4})",
+        r"(\d{4}[-/]\d{2}[-/]\d{2})",
+        r"(\d{2}[-/]\d{2}[-/]\d{4})",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
             fecha_raw = match.group(1)
-            fecha = fecha_raw.replace('/', '-')
-            if re.match(r'\d{2}-\d{2}-\d{4}', fecha):
-                parts = fecha.split('-')
+            fecha = fecha_raw.replace("/", "-")
+            if re.match(r"\d{2}-\d{2}-\d{4}", fecha):
+                parts = fecha.split("-")
                 fecha = f"{parts[2]}-{parts[1]}-{parts[0]}"
             return f"{fecha}T00:00:00-05:00"
     return None
@@ -192,11 +191,11 @@ def _extract_fecha_emision(text: str) -> str | None:
 def _extract_emisor_nit(text: str) -> str | None:
     """Extrae NIT del emisor."""
     patterns = [
-        r'nit\s*(?:emisor|proveedor|vendedor)?\s*:?\s*([0-9\-\.]+)',
-        r'emisor.*?nit\s*:?\s*([0-9\-\.]+)',
-        r'proveedor.*?nit\s*:?\s*([0-9\-\.]+)',
-        r'nit\s*:?\s*([0-9\-\.]+)',
-        r'nit[:\s]+([0-9]+(?:[-\.][0-9]+)?)',
+        r"nit\s*(?:emisor|proveedor|vendedor)?\s*:?\s*([0-9\-\.]+)",
+        r"emisor.*?nit\s*:?\s*([0-9\-\.]+)",
+        r"proveedor.*?nit\s*:?\s*([0-9\-\.]+)",
+        r"nit\s*:?\s*([0-9\-\.]+)",
+        r"nit[:\s]+([0-9]+(?:[-\.][0-9]+)?)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
@@ -210,8 +209,8 @@ def _extract_emisor_nit(text: str) -> str | None:
 def _extract_emisor_razon_social(text: str) -> str | None:
     """Extrae razón social del emisor."""
     patterns = [
-        r'raz[óo]n\s*social\s*(?:emisor)?\s*:?\s*([^\n]+)',
-        r'emisor\s*:?\s*([^\n]+)',
+        r"raz[óo]n\s*social\s*(?:emisor)?\s*:?\s*([^\n]+)",
+        r"emisor\s*:?\s*([^\n]+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
@@ -223,8 +222,8 @@ def _extract_emisor_razon_social(text: str) -> str | None:
 def _extract_receptor_nit(text: str) -> str | None:
     """Extrae NIT del receptor."""
     patterns = [
-        r'nit\s*(?:receptor|cliente)?\s*:?\s*([0-9\-]+)',
-        r'receptor.*?nit\s*:?\s*([0-9\-]+)',
+        r"nit\s*(?:receptor|cliente)?\s*:?\s*([0-9\-]+)",
+        r"receptor.*?nit\s*:?\s*([0-9\-]+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
@@ -236,8 +235,8 @@ def _extract_receptor_nit(text: str) -> str | None:
 def _extract_receptor_razon_social(text: str) -> str | None:
     """Extrae razón social del receptor."""
     patterns = [
-        r'raz[óo]n\s*social\s*(?:receptor)?\s*:?\s*([^\n]+)',
-        r'receptor\s*:?\s*([^\n]+)',
+        r"raz[óo]n\s*social\s*(?:receptor)?\s*:?\s*([^\n]+)",
+        r"receptor\s*:?\s*([^\n]+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
@@ -250,56 +249,56 @@ def _extract_totales(text: str) -> dict[str, Any]:
     """Extrae totales monetarios."""
     patterns = {
         "subtotal": [
-            r'subtotal\s*:?\s*\$?\s*([0-9,\.]+)',
-            r'sub\s*total\s*:?\s*\$?\s*([0-9,\.]+)',
-            r'subtotal\s*(?:sin\s*impuestos)?\s*:?\s*\$?\s*([0-9,\.]+)',
+            r"subtotal\s*:?\s*\$?\s*([0-9,\.]+)",
+            r"sub\s*total\s*:?\s*\$?\s*([0-9,\.]+)",
+            r"subtotal\s*(?:sin\s*impuestos)?\s*:?\s*\$?\s*([0-9,\.]+)",
         ],
         "impuestos": [
-            r'impuestos?\s*:?\s*\$?\s*([0-9,\.]+)',
-            r'iva\s*:?\s*\$?\s*([0-9,\.]+)',
-            r'impuesto\s*(?:al\s*valor\s*agregado|iva)\s*:?\s*\$?\s*([0-9,\.]+)',
+            r"impuestos?\s*:?\s*\$?\s*([0-9,\.]+)",
+            r"iva\s*:?\s*\$?\s*([0-9,\.]+)",
+            r"impuesto\s*(?:al\s*valor\s*agregado|iva)\s*:?\s*\$?\s*([0-9,\.]+)",
         ],
         "total": [
-            r'total\s*(?:a\s*pagar|general)?\s*:?\s*\$?\s*([0-9,\.]+)',
-            r'valor\s*total\s*:?\s*\$?\s*([0-9,\.]+)',
-            r'total\s*:?\s*\$?\s*([0-9,\.]+)',
-            r'total\s*:?\s*\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{2})?)',
+            r"total\s*(?:a\s*pagar|general)?\s*:?\s*\$?\s*([0-9,\.]+)",
+            r"valor\s*total\s*:?\s*\$?\s*([0-9,\.]+)",
+            r"total\s*:?\s*\$?\s*([0-9,\.]+)",
+            r"total\s*:?\s*\$?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{2})?)",
         ],
     }
-    
+
     totales = {"moneda": "COP", "subtotal": "0.00", "impuestos": "0.00", "total": "0.00"}
-    
+
     for key, pattern_list in patterns.items():
         for pattern in pattern_list:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 value_raw = match.group(1)
-                if ',' in value_raw and '.' in value_raw:
-                    value = value_raw.replace('.', '').replace(',', '.')
-                elif ',' in value_raw:
-                    if value_raw.count(',') > 1:
-                        value = value_raw.replace(',', '')
+                if "," in value_raw and "." in value_raw:
+                    value = value_raw.replace(".", "").replace(",", ".")
+                elif "," in value_raw:
+                    if value_raw.count(",") > 1:
+                        value = value_raw.replace(",", "")
                     else:
-                        value = value_raw.replace(',', '.')
+                        value = value_raw.replace(",", ".")
                 else:
-                    value = value_raw.replace('.', '')
-                
+                    value = value_raw.replace(".", "")
+
                 totales[key] = value
                 break
-    
+
     return totales
 
 
 def _extract_referencia(text: str) -> dict[str, str] | None:
     """Extrae referencia a factura (para Notas Crédito)."""
     patterns = [
-        r'factura\s*(?:referenciada|afectada|relacionada|original)\s*:?\s*([A-Z0-9\-]+)',
-        r'referencia\s*(?:a\s*)?(?:factura|documento)?\s*:?\s*([A-Z0-9\-]+)',
-        r'afecta\s*(?:a\s*)?(?:factura|documento)?\s*:?\s*([A-Z0-9\-]+)',
-        r'factura\s*:?\s*([A-Z0-9\-]+)',
-        r'ref\.?\s*:?\s*([A-Z0-9\-]+)',
-        r'documento\s*(?:referenciado|afectado)\s*:?\s*([A-Z0-9\-]+)',
-        r'relacionado\s*con\s*(?:factura|documento)\s*:?\s*([A-Z0-9\-]+)',
+        r"factura\s*(?:referenciada|afectada|relacionada|original)\s*:?\s*([A-Z0-9\-]+)",
+        r"referencia\s*(?:a\s*)?(?:factura|documento)?\s*:?\s*([A-Z0-9\-]+)",
+        r"afecta\s*(?:a\s*)?(?:factura|documento)?\s*:?\s*([A-Z0-9\-]+)",
+        r"factura\s*:?\s*([A-Z0-9\-]+)",
+        r"ref\.?\s*:?\s*([A-Z0-9\-]+)",
+        r"documento\s*(?:referenciado|afectado)\s*:?\s*([A-Z0-9\-]+)",
+        r"relacionado\s*con\s*(?:factura|documento)\s*:?\s*([A-Z0-9\-]+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
@@ -316,8 +315,8 @@ def _extract_referencia(text: str) -> dict[str, str] | None:
 def _extract_motivo(text: str) -> str:
     """Extrae motivo de la nota crédito."""
     patterns = [
-        r'motivo\s*:?\s*([^\n]+)',
-        r'raz[óo]n\s*:?\s*([^\n]+)',
+        r"motivo\s*:?\s*([^\n]+)",
+        r"raz[óo]n\s*:?\s*([^\n]+)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)

@@ -7,56 +7,90 @@ Este paquete implementa la arquitectura modular SINTEL v3.5:
 - business_service.py: Logica de negocio y orquestacion
 """
 
-from .selectors import (
-    LIST_FIELDS,
-    DETAIL_FIELDS,
-    qs_list,
-    qs_detail,
-    TareaCortaSelector,
-    TAREA_CORTA_FIELDS
-)
-
-from .crud_service import (
-    save_proyecto,
-    delete_proyecto,
-    save_asignacion,
-    delete_asignacion,
-    save_pedido,
-    delete_pedido,
-    save_tarea_corta,
-    delete_tarea_corta
-)
-
+from .api_mixins import TareaCortaServiceMixin
 from .business_service import (
-    calcular_indicadores_financieros,
+    TareasCortasBusinessService,
     asignar_snapshot_cliente,
     asignar_snapshot_responsable,
+    calcular_indicadores_financieros,
     cambiar_fase_proyecto,
     orchestrate_create_proyecto,
     orchestrate_update_proyecto,
-    TareasCortasBusinessService
 )
-
-from .presupuesto_service import (
-    PresupuestoBusinessService,
-    ITEM_FIELDS as PRESUPUESTO_ITEM_FIELDS
+from .crud_service import (
+    delete_asignacion,
+    delete_pedido,
+    delete_proyecto,
+    delete_tarea_corta,
+    save_asignacion,
+    save_pedido,
+    save_proyecto,
+    save_tarea_corta,
 )
-
-from .tareas_service import (
-    TareasDiariasCRUDService,
-    TareasDiariasBusinessService,
-    TareasDiariasSelector,
-    TAREA_FIELDS
-)
-
 from .documentos_service import (
-    DocumentosCRUDService,
+    DOCUMENTO_FIELDS,
     DocumentosBusinessService,
-    resolver_requisitos_transicion,
+    DocumentosCRUDService,
     documentos_faltantes,
     documentos_obligatorios_faltantes,
+    resolver_requisitos_transicion,
     validar_archivo,
-    DOCUMENTO_FIELDS,
+)
+from .presupuesto_service import ITEM_FIELDS as PRESUPUESTO_ITEM_FIELDS
+from .presupuesto_service import PresupuestoBusinessService
+from .selectors import (
+    DETAIL_FIELDS,
+    LIST_FIELDS,
+    TAREA_CORTA_FIELDS,
+    TareaCortaSelector,
+    qs_detail,
+    qs_list,
+)
+from .tareas_service import (
+    TAREA_FIELDS,
+    TareasDiariasBusinessService,
+    TareasDiariasCRUDService,
+    TareasDiariasSelector,
 )
 
-from .api_mixins import TareaCortaServiceMixin
+# Re-exports publicos del Service Layer (SSoT) -- declarados explicitamente
+# para que ruff (F401) no los marque como "importados pero no usados": el
+# proposito de este __init__.py es precisamente exponerlos a otros modulos
+# via `from apps.tenant.proyectos.services import X`.
+__all__ = [
+    "TareaCortaServiceMixin",
+    "TareasCortasBusinessService",
+    "asignar_snapshot_cliente",
+    "asignar_snapshot_responsable",
+    "calcular_indicadores_financieros",
+    "cambiar_fase_proyecto",
+    "orchestrate_create_proyecto",
+    "orchestrate_update_proyecto",
+    "delete_asignacion",
+    "delete_pedido",
+    "delete_proyecto",
+    "delete_tarea_corta",
+    "save_asignacion",
+    "save_pedido",
+    "save_proyecto",
+    "save_tarea_corta",
+    "DOCUMENTO_FIELDS",
+    "DocumentosBusinessService",
+    "DocumentosCRUDService",
+    "documentos_faltantes",
+    "documentos_obligatorios_faltantes",
+    "resolver_requisitos_transicion",
+    "validar_archivo",
+    "PRESUPUESTO_ITEM_FIELDS",
+    "PresupuestoBusinessService",
+    "DETAIL_FIELDS",
+    "LIST_FIELDS",
+    "TAREA_CORTA_FIELDS",
+    "TareaCortaSelector",
+    "qs_detail",
+    "qs_list",
+    "TAREA_FIELDS",
+    "TareasDiariasBusinessService",
+    "TareasDiariasCRUDService",
+    "TareasDiariasSelector",
+]

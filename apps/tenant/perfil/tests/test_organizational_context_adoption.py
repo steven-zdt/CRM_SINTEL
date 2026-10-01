@@ -10,6 +10,7 @@ sin exigir TenantProfile - mientras OrganizationalContext.resolve() para el
 mismo request exige TenantProfile y lanza OrganizationalContextError si no
 existe. Por eso get_queryset()/list()/etc. no fueron migrados en esta fase.
 """
+
 from apps.tenant.core.services.organizational_context import (
     OrganizationalContext,
     OrganizationalContextError,
@@ -26,17 +27,21 @@ class PerfilOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9 Perfil", nit="900000998", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9 Perfil",
+            nit="900000998",
+            direccion="Calle 1",
         )
 
     def test_perfilviewset_exposes_get_organizational_context_with_a_real_profile(self):
         """Caso comun: el usuario tiene TenantProfile - la nueva capacidad
         resuelve un contexto correcto y coincide con context.filter(TenantProfile)."""
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         from rest_framework.test import APIRequestFactory
-        from rest_framework_simplejwt.tokens import RefreshToken
         from rest_framework_simplejwt.authentication import JWTAuthentication
+        from rest_framework_simplejwt.tokens import RefreshToken
 
         factory = APIRequestFactory()
         token = str(RefreshToken.for_user(self.user).access_token)

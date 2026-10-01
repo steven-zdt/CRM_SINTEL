@@ -70,7 +70,7 @@ class Command(BaseCommand):
             else:
                 raise CommandError(
                     f'Tenant con schema_name "{schema_name}" no existe. Use --create-schema para crearlo.'
-                )
+                ) from None
 
         # Obtener configuración de base de datos
         db_config = settings.DATABASES["default"]
@@ -135,19 +135,19 @@ class Command(BaseCommand):
                     # Agregar comando para establecer search_path
                     sql_content = f"SET search_path TO {schema_name};\n" + sql_content
 
-                    result = subprocess.run(
+                    subprocess.run(
                         cmd, env=env, input=sql_content, capture_output=True, text=True, check=True
                     )
             else:
                 # Para otros formatos, usar pg_restore
-                result = subprocess.run(cmd, env=env, capture_output=True, text=True, check=True)
+                subprocess.run(cmd, env=env, capture_output=True, text=True, check=True)
 
             self.stdout.write(self.style.SUCCESS("OK: Restauración completada exitosamente"))
 
         except subprocess.CalledProcessError as e:
-            raise CommandError(f"Error al ejecutar restauración: {e.stderr}")
+            raise CommandError(f"Error al ejecutar restauración: {e.stderr}") from e
         except Exception as e:
-            raise CommandError(f"Error inesperado: {str(e)}")
+            raise CommandError(f"Error inesperado: {str(e)}") from e
 
     def _detect_backup_format(self, backup_file):
         """Detecta el formato del backup basado en la extensión."""

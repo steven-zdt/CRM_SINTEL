@@ -8,34 +8,96 @@ from apps.tenant.bancos.models import (
     TransaccionBancaria,
 )
 
-CUENTA_LIST_FIELDS = (
-    "id", "uuid", "nombre", "banco", "tipo", "numero", "activo", "empresa_id"
-)
+CUENTA_LIST_FIELDS = ("id", "uuid", "nombre", "banco", "tipo", "numero", "activo", "empresa_id")
 CUENTA_DETAIL_FIELDS = (
-    "id", "uuid", "nombre", "banco", "tipo", "numero", "activo", "empresa_id", "created_at", "updated_at"
+    "id",
+    "uuid",
+    "nombre",
+    "banco",
+    "tipo",
+    "numero",
+    "activo",
+    "empresa_id",
+    "created_at",
+    "updated_at",
 )
 
 EXTRACTO_LIST_FIELDS = (
-    "id", "uuid", "cuenta_id", "cuenta__uuid", "cuenta__nombre", "cuenta__numero",
-    "mes", "anio", "archivo_s3", "procesado", "saldo_inicial", "saldo_final",
-    "empresa_id", "sede_id", "sede__nombre",  # BAN-11 (DT-SEDE-01)
+    "id",
+    "uuid",
+    "cuenta_id",
+    "cuenta__uuid",
+    "cuenta__nombre",
+    "cuenta__numero",
+    "mes",
+    "anio",
+    "archivo_s3",
+    "procesado",
+    "saldo_inicial",
+    "saldo_final",
+    "empresa_id",
+    "sede_id",
+    "sede__nombre",  # BAN-11 (DT-SEDE-01)
 )
 EXTRACTO_DETAIL_FIELDS = (
-    "id", "uuid", "cuenta_id", "cuenta__uuid", "cuenta__nombre", "cuenta__numero",
-    "mes", "anio", "archivo_s3", "procesado", "saldo_inicial", "saldo_final",
-    "empresa_id", "created_at", "updated_at", "sede_id", "sede__nombre",  # BAN-11
+    "id",
+    "uuid",
+    "cuenta_id",
+    "cuenta__uuid",
+    "cuenta__nombre",
+    "cuenta__numero",
+    "mes",
+    "anio",
+    "archivo_s3",
+    "procesado",
+    "saldo_inicial",
+    "saldo_final",
+    "empresa_id",
+    "created_at",
+    "updated_at",
+    "sede_id",
+    "sede__nombre",  # BAN-11
 )
 
 TRANSACCION_LIST_FIELDS = (
-    "id", "uuid", "extracto_id", "extracto__uuid", "fecha", "descripcion", "sucursal",
-    "dcto", "valor", "saldo", "factura_uuid", "proveedor_uuid", "cliente_uuid",
-    "conciliado", "notas_conciliacion", "empresa_id",
+    "id",
+    "uuid",
+    "extracto_id",
+    "extracto__uuid",
+    "fecha",
+    "descripcion",
+    "sucursal",
+    "dcto",
+    "valor",
+    "saldo",
+    "factura_uuid",
+    "proveedor_uuid",
+    "cliente_uuid",
+    "conciliado",
+    "notas_conciliacion",
+    "empresa_id",
 )
 TRANSACCION_DETAIL_FIELDS = (
-    "id", "uuid", "extracto_id", "extracto__uuid", "fecha", "descripcion", "sucursal",
-    "dcto", "valor", "saldo", "factura_uuid", "proveedor_uuid", "cliente_uuid",
-    "conciliado", "notas_conciliacion", "empresa_id", "created_at", "updated_at",
+    "id",
+    "uuid",
+    "extracto_id",
+    "extracto__uuid",
+    "fecha",
+    "descripcion",
+    "sucursal",
+    "dcto",
+    "valor",
+    "saldo",
+    "factura_uuid",
+    "proveedor_uuid",
+    "cliente_uuid",
+    "conciliado",
+    "notas_conciliacion",
+    "empresa_id",
+    "created_at",
+    "updated_at",
 )
+
 
 class CuentaBancariaSelector:
     """Read-only selectors for CuentaBancaria."""
@@ -46,9 +108,9 @@ class CuentaBancariaSelector:
         qs = CuentaBancaria.objects.filter(empresa_id=empresa_id).only(*CUENTA_LIST_FIELDS)
         if search:
             qs = qs.filter(
-                Q(nombre__icontains=search) |
-                Q(banco__icontains=search) |
-                Q(numero__icontains=search)
+                Q(nombre__icontains=search)
+                | Q(banco__icontains=search)
+                | Q(numero__icontains=search)
             )
         return qs.order_by("nombre")
 
@@ -60,6 +122,7 @@ class CuentaBancariaSelector:
             return qs.filter(uuid=uuid)
         return qs
 
+
 class ExtractoBancarioSelector:
     """Read-only selectors for ExtractoBancario."""
 
@@ -67,34 +130,34 @@ class ExtractoBancarioSelector:
     def get_list(empresa_id: int, cuenta_uuid=None, search: str = None):
         """Get optimized ExtractoBancario list con anotaciones de conciliacion."""
         qs = (
-            ExtractoBancario.objects
-            .filter(empresa_id=empresa_id)
+            ExtractoBancario.objects.filter(empresa_id=empresa_id)
             .select_related("cuenta", "sede")
             .only(*EXTRACTO_LIST_FIELDS)
             .annotate(
-                total_transacciones=Count('transacciones'),
-                tx_conciliadas=Count(
-                    'transacciones',
-                    filter=Q(transacciones__conciliado=True)
-                ),
+                total_transacciones=Count("transacciones"),
+                tx_conciliadas=Count("transacciones", filter=Q(transacciones__conciliado=True)),
             )
         )
         if cuenta_uuid:
             qs = qs.filter(cuenta__uuid=cuenta_uuid)
         if search:
             qs = qs.filter(
-                Q(cuenta__nombre__icontains=search) |
-                Q(cuenta__numero__icontains=search)
+                Q(cuenta__nombre__icontains=search) | Q(cuenta__numero__icontains=search)
             )
         return qs.order_by("-anio", "-mes")
 
     @staticmethod
     def get_detail(empresa_id: int, uuid=None):
         """Get optimized ExtractoBancario detail."""
-        qs = ExtractoBancario.objects.filter(empresa_id=empresa_id).select_related("cuenta", "sede").only(*EXTRACTO_DETAIL_FIELDS)
+        qs = (
+            ExtractoBancario.objects.filter(empresa_id=empresa_id)
+            .select_related("cuenta", "sede")
+            .only(*EXTRACTO_DETAIL_FIELDS)
+        )
         if uuid:
             return qs.filter(uuid=uuid)
         return qs
+
 
 class TransaccionBancariaSelector:
     """Read-only selectors for TransaccionBancaria."""
@@ -122,9 +185,9 @@ class TransaccionBancariaSelector:
             qs = qs.filter(extracto__uuid=extracto_uuid)
         if search:
             qs = qs.filter(
-                Q(descripcion__icontains=search) |
-                Q(sucursal__icontains=search) |
-                Q(dcto__icontains=search)
+                Q(descripcion__icontains=search)
+                | Q(sucursal__icontains=search)
+                | Q(dcto__icontains=search)
             )
         tipo_mov = (tipo_movimiento or "").upper()
         if tipo_mov == "DEBITO":
@@ -142,17 +205,32 @@ class TransaccionBancariaSelector:
     @staticmethod
     def get_detail(empresa_id: int, uuid=None):
         """Get optimized TransaccionBancaria detail."""
-        qs = TransaccionBancaria.objects.filter(empresa_id=empresa_id).select_related("extracto").only(*TRANSACCION_DETAIL_FIELDS)
+        qs = (
+            TransaccionBancaria.objects.filter(empresa_id=empresa_id)
+            .select_related("extracto")
+            .only(*TRANSACCION_DETAIL_FIELDS)
+        )
         if uuid:
             return qs.filter(uuid=uuid)
         return qs
 
 
 APLICACION_FIELDS = (
-    "id", "uuid", "transaccion_id", "transaccion__uuid",
-    "tipo_referencia", "referencia_uuid", "tercero_tipo", "tercero_uuid",
-    "monto_aplicado", "fecha_aplicacion", "notas",
-    "origen_matching", "confianza", "empresa_id", "created_at",
+    "id",
+    "uuid",
+    "transaccion_id",
+    "transaccion__uuid",
+    "tipo_referencia",
+    "referencia_uuid",
+    "tercero_tipo",
+    "tercero_uuid",
+    "monto_aplicado",
+    "fecha_aplicacion",
+    "notas",
+    "origen_matching",
+    "confianza",
+    "empresa_id",
+    "created_at",
 )
 
 
@@ -163,7 +241,9 @@ class TerceroDisplaySelector:
     el nombre de un vinculo ya guardado (antes se mostraba el UUID truncado)."""
 
     @staticmethod
-    def resolver(empresa_id: int, factura_uuids=None, proveedor_uuids=None, cliente_uuids=None) -> dict:
+    def resolver(
+        empresa_id: int, factura_uuids=None, proveedor_uuids=None, cliente_uuids=None
+    ) -> dict:
         """Retorna {uuid_str: display_str}. Un UUID sin match (registro
         eliminado o soft-ref sin resolver) queda ausente del dict -- el
         llamador debe usar un fallback, mismo criterio de soft references
@@ -174,9 +254,16 @@ class TerceroDisplaySelector:
             from apps.tenant.facturas.models import Factura
 
             for f in Factura.objects.filter(empresa_id=empresa_id, uuid__in=factura_uuids).only(
-                "uuid", "numero", "prefijo", "naturaleza", "receptor_razon_social", "emisor_razon_social"
+                "uuid",
+                "numero",
+                "prefijo",
+                "naturaleza",
+                "receptor_razon_social",
+                "emisor_razon_social",
             ):
-                nombre = f.receptor_razon_social if f.naturaleza == "VENTA" else f.emisor_razon_social
+                nombre = (
+                    f.receptor_razon_social if f.naturaleza == "VENTA" else f.emisor_razon_social
+                )
                 numero = f"{f.prefijo}-{f.numero}" if f.prefijo else (f.numero or "")
                 partes = [p for p in (numero, nombre) if p]
                 display[str(f.uuid)] = " — ".join(partes) if partes else str(f.uuid)
@@ -235,9 +322,8 @@ class MovimientoBancarioAplicacionSelector:
 
     @staticmethod
     def get_list(empresa_id: int, transaccion_uuid=None):
-        qs = (
-            MovimientoBancarioAplicacion.objects.filter(empresa_id=empresa_id)
-            .only(*APLICACION_FIELDS)
+        qs = MovimientoBancarioAplicacion.objects.filter(empresa_id=empresa_id).only(
+            *APLICACION_FIELDS
         )
         if transaccion_uuid:
             qs = qs.filter(transaccion__uuid=transaccion_uuid)
@@ -245,7 +331,9 @@ class MovimientoBancarioAplicacionSelector:
 
     @staticmethod
     def get_detail(empresa_id: int, uuid=None):
-        qs = MovimientoBancarioAplicacion.objects.filter(empresa_id=empresa_id).only(*APLICACION_FIELDS)
+        qs = MovimientoBancarioAplicacion.objects.filter(empresa_id=empresa_id).only(
+            *APLICACION_FIELDS
+        )
         if uuid:
             return qs.filter(uuid=uuid)
         return qs

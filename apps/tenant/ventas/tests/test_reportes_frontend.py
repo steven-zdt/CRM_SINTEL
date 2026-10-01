@@ -27,16 +27,30 @@ class VentaReportesFrontendTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Reportes FE", nit="900000931", direccion="Calle Reportes FE",
+            razon_social="Empresa Reportes FE",
+            nit="900000931",
+            direccion="Calle Reportes FE",
         )
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="RPTFE-1", razon_social="Cliente Reportes FE", regimen_tributario="ORDINARIO",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="RPTFE-1",
+            razon_social="Cliente Reportes FE",
+            regimen_tributario="ORDINARIO",
         )
         Venta.objects.create(
-            empresa=self.empresa, cliente=self.cliente, fecha_emision="2026-06-01",
-            estado="BORRADOR", numero_factura="RPTFE-V-1", subtotal="500.00", impuestos="95.00", total_neto="595.00",
+            empresa=self.empresa,
+            cliente=self.cliente,
+            fecha_emision="2026-06-01",
+            estado="BORRADOR",
+            numero_factura="RPTFE-V-1",
+            subtotal="500.00",
+            impuestos="95.00",
+            total_neto="595.00",
         )
 
         # Cliente HTML con sesion real (LoginRequiredMixin).

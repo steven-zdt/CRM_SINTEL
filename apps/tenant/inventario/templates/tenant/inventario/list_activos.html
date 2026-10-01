@@ -8,16 +8,8 @@
 <div class="ui-module h-100 d-flex flex-column">
   <div id="feedback-activos-list" class="alert d-none mb-2" role="alert"></div>
 
-  {# Toolbar #}
-  <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-    <div class="d-flex align-items-center gap-2 flex-grow-1">
-      <input type="text" id="search-activo" class="form-control form-control-sm"
-             placeholder="Buscar código, nombre, categoría, ubicación, responsable..." style="max-width:360px"
-             hx-get="{% url 'inventario:activo-tabla' %}"
-             hx-trigger="keyup changed delay:400ms, search"
-             hx-target="#activos-panel"
-             name="q">
-    </div>
+  {# Toolbar -- sin buscador propio: DataTables trae su buscador nativo #}
+  <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
     <div class="d-flex gap-1">
       <button type="button" class="btn btn-sm btn-outline-secondary"
               onclick="window.ActivosList?.recargar()"
@@ -34,13 +26,15 @@
     </div>
   </div>
 
-  {# Tabla server-rendered (django-tables2 + HTMX) — KPIs incluidos en el partial #}
-  <div id="activos-panel"
-       class="flex-grow-1 w-100"
+  {# KPIs -- siguen server-rendered via HTMX (kpis_activos.html) #}
+  <div id="activos-kpis-panel"
        hx-get="{% url 'inventario:activo-tabla' %}"
        hx-trigger="load, activo-updated from:body"
        hx-target="this"
-       hx-swap="innerHTML"
-       hx-boost="true">
+       hx-swap="innerHTML"></div>
+
+  {# Tabla -- esqueleto estatico, poblado via ajax por activos_list.js #}
+  <div class="flex-grow-1 w-100">
+    {% include 'tenant/inventario/partials/tabla_activos.html' %}
   </div>
 </div>

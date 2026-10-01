@@ -1,6 +1,10 @@
 {# assets_empleados.html - Carga de assets para módulo Empleados #}
 {% load static %}
 
+{# DataTables 3.x (Directorio, Contratos, Resoluciones DIAN, Periodos de Nomina, y los Master de Nominas/Liquidaciones) #}
+{% include 'tenant/empleados/assets_empleados_datatables.html' %}
+<script src="{% static 'core/js/common/datatables.factory.js' %}"></script>
+
 <!-- Empleados API -->
 <script src="{% static 'empleados/js/empleados.api.js' %}"></script>
 

@@ -1,3 +1,14 @@
-{% load django_tables2 %}
-{# Fragmento HTMX: tabla Master (empleados con nominas). Reemplaza #nomina-master-panel completo. #}
-{% render_table table %}
+{# tabla_nomina_master.html — DataTables 3.x (docs/ux/TABLES_FORMS_RELEASE_GATE.md) #}
+{# Esqueleto ESTATICO del panel Master del split-pane Master-Detail de      #}
+{# "Nominas" -- se incluye una sola vez en empleados_list.html y            #}
+{# nomina_list.js puebla <tbody> via ajax contra                           #}
+{# POST /api/v1/empleados/con-nominas/dt/ (EmpleadoViewSet.con_nominas_dt()).#}
+{# El panel Detail (#nomina-detail-panel) sigue en django-tables2 + HTMX -- #}
+{# se carga al hacer click en una fila de este Master (ver nomina_list.js). #}
+
+<table id="tabla-nomina-master" class="table table-hover align-middle mb-0 w-100">
+  <thead>
+    <tr><th>Empleado</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>

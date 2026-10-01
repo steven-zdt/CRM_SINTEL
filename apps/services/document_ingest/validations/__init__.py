@@ -16,6 +16,7 @@ Estructura:
 - gasto.py: Validador para gastos
 - inventario.py: Validador para inventario
 """
+
 from .base import BaseValidator
 from .router import (
     VALIDATORS,
@@ -35,18 +36,19 @@ def _register_default_validators():
     from .gasto import GastoValidator
     from .inventario import InventarioValidator
     from .nota_credito import NotaCreditoValidator
-    
+
     # WARNING: v2.40: IMPORTANTE - Registrar CotizacionesValidator ANTES de InventarioValidator
     # para que tenga prioridad en el override del registro
     register_validator(CotizacionesValidator())
-    
+
     # Registrar validadores de facturas
     register_validator(FacturaValidator())
     register_validator(NotaCreditoValidator())
-    
+
     # Registrar validadores de otras apps (FASE 4)
     register_validator(GastoValidator())
     register_validator(InventarioValidator())  # Este se registrará pero no overrideará cotizaciones
+
 
 # Registrar validadores por defecto
 _register_default_validators()
@@ -59,16 +61,16 @@ from .inventario import InventarioValidator
 from .nota_credito import NotaCreditoValidator
 
 __all__ = [
-    'BaseValidator',
-    'get_validator',
-    'register_validator',
-    'get_validator_by_document_type',
-    'list_validators',
-    'run_validations',
-    'VALIDATORS',
-    'FacturaValidator',
-    'NotaCreditoValidator',
-    'GastoValidator',
-    'InventarioValidator',
-    'CotizacionesValidator',
+    "BaseValidator",
+    "get_validator",
+    "register_validator",
+    "get_validator_by_document_type",
+    "list_validators",
+    "run_validations",
+    "VALIDATORS",
+    "FacturaValidator",
+    "NotaCreditoValidator",
+    "GastoValidator",
+    "InventarioValidator",
+    "CotizacionesValidator",
 ]

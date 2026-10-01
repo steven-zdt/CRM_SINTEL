@@ -166,9 +166,7 @@ class AIKnowledgeSettings(SintelTenantBaseModel):
     class Meta:
         verbose_name = "AI Knowledge Settings"
         verbose_name_plural = "AI Knowledge Settings"
-        constraints = [
-            models.UniqueConstraint(fields=["empresa"], name="uniq_aikset_empresa")
-        ]
+        constraints = [models.UniqueConstraint(fields=["empresa"], name="uniq_aikset_empresa")]
         # Django NO fusiona los indexes de la Meta abstracta (mismo gotcha
         # documentado en AIKnowledgeDocument/AIKnowledgeChunk, AI-VECTOR-03).
         indexes = [

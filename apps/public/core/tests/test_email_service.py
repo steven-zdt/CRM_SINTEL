@@ -5,13 +5,13 @@ Tests para EmailService de la aplicacion core.
 """
 
 from unittest.mock import patch
-from django.test import TestCase
-from django.core import mail
-from django.contrib.auth import get_user_model
-from django.conf import settings
 
-from apps.public.tenants.models import Client
+from django.contrib.auth import get_user_model
+from django.core import mail
+from django.test import TestCase
+
 from apps.public.core.services.email_service import EmailService
+from apps.public.tenants.models import Client
 
 
 class EmailServiceTestCase(TestCase):
@@ -44,7 +44,7 @@ class EmailServiceTestCase(TestCase):
         """
         url = "http://test_tenant.localhost/activate/abc"
         result = EmailService.send_invitation_email(self.user, self.tenant, url)
-        
+
         self.assertTrue(result)
         mock_task_delay.assert_called_once_with(self.user.pk, self.tenant.pk, url)
 
@@ -55,7 +55,7 @@ class EmailServiceTestCase(TestCase):
         """
         url = "http://test_tenant.localhost/reset/xyz"
         result = EmailService.send_password_reset_email(self.user, self.tenant, url)
-        
+
         self.assertTrue(result)
         mock_task_delay.assert_called_once_with(self.user.pk, self.tenant.pk, url)
 
@@ -66,16 +66,16 @@ class EmailServiceTestCase(TestCase):
         """
         mail.outbox = []
         url = "http://test_tenant.localhost/activate/abc"
-        
+
         result = EmailService.send_invitation_email_sync(self.user, self.tenant, url)
-        
+
         self.assertTrue(result)
         self.assertEqual(len(mail.outbox), 1)
-        
+
         sent_email = mail.outbox[0]
         self.assertEqual(sent_email.to, [self.user.email])
         self.assertIn("Activa tu cuenta", sent_email.subject)
-        
+
         # Verificar que el contenido renderiza datos del tenant y del usuario
         self.assertIn("Test Company", sent_email.body)
         self.assertIn(url, sent_email.body)
@@ -86,12 +86,12 @@ class EmailServiceTestCase(TestCase):
         """
         mail.outbox = []
         url = "http://test_tenant.localhost/reset/xyz"
-        
+
         result = EmailService.send_password_reset_email_sync(self.user, self.tenant, url)
-        
+
         self.assertTrue(result)
         self.assertEqual(len(mail.outbox), 1)
-        
+
         sent_email = mail.outbox[0]
         self.assertEqual(sent_email.to, [self.user.email])
         self.assertIn("Restablecer", sent_email.subject)

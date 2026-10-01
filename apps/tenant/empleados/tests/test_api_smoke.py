@@ -4,6 +4,7 @@ Pruebas de humo para API de empleados (DRF + multitenancy).
 Verifica que los endpoints respondan correctamente y que el aislamiento
 por esquema funcione correctamente.
 """
+
 import pytest
 from django_tenants.utils import schema_context
 
@@ -14,13 +15,14 @@ from apps.tenant.empleados.models import Empleado
 def test_empleados_list_smoke(client, admin_user, tenant):
     """
     Smoke test: lista de empleados.
-    
+
     Inserta un registro en el esquema del tenant y verifica que el endpoint
     responda correctamente (200 o 404 si aún no se incluyó el router).
     """
     # Insertar registro en el esquema del tenant
     with schema_context(tenant.schema_name):
         from apps.tenant.empresa.models import Empresa
+
         empresa = Empresa.objects.first()
         Empleado.objects.create(
             tipo_documento="CC",
@@ -33,9 +35,9 @@ def test_empleados_list_smoke(client, admin_user, tenant):
             empresa=empresa,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
-    
+
     # Autenticar usuario global (según fixtures). force_login debe escribir la
     # sesion en el esquema del tenant: sessions esta en TENANT_APPS (aislado
     # por esquema) y la request real solo la lee despues de que
@@ -45,7 +47,7 @@ def test_empleados_list_smoke(client, admin_user, tenant):
 
     # La ruta se incluirá más adelante en TENANT_URLCONF (/api/v1/empleados/)
     resp = client.get("/api/v1/empleados/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
-    
+
     # 200 si el router está incluido, 404 si aún no se incluyó
     assert resp.status_code in (200, 404), f"Expected 200 or 404, got {resp.status_code}"
 
@@ -54,7 +56,7 @@ def test_empleados_list_smoke(client, admin_user, tenant):
 def test_empleados_create_smoke(client, admin_user, tenant):
     """
     Smoke test: crear empleado.
-    
+
     Verifica que el endpoint de creación responda correctamente.
     """
     with schema_context(tenant.schema_name):
@@ -62,6 +64,7 @@ def test_empleados_create_smoke(client, admin_user, tenant):
 
     with schema_context(tenant.schema_name):
         from apps.tenant.empresa.models import Empresa
+
         empresa = Empresa.objects.first()
 
     payload = {
@@ -75,19 +78,19 @@ def test_empleados_create_smoke(client, admin_user, tenant):
         "fecha_ingreso": "2024-01-01",
         "eps": "EPS004",
         "afp": "AFP001",
-        "arl": "ARL002"
+        "arl": "ARL002",
     }
-    
+
     resp = client.post(
         "/api/v1/empleados/",
         data=payload,
         content_type="application/json",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
-    
+
     # 201 si el router está incluido y funciona, 404 si aún no se incluyó
     assert resp.status_code in (201, 404), f"Expected 201 or 404, got {resp.status_code}"
-    
+
     # Si se creó, verificar que existe en el esquema correcto
     if resp.status_code == 201:
         with schema_context(tenant.schema_name):
@@ -98,15 +101,16 @@ def test_empleados_create_smoke(client, admin_user, tenant):
 def test_empleados_multitenancy_isolation(client, admin_user, tenant, tenant_factory):
     """
     Smoke test: aislamiento multitenant.
-    
+
     Verifica que los empleados de un tenant no sean visibles desde otro tenant.
     """
     # Crear segundo tenant
     tenant2 = tenant_factory(schema_name="tenant2")
-    
+
     # Crear empleado en tenant1
     with schema_context(tenant.schema_name):
         from apps.tenant.empresa.models import Empresa
+
         empresa1 = Empresa.objects.first()
         Empleado.objects.create(
             tipo_documento="CC",
@@ -118,20 +122,21 @@ def test_empleados_multitenancy_isolation(client, admin_user, tenant, tenant_fac
             empresa=empresa1,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
-    
+
     # Crear empleado en tenant2
     with schema_context(tenant2.schema_name):
         from apps.tenant.empresa.models import Empresa
+
         empresa2 = Empresa.objects.first()
         # Ensure Empresa exists in tenant2 as tenant_factory might not run the migrations.
         if not empresa2:
             empresa2 = Empresa.objects.create(
-                razon_social='EMPRESA TEST 2',
-                nit='901234568',
-                direccion='Dir test 2',
-                telefono='3000000001'
+                razon_social="EMPRESA TEST 2",
+                nit="901234568",
+                direccion="Dir test 2",
+                telefono="3000000001",
             )
         Empleado.objects.create(
             tipo_documento="CC",
@@ -143,23 +148,20 @@ def test_empleados_multitenancy_isolation(client, admin_user, tenant, tenant_fac
             empresa=empresa2,
             eps="EPS004",
             afp="AFP001",
-            arl="ARL002"
+            arl="ARL002",
         )
-    
+
     from apps.public.tenants.models import TenantMembership
     from apps.tenant.perfil.models import TenantProfile
+
     TenantMembership.objects.get_or_create(
-        client=tenant2,
-        user=admin_user,
-        defaults={'is_active': True, 'rol': 'ADMIN'}
+        client=tenant2, user=admin_user, defaults={"is_active": True, "rol": "ADMIN"}
     )
     with schema_context(tenant2.schema_name):
         TenantProfile.objects.get_or_create(
-            user=admin_user,
-            empresa=empresa2,
-            defaults={'rol': 'ADMIN'}
+            user=admin_user, empresa=empresa2, defaults={"rol": "ADMIN"}
         )
-    
+
     # force_login debe escribir la sesion en el esquema del tenant consultado:
     # sessions esta en TENANT_APPS (aislado por esquema) y la request real
     # solo la lee despues de que TenantMainMiddleware cambia de esquema, asi

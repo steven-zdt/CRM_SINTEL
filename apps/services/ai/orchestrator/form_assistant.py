@@ -25,6 +25,7 @@ concatenado al `system` -- y el propio `system` instruye explicitamente
 al modelo a tratarlo como dato, no como instruccion a seguir si
 contradice las reglas.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,10 +35,18 @@ from django.conf import settings
 
 from apps.services.ai.context import PermissionDeniedError, build_context
 from apps.services.ai.engine import AIEngine
-from apps.services.ai.providers import AnthropicProvider
+from apps.services.ai.providers import resolve_active_llm, resolve_fallback_llm
 from apps.services.ai.tools import tool_metadata
 
 logger = logging.getLogger("ai_engine")
+
+# Fase 4 del plan de Ollama (docs/ai/OLLAMA_STATUS.md): con AI_PROVIDER=ollama
+# (Qwen3.5, modelo "thinking") 512 tokens no alcanzan ni para el razonamiento
+# interno del modelo -- la respuesta viene vacia (done_reason=length, ver
+# prueba real Fase 3). AnthropicProvider no tiene ese problema (no gasta
+# tokens en razonamiento oculto), asi que subir este numero es seguro para
+# ambos proveedores, no solo necesario para Ollama.
+_COMPLETION_MAX_TOKENS = 2000
 
 
 def _build_system_prompt() -> str:
@@ -77,19 +86,62 @@ def ask(request, message: str, *, screen: dict | None = None) -> dict:
     (Regla Absoluta 6/7: ninguna escritura se auto-aprueba).
     """
     if not bool(getattr(settings, "AI_ENABLED", False)):
-        return {"status": "PERMISSION_DENIED", "message": "AI Engine deshabilitado en este entorno."}
+        return {
+            "status": "PERMISSION_DENIED",
+            "message": "AI Engine deshabilitado en este entorno.",
+        }
 
     try:
         build_context(request, screen=screen)
     except PermissionDeniedError as exc:
         return {"status": "PERMISSION_DENIED", "message": str(exc)}
 
-    provider = AnthropicProvider()
+    # resolve_active_llm() (no get_ai_provider() directo) -- correccion
+    # 2026-09-24, Fase 10: este era el UNICO caller que todavia leia el
+    # provider sin pasar por el resolver DB-aware (agent.py/ADK ya lo usa
+    # desde Fase 5). Con AI_ADK_ENABLED=False este es el camino real que
+    # atiende /api/v1/ai/ask/ -- activar un modelo desde la consola no
+    # tenia ningun efecto aqui hasta este fix.
+    resolution = resolve_active_llm(agent_context="form_assistant")
+    system_prompt = _build_system_prompt()
+    fallback_used = False
     try:
-        response = provider.complete(_build_system_prompt(), message, max_tokens=512)
-    except RuntimeError as exc:
-        # AI_API_KEY no configurada / paquete anthropic no instalado -- error de entorno, no de negocio.
-        return {"status": "INTERNAL_ERROR", "message": str(exc)}
+        response = resolution.provider.complete(
+            system_prompt, message, max_tokens=_COMPLETION_MAX_TOKENS
+        )
+    except Exception as primary_exc:
+        # Fase 10 (Fallback, plan Seccion 28): la llamada que acaba de
+        # fallar es SOLO "decidir que tool usar" -- ninguna escritura ha
+        # ocurrido todavia (AIEngine.run_tool() se llama una sola vez, mas
+        # abajo, sin importar que provider tomo la decision). Seguro
+        # reintentar con un fallback configurado aqui; NUNCA reintentar
+        # despues de que run_tool() ya se ejecuto (Regla Absoluta "NO
+        # FALLBACK AUTOMATICO DURANTE WRITE").
+        fallback = resolve_fallback_llm(exclude_model_config_id=resolution.model_config_id)
+        if fallback is None:
+            logger.error(
+                "ai_orchestrator.primary_failed_no_fallback provider=%s error=%s",
+                resolution.provider_name,
+                primary_exc,
+            )
+            return {"status": "INTERNAL_ERROR", "message": str(primary_exc)}
+        logger.warning(
+            "ai_orchestrator.fallback_used primary=%s fallback=%s error=%s",
+            resolution.provider_name,
+            fallback.provider_name,
+            primary_exc,
+        )
+        try:
+            response = fallback.provider.complete(
+                system_prompt, message, max_tokens=_COMPLETION_MAX_TOKENS
+            )
+        except Exception as fallback_exc:
+            # Ambos fallaron -- error real de entorno, no de negocio.
+            return {
+                "status": "INTERNAL_ERROR",
+                "message": f"{resolution.provider_name} y {fallback.provider_name} fallaron: {fallback_exc}",
+            }
+        fallback_used = True
 
     raw = response.text.strip()
     if raw.startswith("```"):
@@ -99,21 +151,34 @@ def ask(request, message: str, *, screen: dict | None = None) -> dict:
         decision = json.loads(raw)
     except json.JSONDecodeError:
         logger.error("ai_orchestrator.invalid_json raw=%s", raw[:200])
-        return {"status": "INTERNAL_ERROR", "message": "El modelo no devolvio un JSON valido."}
+        return {
+            "status": "INTERNAL_ERROR",
+            "message": "El modelo no devolvio un JSON valido.",
+            "fallback_used": fallback_used,
+        }
 
     if not isinstance(decision, dict):
-        return {"status": "INTERNAL_ERROR", "message": "El modelo no devolvio un objeto JSON."}
+        return {
+            "status": "INTERNAL_ERROR",
+            "message": "El modelo no devolvio un objeto JSON.",
+            "fallback_used": fallback_used,
+        }
 
     tool_name = decision.get("tool")
     if not tool_name:
         return {
             "status": "NO_TOOL",
             "message": decision.get("reason", "Ninguna herramienta aplica a esta pregunta."),
+            "fallback_used": fallback_used,
         }
 
     arguments = decision.get("arguments") or {}
     if not isinstance(arguments, dict):
-        return {"status": "INTERNAL_ERROR", "message": "El modelo devolvio argumentos con formato invalido."}
+        return {
+            "status": "INTERNAL_ERROR",
+            "message": "El modelo devolvio argumentos con formato invalido.",
+            "fallback_used": fallback_used,
+        }
 
     result = AIEngine.run_tool(tool_name, request, screen=screen, **arguments)
 
@@ -122,4 +187,10 @@ def ask(request, message: str, *, screen: dict | None = None) -> dict:
         "tool_used": tool_name,
         "data": result.data,
         "message": result.message,
+        # Fase 10 (plan Seccion 28): "cualquier fallback real debe ser
+        # visible para el usuario cuando afecte el resultado" -- nunca
+        # oculto. Clave aditiva -- no rompe consumidores existentes que
+        # ignoran claves desconocidas (mismo contrato {status,tool_used,
+        # data,message} que ya documenta adk_router.py).
+        "fallback_used": fallback_used,
     }

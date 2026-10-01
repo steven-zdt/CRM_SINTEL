@@ -5,24 +5,21 @@ SINTEL v3.10.1: Arquitectura Service Layer Modular.
 - Hereda de BaseServiceMixin (canonical, consolidado)
 - Mantiene properties y service_* methods específicos de Proveedores
 """
+
 from apps.tenant.api.mixins import BaseServiceMixin
-from apps.tenant.proveedores.services.selectors import (
-    ProveedorSelector,
-    CuentasPagarSelector,
-    RepresentanteSelector,
-    LIST_FIELDS,
-    DETAIL_FIELDS,
-    LIST_FIELDS_REPRESENTANTE,
-    DETAIL_FIELDS_REPRESENTANTE,
-)
 from apps.tenant.proveedores.services.business_service import (
-    ProveedorBusinessService,
     CuentasPagarBusinessService,
+    ProveedorBusinessService,
     RepresentanteBusinessService,
 )
 from apps.tenant.proveedores.services.crud_service import (
     ProveedorCRUDService,
     RepresentanteCRUDService,
+)
+from apps.tenant.proveedores.services.selectors import (
+    CuentasPagarSelector,
+    ProveedorSelector,
+    RepresentanteSelector,
 )
 
 

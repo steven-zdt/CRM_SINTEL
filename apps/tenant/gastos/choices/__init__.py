@@ -10,6 +10,6 @@ from .categoria_contable import (
 )
 
 __all__ = [
-    'CATEGORIA_CONTABLE_CHOICES',
-    'get_categoria_contable_choices',
+    "CATEGORIA_CONTABLE_CHOICES",
+    "get_categoria_contable_choices",
 ]

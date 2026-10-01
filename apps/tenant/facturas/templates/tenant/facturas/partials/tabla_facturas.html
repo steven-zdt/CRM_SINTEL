@@ -1,25 +1,46 @@
-{% load django_tables2 %}
-{% comment %}
-Fragmento HTMX: filtros rapidos de pago + tabla de Facturas (Ventas o Compras
-segun la naturaleza de la vista). Reemplaza el panel completo en cada
-busqueda/filtro/orden/paginacion/evento facturaGuardada.
-{% endcomment %}
+{# tabla_facturas.html — DataTables 3.x (mismo patron ya validado en Ventas/ #}
+{# Bancos, ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Esqueleto #}
+{# ESTATICO parametrizado (table_id/tipo) -- se incluye 2 veces en          #}
+{# list_factura.html (Ventas/Compras), cada instancia poblada via ajax por  #}
+{# facturas_list.js contra POST /api/v1/facturas/dt/?naturaleza=<tipo>.     #}
+{# Indices de columna deben coincidir 1:1 con fields_map/column_filters de  #}
+{# FacturaViewSet.dt(). La fila de filtros por columna NO va aqui como HTML #}
+{# estatico -- se construye e inserta en JS despues de crear el DataTable   #}
+{# (DataTables reescribe el <thead> completo al iniciarse y la destruiria). #}
 
-<div class="d-flex gap-1 px-1 pt-2 pb-1 flex-wrap align-items-center border-bottom" style="background:#fafafa;">
+<div class="d-flex gap-1 px-1 pt-2 pb-1 flex-wrap align-items-center border-bottom" style="background:#fafafa;"
+     data-filtros-pago="{{ table_id }}">
   <span class="text-muted me-1" style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.04em;">Pago:</span>
-  {% for f in filtros_pago %}
-    <button type="button"
-            class="btn btn-xs {{ f.clase }}{% if f.activo %} active{% endif %}"
-            style="font-size:0.73rem;padding:2px 8px;"
-            hx-get="{{ tabla_url }}{% if f.valor %}?estado_pago={{ f.valor }}{% endif %}"
-            hx-target="closest div[data-facturas-panel]"
-            hx-include="#search-factura"
-            hx-swap="innerHTML">
-      <i class="bi {{ f.icono }} me-1"></i>{{ f.etiqueta }}
-    </button>
-  {% endfor %}
+  <button type="button" class="btn btn-xs btn-outline-dark active" style="font-size:0.73rem;padding:2px 8px;" data-estado-pago="">
+    <i class="bi bi-list me-1"></i>Todas
+  </button>
+  <button type="button" class="btn btn-xs btn-outline-danger" style="font-size:0.73rem;padding:2px 8px;" data-estado-pago="NO_PAGADA">
+    <i class="bi bi-exclamation-circle me-1"></i>Pendientes
+  </button>
+  <button type="button" class="btn btn-xs btn-outline-warning" style="font-size:0.73rem;padding:2px 8px;" data-estado-pago="PAGO_PARCIAL">
+    <i class="bi bi-clock-history me-1"></i>Parcial
+  </button>
+  <button type="button" class="btn btn-xs btn-outline-success" style="font-size:0.73rem;padding:2px 8px;" data-estado-pago="PAGADA">
+    <i class="bi bi-check2-all me-1"></i>Pagadas
+  </button>
 </div>
 
-<div class="w-100" style="max-width:100%; overflow-x:auto;">
-  {% render_table table %}
+<div class="border rounded-bottom bg-white">
+  <div class="w-100" style="max-width:100%; overflow-x:auto;">
+    <table id="{{ table_id }}" class="table table-hover align-middle mb-0 w-100" data-naturaleza="{{ tipo }}">
+      <thead>
+        <tr>
+          <th>Factura</th>
+          <th>Cliente / Proveedor</th>
+          <th>Vencimiento</th>
+          <th class="text-end">Total</th>
+          <th>DIAN</th>
+          <th>Pago</th>
+          <th>Cot.</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>

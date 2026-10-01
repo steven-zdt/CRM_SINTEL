@@ -15,6 +15,7 @@ apps/tenant/dashboard/services/extractores/facturas_ext.py para "facturas
 reales" (documentos rechazados/borrador no representan una obligacion fiscal
 real).
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -37,13 +38,28 @@ _DATASET_ID = "tax.iva"
 
 _DIMENSIONS = (
     ReportField("fecha", "Fecha", FieldType.DATE, source="factura__fecha_emision__date"),
-    ReportField("naturaleza", "Naturaleza (VENTA=generado, COMPRA=descontable)", FieldType.STRING, source="factura__naturaleza"),
+    ReportField(
+        "naturaleza",
+        "Naturaleza (VENTA=generado, COMPRA=descontable)",
+        FieldType.STRING,
+        source="factura__naturaleza",
+    ),
 )
 
 _MEASURES = (
-    ReportMeasure("cantidad_lineas", "Cantidad de lineas", FieldType.INTEGER, Aggregation.COUNT, source="id"),
-    ReportMeasure("base_imponible", "Base imponible", FieldType.DECIMAL, Aggregation.SUM, source="base_imponible"),
-    ReportMeasure("valor_iva", "Valor IVA", FieldType.DECIMAL, Aggregation.SUM, source="valor_impuesto"),
+    ReportMeasure(
+        "cantidad_lineas", "Cantidad de lineas", FieldType.INTEGER, Aggregation.COUNT, source="id"
+    ),
+    ReportMeasure(
+        "base_imponible",
+        "Base imponible",
+        FieldType.DECIMAL,
+        Aggregation.SUM,
+        source="base_imponible",
+    ),
+    ReportMeasure(
+        "valor_iva", "Valor IVA", FieldType.DECIMAL, Aggregation.SUM, source="valor_impuesto"
+    ),
 )
 
 _FILTERS = (
@@ -102,22 +118,28 @@ class FacturasTaxReportProvider:
         measures = request.measures or tuple(m.name for m in _MEASURES)
 
         group_sources = {name: _DATASET.get_dimension(name).source for name in group_by}
-        annotations = {name: _AGGREGATORS[name](_DATASET.get_measure(name).source) for name in measures}
+        annotations = {
+            name: _AGGREGATORS[name](_DATASET.get_measure(name).source) for name in measures
+        }
 
         values_qs = qs.values(*group_sources.values()).annotate(**annotations)
 
         if request.order_by:
             order_field = request.order_by.lstrip("-")
             prefix = "-" if request.order_by.startswith("-") else ""
-            resolved = group_sources.get(order_field, order_field if order_field in measures else None)
+            resolved = group_sources.get(
+                order_field, order_field if order_field in measures else None
+            )
             if resolved:
                 values_qs = values_qs.order_by(f"{prefix}{resolved}")
         else:
-            values_qs = values_qs.order_by(*[f"-{s}" for s in group_sources.values()][:1] or ["-factura__fecha_emision__date"])
+            values_qs = values_qs.order_by(
+                *[f"-{s}" for s in group_sources.values()][:1] or ["-factura__fecha_emision__date"]
+            )
 
         count = values_qs.count()
         start = (request.page - 1) * request.page_size
-        page_rows = list(values_qs[start:start + request.page_size])
+        page_rows = list(values_qs[start : start + request.page_size])
 
         rows = []
         for raw in page_rows:
@@ -139,8 +161,12 @@ class FacturasTaxReportProvider:
         # ambas medidas estan presentes -- no se inventa si el usuario pidio
         # un subconjunto de medidas.
         if "valor_iva" in measures and not request.group_by:
-            generado = qs.filter(factura__naturaleza="VENTA").aggregate(t=Sum("valor_impuesto"))["t"] or Decimal("0")
-            descontable = qs.filter(factura__naturaleza="COMPRA").aggregate(t=Sum("valor_impuesto"))["t"] or Decimal("0")
+            generado = qs.filter(factura__naturaleza="VENTA").aggregate(t=Sum("valor_impuesto"))[
+                "t"
+            ] or Decimal("0")
+            descontable = qs.filter(factura__naturaleza="COMPRA").aggregate(
+                t=Sum("valor_impuesto")
+            )["t"] or Decimal("0")
             totals["iva_generado"] = float(generado)
             totals["iva_descontable"] = float(descontable)
             totals["saldo_fiscal_calculado"] = float(generado - descontable)

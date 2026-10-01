@@ -7,6 +7,7 @@ WARNING: IMPORTANTE: Estos modelos están en TENANT_APPS, por lo que:
 - django-tenants maneja automáticamente el aislamiento por esquema
 - No es necesario filtrar manualmente por tenant_id
 """
+
 import uuid
 from decimal import Decimal
 
@@ -15,26 +16,25 @@ from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
 
 from apps.tenant.core.models import SintelTenantBaseModel
-from apps.tenant.empresa.models import Empresa  # SSoT empresa (singleton por tenant)
 
 # ============================================================================
 # CHOICES - Normativa Colombiana (NIIF PYMES)
 # ============================================================================
 
 TIPO_COMPROBANTE_CHOICES = [
-    ('FVE', _('Factura de Venta Electrónica')),
-    ('CE', _('Comprobante de Egreso')),
-    ('RC', _('Recibo de Caja')),
-    ('GN', _('Nota General')),
-    ('ND', _('Nota Débito')),
-    ('NC', _('Nota Crédito')),
+    ("FVE", _("Factura de Venta Electrónica")),
+    ("CE", _("Comprobante de Egreso")),
+    ("RC", _("Recibo de Caja")),
+    ("GN", _("Nota General")),
+    ("ND", _("Nota Débito")),
+    ("NC", _("Nota Crédito")),
 ]
 
 TIPO_TERCERO_CHOICES = [
-    ('CLIENTE', _('Cliente')),
-    ('PROVEEDOR', _('Proveedor')),
-    ('EMPLEADO', _('Empleado')),
-    ('OTRO', _('Otro Tercero')),
+    ("CLIENTE", _("Cliente")),
+    ("PROVEEDOR", _("Proveedor")),
+    ("EMPLEADO", _("Empleado")),
+    ("OTRO", _("Otro Tercero")),
 ]
 
 
@@ -44,70 +44,78 @@ class CatalogoMaestroNIIF(SintelTenantBaseModel):
     Solo requiere 'codigo'; nombre/nivel/naturaleza son editable=False (auto-seteados desde catalogo).
     Poblar con: python manage.py poblar_catalogo_niif
     """
+
     NATURALEZA_CHOICES = [
-        ('D', _('Débito/Deudora')),
-        ('C', _('Crédito/Acreedora')),
+        ("D", _("Débito/Deudora")),
+        ("C", _("Crédito/Acreedora")),
     ]
-    
+
     codigo = models.CharField(
         max_length=20,
         unique=True,
-        verbose_name=_('Código NIIF'),
-        help_text=_('Código oficial de la cuenta según NIIF Colombia')
+        verbose_name=_("Código NIIF"),
+        help_text=_("Código oficial de la cuenta según NIIF Colombia"),
     )
     nombre = models.CharField(
         max_length=200,
         editable=False,
-        verbose_name=_('Nombre Oficial'),
-        help_text=_('Nombre oficial de la cuenta según NIIF Colombia (auto-seteado desde catálogo)')
+        verbose_name=_("Nombre Oficial"),
+        help_text=_(
+            "Nombre oficial de la cuenta según NIIF Colombia (auto-seteado desde catálogo)"
+        ),
     )
     nivel = models.IntegerField(
         editable=False,
-        verbose_name=_('Nivel'),
-        help_text=_('Nivel de la cuenta: 1 (Clase), 2 (Grupo), 4 (Cuenta), 6 (Subcuenta) (auto-seteado desde catálogo)')
+        verbose_name=_("Nivel"),
+        help_text=_(
+            "Nivel de la cuenta: 1 (Clase), 2 (Grupo), 4 (Cuenta), 6 (Subcuenta) (auto-seteado desde catálogo)"
+        ),
     )
     naturaleza = models.CharField(
         max_length=1,
         choices=NATURALEZA_CHOICES,
         editable=False,
-        verbose_name=_('Naturaleza'),
-        help_text=_('Naturaleza de la cuenta: D (Débito/Deudora), C (Crédito/Acreedora) (auto-seteado desde catálogo)')
+        verbose_name=_("Naturaleza"),
+        help_text=_(
+            "Naturaleza de la cuenta: D (Débito/Deudora), C (Crédito/Acreedora) (auto-seteado desde catálogo)"
+        ),
     )
     activa = models.BooleanField(
         default=True,
-        verbose_name=_('Activa'),
-        help_text=_('Indica si la cuenta está activa en el catálogo')
+        verbose_name=_("Activa"),
+        help_text=_("Indica si la cuenta está activa en el catálogo"),
     )
+
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Catálogo Maestro NIIF')
-        verbose_name_plural = _('Catálogo Maestro NIIF')
-        ordering = ['codigo']
+        verbose_name = _("Catálogo Maestro NIIF")
+        verbose_name_plural = _("Catálogo Maestro NIIF")
+        ordering = ["codigo"]
         indexes = SintelTenantBaseModel.Meta.indexes + [
-            models.Index(fields=['codigo']),
-            models.Index(fields=['nivel']),
+            models.Index(fields=["codigo"]),
+            models.Index(fields=["nivel"]),
         ]
-    
+
     def __str__(self):
         return f"{self.codigo} - {self.nombre}"
 
     def get_tipo_cuenta(self):
         """
         Determina el tipo de cuenta basado en el primer dígito del código.
-        
+
         Returns:
             str: ACTIVO, PASIVO, PATRIMONIO, INGRESO, GASTO, COSTO
         """
         if not self.codigo:
             return None
-        
+
         primer_digito = self.codigo[0]
         tipos = {
-            '1': 'ACTIVO',
-            '2': 'PASIVO',
-            '3': 'PATRIMONIO',
-            '4': 'INGRESO',
-            '5': 'GASTO',
-            '6': 'COSTO',
+            "1": "ACTIVO",
+            "2": "PASIVO",
+            "3": "PATRIMONIO",
+            "4": "INGRESO",
+            "5": "GASTO",
+            "6": "COSTO",
         }
         return tipos.get(primer_digito)
 
@@ -115,85 +123,76 @@ class CatalogoMaestroNIIF(SintelTenantBaseModel):
 class CuentaContable(SintelTenantBaseModel):
     """
     Plan de cuentas contables (por tenant).
-    
+
     Cada tenant tiene su propio plan de cuentas.
     """
+
     TIPO_CUENTA_CHOICES = [
-        ('ACTIVO', _('Activo')),
-        ('PASIVO', _('Pasivo')),
-        ('PATRIMONIO', _('Patrimonio')),
-        ('INGRESO', _('Ingreso')),
-        ('GASTO', _('Gasto')),
+        ("ACTIVO", _("Activo")),
+        ("PASIVO", _("Pasivo")),
+        ("PATRIMONIO", _("Patrimonio")),
+        ("INGRESO", _("Ingreso")),
+        ("GASTO", _("Gasto")),
     ]
-    
+
     # WARNING: v2.37: UUID para lookup público (no expone PK interno)
     uuid = models.UUIDField(
         default=uuid.uuid4,
         editable=False,
         unique=True,
         db_index=True,
-        verbose_name=_('UUID'),
-        help_text=_('Identificador único público para la API')
+        verbose_name=_("UUID"),
+        help_text=_("Identificador único público para la API"),
     )
-    
+
     codigo = models.CharField(
         max_length=20,
         unique=True,
-        verbose_name=_('Código'),
-        help_text=_('Código único de la cuenta contable')
+        verbose_name=_("Código"),
+        help_text=_("Código único de la cuenta contable"),
     )
     nombre = models.CharField(
-        max_length=200,
-        verbose_name=_('Nombre'),
-        help_text=_('Nombre de la cuenta contable')
+        max_length=200, verbose_name=_("Nombre"), help_text=_("Nombre de la cuenta contable")
     )
     tipo = models.CharField(
-        max_length=20,
-        choices=TIPO_CUENTA_CHOICES,
-        verbose_name=_('Tipo de Cuenta')
+        max_length=20, choices=TIPO_CUENTA_CHOICES, verbose_name=_("Tipo de Cuenta")
     )
-    descripcion = models.TextField(
-        blank=True,
-        null=True,
-        verbose_name=_('Descripción')
-    )
+    descripcion = models.TextField(blank=True, null=True, verbose_name=_("Descripción"))
     nivel = models.PositiveSmallIntegerField(
-        default=1,
-        verbose_name=_('Nivel'),
-        help_text=_('Nivel jerárquico de la cuenta (1-6)')
+        default=1, verbose_name=_("Nivel"), help_text=_("Nivel jerárquico de la cuenta (1-6)")
     )
     cuenta_padre = models.ForeignKey(
-        'self',
+        "self",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
-        related_name='cuentas_hijas',
-        verbose_name=_('Cuenta Padre'),
-        help_text=_('Cuenta contable padre (para jerarquía)')
+        related_name="cuentas_hijas",
+        verbose_name=_("Cuenta Padre"),
+        help_text=_("Cuenta contable padre (para jerarquía)"),
     )
     catalogo_referencia = models.ForeignKey(
-        'CatalogoMaestroNIIF',
+        "CatalogoMaestroNIIF",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
-        related_name='cuentas_vinculadas',
-        verbose_name=_('Referencia Catálogo NIIF'),
-        help_text=_('Vínculo con el catálogo maestro oficial NIIF')
+        related_name="cuentas_vinculadas",
+        verbose_name=_("Referencia Catálogo NIIF"),
+        help_text=_("Vínculo con el catálogo maestro oficial NIIF"),
     )
     activa = models.BooleanField(
         default=True,
-        verbose_name=_('Activa'),
-        help_text=_('Indica si la cuenta está habilitada para registros')
+        verbose_name=_("Activa"),
+        help_text=_("Indica si la cuenta está habilitada para registros"),
     )
 
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Cuenta Contable')
-        verbose_name_plural = _('Cuentas Contables')
-        ordering = ['codigo']
+        verbose_name = _("Cuenta Contable")
+        verbose_name_plural = _("Cuentas Contables")
+        ordering = ["codigo"]
         indexes = SintelTenantBaseModel.Meta.indexes + [
-            models.Index(fields=['nivel']),  # WARNING: NORMATIVA: Índice para validación de nivel
+            models.Index(fields=["nivel"]),  # WARNING: NORMATIVA: Índice para validación de nivel
         ]
-    
+
     def __str__(self):
         return f"{self.codigo} - {self.nombre}"
 
@@ -203,21 +202,24 @@ class TipoComprobante(SintelTenantBaseModel):
     Define los tipos de documentos contables (plantillas).
     Permite prefijos y consecutivos dinámicos por tipo (ej: CC, RC, ND).
     """
+
     # Identificador público v3.5
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, db_index=True)
-    
-    codigo = models.CharField(max_length=10, verbose_name=_('Código/Sigla'))
-    nombre = models.CharField(max_length=100, verbose_name=_('Nombre del Comprobante'))
-    prefijo = models.CharField(max_length=5, blank=True, null=True, verbose_name=_('Prefijo'))
-    consecutivo_actual = models.PositiveIntegerField(default=1, verbose_name=_('Consecutivo Actual'))
-    
-    activa = models.BooleanField(default=True, verbose_name=_('Activa'))
+
+    codigo = models.CharField(max_length=10, verbose_name=_("Código/Sigla"))
+    nombre = models.CharField(max_length=100, verbose_name=_("Nombre del Comprobante"))
+    prefijo = models.CharField(max_length=5, blank=True, null=True, verbose_name=_("Prefijo"))
+    consecutivo_actual = models.PositiveIntegerField(
+        default=1, verbose_name=_("Consecutivo Actual")
+    )
+
+    activa = models.BooleanField(default=True, verbose_name=_("Activa"))
 
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Tipo de Comprobante')
-        verbose_name_plural = _('Tipos de Comprobante')
-        ordering = ['codigo']
-        unique_together = [['empresa', 'codigo']]
+        verbose_name = _("Tipo de Comprobante")
+        verbose_name_plural = _("Tipos de Comprobante")
+        ordering = ["codigo"]
+        unique_together = [["empresa", "codigo"]]
 
     def __str__(self):
         return f"{self.codigo} - {self.nombre}"
@@ -242,7 +244,7 @@ class TipoComprobante(SintelTenantBaseModel):
             locked = TipoComprobante.objects.select_for_update().get(pk=self.pk)
             numero = str(locked.consecutivo_actual).zfill(5)
             locked.consecutivo_actual += 1
-            locked.save(update_fields=['consecutivo_actual'])
+            locked.save(update_fields=["consecutivo_actual"])
         self.consecutivo_actual = locked.consecutivo_actual
         return f"{locked.prefijo}{numero}" if locked.prefijo else numero
 
@@ -255,10 +257,11 @@ class AsientoContable(SintelTenantBaseModel):
 
     v3.0: Integración centralizada — trazabilidad a documento origen + soporte reversales
     """
+
     ESTADO_CHOICES = [
-        ('BORRADOR', _('Borrador')),
-        ('APROBADO', _('Aprobado')),
-        ('CERRADO', _('Cerrado')),
+        ("BORRADOR", _("Borrador")),
+        ("APROBADO", _("Aprobado")),
+        ("CERRADO", _("Cerrado")),
     ]
 
     # WARNING: v2.37: UUID para lookup público (no expone PK interno)
@@ -267,28 +270,22 @@ class AsientoContable(SintelTenantBaseModel):
         editable=False,
         unique=True,
         db_index=True,
-        verbose_name=_('UUID'),
-        help_text=_('Identificador único público para la API')
+        verbose_name=_("UUID"),
+        help_text=_("Identificador único público para la API"),
     )
 
     numero = models.CharField(
         max_length=50,
         unique=True,
-        verbose_name=_('Número de Asiento'),
-        help_text=_('Número único del asiento (auto-generado)')
+        verbose_name=_("Número de Asiento"),
+        help_text=_("Número único del asiento (auto-generado)"),
     )
-    fecha = models.DateField(
-        verbose_name=_('Fecha del Asiento')
-    )
+    fecha = models.DateField(verbose_name=_("Fecha del Asiento"))
     descripcion = models.TextField(
-        verbose_name=_('Descripción'),
-        help_text=_('Descripción del asiento contable')
+        verbose_name=_("Descripción"), help_text=_("Descripción del asiento contable")
     )
     estado = models.CharField(
-        max_length=20,
-        choices=ESTADO_CHOICES,
-        default='BORRADOR',
-        verbose_name=_('Estado')
+        max_length=20, choices=ESTADO_CHOICES, default="BORRADOR", verbose_name=_("Estado")
     )
 
     # WARNING: NORMATIVA: Tipo de comprobante para trazabilidad
@@ -297,24 +294,24 @@ class AsientoContable(SintelTenantBaseModel):
         choices=TIPO_COMPROBANTE_CHOICES,
         blank=True,
         null=True,
-        verbose_name=_('Tipo de Comprobante (Legado)'),
-        help_text=_('Tipo de documento que originó el asiento (FVE, CE, RC, GN, ND, NC)')
+        verbose_name=_("Tipo de Comprobante (Legado)"),
+        help_text=_("Tipo de documento que originó el asiento (FVE, CE, RC, GN, ND, NC)"),
     )
     tipo_comprobante_ref = models.ForeignKey(
-        'TipoComprobante',
+        "TipoComprobante",
         on_delete=models.PROTECT,
         blank=True,
         null=True,
-        related_name='asientos',
-        verbose_name=_('Tipo de Comprobante'),
-        help_text=_('Vínculo dinámico a la plantilla de comprobante')
+        related_name="asientos",
+        verbose_name=_("Tipo de Comprobante"),
+        help_text=_("Vínculo dinámico a la plantilla de comprobante"),
     )
     numero_comprobante = models.CharField(
         max_length=50,
         blank=True,
         null=True,
-        verbose_name=_('Número de Comprobante'),
-        help_text=_('Número del comprobante que originó el asiento')
+        verbose_name=_("Número de Comprobante"),
+        help_text=_("Número del comprobante que originó el asiento"),
     )
 
     # v3.0: Trazabilidad a documento origen (idempotencia)
@@ -322,96 +319,100 @@ class AsientoContable(SintelTenantBaseModel):
         max_length=30,
         blank=True,
         null=True,
-        verbose_name=_('App de Origen'),
-        help_text=_('App que generó el asiento: facturas, gastos, empleados, inventario')
+        verbose_name=_("App de Origen"),
+        help_text=_("App que generó el asiento: facturas, gastos, empleados, inventario"),
     )
     documento_origen_modelo = models.CharField(
         max_length=50,
         blank=True,
         null=True,
-        verbose_name=_('Modelo de Origen'),
-        help_text=_('Modelo que generó el asiento: Factura, DocumentoSoporte, Devengo')
+        verbose_name=_("Modelo de Origen"),
+        help_text=_("Modelo que generó el asiento: Factura, DocumentoSoporte, Devengo"),
     )
     documento_origen_id = models.PositiveIntegerField(
         blank=True,
         null=True,
-        verbose_name=_('ID del Documento Origen'),
-        help_text=_('PK en la app de origen')
+        verbose_name=_("ID del Documento Origen"),
+        help_text=_("PK en la app de origen"),
     )
     documento_origen_numero = models.CharField(
         max_length=50,
         blank=True,
         null=True,
-        verbose_name=_('Número del Documento Origen'),
-        help_text=_('Número visible del documento origen (factura, recibo, etc.)')
+        verbose_name=_("Número del Documento Origen"),
+        help_text=_("Número visible del documento origen (factura, recibo, etc.)"),
     )
     documento_origen_reversado = models.BooleanField(
         default=False,
-        verbose_name=_('Es Reversal'),
-        help_text=_('Indica si este asiento es reversal de otro')
+        verbose_name=_("Es Reversal"),
+        help_text=_("Indica si este asiento es reversal de otro"),
     )
     asiento_reversado = models.ForeignKey(
-        'self',
+        "self",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
-        related_name='reversales',
-        verbose_name=_('Asiento Reversado'),
-        help_text=_('Asiento original que fue reversado por este')
+        related_name="reversales",
+        verbose_name=_("Asiento Reversado"),
+        help_text=_("Asiento original que fue reversado por este"),
     )
     periodo_contable = models.ForeignKey(
-        'PeriodoContable',
+        "PeriodoContable",
         on_delete=models.PROTECT,
         blank=True,
         null=True,
-        related_name='asientos',
-        verbose_name=_('Periodo Contable'),
-        help_text=_('Período contable al que pertenece el asiento')
+        related_name="asientos",
+        verbose_name=_("Periodo Contable"),
+        help_text=_("Período contable al que pertenece el asiento"),
     )
 
     # Totales (deben cuadrar: debe = haber) - WARNING: NORMATIVA: Partida Doble Estricta
     debe_total = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Total Débito')
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Total Débito"),
     )
     haber_total = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Total Crédito')
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Total Crédito"),
     )
 
     # Legado: mantener compatibilidad
     total_debe = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Total Débito (legado)'),
-        editable=False
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Total Débito (legado)"),
+        editable=False,
     )
     total_haber = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Total Crédito (legado)'),
-        editable=False
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Total Crédito (legado)"),
+        editable=False,
     )
 
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Asiento Contable')
-        verbose_name_plural = _('Asientos Contables')
-        ordering = ['-fecha', '-numero']
+        verbose_name = _("Asiento Contable")
+        verbose_name_plural = _("Asientos Contables")
+        ordering = ["-fecha", "-numero"]
         indexes = SintelTenantBaseModel.Meta.indexes + [
-            models.Index(fields=['fecha']),
-            models.Index(fields=['estado']),
-            models.Index(fields=['tipo_comprobante', 'numero_comprobante']),  # WARNING: NORMATIVA: Trazabilidad
-            models.Index(fields=['documento_origen_app', 'documento_origen_modelo', 'documento_origen_id']),  # v3.0: Idempotencia
+            models.Index(fields=["fecha"]),
+            models.Index(fields=["estado"]),
+            models.Index(
+                fields=["tipo_comprobante", "numero_comprobante"]
+            ),  # WARNING: NORMATIVA: Trazabilidad
+            models.Index(
+                fields=["documento_origen_app", "documento_origen_modelo", "documento_origen_id"]
+            ),  # v3.0: Idempotencia
         ]
         # WARNING: [PERF-C1] Respaldo de idempotencia a nivel de base de datos.
         # Contabilizador._validar_no_existe() ya verifica con un .exists() antes de
@@ -422,9 +423,16 @@ class AsientoContable(SintelTenantBaseModel):
         # mismo documento_origen_* que el asiento original (ver Contabilizador.reversar_asiento).
         constraints = [
             models.UniqueConstraint(
-                fields=['empresa', 'documento_origen_app', 'documento_origen_modelo', 'documento_origen_id'],
-                condition=models.Q(documento_origen_reversado=False, documento_origen_id__isnull=False),
-                name='uniq_asiento_documento_origen_no_reversado',
+                fields=[
+                    "empresa",
+                    "documento_origen_app",
+                    "documento_origen_modelo",
+                    "documento_origen_id",
+                ],
+                condition=models.Q(
+                    documento_origen_reversado=False, documento_origen_id__isnull=False
+                ),
+                name="uniq_asiento_documento_origen_no_reversado",
             ),
         ]
 
@@ -446,19 +454,20 @@ class MovimientoContable(SintelTenantBaseModel):
 
     v3.0: Integración centralizada — soporte para centro_costo_id + cuenta_codigo directo
     """
+
     asiento = models.ForeignKey(
         AsientoContable,
         on_delete=models.CASCADE,
-        related_name='movimientos',
-        verbose_name=_('Asiento')
+        related_name="movimientos",
+        verbose_name=_("Asiento"),
     )
     # v3.0: Direct cuenta_codigo lookup (para resolver cuentas sin FK)
     cuenta_codigo = models.CharField(
         max_length=20,
         blank=True,
         null=True,
-        verbose_name=_('Código de Cuenta'),
-        help_text=_('Código PUC de la cuenta (ej: 130505). Si se completa, se usa en lugar de FK.')
+        verbose_name=_("Código de Cuenta"),
+        help_text=_("Código PUC de la cuenta (ej: 130505). Si se completa, se usa en lugar de FK."),
     )
     # Legado: FK a CuentaContable
     cuenta = models.ForeignKey(
@@ -466,211 +475,210 @@ class MovimientoContable(SintelTenantBaseModel):
         on_delete=models.PROTECT,
         blank=True,
         null=True,
-        verbose_name=_('Cuenta Contable'),
-        help_text=_('Cuenta contable (debe ser de nivel 6 según normativa). Legado si cuenta_codigo está presente.')
+        verbose_name=_("Cuenta Contable"),
+        help_text=_(
+            "Cuenta contable (debe ser de nivel 6 según normativa). Legado si cuenta_codigo está presente."
+        ),
     )
     tipo_tercero = models.CharField(
         max_length=20,
         choices=TIPO_TERCERO_CHOICES,
         blank=True,
         null=True,
-        verbose_name=_('Tipo de Tercero'),
-        help_text=_('Tipo de tercero asociado al movimiento (obligatorio para medios magnéticos)')
+        verbose_name=_("Tipo de Tercero"),
+        help_text=_("Tipo de tercero asociado al movimiento (obligatorio para medios magnéticos)"),
     )
     tercero_id = models.PositiveIntegerField(
         blank=True,
         null=True,
-        verbose_name=_('ID del Tercero'),
-        help_text=_('ID del tercero (Cliente, Proveedor, Empleado u otro)')
+        verbose_name=_("ID del Tercero"),
+        help_text=_("ID del tercero (Cliente, Proveedor, Empleado u otro)"),
     )
     tercero_nit = models.CharField(
         max_length=32,
         blank=True,
         null=True,
-        verbose_name=_('NIT/CC del Tercero'),
-        help_text=_('Número de identificación del tercero (NIT, CC, CE, etc.)')
+        verbose_name=_("NIT/CC del Tercero"),
+        help_text=_("Número de identificación del tercero (NIT, CC, CE, etc.)"),
     )
     tercero_razon_social = models.CharField(
         max_length=200,
         blank=True,
         null=True,
-        verbose_name=_('Razón Social del Tercero'),
-        help_text=_('Nombre o razón social del tercero')
+        verbose_name=_("Razón Social del Tercero"),
+        help_text=_("Nombre o razón social del tercero"),
     )
     debe = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Débito')
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Débito"),
     )
     haber = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Crédito')
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Crédito"),
     )
     descripcion = models.TextField(
         blank=True,
         null=True,
-        verbose_name=_('Descripción'),
-        help_text=_('Descripción del movimiento')
+        verbose_name=_("Descripción"),
+        help_text=_("Descripción del movimiento"),
     )
     # v3.0: Centro de costo para análisis por proyecto (sin FK — referencia desacoplada)
     centro_costo_id = models.PositiveIntegerField(
         blank=True,
         null=True,
-        verbose_name=_('ID del Centro de Costo'),
-        help_text=_('ID del proyecto/centro de costo (sin FK — referencia desacoplada)')
+        verbose_name=_("ID del Centro de Costo"),
+        help_text=_("ID del proyecto/centro de costo (sin FK — referencia desacoplada)"),
     )
     base_iva = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        verbose_name=_('Base IVA'),
-        help_text=_('Base gravable para cálculo de IVA')
+        default=Decimal("0.00"),
+        verbose_name=_("Base IVA"),
+        help_text=_("Base gravable para cálculo de IVA"),
     )
     iva_generado = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        verbose_name=_('IVA Generado'),
-        help_text=_('IVA generado (cuenta 240805)')
+        default=Decimal("0.00"),
+        verbose_name=_("IVA Generado"),
+        help_text=_("IVA generado (cuenta 240805)"),
     )
     iva_descontable = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        verbose_name=_('IVA Descontable'),
-        help_text=_('IVA descontable (cuenta 240810)')
+        default=Decimal("0.00"),
+        verbose_name=_("IVA Descontable"),
+        help_text=_("IVA descontable (cuenta 240810)"),
     )
     retefuente = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        verbose_name=_('Retención en la Fuente'),
-        help_text=_('Retención en la fuente (cuenta 2365)')
+        default=Decimal("0.00"),
+        verbose_name=_("Retención en la Fuente"),
+        help_text=_("Retención en la fuente (cuenta 2365)"),
     )
     reteica = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        verbose_name=_('Retención ICA'),
-        help_text=_('Retención ICA (cuenta 2368)')
+        default=Decimal("0.00"),
+        verbose_name=_("Retención ICA"),
+        help_text=_("Retención ICA (cuenta 2368)"),
     )
     orden = models.IntegerField(
-        default=1,
-        verbose_name=_('Orden'),
-        help_text=_('Orden del movimiento en el asiento')
+        default=1, verbose_name=_("Orden"), help_text=_("Orden del movimiento en el asiento")
     )
 
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Movimiento Contable')
-        verbose_name_plural = _('Movimientos Contables')
-        ordering = ['asiento', 'orden']
+        verbose_name = _("Movimiento Contable")
+        verbose_name_plural = _("Movimientos Contables")
+        ordering = ["asiento", "orden"]
         indexes = SintelTenantBaseModel.Meta.indexes + [
-            models.Index(fields=['asiento', 'orden']),
-            models.Index(fields=['cuenta']),
-            models.Index(fields=['cuenta_codigo']),  # v3.0: índice para resolución directa
-            models.Index(fields=['tipo_tercero', 'tercero_id']),
-            models.Index(fields=['tercero_nit']),
-            models.Index(fields=['centro_costo_id']),  # v3.0: índice para reportes por proyecto
+            models.Index(fields=["asiento", "orden"]),
+            models.Index(fields=["cuenta"]),
+            models.Index(fields=["cuenta_codigo"]),  # v3.0: índice para resolución directa
+            models.Index(fields=["tipo_tercero", "tercero_id"]),
+            models.Index(fields=["tercero_nit"]),
+            models.Index(fields=["centro_costo_id"]),  # v3.0: índice para reportes por proyecto
         ]
 
     def __str__(self):
-        cuenta_str = self.cuenta_codigo or (self.cuenta.codigo if self.cuenta else '?')
-        return f"{self.asiento.numero} - {cuenta_str} - {self.tercero_razon_social or 'Sin tercero'}"
+        cuenta_str = self.cuenta_codigo or (self.cuenta.codigo if self.cuenta else "?")
+        return (
+            f"{self.asiento.numero} - {cuenta_str} - {self.tercero_razon_social or 'Sin tercero'}"
+        )
+
 
 class PeriodoContable(SintelTenantBaseModel):
     """
     Periodo contable cerrado (por tenant).
-    
+
     WARNING: v2.60 Fase 3: Inmutabilidad de Periodos Cerrados
     - Una vez cerrado un periodo, no se pueden editar/anular documentos en ese rango de fechas
     - Bloquea edición/anulación de Facturas y Gastos en periodos cerrados
     """
+
     ESTADO_CHOICES = [
-        ('ABIERTO', _('Abierto')),
-        ('CERRADO', _('Cerrado')),
+        ("ABIERTO", _("Abierto")),
+        ("CERRADO", _("Cerrado")),
     ]
-    
+
     # WARNING: v2.61: UUID para lookup público en API
     uuid = models.UUIDField(
         default=uuid.uuid4,
         editable=False,
         unique=True,
         db_index=True,
-        verbose_name=_('UUID'),
-        help_text=_('Identificador único público para la API')
+        verbose_name=_("UUID"),
+        help_text=_("Identificador único público para la API"),
     )
-    
+
     periodo = models.CharField(
         max_length=7,
-        verbose_name=_('Periodo (YYYY-MM)'),
-        help_text=_('Formato: YYYY-MM (ej: 2024-01)')
+        verbose_name=_("Periodo (YYYY-MM)"),
+        help_text=_("Formato: YYYY-MM (ej: 2024-01)"),
     )
-    
+
     fecha_inicio = models.DateField(
-        verbose_name=_('Fecha Inicio'),
-        help_text=_('Primer día del periodo')
+        verbose_name=_("Fecha Inicio"), help_text=_("Primer día del periodo")
     )
-    
-    fecha_fin = models.DateField(
-        verbose_name=_('Fecha Fin'),
-        help_text=_('Último día del periodo')
-    )
-    
+
+    fecha_fin = models.DateField(verbose_name=_("Fecha Fin"), help_text=_("Último día del periodo"))
+
     estado = models.CharField(
         max_length=20,
         choices=ESTADO_CHOICES,
-        default='ABIERTO',
-        verbose_name=_('Estado'),
-        help_text=_('ABIERTO: Permite ediciones. CERRADO: Bloquea ediciones/anulaciones.')
+        default="ABIERTO",
+        verbose_name=_("Estado"),
+        help_text=_("ABIERTO: Permite ediciones. CERRADO: Bloquea ediciones/anulaciones."),
     )
-    
+
     fecha_cierre = models.DateTimeField(
         null=True,
         blank=True,
-        verbose_name=_('Fecha de Cierre'),
-        help_text=_('Fecha y hora en que se cerró el periodo')
+        verbose_name=_("Fecha de Cierre"),
+        help_text=_("Fecha y hora en que se cerró el periodo"),
     )
-    
+
     cerrado_por = models.ForeignKey(
-        'perfil.TenantProfile',  # Usuario del tenant (perfil específico del tenant)
+        "perfil.TenantProfile",  # Usuario del tenant (perfil específico del tenant)
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='periodos_cerrados',
-        verbose_name=_('Cerrado Por'),
-        help_text=_('Usuario del tenant que cerró el periodo')
+        related_name="periodos_cerrados",
+        verbose_name=_("Cerrado Por"),
+        help_text=_("Usuario del tenant que cerró el periodo"),
     )
-    
+
     observaciones = models.TextField(
         blank=True,
         null=True,
-        verbose_name=_('Observaciones'),
-        help_text=_('Notas sobre el cierre del periodo')
+        verbose_name=_("Observaciones"),
+        help_text=_("Notas sobre el cierre del periodo"),
     )
-    
-    
+
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Periodo Contable')
-        verbose_name_plural = _('Periodos Contables')
-        ordering = ['-periodo']
-        unique_together = [['empresa', 'periodo']]
+        verbose_name = _("Periodo Contable")
+        verbose_name_plural = _("Periodos Contables")
+        ordering = ["-periodo"]
+        unique_together = [["empresa", "periodo"]]
         indexes = SintelTenantBaseModel.Meta.indexes + [
-            models.Index(fields=['empresa', 'estado']),
-            models.Index(fields=['fecha_inicio', 'fecha_fin']),
+            models.Index(fields=["empresa", "estado"]),
+            models.Index(fields=["fecha_inicio", "fecha_fin"]),
         ]
-    
+
     def __str__(self):
         return f"{self.periodo} - {self.get_estado_display()}"
-    
+
     def esta_cerrado(self):
         """Verifica si el periodo está cerrado."""
-        return self.estado == 'CERRADO'
-    
+        return self.estado == "CERRADO"
+
     def contiene_fecha(self, fecha):
         """
         Verifica si una fecha está dentro del rango del periodo.
@@ -681,7 +689,7 @@ class PeriodoContable(SintelTenantBaseModel):
         Returns:
             bool
         """
-        if hasattr(fecha, 'date'):
+        if hasattr(fecha, "date"):
             fecha = fecha.date()
         return self.fecha_inicio <= fecha <= self.fecha_fin
 
@@ -689,6 +697,7 @@ class PeriodoContable(SintelTenantBaseModel):
 # ============================================================================
 # v3.0: INTEGRACIÓN CENTRALIZADA - Configuración Contable
 # ============================================================================
+
 
 class ReglaContable(SintelTenantBaseModel):
     """
@@ -703,47 +712,46 @@ class ReglaContable(SintelTenantBaseModel):
 
     v3.0: Nueva en integración centralizada
     """
+
     tipo_transaccion = models.CharField(
         max_length=50,
-        verbose_name=_('Tipo de Transacción'),
-        help_text=_('Tipo de transacción (VENTA_FACTURA, COMPRA_GASTO, NOMINA_LIQUIDACION, etc.)')
+        verbose_name=_("Tipo de Transacción"),
+        help_text=_("Tipo de transacción (VENTA_FACTURA, COMPRA_GASTO, NOMINA_LIQUIDACION, etc.)"),
     )
     concepto = models.CharField(
         max_length=50,
-        verbose_name=_('Concepto Económico'),
-        help_text=_('Concepto económico (INGRESO_PRINCIPAL, AUXILIO_TRANSPORTE, etc.)')
+        verbose_name=_("Concepto Económico"),
+        help_text=_("Concepto económico (INGRESO_PRINCIPAL, AUXILIO_TRANSPORTE, etc.)"),
     )
     cuenta_codigo = models.CharField(
         max_length=20,
-        verbose_name=_('Código de Cuenta PUC'),
-        help_text=_('Código PUC de 6 dígitos (ej: 130505)')
+        verbose_name=_("Código de Cuenta PUC"),
+        help_text=_("Código PUC de 6 dígitos (ej: 130505)"),
     )
     descripcion = models.TextField(
         blank=True,
         null=True,
-        verbose_name=_('Descripción'),
-        help_text=_('Descripción de la regla (para auditoría)')
+        verbose_name=_("Descripción"),
+        help_text=_("Descripción de la regla (para auditoría)"),
     )
     activo = models.BooleanField(
-        default=True,
-        verbose_name=_('Activo'),
-        help_text=_('Indica si esta regla es vigente')
+        default=True, verbose_name=_("Activo"), help_text=_("Indica si esta regla es vigente")
     )
 
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Regla Contable')
-        verbose_name_plural = _('Reglas Contables')
-        ordering = ['tipo_transaccion', 'concepto']
+        verbose_name = _("Regla Contable")
+        verbose_name_plural = _("Reglas Contables")
+        ordering = ["tipo_transaccion", "concepto"]
         indexes = SintelTenantBaseModel.Meta.indexes + [
-            models.Index(fields=['tipo_transaccion', 'concepto', 'activo']),
-            models.Index(fields=['cuenta_codigo']),
+            models.Index(fields=["tipo_transaccion", "concepto", "activo"]),
+            models.Index(fields=["cuenta_codigo"]),
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=['empresa', 'tipo_transaccion', 'concepto'],
+                fields=["empresa", "tipo_transaccion", "concepto"],
                 condition=models.Q(activo=True),
-                name='%(class)s_unique_tipo_concepto_activo',
-                violation_error_message=_('Ya existe regla activa para este tipo + concepto')
+                name="%(class)s_unique_tipo_concepto_activo",
+                violation_error_message=_("Ya existe regla activa para este tipo + concepto"),
             )
         ]
 
@@ -764,72 +772,72 @@ class TarifaImpuesto(SintelTenantBaseModel):
 
     v3.0: Nueva en integración centralizada
     """
+
     TIPO_CHOICES = [
-        ('IVA', _('IVA')),
-        ('RETEFUENTE', _('Retención en la Fuente')),
-        ('RETEICA', _('Retención ICA')),
-        ('RETEIVA', _('Retención IVA')),
-        ('SALUD_EMPLEADO', _('Aporte Salud Empleado')),
-        ('PENSION_EMPLEADO', _('Aporte Pensión Empleado')),
-        ('SALUD_PATRONAL', _('Aporte Salud Patronal')),
-        ('PENSION_PATRONAL', _('Aporte Pensión Patronal')),
-        ('ARL', _('Seguro ARL')),
-        ('CAJA', _('Caja de Compensación')),
-        ('ICBF', _('ICBF')),
-        ('SENA', _('SENA')),
-        ('CESANTIAS', _('Cesantías')),
-        ('PRIMA_SERVICIOS', _('Prima de Servicios')),
-        ('VACACIONES', _('Vacaciones')),
-        ('INTERESES_CESANTIAS', _('Intereses sobre Cesantías')),
+        ("IVA", _("IVA")),
+        ("RETEFUENTE", _("Retención en la Fuente")),
+        ("RETEICA", _("Retención ICA")),
+        ("RETEIVA", _("Retención IVA")),
+        ("SALUD_EMPLEADO", _("Aporte Salud Empleado")),
+        ("PENSION_EMPLEADO", _("Aporte Pensión Empleado")),
+        ("SALUD_PATRONAL", _("Aporte Salud Patronal")),
+        ("PENSION_PATRONAL", _("Aporte Pensión Patronal")),
+        ("ARL", _("Seguro ARL")),
+        ("CAJA", _("Caja de Compensación")),
+        ("ICBF", _("ICBF")),
+        ("SENA", _("SENA")),
+        ("CESANTIAS", _("Cesantías")),
+        ("PRIMA_SERVICIOS", _("Prima de Servicios")),
+        ("VACACIONES", _("Vacaciones")),
+        ("INTERESES_CESANTIAS", _("Intereses sobre Cesantías")),
     ]
 
     tipo = models.CharField(
         max_length=50,
         choices=TIPO_CHOICES,
-        verbose_name=_('Tipo de Impuesto/Deducción'),
-        help_text=_('Clasificación del impuesto o deducción')
+        verbose_name=_("Tipo de Impuesto/Deducción"),
+        help_text=_("Clasificación del impuesto o deducción"),
     )
     valor_porcentaje = models.DecimalField(
         max_digits=5,
         decimal_places=2,
-        verbose_name=_('Valor %'),
-        help_text=_('Tasa en porcentaje (ej: 19.00 para 19% IVA)')
+        verbose_name=_("Valor %"),
+        help_text=_("Tasa en porcentaje (ej: 19.00 para 19% IVA)"),
     )
     fecha_inicio = models.DateField(
-        verbose_name=_('Fecha Inicio Vigencia'),
-        help_text=_('Desde cuándo rige esta tarifa')
+        verbose_name=_("Fecha Inicio Vigencia"), help_text=_("Desde cuándo rige esta tarifa")
     )
     fecha_fin = models.DateField(
         blank=True,
         null=True,
-        verbose_name=_('Fecha Fin Vigencia'),
-        help_text=_('Hasta cuándo rige. NULL = abierta (vigente indefinidamente)')
+        verbose_name=_("Fecha Fin Vigencia"),
+        help_text=_("Hasta cuándo rige. NULL = abierta (vigente indefinidamente)"),
     )
     vigente = models.BooleanField(
-        default=True,
-        verbose_name=_('Vigente'),
-        help_text=_('Indica si esta tarifa está activa')
+        default=True, verbose_name=_("Vigente"), help_text=_("Indica si esta tarifa está activa")
     )
     exonerado = models.BooleanField(
         default=False,
-        verbose_name=_('Puede ser Exonerado'),
-        help_text=_('Si aplica art. 114-1 ET (parafiscales <10 SMMLV)')
+        verbose_name=_("Puede ser Exonerado"),
+        help_text=_("Si aplica art. 114-1 ET (parafiscales <10 SMMLV)"),
     )
     base_minima_uvt = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        default=Decimal('0'),
-        verbose_name=_('Base Mínima en UVT'),
-        help_text=_('Umbral UVT para exoneración (ej: 10 para <10 SMMLV). 0 = no aplica exoneración.')
+        default=Decimal("0"),
+        verbose_name=_("Base Mínima en UVT"),
+        help_text=_(
+            "Umbral UVT para exoneración (ej: 10 para <10 SMMLV). 0 = no aplica exoneración."
+        ),
     )
 
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Tarifa de Impuesto')
-        verbose_name_plural = _('Tarifas de Impuesto')
-        ordering = ['tipo', '-fecha_inicio']
+        verbose_name = _("Tarifa de Impuesto")
+        verbose_name_plural = _("Tarifas de Impuesto")
+        ordering = ["tipo", "-fecha_inicio"]
         indexes = SintelTenantBaseModel.Meta.indexes + [
-            models.Index(fields=['tipo', 'fecha_inicio', 'vigente']),
-            models.Index(fields=['tipo', 'fecha_inicio', 'fecha_fin']),
+            models.Index(fields=["tipo", "fecha_inicio", "vigente"]),
+            models.Index(fields=["tipo", "fecha_inicio", "fecha_fin"]),
         ]
 
     def __str__(self):
@@ -846,14 +854,13 @@ class TarifaImpuesto(SintelTenantBaseModel):
             return False
         if fecha < self.fecha_inicio:
             return False
-        if self.fecha_fin and fecha > self.fecha_fin:
-            return False
-        return True
+        return not (self.fecha_fin and fecha > self.fecha_fin)
 
 
 # ============================================================================
 # RETENCIONES - Pull Model desde Facturas/Gastos/etc.
 # ============================================================================
+
 
 class ConfiguracionRetenciones(SintelTenantBaseModel):
     """
@@ -870,21 +877,22 @@ class ConfiguracionRetenciones(SintelTenantBaseModel):
     - ConfiguracionRetenciones(tipo_tercero='CLIENTE', nit_tercero='800123456', tipo_retencion='RETEFUENTE', porcentaje=3.5)
     - ConfiguracionRetenciones(tipo_tercero='CLIENTE', nit_tercero=None, tipo_retencion='RETEFUENTE', porcentaje=0.0)
     """
+
     TIPO_TERCERO_CHOICES = [
-        ('CLIENTE', _('Cliente')),
-        ('PROVEEDOR', _('Proveedor')),
-        ('EMPLEADO', _('Empleado')),
+        ("CLIENTE", _("Cliente")),
+        ("PROVEEDOR", _("Proveedor")),
+        ("EMPLEADO", _("Empleado")),
     ]
 
     TIPO_RETENCION_CHOICES = [
-        ('RETEFUENTE', _('Retención en la Fuente')),
-        ('RETEICA', _('Retención ICA')),
-        ('RETEIVA', _('Retención IVA')),
+        ("RETEFUENTE", _("Retención en la Fuente")),
+        ("RETEICA", _("Retención ICA")),
+        ("RETEIVA", _("Retención IVA")),
     ]
 
     NATURALEZA_CHOICES = [
-        ('VENTA', _('Venta (Invoice)')),
-        ('COMPRA', _('Compra (PO)')),
+        ("VENTA", _("Venta (Invoice)")),
+        ("COMPRA", _("Compra (PO)")),
     ]
 
     # WARNING: [ARQ-A1] UUID para lookup público (no expone PK interno) — AGENTS.md §25
@@ -893,76 +901,76 @@ class ConfiguracionRetenciones(SintelTenantBaseModel):
         editable=False,
         unique=True,
         db_index=True,
-        verbose_name=_('UUID'),
-        help_text=_('Identificador único público para la API')
+        verbose_name=_("UUID"),
+        help_text=_("Identificador único público para la API"),
     )
     tipo_tercero = models.CharField(
         max_length=20,
         choices=TIPO_TERCERO_CHOICES,
-        verbose_name=_('Tipo de Tercero'),
-        help_text=_('Clasificación del tercero (cliente, proveedor, empleado)')
+        verbose_name=_("Tipo de Tercero"),
+        help_text=_("Clasificación del tercero (cliente, proveedor, empleado)"),
     )
     nit_tercero = models.CharField(
         max_length=20,
         null=True,
         blank=True,
-        verbose_name=_('NIT del Tercero'),
-        help_text=_('Si está definido, aplica solo a este tercero. Si es nulo, es el default.')
+        verbose_name=_("NIT del Tercero"),
+        help_text=_("Si está definido, aplica solo a este tercero. Si es nulo, es el default."),
     )
     tipo_retencion = models.CharField(
         max_length=20,
         choices=TIPO_RETENCION_CHOICES,
-        verbose_name=_('Tipo de Retención'),
-        help_text=_('Tipo de retención a aplicar (Retefuente, ReteICA, ReteIVA)')
+        verbose_name=_("Tipo de Retención"),
+        help_text=_("Tipo de retención a aplicar (Retefuente, ReteICA, ReteIVA)"),
     )
     porcentaje_por_defecto = models.DecimalField(
         max_digits=5,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Porcentaje por Defecto'),
-        help_text=_('Porcentaje de retención a aplicar (0.00 para no retener)')
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Porcentaje por Defecto"),
+        help_text=_("Porcentaje de retención a aplicar (0.00 para no retener)"),
     )
     cuenta_retencion = models.ForeignKey(
-        'CuentaContable',
+        "CuentaContable",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        verbose_name=_('Cuenta de Retención'),
-        help_text=_('Cuenta contable donde se registra esta retención (ej: Retenciones por Pagar)')
+        verbose_name=_("Cuenta de Retención"),
+        help_text=_("Cuenta contable donde se registra esta retención (ej: Retenciones por Pagar)"),
     )
     activa = models.BooleanField(
         default=True,
-        verbose_name=_('Activa'),
-        help_text=_('Si está inactiva, no se aplica en nuevas transacciones')
+        verbose_name=_("Activa"),
+        help_text=_("Si está inactiva, no se aplica en nuevas transacciones"),
     )
     naturaleza = models.CharField(
         max_length=20,
         choices=NATURALEZA_CHOICES,
-        default='VENTA',
-        verbose_name=_('Naturaleza de Transacción'),
-        help_text=_('Contexto de la transacción (venta o compra)')
+        default="VENTA",
+        verbose_name=_("Naturaleza de Transacción"),
+        help_text=_("Contexto de la transacción (venta o compra)"),
     )
 
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Configuración de Retención')
-        verbose_name_plural = _('Configuraciones de Retención')
-        ordering = ['tipo_tercero', 'nit_tercero', 'tipo_retencion']
+        verbose_name = _("Configuración de Retención")
+        verbose_name_plural = _("Configuraciones de Retención")
+        ordering = ["tipo_tercero", "nit_tercero", "tipo_retencion"]
         indexes = SintelTenantBaseModel.Meta.indexes + [
-            models.Index(fields=['tipo_tercero', 'nit_tercero', 'tipo_retencion']),
-            models.Index(fields=['activa', 'tipo_retencion']),
+            models.Index(fields=["tipo_tercero", "nit_tercero", "tipo_retencion"]),
+            models.Index(fields=["activa", "tipo_retencion"]),
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=['tipo_tercero', 'nit_tercero', 'tipo_retencion', 'naturaleza'],
-                name='unique_config_retencion',
-                condition=models.Q(activa=True)
+                fields=["tipo_tercero", "nit_tercero", "tipo_retencion", "naturaleza"],
+                name="unique_config_retencion",
+                condition=models.Q(activa=True),
             ),
         ]
 
     def __str__(self):
-        tercero = self.nit_tercero or f'Default {self.tipo_tercero}'
-        return f'{self.tipo_retencion} ({tercero}): {self.porcentaje_por_defecto}%'
+        tercero = self.nit_tercero or f"Default {self.tipo_tercero}"
+        return f"{self.tipo_retencion} ({tercero}): {self.porcentaje_por_defecto}%"
 
 
 class Retencion(SintelTenantBaseModel):
@@ -984,10 +992,11 @@ class Retencion(SintelTenantBaseModel):
     - Cada retención está asociada exactamente a un documento origen
     - Múltiples retenciones (RETEFUENTE + RETEICA + RETEIVA) pueden existir para el mismo documento
     """
+
     TIPO_RETENCION_CHOICES = [
-        ('RETEFUENTE', _('Retención en la Fuente')),
-        ('RETEICA', _('Retención ICA')),
-        ('RETEIVA', _('Retención IVA')),
+        ("RETEFUENTE", _("Retención en la Fuente")),
+        ("RETEICA", _("Retención ICA")),
+        ("RETEIVA", _("Retención IVA")),
     ]
 
     # Identificador de retención
@@ -995,118 +1004,120 @@ class Retencion(SintelTenantBaseModel):
         default=uuid.uuid4,
         unique=True,
         editable=False,
-        verbose_name=_('UUID'),
-        help_text=_('Identificador único de la retención')
+        verbose_name=_("UUID"),
+        help_text=_("Identificador único de la retención"),
     )
 
     # Tipo de retención
     tipo = models.CharField(
         max_length=20,
         choices=TIPO_RETENCION_CHOICES,
-        verbose_name=_('Tipo de Retención'),
-        help_text=_('RETEFUENTE, RETEICA o RETEIVA')
+        verbose_name=_("Tipo de Retención"),
+        help_text=_("RETEFUENTE, RETEICA o RETEIVA"),
     )
 
     # Cálculo
     porcentaje = models.DecimalField(
         max_digits=5,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Porcentaje Aplicado'),
-        help_text=_('Porcentaje usado para calcular el monto')
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Porcentaje Aplicado"),
+        help_text=_("Porcentaje usado para calcular el monto"),
     )
     base = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Base de Cálculo'),
-        help_text=_('Base sobre la cual se calculó la retención')
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Base de Cálculo"),
+        help_text=_("Base sobre la cual se calculó la retención"),
     )
     monto = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Monto de Retención'),
-        help_text=_('Monto total retenido')
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Monto de Retención"),
+        help_text=_("Monto total retenido"),
     )
 
     # Documento origen (Pull Model - referencia a documento en otra app)
     documento_origen_app = models.CharField(
         max_length=50,
-        verbose_name=_('Aplicación Origen'),
-        help_text=_('Nombre de la app donde se originó (ej: facturas, gastos, inventario)')
+        verbose_name=_("Aplicación Origen"),
+        help_text=_("Nombre de la app donde se originó (ej: facturas, gastos, inventario)"),
     )
     documento_origen_modelo = models.CharField(
         max_length=50,
-        verbose_name=_('Modelo Origen'),
-        help_text=_('Nombre del modelo (ej: Factura, NotaCredito, ItemFactura, DocumentoSoporte)')
+        verbose_name=_("Modelo Origen"),
+        help_text=_("Nombre del modelo (ej: Factura, NotaCredito, ItemFactura, DocumentoSoporte)"),
     )
     documento_origen_id = models.PositiveIntegerField(
-        verbose_name=_('ID del Documento Origen'),
-        help_text=_('ID del documento en la tabla origen')
+        verbose_name=_("ID del Documento Origen"),
+        help_text=_("ID del documento en la tabla origen"),
     )
 
     # Vinculación contable
     asiento_contable = models.ForeignKey(
-        'AsientoContable',
+        "AsientoContable",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='retenciones',
-        verbose_name=_('Asiento Contable'),
-        help_text=_('Asiento contable donde se registró esta retención')
+        related_name="retenciones",
+        verbose_name=_("Asiento Contable"),
+        help_text=_("Asiento contable donde se registró esta retención"),
     )
 
     # Configuración aplicada
     configuracion = models.ForeignKey(
-        'ConfiguracionRetenciones',
+        "ConfiguracionRetenciones",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        verbose_name=_('Configuración Aplicada'),
-        help_text=_('Configuración de retención que se usó para este cálculo')
+        verbose_name=_("Configuración Aplicada"),
+        help_text=_("Configuración de retención que se usó para este cálculo"),
     )
 
     naturaleza = models.CharField(
         max_length=10,
-        choices=[('VENTA', _('Venta')), ('COMPRA', _('Compra'))],
-        default='VENTA',
-        verbose_name=_('Naturaleza'),
-        help_text=_('VENTA: retencion requerida por el cliente. COMPRA: retenida al proveedor.')
+        choices=[("VENTA", _("Venta")), ("COMPRA", _("Compra"))],
+        default="VENTA",
+        verbose_name=_("Naturaleza"),
+        help_text=_("VENTA: retencion requerida por el cliente. COMPRA: retenida al proveedor."),
     )
     reversada = models.BooleanField(
         default=False,
-        verbose_name=_('Reversada'),
-        help_text=_('Si True, esta retención fue reversada por nota de crédito')
+        verbose_name=_("Reversada"),
+        help_text=_("Si True, esta retención fue reversada por nota de crédito"),
     )
     retencion_reversada_por = models.ForeignKey(
-        'self',
+        "self",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='reversales',
-        verbose_name=_('Retención Reversada Por'),
-        help_text=_('Si está reversada, apunta a la retención que la reversa')
+        related_name="reversales",
+        verbose_name=_("Retención Reversada Por"),
+        help_text=_("Si está reversada, apunta a la retención que la reversa"),
     )
     notas = models.TextField(
         blank=True,
-        default='',
-        verbose_name=_('Notas'),
-        help_text=_('Notas sobre la retención (auditoría)')
+        default="",
+        verbose_name=_("Notas"),
+        help_text=_("Notas sobre la retención (auditoría)"),
     )
 
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Retención')
-        verbose_name_plural = _('Retenciones')
-        ordering = ['-created_at']
+        verbose_name = _("Retención")
+        verbose_name_plural = _("Retenciones")
+        ordering = ["-created_at"]
         indexes = SintelTenantBaseModel.Meta.indexes + [
-            models.Index(fields=['documento_origen_app', 'documento_origen_modelo', 'documento_origen_id']),
-            models.Index(fields=['tipo', 'reversada']),
-            models.Index(fields=['naturaleza']),
-            models.Index(fields=['asiento_contable']),
+            models.Index(
+                fields=["documento_origen_app", "documento_origen_modelo", "documento_origen_id"]
+            ),
+            models.Index(fields=["tipo", "reversada"]),
+            models.Index(fields=["naturaleza"]),
+            models.Index(fields=["asiento_contable"]),
         ]
         constraints = [
             # REM P0-03 (docs/remediation/REM-P0-03.md): antes de esta
@@ -1125,21 +1136,26 @@ class Retencion(SintelTenantBaseModel):
             # se excluye cuando es 0 (sentinel de "sin origen real", nunca
             # una clave de negocio valida).
             models.UniqueConstraint(
-                fields=['empresa', 'documento_origen_app', 'documento_origen_modelo',
-                        'documento_origen_id', 'tipo'],
+                fields=[
+                    "empresa",
+                    "documento_origen_app",
+                    "documento_origen_modelo",
+                    "documento_origen_id",
+                    "tipo",
+                ],
                 condition=models.Q(reversada=False) & ~models.Q(documento_origen_id=0),
-                name='uniq_retencion_documento_origen_tipo_activa',
+                name="uniq_retencion_documento_origen_tipo_activa",
             ),
         ]
 
     def __str__(self):
-        reversada = '(REVERSADA)' if self.reversada else ''
-        doc = f'{self.documento_origen_modelo}#{self.documento_origen_id}'
-        return f'{self.tipo}: ${self.monto} en {doc} {reversada}'
+        reversada = "(REVERSADA)" if self.reversada else ""
+        doc = f"{self.documento_origen_modelo}#{self.documento_origen_id}"
+        return f"{self.tipo}: ${self.monto} en {doc} {reversada}"
 
     def calcular_monto(self):
         """Recalcula el monto basado en porcentaje y base."""
-        self.monto = (self.base * self.porcentaje) / Decimal('100')
+        self.monto = (self.base * self.porcentaje) / Decimal("100")
         return self.monto
 
 
@@ -1148,25 +1164,25 @@ class Retencion(SintelTenantBaseModel):
 # ============================================================================
 
 TIPO_MOTOR_CHOICES = [
-    ('VENTA', _('Venta')),
-    ('COMPRA', _('Compra')),
-    ('GASTO', _('Gasto')),
-    ('NOMINA', _('Nomina')),
+    ("VENTA", _("Venta")),
+    ("COMPRA", _("Compra")),
+    ("GASTO", _("Gasto")),
+    ("NOMINA", _("Nomina")),
 ]
 
 NATURALEZA_LINEA_CHOICES = [
-    ('DEBE', _('Debe')),
-    ('HABER', _('Haber')),
+    ("DEBE", _("Debe")),
+    ("HABER", _("Haber")),
 ]
 
 ORIGEN_VALOR_CHOICES = [
-    ('SALDO_BASE', _('Saldo Base / Subtotal')),
-    ('IVA_GENERADO', _('IVA Generado')),
-    ('IVA_DESCONTABLE', _('IVA Descontable')),
-    ('RETEFUENTE', _('Retencion en la Fuente')),
-    ('RETEICA', _('Retencion ICA')),
-    ('RETEIVA', _('Retencion IVA')),
-    ('TOTAL_DOCUMENTO', _('Total Neto del Documento')),
+    ("SALDO_BASE", _("Saldo Base / Subtotal")),
+    ("IVA_GENERADO", _("IVA Generado")),
+    ("IVA_DESCONTABLE", _("IVA Descontable")),
+    ("RETEFUENTE", _("Retencion en la Fuente")),
+    ("RETEICA", _("Retencion ICA")),
+    ("RETEIVA", _("Retencion IVA")),
+    ("TOTAL_DOCUMENTO", _("Total Neto del Documento")),
 ]
 
 
@@ -1176,41 +1192,40 @@ class PlantillaContable(SintelTenantBaseModel):
     - Modo Resolver (backward compat): regla + cuenta_debe_codigo + cuenta_credito_codigo
     - Motor Fase 3: tipo_transaccion + lineas (LineaPlantilla) con partida doble completa
     """
+
     uuid = models.UUIDField(
         default=uuid.uuid4,
         editable=False,
         unique=True,
         db_index=True,
-        verbose_name=_('UUID'),
+        verbose_name=_("UUID"),
     )
     # -- Modo Resolver (backward compat con resolver.py) --
     regla = models.ForeignKey(
-        'ReglaContable',
+        "ReglaContable",
         on_delete=models.CASCADE,
-        related_name='plantillas',
+        related_name="plantillas",
         null=True,
         blank=True,
-        verbose_name=_('Regla Contable'),
-        help_text=_('Regla contable asociada (modo resolver legacy)')
+        verbose_name=_("Regla Contable"),
+        help_text=_("Regla contable asociada (modo resolver legacy)"),
     )
     cuenta_debe_codigo = models.CharField(
         max_length=20,
         null=True,
         blank=True,
-        verbose_name=_('Codigo Cuenta Debito'),
-        help_text=_('Codigo PUC para el DEBE (modo resolver legacy)')
+        verbose_name=_("Codigo Cuenta Debito"),
+        help_text=_("Codigo PUC para el DEBE (modo resolver legacy)"),
     )
     cuenta_credito_codigo = models.CharField(
         max_length=20,
         null=True,
         blank=True,
-        verbose_name=_('Codigo Cuenta Credito'),
-        help_text=_('Codigo PUC para el HABER (modo resolver legacy)')
+        verbose_name=_("Codigo Cuenta Credito"),
+        help_text=_("Codigo PUC para el HABER (modo resolver legacy)"),
     )
     activo = models.BooleanField(
-        default=True,
-        verbose_name=_('Activo'),
-        help_text=_('Indica si esta plantilla esta activa')
+        default=True, verbose_name=_("Activo"), help_text=_("Indica si esta plantilla esta activa")
     )
 
     # -- Motor de Plantillas Fase 3 --
@@ -1218,31 +1233,31 @@ class PlantillaContable(SintelTenantBaseModel):
         max_length=100,
         null=True,
         blank=True,
-        verbose_name=_('Nombre'),
-        help_text=_('Nombre descriptivo (ej: Venta Facturas Electronicas)')
+        verbose_name=_("Nombre"),
+        help_text=_("Nombre descriptivo (ej: Venta Facturas Electronicas)"),
     )
     tipo_transaccion = models.CharField(
         max_length=20,
         choices=TIPO_MOTOR_CHOICES,
         null=True,
         blank=True,
-        verbose_name=_('Tipo de Transaccion'),
-        help_text=_('Tipo de documento que usa esta plantilla: VENTA, COMPRA, GASTO o NOMINA')
+        verbose_name=_("Tipo de Transaccion"),
+        help_text=_("Tipo de documento que usa esta plantilla: VENTA, COMPRA, GASTO o NOMINA"),
     )
 
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Plantilla Contable')
-        verbose_name_plural = _('Plantillas Contables')
+        verbose_name = _("Plantilla Contable")
+        verbose_name_plural = _("Plantillas Contables")
         constraints = [
             models.UniqueConstraint(
-                fields=['empresa', 'regla'],
+                fields=["empresa", "regla"],
                 condition=models.Q(activo=True) & models.Q(regla__isnull=False),
-                name='%(class)s_unique_regla_activo'
+                name="%(class)s_unique_regla_activo",
             ),
             models.UniqueConstraint(
-                fields=['empresa', 'tipo_transaccion'],
+                fields=["empresa", "tipo_transaccion"],
                 condition=models.Q(activo=True) & models.Q(tipo_transaccion__isnull=False),
-                name='%(class)s_unique_tipo_transaccion_activo'
+                name="%(class)s_unique_tipo_transaccion_activo",
             ),
         ]
 
@@ -1266,137 +1281,138 @@ class LineaPlantilla(SintelTenantBaseModel):
         origen_valor=IVA_GENERADO,  naturaleza=HABER -> 240805 (IVA por Pagar)
         origen_valor=RETEFUENTE,    naturaleza=DEBE  -> 236505 (Ret. Fuente x Pagar)
     """
+
     uuid = models.UUIDField(
         default=uuid.uuid4,
         editable=False,
         unique=True,
         db_index=True,
-        verbose_name=_('UUID'),
+        verbose_name=_("UUID"),
     )
     plantilla = models.ForeignKey(
-        'PlantillaContable',
+        "PlantillaContable",
         on_delete=models.CASCADE,
-        related_name='lineas',
-        verbose_name=_('Plantilla Contable'),
+        related_name="lineas",
+        verbose_name=_("Plantilla Contable"),
     )
     cuenta_contable = models.ForeignKey(
-        'CuentaContable',
+        "CuentaContable",
         on_delete=models.PROTECT,
-        verbose_name=_('Cuenta Contable'),
-        help_text=_('Cuenta PUC nivel 6 para este movimiento')
+        verbose_name=_("Cuenta Contable"),
+        help_text=_("Cuenta PUC nivel 6 para este movimiento"),
     )
     naturaleza = models.CharField(
         max_length=5,
         choices=NATURALEZA_LINEA_CHOICES,
-        verbose_name=_('Naturaleza'),
-        help_text=_('DEBE o HABER')
+        verbose_name=_("Naturaleza"),
+        help_text=_("DEBE o HABER"),
     )
     origen_valor = models.CharField(
         max_length=30,
         choices=ORIGEN_VALOR_CHOICES,
-        verbose_name=_('Origen del Valor'),
-        help_text=_('Componente economico del documento que alimenta esta cuenta')
+        verbose_name=_("Origen del Valor"),
+        help_text=_("Componente economico del documento que alimenta esta cuenta"),
     )
     porcentaje_aplicar = models.DecimalField(
         max_digits=5,
         decimal_places=2,
-        default=Decimal('100.00'),
-        validators=[MinValueValidator(Decimal('0.01'))],
-        verbose_name=_('Porcentaje a Aplicar'),
-        help_text=_('100 = valor completo, 50 = la mitad del componente')
+        default=Decimal("100.00"),
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name=_("Porcentaje a Aplicar"),
+        help_text=_("100 = valor completo, 50 = la mitad del componente"),
     )
     orden = models.PositiveSmallIntegerField(
-        default=1,
-        verbose_name=_('Orden'),
-        help_text=_('Orden de aparicion en el asiento generado')
+        default=1, verbose_name=_("Orden"), help_text=_("Orden de aparicion en el asiento generado")
     )
     descripcion = models.CharField(
         max_length=200,
         blank=True,
-        default='',
-        verbose_name=_('Descripcion'),
-        help_text=_('Descripcion que aparece en el MovimientoContable')
+        default="",
+        verbose_name=_("Descripcion"),
+        help_text=_("Descripcion que aparece en el MovimientoContable"),
     )
 
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Linea de Plantilla')
-        verbose_name_plural = _('Lineas de Plantilla')
-        ordering = ['plantilla', 'orden']
+        verbose_name = _("Linea de Plantilla")
+        verbose_name_plural = _("Lineas de Plantilla")
+        ordering = ["plantilla", "orden"]
 
     def __str__(self):
-        return f"{self.plantilla} | {self.origen_valor} -> {self.cuenta_contable} [{self.naturaleza}]"
+        return (
+            f"{self.plantilla} | {self.origen_valor} -> {self.cuenta_contable} [{self.naturaleza}]"
+        )
 
 
 class ImpuestoDocumento(SintelTenantBaseModel):
     """
     Registro de impuestos aplicados a nivel de documento con trazabilidad polimorfica.
     """
+
     asiento = models.ForeignKey(
-        'AsientoContable',
+        "AsientoContable",
         on_delete=models.CASCADE,
-        related_name='impuestos_documento',
-        verbose_name=_('Asiento Contable'),
-        help_text=_('Asiento contable asociado')
+        related_name="impuestos_documento",
+        verbose_name=_("Asiento Contable"),
+        help_text=_("Asiento contable asociado"),
     )
     tipo = models.CharField(
         max_length=50,
-        verbose_name=_('Tipo de Impuesto'),
-        help_text=_('Tipo de impuesto (ej. IVA, RETEFUENTE)')
+        verbose_name=_("Tipo de Impuesto"),
+        help_text=_("Tipo de impuesto (ej. IVA, RETEFUENTE)"),
     )
     base = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Base Imponible'),
-        help_text=_('Base sobre la cual se calcula el impuesto')
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Base Imponible"),
+        help_text=_("Base sobre la cual se calcula el impuesto"),
     )
     porcentaje = models.DecimalField(
         max_digits=5,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Porcentaje'),
-        help_text=_('Porcentaje aplicado')
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Porcentaje"),
+        help_text=_("Porcentaje aplicado"),
     )
     valor = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        default=Decimal('0.00'),
-        validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Valor'),
-        help_text=_('Valor calculado del impuesto')
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_("Valor"),
+        help_text=_("Valor calculado del impuesto"),
     )
     cuenta_codigo = models.CharField(
         max_length=20,
         null=True,
         blank=True,
-        verbose_name=_('Codigo Cuenta'),
-        help_text=_('Codigo de la cuenta contable de impuesto')
+        verbose_name=_("Codigo Cuenta"),
+        help_text=_("Codigo de la cuenta contable de impuesto"),
     )
 
     # Trazabilidad polimorfica
     documento_origen_app = models.CharField(
         max_length=50,
-        verbose_name=_('Aplicacion Origen'),
-        help_text=_('Nombre de la app donde se origino')
+        verbose_name=_("Aplicacion Origen"),
+        help_text=_("Nombre de la app donde se origino"),
     )
     documento_origen_modelo = models.CharField(
-        max_length=50,
-        verbose_name=_('Modelo Origen'),
-        help_text=_('Nombre del modelo origen')
+        max_length=50, verbose_name=_("Modelo Origen"), help_text=_("Nombre del modelo origen")
     )
     documento_origen_id = models.PositiveIntegerField(
-        verbose_name=_('ID del Documento Origen'),
-        help_text=_('ID del documento origen')
+        verbose_name=_("ID del Documento Origen"), help_text=_("ID del documento origen")
     )
 
     class Meta(SintelTenantBaseModel.Meta):
-        verbose_name = _('Impuesto de Documento')
-        verbose_name_plural = _('Impuestos de Documento')
+        verbose_name = _("Impuesto de Documento")
+        verbose_name_plural = _("Impuestos de Documento")
         indexes = SintelTenantBaseModel.Meta.indexes + [
-            models.Index(fields=['documento_origen_app', 'documento_origen_modelo', 'documento_origen_id']),
-            models.Index(fields=['asiento']),
+            models.Index(
+                fields=["documento_origen_app", "documento_origen_modelo", "documento_origen_id"]
+            ),
+            models.Index(fields=["asiento"]),
         ]
 
     def __str__(self):

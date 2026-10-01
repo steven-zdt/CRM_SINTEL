@@ -30,7 +30,10 @@
         if (currency === 'COP' && w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
             return w.DOMUtils.formatCurrency(num, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
         }
-        return new Intl.NumberFormat('es-CO', {
+        // en-US agrupa con coma/punto (convencion real que este proyecto
+        // necesita) -- se conserva `currency` dinamico tal cual (puede ser
+        // una moneda extranjera real de la factura, no siempre COP).
+        return new Intl.NumberFormat('en-US', {
             style: 'currency',
             currency: currency,
             minimumFractionDigits: 0,

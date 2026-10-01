@@ -9,6 +9,7 @@ y CRUD con reemplazo automatico para tipos de "unico vigente".
 Patron: CRUD Service + Business Service, igual que tareas_service.py /
 presupuesto_service.py de este mismo modulo.
 """
+
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
@@ -22,9 +23,20 @@ TipoDocumento = DocumentoProyecto.TipoDocumento
 # ==============================================================================
 
 DOCUMENTO_FIELDS = [
-    'id', 'uuid', 'proyecto_id', 'empresa_id', 'fase', 'tipo_documento',
-    'nombre', 'archivo', 'fecha_documento', 'observaciones', 'subido_por_id',
-    'activo', 'created_at', 'updated_at',
+    "id",
+    "uuid",
+    "proyecto_id",
+    "empresa_id",
+    "fase",
+    "tipo_documento",
+    "nombre",
+    "archivo",
+    "fecha_documento",
+    "observaciones",
+    "subido_por_id",
+    "activo",
+    "created_at",
+    "updated_at",
 ]
 
 
@@ -43,20 +55,22 @@ DOCUMENTO_FIELDS = [
 # business_service.cambiar_fase_proyecto() -- hoy ninguno lo esta.
 
 REQUISITOS_TRANSICION = {
-    ('BORRADOR', 'INICIO'): [],  # solo datos basicos del proyecto
-    ('INICIO', 'PLANEACION'): [
-        {'tipos': (TipoDocumento.ORDEN_COMPRA, TipoDocumento.ORDEN_PEDIDO),
-         'label': 'Orden de Compra / Orden de Pedido'},
-        {'tipos': (TipoDocumento.AUTORIZACION,), 'label': 'Autorizacion'},
-        {'tipos': (TipoDocumento.COTIZACION_APROBADA,), 'label': 'Cotizacion aprobada'},
+    ("BORRADOR", "INICIO"): [],  # solo datos basicos del proyecto
+    ("INICIO", "PLANEACION"): [
+        {
+            "tipos": (TipoDocumento.ORDEN_COMPRA, TipoDocumento.ORDEN_PEDIDO),
+            "label": "Orden de Compra / Orden de Pedido",
+        },
+        {"tipos": (TipoDocumento.AUTORIZACION,), "label": "Autorizacion"},
+        {"tipos": (TipoDocumento.COTIZACION_APROBADA,), "label": "Cotizacion aprobada"},
     ],
-    ('PLANEACION', 'EJECUCION'): [
-        {'tipos': (TipoDocumento.ACTA_INICIO,), 'label': 'Acta de inicio'},
-        {'tipos': (TipoDocumento.CRONOGRAMA,), 'label': 'Cronograma'},
+    ("PLANEACION", "EJECUCION"): [
+        {"tipos": (TipoDocumento.ACTA_INICIO,), "label": "Acta de inicio"},
+        {"tipos": (TipoDocumento.CRONOGRAMA,), "label": "Cronograma"},
     ],
-    ('EJECUCION', 'CIERRE'): [
-        {'tipos': (TipoDocumento.ACTA_ENTREGA,), 'label': 'Acta de entrega'},
-        {'tipos': (TipoDocumento.INFORME_FINAL,), 'label': 'Informe final'},
+    ("EJECUCION", "CIERRE"): [
+        {"tipos": (TipoDocumento.ACTA_ENTREGA,), "label": "Acta de entrega"},
+        {"tipos": (TipoDocumento.INFORME_FINAL,), "label": "Informe final"},
     ],
 }
 
@@ -79,14 +93,16 @@ def resolver_requisitos_transicion(proyecto, fase_actual, nueva_fase):
         cumplido = DocumentoProyecto.objects.filter(
             proyecto=proyecto,
             empresa_id=proyecto.empresa_id,
-            tipo_documento__in=requisito['tipos'],
+            tipo_documento__in=requisito["tipos"],
             activo=True,
         ).exists()
-        resultado.append({
-            'label': requisito['label'],
-            'cumplido': cumplido,
-            'obligatorio': requisito.get('obligatorio', False),
-        })
+        resultado.append(
+            {
+                "label": requisito["label"],
+                "cumplido": cumplido,
+                "obligatorio": requisito.get("obligatorio", False),
+            }
+        )
     return resultado
 
 
@@ -97,8 +113,9 @@ def documentos_faltantes(proyecto, fase_actual, nueva_fase):
     REQUISITOS_TRANSICION arriba).
     """
     return [
-        r['label'] for r in resolver_requisitos_transicion(proyecto, fase_actual, nueva_fase)
-        if not r['cumplido']
+        r["label"]
+        for r in resolver_requisitos_transicion(proyecto, fase_actual, nueva_fase)
+        if not r["cumplido"]
     ]
 
 
@@ -110,8 +127,9 @@ def documentos_obligatorios_faltantes(proyecto, fase_actual, nueva_fase):
     marca algun requisito con 'obligatorio': True.
     """
     return [
-        r['label'] for r in resolver_requisitos_transicion(proyecto, fase_actual, nueva_fase)
-        if not r['cumplido'] and r['obligatorio']
+        r["label"]
+        for r in resolver_requisitos_transicion(proyecto, fase_actual, nueva_fase)
+        if not r["cumplido"] and r["obligatorio"]
     ]
 
 
@@ -119,7 +137,7 @@ def documentos_obligatorios_faltantes(proyecto, fase_actual, nueva_fase):
 # VALIDACION DE ARCHIVO (sin dependencias externas)
 # ==============================================================================
 
-EXTENSIONES_PERMITIDAS = ('.pdf', '.xls', '.xlsx')
+EXTENSIONES_PERMITIDAS = (".pdf", ".xls", ".xlsx")
 TAMANO_MAXIMO_BYTES = 10 * 1024 * 1024  # 10MB
 
 # Firmas binarias (magic bytes) reales por extension. Django advierte
@@ -127,9 +145,9 @@ TAMANO_MAXIMO_BYTES = 10 * 1024 * 1024  # 10MB
 # contenido -- esto se resuelve leyendo los primeros bytes, sin agregar
 # ninguna dependencia nueva (python-magic, filetype, etc.).
 _FIRMAS_BINARIAS = {
-    '.pdf': (b'%PDF-',),
-    '.xlsx': (b'PK\x03\x04',),
-    '.xls': (b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',),
+    ".pdf": (b"%PDF-",),
+    ".xlsx": (b"PK\x03\x04",),
+    ".xls": (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",),
 }
 
 
@@ -144,31 +162,36 @@ def validar_archivo(uploaded_file):
     Raises:
         ValidationError si el archivo no pasa alguna validacion.
     """
-    nombre = (uploaded_file.name or '').lower()
+    nombre = (uploaded_file.name or "").lower()
     extension = next((ext for ext in EXTENSIONES_PERMITIDAS if nombre.endswith(ext)), None)
     if extension is None:
-        raise ValidationError({
-            'archivo': f'Extension no permitida. Solo se aceptan: {", ".join(EXTENSIONES_PERMITIDAS)}.'
-        })
+        raise ValidationError(
+            {
+                "archivo": f'Extension no permitida. Solo se aceptan: {", ".join(EXTENSIONES_PERMITIDAS)}.'
+            }
+        )
 
     if uploaded_file.size > TAMANO_MAXIMO_BYTES:
-        raise ValidationError({
-            'archivo': f'El archivo excede el tamano maximo permitido ({TAMANO_MAXIMO_BYTES // (1024 * 1024)}MB).'
-        })
+        raise ValidationError(
+            {
+                "archivo": f"El archivo excede el tamano maximo permitido ({TAMANO_MAXIMO_BYTES // (1024 * 1024)}MB)."
+            }
+        )
 
     firmas_validas = _FIRMAS_BINARIAS.get(extension, ())
     uploaded_file.seek(0)
     cabecera = uploaded_file.read(8)
     uploaded_file.seek(0)
     if firmas_validas and not any(cabecera.startswith(firma) for firma in firmas_validas):
-        raise ValidationError({
-            'archivo': 'El contenido del archivo no corresponde a su extension declarada.'
-        })
+        raise ValidationError(
+            {"archivo": "El contenido del archivo no corresponde a su extension declarada."}
+        )
 
 
 # ==============================================================================
 # CRUD SERVICE - Persistencia
 # ==============================================================================
+
 
 class DocumentosCRUDService:
     """
@@ -188,6 +211,7 @@ class DocumentosCRUDService:
 # BUSINESS SERVICE - Logica de Negocio
 # ==============================================================================
 
+
 class DocumentosBusinessService:
     """
     Logica de negocio del expediente documental:
@@ -201,12 +225,22 @@ class DocumentosBusinessService:
     @staticmethod
     def _validar_tipo_documento(tipo_documento):
         if tipo_documento not in dict(DocumentoProyecto.TipoDocumento.choices):
-            raise ValidationError({'tipo_documento': f'Tipo de documento invalido: {tipo_documento}'})
+            raise ValidationError(
+                {"tipo_documento": f"Tipo de documento invalido: {tipo_documento}"}
+            )
 
     @staticmethod
     @transaction.atomic
-    def crear_documento(proyecto, tipo_documento, archivo, fase=None, fecha_documento=None,
-                         observaciones='', subido_por=None, nombre=''):
+    def crear_documento(
+        proyecto,
+        tipo_documento,
+        archivo,
+        fase=None,
+        fecha_documento=None,
+        observaciones="",
+        subido_por=None,
+        nombre="",
+    ):
         """
         Crea un nuevo DocumentoProyecto. Si el tipo es de "unico vigente"
         (todos salvo DOCUMENTO_EJECUCION), desactiva cualquier documento
@@ -230,7 +264,7 @@ class DocumentosBusinessService:
             empresa_id=proyecto.empresa_id,
             fase=fase or proyecto.fase_actual,
             tipo_documento=tipo_documento,
-            nombre=nombre or getattr(archivo, 'name', ''),
+            nombre=nombre or getattr(archivo, "name", ""),
             archivo=archivo,
             fecha_documento=fecha_documento,
             observaciones=observaciones,
@@ -244,7 +278,7 @@ class DocumentosBusinessService:
     def desactivar_documento(documento):
         """Soft-delete: nunca borra el archivo fisico del storage privado."""
         documento.activo = False
-        DocumentosCRUDService.save_documento(documento, update_fields=['activo', 'updated_at'])
+        DocumentosCRUDService.save_documento(documento, update_fields=["activo", "updated_at"])
         return documento
 
     @staticmethod
@@ -257,7 +291,7 @@ class DocumentosBusinessService:
             qs = qs.filter(activo=True)
         if tipo_documento:
             qs = qs.filter(tipo_documento=tipo_documento)
-        return qs.order_by('-created_at')
+        return qs.order_by("-created_at")
 
     @staticmethod
     def obtener_documento(proyecto, documento_uuid):

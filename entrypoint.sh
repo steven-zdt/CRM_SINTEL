@@ -112,6 +112,40 @@ if [ "$ARGS_STR" = "python manage.py runserver 0.0.0.0:8000" ] || \
     echo ""
 fi
 
+# STATIC-AUTOWATCH: solo en dev (SERVICE_ROLE=web + STATIC_AUTOWATCH=1 en
+# docker-compose.yaml, nunca en prod -- ahi el codigo viene COPY'd en la
+# imagen, sin bind-mount, y los estaticos los sirve WhiteNoise). Sin esto,
+# collectstatic solo corre una vez al arrancar el contenedor -- editar un
+# .js/.css YA COLLECTADO en vivo (sin crear un archivo nuevo) quedaba
+# invisible para nginx (que sirve /app/staticfiles directo del filesystem,
+# nunca pasa por Django) hasta reiniciar el contenedor a mano (hallazgo
+# real, 2026-09-28).
+#
+# inotify NO detecta los cambios hechos desde Windows dentro del bind-mount
+# `.:/app` de Docker Desktop (probado en vivo: 0 eventos) -- se fuerza
+# polling explicito (--debug-force-polling) en vez del watcher nativo.
+# --drop evita apilar corridas de collectstatic si se guardan varios
+# archivos casi al mismo tiempo (solo una corre a la vez).
+if [ "$SERVICE_ROLE" = "web" ] && [ "${STATIC_AUTOWATCH:-0}" = "1" ]; then
+    if command -v watchmedo >/dev/null 2>&1; then
+        echo "👀 STATIC_AUTOWATCH activo: observando */static/ (polling) para re-correr collectstatic..."
+        STATIC_DIRS=$(find /app/apps -type d -name static 2>/dev/null)
+        if [ -n "$STATIC_DIRS" ]; then
+            # shellcheck disable=SC2086
+            watchmedo shell-command \
+                --debug-force-polling --interval=3 \
+                --patterns="*.js;*.css;*.scss;*.svg;*.png;*.jpg;*.jpeg;*.gif;*.woff;*.woff2;*.ttf;*.ico;*.json" \
+                --ignore-directories --recursive --drop \
+                --command='cd /app && python manage.py collectstatic --noinput >> /tmp/static_autowatch.log 2>&1' \
+                $STATIC_DIRS >/tmp/static_autowatch_watcher.log 2>&1 &
+            echo "✅ static-autowatch corriendo en background (logs: /tmp/static_autowatch.log)"
+        else
+            echo "⚠️  static-autowatch: no se encontraron directorios */static/, watcher no iniciado"
+        fi
+    else
+        echo "⚠️  STATIC_AUTOWATCH=1 pero 'watchmedo' no esta instalado -- watcher no iniciado"
+    fi
+fi
 
 # Pasar el control al comando recibido
 exec "$@"

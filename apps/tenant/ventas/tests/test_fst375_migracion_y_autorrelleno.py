@@ -20,6 +20,7 @@ de referencia, siguiendo la instruccion explicita del propio prompt: "no
 convertir sus datos en constantes" (se usan solo como datos de un test, no
 como literales en servicios/vistas).
 """
+
 from decimal import Decimal
 from io import StringIO
 
@@ -39,18 +40,23 @@ class FST375Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="SINTEL TECHNOLOGY SAS", nit="901123299", direccion="Calle 30 58 CD 20",
+            razon_social="SINTEL TECHNOLOGY SAS",
+            nit="901123299",
+            direccion="Calle 30 58 CD 20",
         )
         # FST 375 -- valores tal como los transcribe el documento de referencia.
         self.factura = Factura.objects.create(
             empresa=self.empresa,
-            numero="FST 375", prefijo="FST", consecutivo=375,
+            numero="FST 375",
+            prefijo="FST",
+            consecutivo=375,
             tipo=Factura.TipoFactura.FE,
             naturaleza=Factura.Naturaleza.VENTA,
             estado=Factura.Estado.ACEPTADA,
             fecha_emision="2026-06-20T10:18:00Z",
             fecha_vencimiento="2026-07-20",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
             receptor_nit="900860947",
             receptor_razon_social="Focus electronic security sistem S.A.S",
             receptor_telefono="(601) 7561406",
@@ -73,7 +79,8 @@ class FST375Tests(SintelTenantTestCase):
             autorizacion_vigencia_fin="2027-11-09",
         )
         ItemFactura.objects.create(
-            empresa=self.empresa, factura=self.factura,
+            empresa=self.empresa,
+            factura=self.factura,
             descripcion="SERVICIO MANO OBRA INSTALACION PP241173",
             cantidad=Decimal("1.00"),
             valor_unitario=Decimal("4319257.00"),
@@ -175,13 +182,20 @@ class FST375Tests(SintelTenantTestCase):
         antes de que existiera este comando), debe vincularse a ella en vez
         de crear una segunda."""
         cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900860947", razon_social="Focus electronic security sistem S.A.S",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900860947",
+            razon_social="Focus electronic security sistem S.A.S",
             regimen_tributario="ORDINARIO",
         )
         venta_previa = Venta.objects.create(
-            empresa=self.empresa, cliente=cliente, fecha_emision="2026-06-20",
-            numero_factura="FST 375", subtotal=Decimal("4319257.00"), total_neto=Decimal("5139915.83"),
+            empresa=self.empresa,
+            cliente=cliente,
+            fecha_emision="2026-06-20",
+            numero_factura="FST 375",
+            subtotal=Decimal("4319257.00"),
+            total_neto=Decimal("5139915.83"),
         )
 
         self._run_migracion(apply=True)
@@ -195,17 +209,28 @@ class FST375Tests(SintelTenantTestCase):
         """Dos Ventas sin vincular con el mismo numero_factura: no debe
         vincular automaticamente con evidencia insuficiente (secc. 18)."""
         cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900860947-dup", razon_social="Focus electronic security sistem S.A.S",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900860947-dup",
+            razon_social="Focus electronic security sistem S.A.S",
             regimen_tributario="ORDINARIO",
         )
         Venta.objects.create(
-            empresa=self.empresa, cliente=cliente, fecha_emision="2026-06-20",
-            numero_factura="FST 375", subtotal=Decimal("1.00"), total_neto=Decimal("1.00"),
+            empresa=self.empresa,
+            cliente=cliente,
+            fecha_emision="2026-06-20",
+            numero_factura="FST 375",
+            subtotal=Decimal("1.00"),
+            total_neto=Decimal("1.00"),
         )
         Venta.objects.create(
-            empresa=self.empresa, cliente=cliente, fecha_emision="2026-06-20",
-            numero_factura="FST 375", subtotal=Decimal("2.00"), total_neto=Decimal("2.00"),
+            empresa=self.empresa,
+            cliente=cliente,
+            fecha_emision="2026-06-20",
+            numero_factura="FST 375",
+            subtotal=Decimal("2.00"),
+            total_neto=Decimal("2.00"),
         )
 
         salida = self._run_migracion(apply=True)
@@ -216,11 +241,16 @@ class FST375Tests(SintelTenantTestCase):
 
     def test_crear_venta_desde_factura_falla_sin_items(self):
         factura_sin_items = Factura.objects.create(
-            empresa=self.empresa, numero="FST-SIN-ITEMS", consecutivo=999,
+            empresa=self.empresa,
+            numero="FST-SIN-ITEMS",
+            consecutivo=999,
             fecha_emision="2026-06-20",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
-            receptor_nit="900860947", receptor_razon_social="Focus electronic security sistem S.A.S",
-            naturaleza=Factura.Naturaleza.VENTA, estado=Factura.Estado.ACEPTADA,
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
+            receptor_nit="900860947",
+            receptor_razon_social="Focus electronic security sistem S.A.S",
+            naturaleza=Factura.Naturaleza.VENTA,
+            estado=Factura.Estado.ACEPTADA,
         )
         with self.assertRaises(ValueError):
             VentaBusinessService.crear_venta_desde_factura(factura_sin_items, self.empresa)

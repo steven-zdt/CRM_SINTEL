@@ -1,15 +1,21 @@
 // @ts-nocheck — Vanilla JS con namespace global window.Sintel (no TypeScript)
 /**
- * Nomina List Module — Master-Detail, Fase 5-BIS: tablas server-rendered via
- * django-tables2 + HTMX.
+ * Nomina List Module — Master-Detail.
  *
- * Panel Izquierdo (Master, #nomina-master-panel): empleados con nominas,
- * cada fila lleva hx-get/hx-target (via row_attrs en tables.py) que carga
- * el panel Detail al hacer click -- no requiere JS para la carga en si,
- * solo para el resaltado visual de la fila activa.
+ * Panel Izquierdo (Master, #tabla-nomina-master): empleados con nominas, es
+ * DataTables 3.x (mismo patron ya validado en Ventas/Bancos/Facturas/
+ * Clientes/Proveedores/Compras/Gastos/Empleados -- ver
+ * docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md), poblado via ajax
+ * contra POST /api/v1/empleados/con-nominas/dt/
+ * (EmpleadoViewSet.con_nominas_dt()). NominaEmpleadoMasterTable/
+ * NominaMasterTableView (django-tables2) retirados. Cada fila lleva
+ * data-empleado-uuid (ver createdRow) -- el click en una fila carga el
+ * panel Detail (sin usar row_attrs de django-tables2, que ya no aplica).
+ *
  * Panel Derecho (Detail, #nomina-detail-panel): historico de nominas del
  * empleado seleccionado (header + tabla, ambos renderizados server-side
- * juntos en cada click porque el header depende del empleado).
+ * juntos en cada click porque el header depende del empleado) -- sigue en
+ * django-tables2 + HTMX, no es un listado plano independiente.
  *
  * Namespace: window.Sintel.Empleados.NominaList
  */
@@ -19,18 +25,62 @@
     w.Sintel = w.Sintel || {};
     w.Sintel.Empleados = w.Sintel.Empleados || {};
 
-    const MASTER_PANEL = '#nomina-master-panel';
+    const TABLA_MASTER_SELECTOR = '#tabla-nomina-master';
+    const TABLA_MASTER_URL = '/api/v1/empleados/con-nominas/dt/';
     const DETAIL_PANEL = '#nomina-detail-panel';
+    let _masterTablaInicializada = false;
 
     let empleadoActivoUuid = null;
 
-    // init()/redraw() ya no inicializan nada (los paneles HTMX se auto-cargan);
-    // se conservan porque empleados.module.js las invoca al activar el sub-tab.
-    function init() {}
+    function escapeHtml(str) {
+        var div = d.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
+
+    function renderEmpleado(data, type, row) {
+        var nombre = (row.primer_nombre + ' ' + row.primer_apellido).trim();
+        var total = row.total_nominas || 0;
+        return '<div class="d-flex align-items-start justify-content-between gap-1 py-1">' +
+            '<div class="lh-sm"><div class="fw-semibold small">' + escapeHtml(nombre) + '</div>' +
+            '<div class="text-muted" style="font-size:.72rem;"><code>' + escapeHtml(row.numero_documento || '') + '</code></div></div>' +
+            '<span class="badge bg-primary-subtle text-primary border border-primary-subtle flex-shrink-0 mt-1">' + total + '</span>' +
+            '</div>';
+    }
+
+    var COLUMNS = [
+        { data: null, title: 'Empleado', orderable: false, render: renderEmpleado },
+    ];
+
+    function initMasterTabla() {
+        if (_masterTablaInicializada) return;
+        if (typeof DataTable === 'undefined' || !w.Sintel.Core || !w.Sintel.Core.DataTablesFactory) return;
+        w.Sintel.Core.DataTablesFactory.create(TABLA_MASTER_SELECTOR, TABLA_MASTER_URL, COLUMNS, {
+            pageLength: 20,
+            createdRow: function (tr, rowData) {
+                tr.setAttribute('data-empleado-uuid', rowData.uuid);
+                tr.classList.add('fila-master-nomina');
+                tr.style.cursor = 'pointer';
+            },
+        });
+        _masterTablaInicializada = true;
+    }
+
+    /**
+     * empleados.module.js invoca init() al activarse el sub-tab "Nominas" --
+     * initMasterTabla() es idempotente (guard _masterTablaInicializada),
+     * seguro llamarla tambien aqui.
+     */
+    function init() {
+        initMasterTabla();
+    }
+
     function redraw() {}
 
     function reload() {
-        d.body.dispatchEvent(new CustomEvent('nomina-updated'));
+        if (w.Sintel.Core && w.Sintel.Core.DataTablesFactory) {
+            w.Sintel.Core.DataTablesFactory.reload(TABLA_MASTER_SELECTOR);
+        }
         if (empleadoActivoUuid && w.htmx) {
             const detailPanel = d.querySelector(DETAIL_PANEL);
             if (detailPanel) {
@@ -46,18 +96,21 @@
         return empleadoActivoUuid ? { uuid: empleadoActivoUuid } : null;
     }
 
-    // ── Resaltado visual de la fila activa en el Master ──────────────────────
+    // ── Seleccion de fila en el Master: resaltado visual + carga del Detail ──
 
     function attachMasterListeners() {
-        const panel = d.querySelector(MASTER_PANEL);
-        if (!panel) return;
-
-        panel.addEventListener('click', (ev) => {
-            const row = ev.target.closest('.fila-master-nomina');
+        d.body.addEventListener('click', (ev) => {
+            const row = ev.target.closest(TABLA_MASTER_SELECTOR + ' tbody tr[data-empleado-uuid]');
             if (!row) return;
-            panel.querySelectorAll('.fila-master-nomina').forEach((r) => r.classList.remove('table-active', 'fw-bold'));
+            d.querySelectorAll(TABLA_MASTER_SELECTOR + ' .fila-master-nomina').forEach((r) => r.classList.remove('table-active', 'fw-bold'));
             row.classList.add('table-active', 'fw-bold');
             empleadoActivoUuid = row.dataset.empleadoUuid || null;
+            if (empleadoActivoUuid && w.htmx) {
+                w.htmx.ajax('GET', `/ui/empleados/nominas/detalle/tabla/?empleado_uuid=${empleadoActivoUuid}`, {
+                    target: DETAIL_PANEL,
+                    swap: 'innerHTML',
+                });
+            }
         });
     }
 
@@ -129,6 +182,7 @@
     }
 
     function setup() {
+        initMasterTabla();
         attachMasterListeners();
         attachDetailListeners();
     }

@@ -2,16 +2,17 @@
 ViewSet para Dashboard v3.9.4 — Endpoints de métricas consolidadas.
 FSD Architecture: hereda BaseTenantViewSet + ServiceMixin
 """
+
 import logging
 
 from django.utils.dateparse import parse_date
-from rest_framework import viewsets, status
+from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.mixins import SintelDSVMixin
-from apps.tenant.api.permissions import IsTenantMember, IsTenantAdmin
+from apps.tenant.api.permissions import IsTenantAdmin, IsTenantMember
 from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.dashboard.api.serializers import DashboardMetricasSerializer, KpiSedeSerializer
 from apps.tenant.dashboard.services.business_service import DashboardBusinessService
@@ -38,10 +39,11 @@ class DashboardViewSet(OrganizationalContextMixin, SintelDSVMixin, BaseTenantVie
 
     permission_classes = [IsTenantMember]
     serializer_class = DashboardMetricasSerializer
-    lookup_field = 'uuid'
+    lookup_field = "uuid"
 
     def get_queryset(self):
         from apps.tenant.empresa.models import Empresa
+
         return Empresa.objects.none()
 
     def list(self, request, *args, **kwargs):
@@ -57,12 +59,12 @@ class DashboardViewSet(OrganizationalContextMixin, SintelDSVMixin, BaseTenantVie
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def metricas(self, request):
         """GET /api/v1/dashboard/metricas/ — alias de list."""
         return self.list(request)
 
-    @action(detail=False, methods=['post'], permission_classes=[IsTenantAdmin])
+    @action(detail=False, methods=["post"], permission_classes=[IsTenantAdmin])
     def invalidar_cache(self, request):
         """POST /api/v1/dashboard/invalidar-cache/ — invalida cache (admin)."""
         try:
@@ -75,13 +77,13 @@ class DashboardViewSet(OrganizationalContextMixin, SintelDSVMixin, BaseTenantVie
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    @action(detail=False, methods=['get'], url_path='kpis-por-sede')
+    @action(detail=False, methods=["get"], url_path="kpis-por-sede")
     def kpis_por_sede(self, request):
         """GET /api/v1/dashboard/kpis-por-sede/."""
         try:
             empresa_id = self.get_empresa_id()
-            fecha_inicio = parse_date(request.query_params.get('fecha_inicio') or '')
-            fecha_fin = parse_date(request.query_params.get('fecha_fin') or '')
+            fecha_inicio = parse_date(request.query_params.get("fecha_inicio") or "")
+            fecha_fin = parse_date(request.query_params.get("fecha_fin") or "")
             rows = DashboardBusinessService.obtener_kpis_por_sede(
                 empresa_id=empresa_id,
                 fecha_inicio=fecha_inicio,

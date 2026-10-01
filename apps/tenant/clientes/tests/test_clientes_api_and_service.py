@@ -5,6 +5,7 @@ Verifica que:
 - El servicio de negocio actual crea y actualiza de forma idempotente
 - El endpoint principal de clientes responde en contexto tenant autenticado
 """
+
 import pytest
 from django_tenants.utils import schema_context
 
@@ -35,13 +36,13 @@ def test_service_crear_cliente_idempotente(tenant):
             "regimen_tributario": "ORDINARIO",
             "email": "ventas@cliente.com",
             "telefono": "3000000000",
-            "activo": True
+            "activo": True,
         }
 
         c1, creado1 = crear_cliente(empresa, data)
         assert creado1 is True
         assert c1.id and c1.razon_social == "CLIENTE S.A.S."
-        
+
         data2 = {**data, "razon_social": "CLIENTE COLOMBIA S.A.S."}
         c2, creado2 = crear_cliente(empresa, data2)
         assert creado2 is False

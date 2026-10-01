@@ -20,10 +20,11 @@ antes de esta mision), el segundo hilo debe esperar a que el primero
 confirme, releer el saldo YA actualizado (40.000) y ser rechazado por
 sobrepago (60.000 > 40.000) -- exactamente uno de los dos abonos aplica.
 """
+
 import threading
+from decimal import Decimal
 
 import pytest
-from decimal import Decimal
 from django.db import connection
 from django_tenants.utils import schema_context
 
@@ -37,13 +38,20 @@ def test_dos_abonos_concurrentes_solo_uno_aplica_sin_sobrepago(tenant):
     with schema_context(tenant.schema_name):
         empresa = Empresa.objects.first()
         cliente = Cliente.objects.create(
-            empresa=empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900555666", razon_social="Cliente Concurrencia",
-            regimen_tributario="ORDINARIO", activo=True,
+            empresa=empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900555666",
+            razon_social="Cliente Concurrencia",
+            regimen_tributario="ORDINARIO",
+            activo=True,
         )
         cartera = Cartera.objects.create(
-            empresa=empresa, cliente=cliente, numero_factura="FE-CONC-1",
-            fecha_emision="2026-06-01", fecha_vencimiento="2026-07-01",
+            empresa=empresa,
+            cliente=cliente,
+            numero_factura="FE-CONC-1",
+            fecha_emision="2026-06-01",
+            fecha_vencimiento="2026-07-01",
             valor_total=Decimal("100000.00"),
         )
         cartera_uuid = cartera.uuid
@@ -57,7 +65,9 @@ def test_dos_abonos_concurrentes_solo_uno_aplica_sin_sobrepago(tenant):
             with schema_context(tenant.schema_name):
                 barrera.wait(timeout=5)  # maximiza la probabilidad de solape real
                 CarteraBusinessService.registrar_abono(
-                    empresa_id=empresa_id, cartera_uuid=cartera_uuid, monto=Decimal("60000.00"),
+                    empresa_id=empresa_id,
+                    cartera_uuid=cartera_uuid,
+                    monto=Decimal("60000.00"),
                 )
                 resultados[nombre] = "OK"
         except Exception as exc:
@@ -78,7 +88,9 @@ def test_dos_abonos_concurrentes_solo_uno_aplica_sin_sobrepago(tenant):
     exitosos = [n for n, r in resultados.items() if r == "OK"]
     rechazados = [n for n, r in resultados.items() if r.startswith("RECHAZADO")]
     assert len(exitosos) == 1, f"Se esperaba exactamente 1 abono exitoso, resultados: {resultados}"
-    assert len(rechazados) == 1, f"Se esperaba exactamente 1 abono rechazado, resultados: {resultados}"
+    assert (
+        len(rechazados) == 1
+    ), f"Se esperaba exactamente 1 abono rechazado, resultados: {resultados}"
 
     with schema_context(tenant.schema_name):
         cartera_final = Cartera.objects.get(uuid=cartera_uuid)

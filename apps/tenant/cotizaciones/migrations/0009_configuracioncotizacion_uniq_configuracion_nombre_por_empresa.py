@@ -4,15 +4,17 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('empresa', '0009_sedes_areas_explicit_fk'),
-        ('tenant_cotizaciones', '0008_alter_cotizacion_fecha_emision'),
+        ("empresa", "0009_sedes_areas_explicit_fk"),
+        ("tenant_cotizaciones", "0008_alter_cotizacion_fecha_emision"),
     ]
 
     operations = [
         migrations.AddConstraint(
-            model_name='configuracioncotizacion',
-            constraint=models.UniqueConstraint(fields=('empresa', 'nombre_configuracion'), name='uniq_configuracion_nombre_por_empresa'),
+            model_name="configuracioncotizacion",
+            constraint=models.UniqueConstraint(
+                fields=("empresa", "nombre_configuracion"),
+                name="uniq_configuracion_nombre_por_empresa",
+            ),
         ),
     ]

@@ -7,6 +7,7 @@ existente, no reimplementa la consulta. `stock_actual` ya viene en
 capacidades, no necesariamente 2 tools separadas -- una lista con
 stock incluido responde ambas preguntas sin duplicar la query).
 """
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext

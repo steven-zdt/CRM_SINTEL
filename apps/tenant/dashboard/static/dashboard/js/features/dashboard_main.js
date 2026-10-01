@@ -26,11 +26,13 @@
     // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
     const COP = (val) => (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
         ? w.DOMUtils.formatCurrency(parseFloat(val) || 0, { minimumFractionDigits: 0 })
-        : new Intl.NumberFormat('es-CO', {
-            style: 'currency', currency: 'COP', minimumFractionDigits: 0
+        : new Intl.NumberFormat('en-US', {
+            style: 'currency', currency: 'USD', minimumFractionDigits: 0
         }).format(parseFloat(val) || 0);
 
-    const num = (val) => new Intl.NumberFormat('es-CO').format(parseInt(val) || 0);
+    // en-US agrupa con coma de miles (convencion real que este proyecto
+    // necesita) -- sin estilo de moneda aqui, es un conteo, no un monto.
+    const num = (val) => new Intl.NumberFormat('en-US').format(parseInt(val) || 0);
 
     // ── Carga de datos ──────────────────────────────────────────────────────
 

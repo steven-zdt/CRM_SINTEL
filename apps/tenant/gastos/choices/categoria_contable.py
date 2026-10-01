@@ -46,7 +46,7 @@ CATEGORIA_CONTABLE_CHOICES: list[tuple[str, str]] = [
 def get_categoria_contable_choices() -> list[tuple[str, str]]:
     """
     Provee los choices de categoria contable en runtime.
-    
+
     Returns:
         List[Tuple[str, str]]: Lista de opciones (codigo, nombre)
     """

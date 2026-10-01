@@ -6,7 +6,7 @@ from apps.tenant.facturas.models import Factura
 from apps.tenant.facturas.tasks import procesar_factura_xml_task
 from apps.tenant.facturas.utils.ubl_parser import fast_get_cufe
 
-XML_SAMPLE = b'''
+XML_SAMPLE = b"""
 <Invoice xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2">
   <cbc:ID>F001</cbc:ID>
   <cbc:UUID>1234567890ABCDEFGHIJKLMN</cbc:UUID>
@@ -53,7 +53,8 @@ XML_SAMPLE = b'''
     </cac:Price>
   </cac:InvoiceLine>
 </Invoice>
-'''
+"""
+
 
 class TestFacturaIngestion(TenantTestCase):
     @pytest.mark.django_db
@@ -63,41 +64,44 @@ class TestFacturaIngestion(TenantTestCase):
 
     @pytest.mark.django_db
     def test_procesar_factura_xml_task(self):
-      from apps.tenant.empresa.models import Empresa
-      User = get_user_model()
-      user = User.objects.create(username="tester", email="tester@example.com")
-      # Crear Empresa dummy si no existe
-      # F27-001 (FIXTURE BUG, reproducido en aislamiento total): el nit
-      # "900000001" no coincide con AccountingSupplierParty ("900123456") ni
-      # AccountingCustomerParty ("901999888") de XML_SAMPLE -- guardar_desde_dto()
-      # rechaza el documento con ValidationError de NIT no coincidente antes de
-      # llegar a la logica que este test quiere ejercitar. nit="901999888"
-      # (el receptor / "Mi Empresa S.A.S." en el XML) hace de esta empresa el
-      # tenant receptor real -- consistente con las aserciones de las lineas
-      # 94-95 (factura.receptor_nit == "901999888").
-      empresa = Empresa.objects.first()
-      if not empresa:
-        empresa = Empresa.objects.create(
-          razon_social="Empresa Test",
-          nit="901999888",
-          dv="1",
-          direccion="Calle 123",
-          telefono="1234567",
-          email_contacto="test@empresa.com",
-          regimen_tributario="NO_RESPONDE",
-          moneda="COP"
-        )
-      empresa_id = empresa.id
-      usuario_id = user.id
-      # Ejecutar tarea de forma síncrona para test
-      # ingest_document() exige bytes explicitamente (contrato documentado en
-      # apps/services/document_ingest/ingest_service.py: "content: Contenido
-      # del documento en bytes", ademas de hashlib.sha256() que solo acepta
-      # bytes) -- el test pasaba XML_SAMPLE.decode() (str) por error.
-      procesar_factura_xml_task(XML_SAMPLE, empresa_id, usuario_id)
-      factura = Factura.objects.filter(cufe="1234567890ABCDEFGHIJKLMN", empresa_id=empresa_id).first()
-      assert factura is not None
-      assert factura.numero == "F001"
-      assert factura.total == 119000
-      assert factura.emisor_nit == "900123456"
-      assert factura.receptor_nit == "901999888"
+        from apps.tenant.empresa.models import Empresa
+
+        User = get_user_model()
+        user = User.objects.create(username="tester", email="tester@example.com")
+        # Crear Empresa dummy si no existe
+        # F27-001 (FIXTURE BUG, reproducido en aislamiento total): el nit
+        # "900000001" no coincide con AccountingSupplierParty ("900123456") ni
+        # AccountingCustomerParty ("901999888") de XML_SAMPLE -- guardar_desde_dto()
+        # rechaza el documento con ValidationError de NIT no coincidente antes de
+        # llegar a la logica que este test quiere ejercitar. nit="901999888"
+        # (el receptor / "Mi Empresa S.A.S." en el XML) hace de esta empresa el
+        # tenant receptor real -- consistente con las aserciones de las lineas
+        # 94-95 (factura.receptor_nit == "901999888").
+        empresa = Empresa.objects.first()
+        if not empresa:
+            empresa = Empresa.objects.create(
+                razon_social="Empresa Test",
+                nit="901999888",
+                dv="1",
+                direccion="Calle 123",
+                telefono="1234567",
+                email_contacto="test@empresa.com",
+                regimen_tributario="NO_RESPONDE",
+                moneda="COP",
+            )
+        empresa_id = empresa.id
+        usuario_id = user.id
+        # Ejecutar tarea de forma síncrona para test
+        # ingest_document() exige bytes explicitamente (contrato documentado en
+        # apps/services/document_ingest/ingest_service.py: "content: Contenido
+        # del documento en bytes", ademas de hashlib.sha256() que solo acepta
+        # bytes) -- el test pasaba XML_SAMPLE.decode() (str) por error.
+        procesar_factura_xml_task(XML_SAMPLE, empresa_id, usuario_id)
+        factura = Factura.objects.filter(
+            cufe="1234567890ABCDEFGHIJKLMN", empresa_id=empresa_id
+        ).first()
+        assert factura is not None
+        assert factura.numero == "F001"
+        assert factura.total == 119000
+        assert factura.emisor_nit == "900123456"
+        assert factura.receptor_nit == "901999888"

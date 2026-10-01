@@ -60,11 +60,14 @@
         return '<span class="badge ' + badge + ' badge-sm">' + escapeHtml(label) + '</span>';
     }
 
-    function renderFacturaNumero(data, type, row) {
-        var numero = row.factura_numero;
-        if (!numero) return '<span class="text-muted" style="font-size:0.78rem;">—</span>';
-        return '<span class="badge bg-success-subtle text-success border border-success-subtle badge-sm">' +
-            '<i class="bi bi-receipt-cutoff me-1"></i>' + escapeHtml(numero) + '</span>';
+    function renderNumeroFactura(value) {
+        // numero_factura es un campo propio de Venta (referencia de texto,
+        // no FK -- clave de matching de la sincronizacion Facturas/Ventas).
+        // La columna "Factura DIAN" (factura_numero, via factura_asociada)
+        // se retiro por redundante -- el badge/boton de eliminar sync sigue
+        // usando row.factura_asociada_id internamente (ver renderAcciones).
+        if (!value) return '<span class="text-muted" style="font-size:0.78rem;">—</span>';
+        return '<span class="small">' + escapeHtml(value) + '</span>';
     }
 
     function renderTotal(value) {
@@ -88,7 +91,7 @@
         { data: 'cliente_nombre', title: 'Cliente', render: renderCliente },
         { data: 'fecha_emision', title: 'Fecha', render: function (v) { return formatFecha(v); } },
         { data: 'estado', title: 'Estado', render: function (v) { return renderEstado(v); } },
-        { data: 'factura_numero', title: 'Factura DIAN', orderable: false, render: renderFacturaNumero },
+        { data: 'numero_factura', title: 'Núm. Factura', orderable: false, render: renderNumeroFactura },
         { data: 'total_neto', title: 'Total', className: 'text-end', render: function (v) { return renderTotal(v); } },
         { data: null, title: '', orderable: false, searchable: false, render: renderAcciones },
     ];
@@ -185,7 +188,7 @@
             '<option value="FACTURADA_DIAN">Facturada DIAN</option>' +
             '<option value="ANULADA">Anulada</option>' +
             '</select></th>' +
-            '<th></th>' +
+            '<th><input type="text" class="form-control form-control-sm" id="filtro-venta-numero-factura" placeholder="Filtrar número..."></th>' +
             '<th><div class="d-flex gap-1">' +
             '<input type="number" class="form-control form-control-sm" id="filtro-venta-total-min" placeholder="Min">' +
             '<input type="number" class="form-control form-control-sm" id="filtro-venta-total-max" placeholder="Max">' +
@@ -232,6 +235,13 @@
             selectEstado.addEventListener('change', function () {
                 Factory.columnSearch(TABLA_SELECTOR, 2, selectEstado.value);
             });
+        }
+
+        var inputNumeroFactura = d.getElementById('filtro-venta-numero-factura');
+        if (inputNumeroFactura) {
+            inputNumeroFactura.addEventListener('keyup', debounce(function () {
+                Factory.columnSearch(TABLA_SELECTOR, 3, inputNumeroFactura.value);
+            }, 400));
         }
 
         var totalMin = d.getElementById('filtro-venta-total-min');

@@ -53,10 +53,16 @@ def _validar_balance(transacciones_data: list, saldo_inicial_hint=None):
 
     saldo_inicial_calculado = primero["saldo"] - primero["valor"]
     saldo_final_calculado = ultimo["saldo"]
-    total_creditos = sum((t["valor"] for t in transacciones_data if t["valor"] >= 0), Decimal("0.00"))
-    total_debitos = sum((-t["valor"] for t in transacciones_data if t["valor"] < 0), Decimal("0.00"))
+    total_creditos = sum(
+        (t["valor"] for t in transacciones_data if t["valor"] >= 0), Decimal("0.00")
+    )
+    total_debitos = sum(
+        (-t["valor"] for t in transacciones_data if t["valor"] < 0), Decimal("0.00")
+    )
 
-    saldo_inicial = saldo_inicial_hint if saldo_inicial_hint is not None else saldo_inicial_calculado
+    saldo_inicial = (
+        saldo_inicial_hint if saldo_inicial_hint is not None else saldo_inicial_calculado
+    )
     saldo_final_esperado = saldo_inicial + total_creditos - total_debitos
 
     diferencia = abs(saldo_final_esperado - saldo_final_calculado)
@@ -66,8 +72,10 @@ def _validar_balance(transacciones_data: list, saldo_inicial_hint=None):
             f"creditos ({total_creditos}) - debitos ({total_debitos}) = {saldo_final_esperado}, "
             f"pero el saldo final segun el ultimo movimiento es {saldo_final_calculado} "
             f"(diferencia de {diferencia}, tolerancia {TOLERANCIA_BALANCE}).",
-            saldo_inicial=saldo_inicial, total_creditos=total_creditos,
-            total_debitos=total_debitos, saldo_final_declarado=saldo_final_esperado,
+            saldo_inicial=saldo_inicial,
+            total_creditos=total_creditos,
+            total_debitos=total_debitos,
+            saldo_final_declarado=saldo_final_esperado,
             saldo_final_calculado=saldo_final_calculado,
         )
 
@@ -107,7 +115,9 @@ class ExtractoBancarioBusinessService:
             raise ValidationError("El extracto no tiene un archivo adjunto.")
 
         if not forzar:
-            existentes = TransaccionBancaria.objects.filter(extracto=extracto, empresa_id=extracto.empresa_id)
+            existentes = TransaccionBancaria.objects.filter(
+                extracto=extracto, empresa_id=extracto.empresa_id
+            )
             n_conciliadas = existentes.filter(conciliado=True).count()
             n_aplicaciones = MovimientoBancarioAplicacion.objects.filter(
                 transaccion__extracto=extracto, empresa_id=extracto.empresa_id
@@ -143,7 +153,9 @@ class ExtractoBancarioBusinessService:
                 except ValueError as exc:
                     estado_normalizado.filas_omitidas += 1
                     estado_normalizado.filas_importadas -= 1
-                    estado_normalizado.errores.append(f"Fila {tx.source_row_number}: fecha invalida ({exc})")
+                    estado_normalizado.errores.append(
+                        f"Fila {tx.source_row_number}: fecha invalida ({exc})"
+                    )
                     continue
             if fecha is None:
                 estado_normalizado.filas_omitidas += 1
@@ -151,14 +163,16 @@ class ExtractoBancarioBusinessService:
                 estado_normalizado.errores.append(f"Fila {tx.source_row_number}: sin fecha valida")
                 continue
 
-            transacciones_data.append({
-                "fecha": fecha,
-                "descripcion": tx.descripcion or "",
-                "sucursal": tx.sucursal,
-                "dcto": tx.dcto,
-                "valor": tx.valor,
-                "saldo": tx.saldo,
-            })
+            transacciones_data.append(
+                {
+                    "fecha": fecha,
+                    "descripcion": tx.descripcion or "",
+                    "sucursal": tx.sucursal,
+                    "dcto": tx.dcto,
+                    "valor": tx.valor,
+                    "saldo": tx.saldo,
+                }
+            )
 
         if not transacciones_data:
             raise ValidationError("No se encontraron transacciones validas en el archivo.")
@@ -175,7 +189,9 @@ class ExtractoBancarioBusinessService:
             raise ValidationError(str(exc)) from exc
 
         # Idempotencia (delete + bulk_create), DSV: empresa_id anclado.
-        TransaccionBancaria.objects.filter(extracto=extracto, empresa_id=extracto.empresa_id).delete()
+        TransaccionBancaria.objects.filter(
+            extracto=extracto, empresa_id=extracto.empresa_id
+        ).delete()
 
         TransaccionBancariaCRUDService.crear_transacciones_bulk(
             transacciones_data, extracto, extracto.empresa
@@ -189,9 +205,13 @@ class ExtractoBancarioBusinessService:
         logger.info(
             "[BancosBusiness] Ingestadas %s transacciones para extracto ID=%s (formato=%s, "
             "creditos=%s, debitos=%s, saldo_inicial=%s, saldo_final=%s)",
-            len(transacciones_data), extracto.id, estado_normalizado.source_format,
-            balance["total_creditos"], balance["total_debitos"],
-            balance["saldo_inicial"], balance["saldo_final"],
+            len(transacciones_data),
+            extracto.id,
+            estado_normalizado.source_format,
+            balance["total_creditos"],
+            balance["total_debitos"],
+            balance["saldo_inicial"],
+            balance["saldo_final"],
         )
 
         return {

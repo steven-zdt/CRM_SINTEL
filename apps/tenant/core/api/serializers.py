@@ -6,11 +6,13 @@ Serializers compuestos para Core API.
 - Crear adapters mínimos solo cuando sea necesario
 - Mantener tenant-awareness y branding dinámico
 """
+
 from rest_framework import serializers
 
 
 class EmpresaResumenSerializer(serializers.Serializer):
     """Serializer para resumen de empresa."""
+
     id = serializers.IntegerField(read_only=True)
     razon_social = serializers.CharField(read_only=True)
     nit = serializers.CharField(read_only=True)
@@ -26,6 +28,7 @@ class EmpresaResumenSerializer(serializers.Serializer):
 
 class FacturasResumenSerializer(serializers.Serializer):
     """Serializer para resumen de facturas."""
+
     total = serializers.IntegerField(read_only=True)
     pendientes = serializers.IntegerField(read_only=True)
     aceptadas = serializers.IntegerField(read_only=True)
@@ -36,6 +39,7 @@ class FacturasResumenSerializer(serializers.Serializer):
 
 class ContabilidadResumenSerializer(serializers.Serializer):
     """Serializer para resumen de contabilidad."""
+
     total_cuentas = serializers.IntegerField(read_only=True)
     total_asientos = serializers.IntegerField(read_only=True)
     mes_actual = serializers.DictField(read_only=True)
@@ -44,6 +48,7 @@ class ContabilidadResumenSerializer(serializers.Serializer):
 
 class PerfilResumenSerializer(serializers.Serializer):
     """Serializer para resumen de perfil."""
+
     id = serializers.IntegerField(read_only=True, allow_null=True)
     nombre_completo = serializers.CharField(read_only=True)
     telefono = serializers.CharField(read_only=True, allow_null=True)
@@ -54,6 +59,7 @@ class PerfilResumenSerializer(serializers.Serializer):
 
 class LandingResumenSerializer(serializers.Serializer):
     """Serializer para resumen de landing."""
+
     nombre = serializers.CharField(read_only=True)
     schema_name = serializers.CharField(read_only=True, allow_null=True)
     domain_url = serializers.CharField(read_only=True)
@@ -65,9 +71,10 @@ class LandingResumenSerializer(serializers.Serializer):
 class DashboardCompletoSerializer(serializers.Serializer):
     """
     Serializer para dashboard completo (compuesto de múltiples apps).
-    
+
     # WARNING: POLÍTICA: Incluye branding dinámico desde BD.
     """
+
     tenant = serializers.DictField(read_only=True)
     user = serializers.DictField(read_only=True)
     empresa = EmpresaResumenSerializer(read_only=True)
@@ -81,10 +88,11 @@ class DashboardCompletoSerializer(serializers.Serializer):
 class MiEmpresaSerializer(serializers.Serializer):
     """
     Serializer para endpoint /api/v1/core/mi-empresa/.
-    
+
     # WARNING: POLÍTICA: Incluye branding dinámico desde BD.
     # WARNING: SETUP: Retorna setup_required=True si no existe empresa (falta crear).
     """
+
     empresa = EmpresaResumenSerializer(read_only=True, allow_null=True)
     branding = serializers.DictField(read_only=True)
     setup_required = serializers.BooleanField(read_only=True)
@@ -94,6 +102,7 @@ class MiPerfilSerializer(serializers.Serializer):
     """
     Serializer para endpoint /api/v1/core/mi-perfil/.
     """
+
     perfil = PerfilResumenSerializer(read_only=True)
     user = serializers.DictField(read_only=True)
 

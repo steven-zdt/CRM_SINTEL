@@ -33,6 +33,18 @@
         <i class="bi bi-journals me-2"></i>Plantillas de Numeración
       </button>
     </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link py-2 px-3 fw-semibold border-0"
+              id="subtab-requisiciones-btn"
+              data-bs-toggle="tab"
+              data-bs-target="#subtab-requisiciones"
+              type="button"
+              role="tab"
+              aria-controls="subtab-requisiciones"
+              aria-selected="false">
+        <i class="bi bi-clipboard-check me-2"></i>Requisiciones
+      </button>
+    </li>
   </ul>
 
   <div class="tab-content" id="compras-tab-content">
@@ -52,10 +64,8 @@
         </div>
 
         <div class="card-body">
-          {# Toolbar #}
-          <div class="d-flex justify-content-between align-items-center mb-3" data-module="compras">
-            {% url 'compras:tabla' as compras_search_url %}
-            {% include 'tenant/core/partials/ui/filter_bar.html' with search_id="search-compra" placeholder="Buscar orden..." module="compras" search_url=compras_search_url target="#compras-panel" %}
+          {# Toolbar -- sin buscador propio: DataTables trae su buscador nativo #}
+          <div class="d-flex justify-content-end align-items-center mb-3" data-module="compras">
             <button class="btn btn-primary btn-sm"
                     hx-get="/api/v1/compras/render-offcanvas/crear/"
                     hx-target="#offcanvas-container-compras"
@@ -66,20 +76,15 @@
             </button>
           </div>
 
-          {% comment %}
-          Panel HTMX: KPIs + tabla server-rendered (django-tables2). Reemplaza el
-          antiguo #compras-summary + spinner + #grid-ordenes-compra Tabulator
-          (ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS).
-          {% endcomment %}
-          <div id="compras-panel"
-               data-grid="ordenes-compra"
+          {# KPIs -- siguen server-rendered via HTMX (kpis_compras.html) #}
+          <div id="compras-kpis-panel"
                hx-get="{% url 'compras:tabla' %}"
                hx-trigger="load, compra-created from:body, compra-updated from:body"
                hx-target="this"
-               hx-swap="innerHTML"
-               hx-boost="true">
-            {% include 'tenant/core/partials/ui/loading_state.html' with entity="órdenes de compra" %}
-          </div>
+               hx-swap="innerHTML"></div>
+
+          {# Tabla -- esqueleto estatico, poblado via ajax por compras_list.js #}
+          {% include 'tenant/compras/partials/tabla_compras.html' %}
         </div>
       </div>
     </div>
@@ -106,15 +111,32 @@
           </div>
         </div>
         <div class="card-body">
-          <div id="plantillas-panel"
-               data-grid="plantillas-compra"
-               hx-get="{% url 'compras:plantillas-tabla' %}"
-               hx-trigger="load, plantilla-changed from:body"
-               hx-target="this"
-               hx-swap="innerHTML"
-               hx-boost="true">
-            {% include 'tenant/core/partials/ui/loading_state.html' with entity="plantillas" %}
+          {# Tabla -- esqueleto estatico, poblado via ajax por compras_list.js #}
+          {% include 'tenant/compras/partials/tabla_plantillas.html' %}
+        </div>
+      </div>
+    </div>
+
+    {# ── TAB 3: Requisiciones de Compra ───────────────────────────────── #}
+    <div class="tab-pane fade" id="subtab-requisiciones" role="tabpanel" aria-labelledby="subtab-requisiciones-btn">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold text-dark">
+              <i class="bi bi-clipboard-check me-2 text-primary"></i>Requisiciones de Compra
+            </h6>
+            <button class="btn btn-primary btn-sm"
+                    hx-get="/api/v1/compras/requisiciones/render-offcanvas/crear/"
+                    hx-target="#offcanvas-container-requisiciones"
+                    hx-swap="innerHTML"
+                    title="Crear requisición de compra">
+              <i class="bi bi-plus-lg me-1"></i>Nueva Requisición
+            </button>
           </div>
+        </div>
+        <div class="card-body">
+          {# Tabla -- esqueleto estatico, poblado via ajax por requisiciones_list.js #}
+          {% include 'tenant/compras/requisiciones/partials/tabla_requisiciones.html' %}
         </div>
       </div>
     </div>
@@ -127,5 +149,8 @@
 
 {# Offcanvas Container - Plantillas #}
 <div id="offcanvas-container-plantillas"></div>
+
+{# Offcanvas Container - Requisiciones #}
+<div id="offcanvas-container-requisiciones"></div>
 
 {# assets cargados centralmente en workspace.html extra_js - no duplicar aqui #}

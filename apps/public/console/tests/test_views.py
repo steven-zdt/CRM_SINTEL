@@ -10,6 +10,7 @@ Convenciones del proyecto:
 - Host: 'localhost' (resuelve al schema public en django-tenants)
 - Autenticacion: client.force_login() para sesiones
 """
+
 from django.test import TestCase
 from django.urls import reverse
 

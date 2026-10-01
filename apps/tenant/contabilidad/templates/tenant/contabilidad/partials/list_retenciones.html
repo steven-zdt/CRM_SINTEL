@@ -4,55 +4,29 @@
 {# Fase 5-BIS: tabla server-rendered (django-tables2 + HTMX), reemplaza Tabulator #}
 <div id="ui-contabilidad-retencion" class="ui-module ui-contabilidad">
 
-  {# Toolbar #}
+  {# Toolbar -- sin buscador propio: DataTables trae su buscador nativo #}
   <div class="d-flex flex-wrap align-items-center gap-2 mb-3" id="toolbar-contabilidad-retencion">
 
-    <input id="search-retencion" class="form-control form-control-sm"
-           type="search" placeholder="Buscar por app origen o UUID..."
-           style="width: 240px;"
-           hx-get="{% url 'contabilidad:retencion-tabla' %}"
-           hx-trigger="keyup changed delay:400ms, search"
-           hx-target="#retenciones-panel"
-           hx-include="#filter-tipo-retencion, #filter-naturaleza-retencion, #filter-reversada-retencion"
-           name="q" />
-
-    <select id="filter-tipo-retencion" class="form-select form-select-sm" style="width: auto;"
-            hx-get="{% url 'contabilidad:retencion-tabla' %}"
-            hx-trigger="change"
-            hx-target="#retenciones-panel"
-            hx-include="#search-retencion, #filter-naturaleza-retencion, #filter-reversada-retencion"
-            name="tipo">
+    <select id="filter-tipo-retencion" class="form-select form-select-sm" style="width: auto;">
       <option value="">Todos los Tipos</option>
       <option value="RETEFUENTE">Retefuente</option>
       <option value="RETEICA">ReteICA</option>
       <option value="RETEIVA">ReteIVA</option>
     </select>
 
-    <select id="filter-naturaleza-retencion" class="form-select form-select-sm" style="width: auto;"
-            hx-get="{% url 'contabilidad:retencion-tabla' %}"
-            hx-trigger="change"
-            hx-target="#retenciones-panel"
-            hx-include="#search-retencion, #filter-tipo-retencion, #filter-reversada-retencion"
-            name="naturaleza">
+    <select id="filter-naturaleza-retencion" class="form-select form-select-sm" style="width: auto;">
       <option value="">Todas las Naturalezas</option>
       <option value="VENTA">Venta (cliente retiene)</option>
       <option value="COMPRA">Compra (retenida al proveedor)</option>
     </select>
 
-    <select id="filter-reversada-retencion" class="form-select form-select-sm" style="width: auto;"
-            hx-get="{% url 'contabilidad:retencion-tabla' %}"
-            hx-trigger="change"
-            hx-target="#retenciones-panel"
-            hx-include="#search-retencion, #filter-tipo-retencion, #filter-naturaleza-retencion"
-            name="reversada">
+    <select id="filter-reversada-retencion" class="form-select form-select-sm" style="width: auto;">
       <option value="">Todos los Estados</option>
       <option value="false">Activas</option>
       <option value="true">Reversadas</option>
     </select>
 
-    <button id="btn-refrescar-retencion" class="btn btn-sm btn-outline-secondary" title="Refrescar"
-            hx-get="{% url 'contabilidad:retencion-tabla' %}"
-            hx-target="#retenciones-panel">
+    <button id="btn-refrescar-retencion" class="btn btn-sm btn-outline-secondary" title="Refrescar">
       <i class="bi bi-arrow-clockwise"></i>
     </button>
 
@@ -61,14 +35,8 @@
   {# Feedback #}
   <div id="feedback-retencion" class="alert d-none mb-2" role="alert" aria-live="polite"></div>
 
-  {# Tabla server-rendered (django-tables2 + HTMX) #}
-  <div id="retenciones-panel"
-       hx-get="{% url 'contabilidad:retencion-tabla' %}"
-       hx-trigger="load, retencion-updated from:body"
-       hx-target="this"
-       hx-swap="innerHTML"
-       hx-boost="true">
-  </div>
+  {# Tabla -- esqueleto estatico, poblado via ajax por retencion_list.js #}
+  {% include 'tenant/contabilidad/partials/tabla_retenciones.html' %}
 
   {# Nota informativa #}
   <div class="mt-2 text-muted small">

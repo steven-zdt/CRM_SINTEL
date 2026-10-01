@@ -35,10 +35,10 @@ logger = logging.getLogger(__name__)
 class IndexStats:
     source_type: str
     scanned: int = 0
-    indexed: int = 0      # (re)embebidos
-    skipped: int = 0      # idempotencia: source_version sin cambios
-    emptied: int = 0      # texto en blanco -> des-indexado / no indexado
-    pruned: int = 0       # el registro de origen ya no existe
+    indexed: int = 0  # (re)embebidos
+    skipped: int = 0  # idempotencia: source_version sin cambios
+    emptied: int = 0  # texto en blanco -> des-indexado / no indexado
+    pruned: int = 0  # el registro de origen ya no existe
 
     def as_dict(self) -> dict:
         return {

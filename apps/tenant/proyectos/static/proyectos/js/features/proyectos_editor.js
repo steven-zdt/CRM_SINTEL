@@ -506,7 +506,7 @@
         // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
         const fmt    = (n) => (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
             ? w.DOMUtils.formatCurrency(n || 0, { minimumFractionDigits: 0 })
-            : new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n || 0);
+            : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(n || 0);
         const fmtPct = (n) => `${(n || 0).toFixed(1)}%`;
         const setEl  = (id, text) => { const el = d.querySelector(`#${id}`); if (el) el.textContent = text; };
 
@@ -759,7 +759,7 @@
                 // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
                 ? ((w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
                     ? w.DOMUtils.formatCurrency(total, { maximumFractionDigits: 0 })
-                    : new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(total))
+                    : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(total))
                 : '---';
         }
         if (clienteEl)  clienteEl.textContent  = info.cliente_razon_social || info.cliente || '---';

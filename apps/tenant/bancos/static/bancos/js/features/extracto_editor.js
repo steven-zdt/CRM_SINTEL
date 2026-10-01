@@ -757,7 +757,7 @@
     if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
       return w.DOMUtils.formatCurrency(num, { minimumFractionDigits: 0, maximumFractionDigits: 0, showSymbol: false });
     }
-    return new Intl.NumberFormat('es-CO', { minimumFractionDigits: 0 }).format(num);
+    return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0 }).format(num);
   }
 
   // ── Guardar extracto ─────────────────────────────────────────────────

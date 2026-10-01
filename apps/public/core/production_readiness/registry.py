@@ -13,12 +13,13 @@ confirmo por grep que no existe ningun ProductionReadiness/
 ProductionCheckRegistry/EnvironmentConfig/FeatureFlag/SecretManager/
 HealthService/ReleaseService previo en el repositorio.
 """
+
 from __future__ import annotations
 
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Callable
 
 from django.utils import timezone
 
@@ -123,8 +124,12 @@ def run_all_checks() -> list[CheckResult]:
             evidence = f"El check crasheo al ejecutarse:\n{traceback.format_exc()}"
         results.append(
             CheckResult(
-                id=check_id, category=category, severity=severity,
-                owner=owner, status=status, evidence=evidence,
+                id=check_id,
+                category=category,
+                severity=severity,
+                owner=owner,
+                status=status,
+                evidence=evidence,
             )
         )
     return results

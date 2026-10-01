@@ -5,18 +5,19 @@ SINTEL v3.10.1: Arquitectura Service Layer Modular.
 - Hereda de BaseServiceMixin (canonical, consolidado)
 - Mantiene solo métodos service_* específicos de Contabilidad
 """
+
 from apps.tenant.api.mixins import BaseServiceMixin
-from apps.tenant.contabilidad.services.selectors import (
-    CuentaSelector,
-    AsientoSelector,
-    PeriodoSelector,
-    MovimientoSelector,
-)
 from apps.tenant.contabilidad.services.business_service import (
     ContabilidadBusinessService,
 )
 from apps.tenant.contabilidad.services.crud_service import (
     ContabilidadCRUDService,
+)
+from apps.tenant.contabilidad.services.selectors import (
+    AsientoSelector,
+    CuentaSelector,
+    MovimientoSelector,
+    PeriodoSelector,
 )
 
 
@@ -33,8 +34,8 @@ class CuentaServiceMixin(BaseServiceMixin):
     def get_qs_list(self):
         """Sobrescribe para agregar parámetro tipo."""
         empresa_id = self.get_empresa_id()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
-        tipo = self.request.query_params.get('tipo') if hasattr(self, 'request') else None
+        search = self.request.query_params.get("search") if hasattr(self, "request") else None
+        tipo = self.request.query_params.get("tipo") if hasattr(self, "request") else None
         return self.selector_class.get_list(empresa_id, search=search, tipo=tipo)
 
 
@@ -51,16 +52,15 @@ class AsientoServiceMixin(BaseServiceMixin):
     def get_qs_list(self):
         """Sobrescribe para agregar parámetro estado."""
         empresa_id = self.get_empresa_id()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
-        estado = self.request.query_params.get('estado') if hasattr(self, 'request') else None
+        search = self.request.query_params.get("search") if hasattr(self, "request") else None
+        estado = self.request.query_params.get("estado") if hasattr(self, "request") else None
         return self.selector_class.get_list(empresa_id, search=search, estado=estado)
 
     def service_crear_asiento(self, serializer):
         """Crea asiento usando business service."""
         empresa_id = self.get_empresa_id()
         return self.business_service_class.crear_asiento(
-            empresa_id=empresa_id,
-            data=serializer.validated_data
+            empresa_id=empresa_id, data=serializer.validated_data
         )
 
 
@@ -87,5 +87,5 @@ class MovimientoServiceMixin(BaseServiceMixin):
     def get_qs_list(self):
         """Sobrescribe para agregar parámetro asiento."""
         empresa_id = self.get_empresa_id()
-        asiento_id = self.request.query_params.get('asiento') if hasattr(self, 'request') else None
+        asiento_id = self.request.query_params.get("asiento") if hasattr(self, "request") else None
         return self.selector_class.get_list(empresa_id, asiento_id=asiento_id)

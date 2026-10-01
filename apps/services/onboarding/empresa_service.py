@@ -8,7 +8,6 @@ from django.db import IntegrityError, ProgrammingError, connection, transaction
 from django.utils.text import slugify
 from django_tenants.utils import schema_context, schema_exists
 
-from apps.public.accounts.api.services.user_service import create_user_service
 from apps.public.tenants.models import Client, Domain, TenantMembership
 from apps.public.tenants.utils import normalize_domain, validate_fqdn, validate_schema_name
 
@@ -36,34 +35,36 @@ Uso:
         admin_user_id=1
     )
 """
+
+
 def build_primary_domain(schema_name: str, dominio_fqdn: str | None = None) -> str:
     """
     Construye el dominio primario FQDN para un tenant.
-    
+
     WARNING: CAMBIO v2.25: Autogeneración de dominio como <schema>.<TENANT_DOMAIN_BASE>
     si dominio_fqdn viene vacío, inválido o sin TLD.
-    
+
     Args:
         schema_name: Nombre del schema del tenant (ej: "cliente")
         dominio_fqdn: Dominio proporcionado (opcional, puede ser None o vacío)
-    
+
     Returns:
         str: Dominio FQDN normalizado y validado (ej: "cliente.sintel.net.co")
-    
+
     Raises:
         ValidationError: Si el dominio autogenerado no es válido
     """
     from django.conf import settings
-    
-    base = getattr(settings, 'TENANT_DOMAIN_BASE', 'sintel.net.co')
-    
+
+    base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
+
     # Si no viene dominio o está vacío, autogenerar.
     # Sanitizar schema_name para uso en labels DNS (no se permiten underscores u otros caracteres).
     if not dominio_fqdn or not dominio_fqdn.strip():
         import re
 
-        sanitized = re.sub(r'[^a-z0-9-]', '-', schema_name.lower())
-        sanitized = sanitized.strip('-') or schema_name.lower()
+        sanitized = re.sub(r"[^a-z0-9-]", "-", schema_name.lower())
+        sanitized = sanitized.strip("-") or schema_name.lower()
         dominio_fqdn = f"{sanitized}.{base}"
     else:
         # Normalizar primero para verificar si tiene TLD
@@ -72,33 +73,33 @@ def build_primary_domain(schema_name: str, dominio_fqdn: str | None = None) -> s
         if not validate_fqdn(normalized) or not normalized.endswith(f".{base}"):
             import re
 
-            sanitized = re.sub(r'[^a-z0-9-]', '-', schema_name.lower())
-            sanitized = sanitized.strip('-') or schema_name.lower()
+            sanitized = re.sub(r"[^a-z0-9-]", "-", schema_name.lower())
+            sanitized = sanitized.strip("-") or schema_name.lower()
             dominio_fqdn = f"{sanitized}.{base}"
-    
+
     # Normalizar (sin protocolo/www/puerto/rutas)
     fqdn = normalize_domain(dominio_fqdn)
-    
+
     # Validar FQDN
     if not validate_fqdn(fqdn):
         raise ValidationError(
             f"El dominio '{fqdn}' no es un FQDN válido. "
             f"Se esperaba un formato como '{schema_name}.{base}'"
         )
-    
+
     return fqdn
 
 
 def _build_login_url(domain: str) -> str:
     """
     Construye login_url con puerto en DEV si APP_PORT está configurado.
-    
+
     WARNING: v2.30: API-First - La raíz del tenant redirige según autenticación.
     - Usuario autenticado → /dashboard/
     - Usuario anónimo → /api/v1/landing/info/ (información pública)
-    
+
     WARNING: v2.30: El login se maneja mediante POST /api/v1/core/auth/login/ (Core API)
-    
+
     WARNING: v2.30: Hardening - Incluye puerto en DEV cuando APP_PORT está configurado.
     - Domain.domain SIEMPRE es FQDN puro (sin puerto), tal como dicta la normalización.
     - En DEV, si APP_PORT=8000, se agrega :8000 a la URL.
@@ -111,8 +112,8 @@ def _build_login_url(domain: str) -> str:
         raise ValidationError("Dominio inválido para construir login_url")
 
     # SITE_PROTOCOL env override takes priority (set to 'https' when behind nginx/reverse proxy)
-    site_protocol = getattr(settings, 'SITE_PROTOCOL', '').strip().lower()
-    if site_protocol in ('https', 'http'):
+    site_protocol = getattr(settings, "SITE_PROTOCOL", "").strip().lower()
+    if site_protocol in ("https", "http"):
         protocol = site_protocol
     elif not settings.DEBUG and getattr(settings, "SECURE_SSL_REDIRECT", False):
         protocol = "https"
@@ -120,8 +121,8 @@ def _build_login_url(domain: str) -> str:
         protocol = "http"
 
     # Omit port when protocol is https (reverse proxy handles 443→app)
-    app_port = getattr(settings, 'APP_PORT', None)
-    if protocol != 'https' and settings.DEBUG and app_port and str(app_port) not in ('80', '443'):
+    app_port = getattr(settings, "APP_PORT", None)
+    if protocol != "https" and settings.DEBUG and app_port and str(app_port) not in ("80", "443"):
         domain_with_port = f"{fqdn}:{app_port}"
     else:
         domain_with_port = fqdn
@@ -142,16 +143,19 @@ def generar_schema_name(nombre: str) -> str:
 def _table_exists(schema: str, table: str) -> bool:
     """
     Verifica si una tabla existe en el schema del tenant.
-    
+
     Consulta el catálogo de PostgreSQL para verificar existencia de la tabla.
     """
     with connection.cursor() as cur:
-        cur.execute("""
+        cur.execute(
+            """
             SELECT 1
             FROM information_schema.tables
             WHERE table_schema = %s AND table_name = %s
             LIMIT 1
-        """, [schema, table])
+        """,
+            [schema, table],
+        )
         return cur.fetchone() is not None
 
 
@@ -159,17 +163,17 @@ def _ensure_schema_ready(client: Client, required_tables: list[str] = None):
     """
     Verifica que el schema del tenant tenga las tablas requeridas.
     Si faltan, intenta forzar migración del schema del tenant.
-    
+
     WARNING: v2.30: Hardening - Reforzado para asegurar migraciones antes del seed.
     La doc de django-tenants indica que con auto_create_schema=True
     se ejecuta migrate_schemas al save(), pero esta verificación asegura que
     estén aplicadas antes de seedear (evita errores en escenarios de timing).
-    
+
     WARNING: DEFENSIVO: Ejecuta migrate_schemas --tenant para el schema específico.
     """
     if not required_tables:
         return
-    
+
     missing = [t for t in required_tables if not _table_exists(client.schema_name, t)]
     if missing:
         # Forzar migraciones del schema del tenant (defensivo)
@@ -181,7 +185,8 @@ def _ensure_schema_ready(client: Client, required_tables: list[str] = None):
             # WARNING: v2.30: Usar --schema y --fake-initial para migrar el schema específico
             call_command(
                 "migrate_schemas",
-                "--schema", client.schema_name,
+                "--schema",
+                client.schema_name,
                 "--fake-initial",
                 interactive=False,
                 verbosity=1,  # WARNING: v2.30: Aumentar verbosidad para debugging
@@ -201,7 +206,7 @@ def _ensure_schema_ready(client: Client, required_tables: list[str] = None):
             logger.error(
                 f"ERROR: Error ejecutando migrate_schemas para schema '{client.schema_name}': {e}. "
                 f"Seed de perfil se omitirá.",
-                exc_info=True
+                exc_info=True,
             )
 
 
@@ -221,10 +226,10 @@ def crear_tenant_con_owner(
 ) -> dict[str, Any]:
     """
     Onboarding atómico de tenant con propietario (idempotente y resiliente).
-    
+
     WARNING: CONTRATO ESTABLE: Siempre retorna dict {"client_id", "domain", "membership_id", "login_url"}
     Aunque el seed de perfil falle, el onboarding SIEMPRE retorna login_url si User, Client, Domain y Membership se crearon.
-    
+
     Orden de ejecución (con guardas):
     1. User en public → set_password() (hash seguro), idempotente por email
     2. Client.save() con auto_create_schema=True (crea esquema + migra TENANT_APPS automáticamente)
@@ -232,19 +237,19 @@ def crear_tenant_con_owner(
     4. TenantMembership (OWNER) en public
     5. Seed dentro de schema_context(schema), solo si existe la(s) tabla(s) (ej. perfil_tenantprofile)
        - Si no existen, log de "seed omitido" y continuar (no romper el onboarding)
-    
+
     WARNING: CONFORME A DOCUMENTACIÓN OFICIAL DE DJANGO-TENANTS:
     - Usuario global en public (AUTH_USER_MODEL) - NO en el schema del tenant
     - Client con auto_create_schema=True (crea esquema automáticamente al save())
     - Domain con FQDN limpio (sin puerto, sin www) - según doc oficial
     - TenantMembership (rol=ADMIN, is_primary_admin=True) en public
     - Seed opcional dentro del tenant usando schema_context (solo si tabla existe)
-    
+
     Referencias:
     - django-tenants: https://django-tenants.readthedocs.io/en/latest/use.html
     - auto_create_schema: https://django-tenants.readthedocs.io/en/latest/use.html#creating-tenants
     - schema_context: https://django-tenants.readthedocs.io/en/latest/use.html#schema-context
-    
+
     Args:
         nombre: Nombre de la empresa (requerido)
         schema_name: Schema name (requerido)
@@ -256,7 +261,7 @@ def crear_tenant_con_owner(
         owner_is_active: Si el propietario está activo (default: True)
         paid_until: Fecha de pago hasta (opcional)
         on_trial: Si está en período de prueba (default: True)
-    
+
     Returns:
         Dict estable: {
             "client_id": int,
@@ -264,14 +269,14 @@ def crear_tenant_con_owner(
             "membership_id": int,
             "login_url": str
         }
-    
+
     Raises:
         ValidationError: Si los datos son inválidos o el dominio ya existe
         ValueError: Si email o password están vacíos o faltan parámetros requeridos
     """
     if not nombre or not nombre.strip():
         raise ValidationError("El nombre de la empresa es requerido")
-    
+
     # 1) Resolver usuario admin (crear si no existe, o usar existente)
     # WARNING: GUARDA: User en public (AUTH_USER_MODEL), idempotente por email
     # WARNING: CAMBIO v2.24: Owner se crea con set_unusable_password() y se invita por email
@@ -285,23 +290,26 @@ def crear_tenant_con_owner(
             raise ValidationError(
                 f"El usuario con ID {admin_user_id} no existe o no está activo. "
                 f"No se puede crear un tenant sin un administrador válido."
-            )
+            ) from None
     elif owner_email:
         # WARNING: CAMBIO v2.24: Crear/obtener usuario SIN contraseña usable (se activará en el subdominio)
         email = (owner_email or "").strip().lower()
         if not email:
             raise ValueError("Email del propietario es obligatorio.")
-        
+
         # Primero intentar obtener usuario existente
         user = User.objects.only("id", "email", "is_active", "password").filter(email=email).first()
-        
+
         if user:
             # Usuario existente: si ya tiene password usable, mantenerlo
             # Si no tiene password usable, se generará nueva invitación
             if user.has_usable_password():
                 logger.info("Usuario existente con password usable: %s", email)
             else:
-                logger.info("Usuario existente sin password usable: %s (se generará nueva invitación)", email)
+                logger.info(
+                    "Usuario existente sin password usable: %s (se generará nueva invitación)",
+                    email,
+                )
         else:
             # Crear nuevo usuario SIN password usable (se activará en el subdominio)
             try:
@@ -309,7 +317,7 @@ def crear_tenant_con_owner(
                     _generate_unique_username,
                     _user_has_field,
                 )
-                
+
                 # Preparar kwargs para crear usuario
                 user_kwargs = {
                     "email": email,
@@ -318,33 +326,48 @@ def crear_tenant_con_owner(
                     "is_staff": owner_is_staff,
                     "is_active": owner_is_active,
                 }
-                
+
                 # Si existe el campo username, generarlo de forma única
                 if _user_has_field("username"):
                     user_kwargs["username"] = _generate_unique_username(email)
-                
+
                 # Crear usuario
                 user = User(**user_kwargs)
                 user.set_unusable_password()  # WARNING: CRÍTICO: Sin password usable (se activará en subdominio)
                 # WARNING: CRÍTICO: Guardar primero sin update_fields para crear el PK, luego actualizar si es necesario
                 user.save()  # Crear usuario con PK
-                
-                logger.info("Usuario creado en public: %s (username=%s, password unusable - se activará en subdominio)", email, getattr(user, 'username', 'N/A'))
+
+                logger.info(
+                    "Usuario creado en public: %s (username=%s, password unusable - se activará en subdominio)",
+                    email,
+                    getattr(user, "username", "N/A"),
+                )
             except IntegrityError as e:
                 # Si hay conflicto de unicidad (email o username), intentar obtener el usuario existente
-                logger.warning("Conflicto de unicidad al crear usuario %s, intentando obtener existente...", email)
-                user = User.objects.only("id", "email", "is_active", "password").filter(email=email).first()
+                logger.warning(
+                    "Conflicto de unicidad al crear usuario %s, intentando obtener existente...",
+                    email,
+                )
+                user = (
+                    User.objects.only("id", "email", "is_active", "password")
+                    .filter(email=email)
+                    .first()
+                )
                 if not user:
-                    raise ValueError(f"No se pudo crear ni obtener el usuario {email}: {str(e)}") from e
+                    raise ValueError(
+                        f"No se pudo crear ni obtener el usuario {email}: {str(e)}"
+                    ) from e
                 logger.info("Usuario obtenido después de conflicto: %s", email)
     else:
         raise ValueError("Se requiere 'admin_user_id' o 'owner_email' para crear un tenant")
-    
+
     # 2) Validar schema_name
     raw_schema = schema_name.strip().lower()
     validate_schema_name(raw_schema)
-    logger.info("Iniciando onboarding para tenant: schema='%s', nombre='%s'", raw_schema, nombre.strip())
-    
+    logger.info(
+        "Iniciando onboarding para tenant: schema='%s', nombre='%s'", raw_schema, nombre.strip()
+    )
+
     # 3) Client: auto_create_schema=True debe estar en el modelo; al save() ejecuta migrate_schemas (doc)
     # WARNING: GUARDA: Client.save() con auto_create_schema=True crea esquema + migra TENANT_APPS automáticamente
     client = Client(
@@ -355,13 +378,17 @@ def crear_tenant_con_owner(
         is_active=True,
     )
     client.save()  # django-tenants ejecuta migrate_schemas automáticamente aquí
-    logger.info("Client creado: schema='%s', id=%s (esquema PostgreSQL creado y migrado)", raw_schema, client.id)
-    
+    logger.info(
+        "Client creado: schema='%s', id=%s (esquema PostgreSQL creado y migrado)",
+        raw_schema,
+        client.id,
+    )
+
     # 4) Domain (dominio primario FQDN)
     # WARNING: CAMBIO v2.25: Autogeneración de dominio como <schema>.<TENANT_DOMAIN_BASE>
     # si dominio_fqdn viene vacío o inválido
     primary_fqdn = build_primary_domain(client.schema_name, dominio_fqdn)
-    
+
     try:
         domain, created = Domain.objects.get_or_create(
             domain=primary_fqdn,
@@ -372,15 +399,17 @@ def crear_tenant_con_owner(
         logger.info(
             "Domain creado: '%s' (is_primary=True, autogenerado: %s)",
             primary_fqdn,
-            "sí" if not dominio_fqdn or not dominio_fqdn.strip() else "no"
+            "sí" if not dominio_fqdn or not dominio_fqdn.strip() else "no",
         )
     except IntegrityError:
         # Read-back para condiciones de carrera
         domain = Domain.objects.get(domain=primary_fqdn)
         if domain.tenant_id != client.id:
-            raise ValidationError(f"El dominio '{primary_fqdn}' ya está asociado a otro tenant.")
+            raise ValidationError(
+                f"El dominio '{primary_fqdn}' ya está asociado a otro tenant."
+            ) from None
         logger.info("Domain existente: '%s' (idempotente)", primary_fqdn)
-    
+
     # 5) Membership (propietario) en public
     # WARNING: GUARDA: TenantMembership (OWNER) en public, no en el schema del tenant
     membership, created = TenantMembership.objects.get_or_create(
@@ -389,26 +418,38 @@ def crear_tenant_con_owner(
         defaults={"rol": "ADMIN", "is_primary_admin": True, "is_active": True},
     )
     if created:
-        logger.info("TenantMembership creado: user=%s, client=%s, rol=ADMIN, is_primary_admin=True", user.email, raw_schema)
+        logger.info(
+            "TenantMembership creado: user=%s, client=%s, rol=ADMIN, is_primary_admin=True",
+            user.email,
+            raw_schema,
+        )
     else:
-        logger.info("TenantMembership existente: user=%s, client=%s (idempotente)", user.email, raw_schema)
-    
+        logger.info(
+            "TenantMembership existente: user=%s, client=%s (idempotente)", user.email, raw_schema
+        )
+
     # 6) (Opcional) Seed de perfil, sólo si la tabla existe en el schema del tenant
     # CRÍTICO: El seed es OPCIONAL y NUNCA debe romper el onboarding
     # Aseguramos antes que migraciones estén aplicadas (defensivo)
     # Si la tabla no existe o hay errores, omitimos el seed sin afectar el resultado
     try:
         # Indica el nombre real de tu tabla: <app_label>_<model> en minúsculas
-        required_tables = ["perfil_tenantprofile", "empresa_empresa"]  # ajusta si tu app/model difiere
-        
+        required_tables = [
+            "perfil_tenantprofile",
+            "empresa_empresa",
+        ]  # ajusta si tu app/model difiere
+
         # Verificar y forzar migraciones si faltan tablas
         _ensure_schema_ready(client, required_tables)
-        
+
         # Verificar que las tablas existen después de forzar migraciones
-        if _table_exists(client.schema_name, "perfil_tenantprofile") and _table_exists(client.schema_name, "empresa_empresa"):
+        if _table_exists(client.schema_name, "perfil_tenantprofile") and _table_exists(
+            client.schema_name, "empresa_empresa"
+        ):
             with schema_context(client.schema_name):  # ejecutar dentro del schema del tenant
                 # 1. CRÍTICO: Crear instancia de Empresa ANTES del TenantProfile
                 from apps.tenant.empresa.models import Empresa
+
                 empresa, empresa_created = Empresa.objects.get_or_create(
                     singleton_key=1,
                     defaults={
@@ -418,22 +459,28 @@ def crear_tenant_con_owner(
                         "telefono": "000-000-0000",
                         "email_contacto": user.email,
                         "owner_email": user.email,  # Auto-Admin Elevation: denormalizacion del owner
-                    }
+                    },
                 )
                 if empresa_created:
-                    logger.info(f"Empresa SINTEL_EMPRESA_ROOT creada para tenant {raw_schema}: {empresa.razon_social}")
+                    logger.info(
+                        f"Empresa SINTEL_EMPRESA_ROOT creada para tenant {raw_schema}: {empresa.razon_social}"
+                    )
                 else:
-                    logger.info(f"Empresa existente para tenant {raw_schema}: {empresa.razon_social}")
+                    logger.info(
+                        f"Empresa existente para tenant {raw_schema}: {empresa.razon_social}"
+                    )
 
                 # 1.5. Sede "Principal"/Area "General" (idempotente, ver ADR-003)
                 from apps.tenant.empresa.services.business_service import (
                     asegurar_estructura_organizacional_inicial,
                 )
+
                 asegurar_estructura_organizacional_inicial(empresa)
 
                 # 2. Crear TenantProfile con empresa explícita
                 # LOOKUP incluye empresa para respetar unique_together=(user, empresa)
                 from apps.tenant.perfil.models import TenantProfile
+
                 TenantProfile.objects.get_or_create(
                     user=user,
                     empresa=empresa,
@@ -449,7 +496,7 @@ def crear_tenant_con_owner(
             logger.warning(
                 "Tabla 'perfil_tenantprofile' no existe en schema '%s'. "
                 "Seed de perfil omitido. Onboarding continúa normalmente.",
-                raw_schema
+                raw_schema,
             )
     except ProgrammingError as e:
         # Si el app no está en TENANT_APPS o hay desfase de migraciones, no bloqueamos el onboarding
@@ -470,7 +517,7 @@ def crear_tenant_con_owner(
             exc_info=True,
         )
         raise
-    
+
     # 7) Generar token y encolar email + certificados via Celery post-commit.
     #
     # CRITICO: send_invitation_email() NO se llama aqui de forma sincrona.
@@ -500,7 +547,8 @@ def crear_tenant_con_owner(
 
             logger.info(
                 "Token de activacion generado para user=%s tenant=%s (email se enviara post-commit)",
-                user.email, raw_schema,
+                user.email,
+                raw_schema,
             )
 
             # Encolar email via Celery solo despues del commit exitoso.
@@ -517,7 +565,9 @@ def crear_tenant_con_owner(
             logger.error(
                 "ERROR generando token de invitacion para tenant '%s': %s. "
                 "Onboarding continua sin email de activacion.",
-                raw_schema, str(e), exc_info=True,
+                raw_schema,
+                str(e),
+                exc_info=True,
             )
 
     # Encolar aprovisionamiento de certificados siempre post-commit
@@ -526,10 +576,10 @@ def crear_tenant_con_owner(
     transaction.on_commit(
         lambda dom=_dom_cert, schema=_schema_cert: _enqueue_provision_certificates(dom, schema)
     )
-    
+
     # 8) Construir login_url sin puerto (para compatibilidad con consola)
     login_url = _build_login_url(domain.domain)
-    
+
     # WARNING: CONTRATO ESTABLE: Siempre retornar dict con estos campos, incluso si el seed falló
     result = {
         "client_id": client.id,
@@ -537,17 +587,20 @@ def crear_tenant_con_owner(
         "membership_id": membership.id,
         "login_url": login_url,
     }
-    
+
     # WARNING: CAMBIO v2.24: Incluir activation_url si se generó
     if activation_url:
         result["activation_url"] = activation_url
-    
+
     logger.info(
         "ONBOARDING COMPLETADO: tenant='%s' (schema='%s'), domain='%s', login_url='%s'%s",
-        nombre.strip(), raw_schema, domain.domain, login_url,
-        f", activation_url='{activation_url}'" if activation_url else ""
+        nombre.strip(),
+        raw_schema,
+        domain.domain,
+        login_url,
+        f", activation_url='{activation_url}'" if activation_url else "",
     )
-    
+
     return result
 
 
@@ -591,7 +644,7 @@ def onboard_tenant(
             raise ValidationError(
                 f"El usuario con ID {admin_user_id} no existe o no está activo. "
                 f"No se puede crear un tenant sin un administrador válido."
-            )
+            ) from None
 
     # 3) Client idempotente
     client, _ = Client.objects.get_or_create(
@@ -622,7 +675,9 @@ def onboard_tenant(
         # Read-back para condiciones de carrera / autoreloads concurrentes
         domain = Domain.objects.get(domain=fqdn)
         if domain.tenant_id != client.id:
-            raise ValidationError(f"El dominio '{fqdn}' ya está asociado a otro tenant.")
+            raise ValidationError(
+                f"El dominio '{fqdn}' ya está asociado a otro tenant."
+            ) from None
 
     # 5) Membership idempotente (si hay admin)
     if admin_user is not None:
@@ -650,7 +705,9 @@ def onboard_tenant(
             required_tables = ["perfil_tenantprofile", "empresa_empresa"]
             _ensure_schema_ready(client, required_tables)
 
-            if _table_exists(client.schema_name, "perfil_tenantprofile") and _table_exists(client.schema_name, "empresa_empresa"):
+            if _table_exists(client.schema_name, "perfil_tenantprofile") and _table_exists(
+                client.schema_name, "empresa_empresa"
+            ):
                 with schema_context(client.schema_name):
                     from apps.tenant.empresa.models import Empresa
                     from apps.tenant.perfil.models import TenantProfile
@@ -668,12 +725,15 @@ def onboard_tenant(
                         },
                     )
                     if empresa_created:
-                        logger.info(f"Empresa creada para tenant {raw_schema}: {empresa.razon_social}")
+                        logger.info(
+                            f"Empresa creada para tenant {raw_schema}: {empresa.razon_social}"
+                        )
 
                     # Sede "Principal"/Area "General" (idempotente, ver ADR-003)
                     from apps.tenant.empresa.services.business_service import (
                         asegurar_estructura_organizacional_inicial,
                     )
+
                     asegurar_estructura_organizacional_inicial(empresa)
 
                     # LOOKUP incluye empresa para respetar unique_together=(user, empresa)
@@ -686,12 +746,14 @@ def onboard_tenant(
                             "configuracion": {"theme": "light", "notifications": True},
                         },
                     )
-                logger.info(f"Perfil creado para admin_user {admin_user.email} en tenant {raw_schema}")
+                logger.info(
+                    f"Perfil creado para admin_user {admin_user.email} en tenant {raw_schema}"
+                )
             else:
                 logger.warning(
                     "Tablas 'perfil_tenantprofile'/'empresa_empresa' no existen en schema '%s'. "
                     "Seed de empresa/perfil omitido para admin_user.",
-                    raw_schema
+                    raw_schema,
                 )
         except Exception as ex:
             logger.error(
@@ -734,30 +796,30 @@ def crear_empresa(
     email_admin: str,
     poblar_datos_iniciales: bool = False,
     schema_name: str | None = None,
-    **kwargs
+    **kwargs,
 ) -> dict[str, Any]:
     """
     Crea una nueva empresa (tenant) con su dominio y usuario administrador.
-    
+
     WARNING: v2.17: Estandarización de subdominios
     - El dominio se construye automáticamente como: {schema_name}.{TENANT_DOMAIN_BASE}
     - Ya no se acepta el parámetro 'dominio' - todos los tenants usan subdominios
     - La señal post_save crea automáticamente el dominio principal
-    
+
     Flujo estándar de alta de empresa:
     1. Genera schema_name desde el nombre (si no se proporciona)
     2. Crea instancia de Client (genera esquema automáticamente, señal crea dominio como subdominio)
     3. Ejecuta migraciones del tenant
     4. Opcionalmente crea usuario administrador
     5. Opcionalmente pobla datos iniciales
-    
+
     Args:
         nombre: Nombre de la empresa
         email_admin: Email del administrador de la empresa
         poblar_datos_iniciales: Si True, pobla catálogo DIAN en el tenant (opcional)
         schema_name: Schema name (opcional, se genera desde nombre si no se proporciona)
         **kwargs: Argumentos adicionales para Client (paid_until, on_trial, etc.)
-        
+
     Returns:
         Dict con información de la empresa creada:
         {
@@ -766,7 +828,7 @@ def crear_empresa(
             'user': User (opcional),
             'schema_name': str
         }
-        
+
     Raises:
         ValidationError: Si los datos son inválidos o el dominio ya existe
     """
@@ -774,35 +836,49 @@ def crear_empresa(
     # Validaciones
     if not nombre or not nombre.strip():
         raise ValidationError("El nombre de la empresa es requerido")
-    
+
     if not email_admin or not email_admin.strip():
         raise ValidationError("El email del administrador es requerido")
-    
+
     # Generar schema_name si no se proporciona
     if not schema_name:
         schema_name = generar_schema_name(nombre)
 
     # 1. Crear/obtener usuario admin global usando el Service Layer
     # WARNING: CRÍTICO: Usar create_user_service para generar username único y hashear password
-    user = User.objects.only("id", "email", "is_active", "password", "username").filter(email=email_admin).first()
+    user = (
+        User.objects.only("id", "email", "is_active", "password", "username")
+        .filter(email=email_admin)
+        .first()
+    )
     if not user:
         try:
             from apps.public.accounts.api.services.user_service import _generate_unique_username
+
             new_user = User(
                 email=email_admin,
                 username=_generate_unique_username(email_admin),
-                is_staff=False,   # Owners de tenant no son staff del sistema
+                is_staff=False,  # Owners de tenant no son staff del sistema
                 is_active=True,
             )
             new_user.set_unusable_password()
             new_user.save()
             user = new_user
             user_created = True
-            logger.info("OK: Usuario admin creado en public: %s (password unusable - activacion por email)", email_admin)
+            logger.info(
+                "OK: Usuario admin creado en public: %s (password unusable - activacion por email)",
+                email_admin,
+            )
         except IntegrityError as e:
-            user = User.objects.only("id", "email", "is_active", "password", "username").filter(email=email_admin).first()
+            user = (
+                User.objects.only("id", "email", "is_active", "password", "username")
+                .filter(email=email_admin)
+                .first()
+            )
             if not user:
-                raise ValueError(f"No se pudo crear ni obtener el usuario {email_admin}: {str(e)}") from e
+                raise ValueError(
+                    f"No se pudo crear ni obtener el usuario {email_admin}: {str(e)}"
+                ) from e
             logger.info("OK: Usuario obtenido despues de conflicto: %s", email_admin)
             user_created = False
 
@@ -818,17 +894,32 @@ def crear_empresa(
     # 3.b) Si el usuario fue creado en este flujo (password temporal), generar token
     # de activación e intentar enviar email de invitación. No abortar onboarding si falla.
     try:
-        if 'user_created' in locals() and user_created:
+        if "user_created" in locals() and user_created:
             from apps.public.core.services.email_service import EmailService
-            logger.info("Enviando email de activacion a nuevo admin user_id=%s tenant=%s", user.id, client.schema_name)
+
+            logger.info(
+                "Enviando email de activacion a nuevo admin user_id=%s tenant=%s",
+                user.id,
+                client.schema_name,
+            )
             # SSoT: send_tenant_activation_email genera token + URL tenant-especifica internamente
             sent = EmailService.send_tenant_activation_email(user, client)
             if sent:
-                logger.info("Email de activacion encolado para user=%s tenant=%s", user.email, client.schema_name)
+                logger.info(
+                    "Email de activacion encolado para user=%s tenant=%s",
+                    user.email,
+                    client.schema_name,
+                )
             else:
                 logger.warning("No se pudo encolar email de activacion para user=%s", user.email)
     except Exception as e:
-        logger.error("ERROR enviando invitacion para nuevo admin %s en tenant %s: %s", user.email, schema_name, str(e), exc_info=True)
+        logger.error(
+            "ERROR enviando invitacion para nuevo admin %s en tenant %s: %s",
+            user.email,
+            schema_name,
+            str(e),
+            exc_info=True,
+        )
 
     # 3. (Opcional) Poblar datos iniciales en el schema del tenant
     if poblar_datos_iniciales:
@@ -837,10 +928,10 @@ def crear_empresa(
         pass
 
     return {
-        'client': client,
-        'domain': domain,
-        'user': user,
-        'schema_name': schema_name,
+        "client": client,
+        "domain": domain,
+        "user": user,
+        "schema_name": schema_name,
     }
 
 
@@ -851,14 +942,15 @@ def _enqueue_activation_email(user_id: int, token: str, domain: str) -> None:
     """
     try:
         from apps.public.tenants.tasks import send_activation_email_task
+
         send_activation_email_task.delay(user_id, token, domain)
-        logger.info(
-            "send_activation_email_task encolada: user_id=%s domain=%s", user_id, domain
-        )
+        logger.info("send_activation_email_task encolada: user_id=%s domain=%s", user_id, domain)
     except Exception as e:
         logger.error(
             "Error encolando send_activation_email_task para user_id=%s: %s",
-            user_id, e, exc_info=True,
+            user_id,
+            e,
+            exc_info=True,
         )
 
 
@@ -869,33 +961,41 @@ def _enqueue_provision_certificates(domain: str, schema_name: str) -> None:
     """
     try:
         from apps.public.tenants.tasks import provision_tenant_certificates_task
+
         provision_tenant_certificates_task.delay(domain, schema_name)
         logger.info(
             "provision_tenant_certificates_task encolada: domain=%s schema=%s",
-            domain, schema_name,
+            domain,
+            schema_name,
         )
     except Exception as e:
         logger.error(
             "Error encolando provision_tenant_certificates_task para domain=%s: %s",
-            domain, e, exc_info=True,
+            domain,
+            e,
+            exc_info=True,
         )
 
 
 def verificar_empresa(schema_name: str) -> bool:
     """
     Verifica que una empresa (tenant) existe y está correctamente configurada.
-    
+
     Args:
         schema_name: Nombre del esquema del tenant
-        
+
     Returns:
         True si la empresa existe y está configurada correctamente
     """
     try:
         client = Client.objects.get(schema_name=schema_name)
-        domain = Domain.objects.only("id", "domain", "is_primary", "tenant_id").filter(tenant=client, is_primary=True).first()
+        domain = (
+            Domain.objects.only("id", "domain", "is_primary", "tenant_id")
+            .filter(tenant=client, is_primary=True)
+            .first()
+        )
         schema_exists_check = schema_exists(schema_name)
-        
+
         return client is not None and domain is not None and schema_exists_check
     except Client.DoesNotExist:
         return False

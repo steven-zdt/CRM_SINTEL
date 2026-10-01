@@ -1,6 +1,7 @@
 """
 ViewSets para Configuracion de Cotizaciones v2.62.0 - SINTEL FSD
 """
+
 import logging
 
 from django.db import IntegrityError
@@ -28,6 +29,7 @@ class ConfiguracionCotizacionViewSet(SintelDSVMixin, ConfiguracionServiceMixin, 
     """
     ViewSet para Perfiles de Configuracion de Cotizaciones v2.62.0.
     """
+
     # # WARNING: CRITICO: DRF necesita un queryset definido para generar las rutas del router
     # Usamos .none() como base porque el filtrado real se hace en get_queryset()
     queryset = ConfiguracionCotizacion.objects.none()
@@ -36,47 +38,49 @@ class ConfiguracionCotizacionViewSet(SintelDSVMixin, ConfiguracionServiceMixin, 
     renderer_classes = [JSONRenderer]
     pagination_class = StandardResultsSetPagination
 
-
     def get_queryset(self):
         """Filtrado por empresa del tenant actual (Zero Waste)."""
         queryset = self.get_qs_list()
-        
-        solo_activos = self.request.query_params.get('solo_activos', None)
-        if solo_activos == 'true':
+
+        solo_activos = self.request.query_params.get("solo_activos", None)
+        if solo_activos == "true":
             queryset = queryset.filter(es_activo=True)
-        
-        search = self.request.query_params.get('search', None)
+
+        search = self.request.query_params.get("search", None)
         if search:
             queryset = queryset.filter(nombre_configuracion__icontains=search)
-        
-        return queryset.order_by('-es_activo', 'nombre_configuracion')
+
+        return queryset.order_by("-es_activo", "nombre_configuracion")
 
     def get_serializer_class(self):
         """Diferenciacion entre List (Ligero) y Detail (Completo)."""
-        if self.action == 'list':
+        if self.action == "list":
             return ConfiguracionCotizacionListSerializer
         return ConfiguracionCotizacionDetailSerializer
 
     def create(self, request, *args, **kwargs):
         """
         # WARNING: v2.60: Sobrescribir create para aplicar Error Boundary Pattern.
-        
+
         # WARNING: Error Boundary Pattern: Todos los errores retornan JSON nativo (sin template_name).
         """
         try:
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-            
+
             instance = self.service_crear_configuracion(serializer)
             logger.info(f"Perfil de configuracion creado: {instance.nombre_configuracion}")
-            
+
             output_serializer = self.get_serializer(instance)
             headers = self.get_success_headers(output_serializer.data)
             return Response(output_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-        
+
         except serializers.ValidationError as e:
-            logger.error(f"[ConfiguracionCotizacionViewSet] Error de validacion en create: {str(e)}", exc_info=True)
-            error_detail = e.detail if hasattr(e, 'detail') else str(e)
+            logger.error(
+                f"[ConfiguracionCotizacionViewSet] Error de validacion en create: {str(e)}",
+                exc_info=True,
+            )
+            error_detail = e.detail if hasattr(e, "detail") else str(e)
             # # WARNING: Error Boundary: Siempre devolver estructura {"error": "...", "detail": "..."}
             if isinstance(error_detail, dict):
                 # Si el dict ya tiene "error" y "detail", usarlo; si no, envolverlo
@@ -85,55 +89,64 @@ class ConfiguracionCotizacionViewSet(SintelDSVMixin, ConfiguracionServiceMixin, 
                 # Si es un dict de errores de campo, convertirlo a formato estandar
                 return Response(
                     {"error": "Error de validacion", "detail": error_detail},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             return Response(
                 {"error": "Error de validacion", "detail": str(error_detail)},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         except IntegrityError as e:
-            logger.error(f"[ConfiguracionCotizacionViewSet] Error de integridad en create: {str(e)}", exc_info=True)
+            logger.error(
+                f"[ConfiguracionCotizacionViewSet] Error de integridad en create: {str(e)}",
+                exc_info=True,
+            )
             # Verificar si es un error de unicidad
-            if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
                 return Response(
                     {
                         "error": "Ya existe una configuracion con estos datos. Por favor, verifique la informacion.",
                         "detail": str(e),
-                        "code": "duplicate_configuracion"
+                        "code": "duplicate_configuracion",
                     },
-                    status=status.HTTP_409_CONFLICT
+                    status=status.HTTP_409_CONFLICT,
                 )
             return Response(
                 {"error": "Error de integridad de datos", "detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
             return Response(
-                {"error": "Ocurrio un error inesperado al crear la configuracion.", "detail": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {
+                    "error": "Ocurrio un error inesperado al crear la configuracion.",
+                    "detail": str(e),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
     def update(self, request, *args, **kwargs):
         """Actualizacion de configuracion via Service Layer."""
         try:
-            partial = kwargs.get('partial', False)
+            partial = kwargs.get("partial", False)
             instance = self.get_object()
             serializer = self.get_serializer(instance, data=request.data, partial=partial)
             serializer.is_valid(raise_exception=True)
-            
+
             updated_instance = self.service_actualizar_configuracion(instance, serializer)
-            logger.info(f"Perfil de configuracion actualizado: {updated_instance.nombre_configuracion}")
-            
-            return Response(self.get_serializer(updated_instance).data)
-            
-        except Exception as e:
-            logger.error(f"[ConfiguracionCotizacionViewSet] Error en update: {str(e)}", exc_info=True)
-            return Response(
-                {"error": "Error al actualizar configuracion", "detail": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
+            logger.info(
+                f"Perfil de configuracion actualizado: {updated_instance.nombre_configuracion}"
             )
 
+            return Response(self.get_serializer(updated_instance).data)
+
+        except Exception as e:
+            logger.error(
+                f"[ConfiguracionCotizacionViewSet] Error en update: {str(e)}", exc_info=True
+            )
+            return Response(
+                {"error": "Error al actualizar configuracion", "detail": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     def destroy(self, request, *args, **kwargs):
         """DELETE via Service Layer (antes bypaseaba a business/crud service:
@@ -143,29 +156,34 @@ class ConfiguracionCotizacionViewSet(SintelDSVMixin, ConfiguracionServiceMixin, 
         self.service_eliminar_configuracion(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=['post'], url_path='activar')
+    @action(detail=True, methods=["post"], url_path="activar")
     def activar(self, request, pk=None):
         """
         POST /api/v1/cotizaciones/configuracion/{id}/activar/
-        
+
         # WARNING: v2.60: MULTIPLES PERFILES ACTIVOS PERMITIDOS
         Marca un perfil como activo sin desactivar los demas.
-        
+
         # WARNING: Error Boundary Pattern: Todos los errores retornan JSON nativo (sin template_name).
         """
         try:
             perfil = self.get_object()
             perfil.es_activo = True
             perfil.save()
-            
-            logger.info(f"Perfil de configuracion activado: {perfil.nombre_configuracion} (ID: {perfil.id})")
-            
+
+            logger.info(
+                f"Perfil de configuracion activado: {perfil.nombre_configuracion} (ID: {perfil.id})"
+            )
+
             serializer = self.get_serializer(perfil)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        
+
         except serializers.ValidationError as e:
-            logger.error(f"[ConfiguracionCotizacionViewSet] Error de validacion en activar: {str(e)}", exc_info=True)
-            error_detail = e.detail if hasattr(e, 'detail') else str(e)
+            logger.error(
+                f"[ConfiguracionCotizacionViewSet] Error de validacion en activar: {str(e)}",
+                exc_info=True,
+            )
+            error_detail = e.detail if hasattr(e, "detail") else str(e)
             # # WARNING: Error Boundary: Siempre devolver estructura {"error": "...", "detail": "..."}
             if isinstance(error_detail, dict):
                 # Si el dict ya tiene "error" y "detail", usarlo; si no, envolverlo
@@ -174,16 +192,22 @@ class ConfiguracionCotizacionViewSet(SintelDSVMixin, ConfiguracionServiceMixin, 
                 # Si es un dict de errores de campo, convertirlo a formato estandar
                 return Response(
                     {"error": "Error de validacion", "detail": error_detail},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             return Response(
                 {"error": "Error de validacion", "detail": str(error_detail)},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         except Exception as e:
-            logger.error(f"[ConfiguracionCotizacionViewSet] Error inesperado en activar: {str(e)}", exc_info=True)
+            logger.error(
+                f"[ConfiguracionCotizacionViewSet] Error inesperado en activar: {str(e)}",
+                exc_info=True,
+            )
             return Response(
-                {"error": "Ocurrio un error inesperado al activar la configuracion.", "detail": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {
+                    "error": "Ocurrio un error inesperado al activar la configuracion.",
+                    "detail": str(e),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

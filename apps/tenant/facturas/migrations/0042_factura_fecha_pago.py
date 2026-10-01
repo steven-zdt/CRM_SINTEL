@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('facturas', '0041_factura_uniq_factura_numero_por_empresa'),
+        ("facturas", "0041_factura_uniq_factura_numero_por_empresa"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='factura',
-            name='fecha_pago',
-            field=models.DateField(blank=True, help_text='Fecha real en la que se registro el pago (gestion manual) -- distinta de payment_due_date/fecha_vencimiento, que son plazos.', null=True, verbose_name='Fecha de Pago'),
+            model_name="factura",
+            name="fecha_pago",
+            field=models.DateField(
+                blank=True,
+                help_text="Fecha real en la que se registro el pago (gestion manual) -- distinta de payment_due_date/fecha_vencimiento, que son plazos.",
+                null=True,
+                verbose_name="Fecha de Pago",
+            ),
         ),
     ]

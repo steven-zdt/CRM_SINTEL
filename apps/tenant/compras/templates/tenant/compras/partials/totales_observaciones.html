@@ -1,0 +1,31 @@
+{# totales_observaciones.html - Fase 11 (PLAN_OPTIMIZACION_COMPRAS...) #}
+{# Compartido por offcanvas_crear_compras.html / offcanvas_editar_compras.html. #}
+{# Variable opcional: `instance` (OrdenCompra) -- ausente al crear (totales #}
+{# en $0.00, observaciones vacias).                                        #}
+<div class="section-divider">
+    <div class="row g-3">
+        <div class="col-md-7">
+            <label for="observaciones" class="form-label">Observaciones</label>
+            <textarea class="form-control" id="observaciones" name="observaciones" rows="4" placeholder="Notas o términos de entrega...">{% if instance %}{{ instance.observaciones|default:'' }}{% endif %}</textarea>
+        </div>
+        <div class="col-md-5">
+            <div class="card bg-light border-0 shadow-sm">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between mb-2 small text-muted">
+                        <span>Subtotal:</span>
+                        <span id="resumen-subtotal">${% if instance %}{{ instance.subtotal }}{% else %}0.00{% endif %}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2 small text-muted">
+                        <span>Impuestos (IVA):</span>
+                        <span id="resumen-impuestos">${% if instance %}{{ instance.impuestos }}{% else %}0.00{% endif %}</span>
+                    </div>
+                    <hr class="my-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="fw-bold text-dark">Total Neto:</span>
+                        <h4 class="mb-0 fw-bold text-primary" id="resumen-total">${% if instance %}{{ instance.total }}{% else %}0.00{% endif %}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

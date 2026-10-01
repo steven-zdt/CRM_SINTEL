@@ -7,6 +7,7 @@ Valida que:
 2. Los endpoints NO devuelvan 401 si SessionAuthentication está configurado
 3. El handler del workspace NO redirija a login para este módulo no crítico
 """
+
 import pytest
 from django_tenants.utils import schema_context
 
@@ -17,20 +18,15 @@ from apps.public.tenants.models import TenantMembership
 def test_clientes_list_session_ok(client, django_user_model, tenant):
     """
     Verifica que tras login, el endpoint de clientes NO devuelva 401.
-    
+
     Si el ViewSet acepta SessionAuthentication, NO debe devolver 401 tras login.
     """
     # Crear usuario
     user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    
+
     # Crear membresía activa en el tenant
-    TenantMembership.objects.create(
-        client=tenant,
-        user=user,
-        is_active=True,
-        rol="ADMIN"
-    )
-    
+    TenantMembership.objects.create(client=tenant, user=user, is_active=True, rol="ADMIN")
+
     # Autenticar usuario (simula login con sesión). django.contrib.sessions esta
     # en TENANT_APPS (sesiones aisladas por esquema) y el request real solo lee
     # la sesion despues de que TenantMainMiddleware cambia al esquema del
@@ -41,14 +37,14 @@ def test_clientes_list_session_ok(client, django_user_model, tenant):
     # Si el ViewSet acepta SessionAuthentication, NO debe devolver 401
     # 200 si funciona correctamente, 404 si falta include en TENANT_URLCONF
     r = client.get("/api/v1/clientes/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
-    
+
     # Nunca debe ser 401 si la sesión está activa y SessionAuthentication está configurado
     assert r.status_code != 401, (
         f"El endpoint de clientes devolvió 401 tras login. "
         f"Verifica que ClienteViewSet tenga authentication_classes = [SessionAuthentication]. "
         f"Status recibido: {r.status_code}"
     )
-    
+
     # Debe ser 200 (si funciona) o 404 (si falta include en TENANT_URLCONF)
     assert r.status_code in (200, 404), (
         f"Status inesperado: {r.status_code}. "

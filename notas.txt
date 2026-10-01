@@ -55,6 +55,7 @@ vim .env
 
 # Levantar todos los servicios (construir y ejecutar)
 docker compose up --build
+docker compose build --no-cache
 # o usando Makefile
 make up
 
@@ -391,3 +392,25 @@ NOTAS IMPORTANTES
 - Para desarrollo, el código se monta como volumen, los cambios son inmediatos
 
 ================================================================================
+docker compose exec web python -m pytest apps/tenant/clientes/tests/ -q
+docker compose exec web python -m pytest apps/tenant/proyectos/tests/ -q
+docker compose exec web python -m pytest apps/tenant/inventario/tests/ -q
+docker compose exec web python -m pytest apps/tenant/contabilidad/tests/ -q
+
+
+
+python manage.py check
+python manage.py makemigrations --check --dry-run
+docker compose exec web python -m pytest apps/tenant/approvals/tests -q
+docker compose exec web python -m pytest apps/tenant/compras/tests -q
+docker compose exec web python -m pytest apps/tenant/compras/requisiciones/tests -q
+docker compose exec web python -m pytest apps/tenant/dashboard/tests -q
+docker compose exec web python -m pytest apps/tenant/cotizaciones/tests -q
+
+
+3. Checks finales (§58.4):
+docker compose exec web python manage.py check
+docker compose exec web python manage.py makemigrations --check --dry-run
+
+4. Proveedores — vuelve a correr la suite completa solo después de que resolvamos el SystemExit: 2 con el resultado del comando del punto 1:
+docker compose exec web python -m pytest apps/tenant/proveedores/tests/ -q

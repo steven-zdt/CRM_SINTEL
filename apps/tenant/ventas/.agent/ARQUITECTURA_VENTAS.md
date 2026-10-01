@@ -1,7 +1,21 @@
 # Auditoria Flujo Completo — Modulo Ventas
 
-**Version auditada:** v3.17.0 → Fase 1/2 remediación 2026-09-12
-**Fecha:** 2026-06-18 (actualizado 2026-09-12)
+**Version auditada:** v3.17.0 → Fase 1/2 remediación 2026-09-12 → fix sincronizacion Cotizacion<->Venta 2026-09-26
+**Fecha:** 2026-06-18 (actualizado 2026-09-12, 2026-09-26)
+
+---
+
+## 2026-09-26 — Bug real: `FacturaVentaSyncService` no propagaba `cotizacion_uuid`
+
+Auditoria pedida por el usuario ("valida y corrige la logica: cada cotizacion da origen a una factura, sincroniza y alinea la relacion entre Cotizaciones y Ventas"). Hallazgo real en datos de produccion del tenant `admin`: **0/32 Cotizaciones tenian una Venta vinculada** (`Venta.objects.filter(cotizacion_uuid=...)`) pese a que **28/28 Facturas de esas mismas operaciones SI tenian `cotizacion_uuid` correcto**. Causa raiz: las 28 Ventas fueron creadas/vinculadas por `FacturaVentaSyncService` (FST-375, migracion masiva Facturas->Ventas) -- ni `VentaBusinessService.crear_venta_desde_factura()` ni `vincular_factura_existente()` copiaban `Factura.cotizacion_uuid` (soft-reference, sin FK) hacia `Venta.cotizacion_uuid` (tambien soft-reference, `unique=True`) -- solo `Cotizacion.convertir_a_venta()` (el camino "normal", Cotizaciones->Venta) seteaba ese campo. Cualquier Venta nacida del camino Facturas->Ventas quedaba invisible para la idempotencia de `convertir_a_venta()`, con riesgo real de duplicar la Venta si alguien intentaba convertir esa Cotizacion despues.
+
+**Fix (2026-09-26), ambos en `apps/tenant/ventas/services/business_service.py`, solo propagacion de dato -- NUNCA se agrego una validacion nueva ni se bloqueo ningun CRUD (decision explicita del usuario, la relacion Cotizacion<->Venta<->Factura sigue siendo opcional en las 3 apps):**
+- `crear_venta_desde_factura()`: tras crear la Venta, si `factura.cotizacion_uuid` existe, se copia a `venta.cotizacion_uuid` (`save(update_fields=[...])`).
+- `vincular_factura_existente()`: mismo copy, pero solo si la Venta candidata aun no tenia un `cotizacion_uuid` propio (nunca pisa un valor real existente).
+
+**Backfill de datos reales aplicado** (tenant `admin`, verificado sin colisiones -- los 28 `cotizacion_uuid` de Factura eran distintos entre si, `unique=True` en `Venta.cotizacion_uuid` no se violo): las 28 Ventas existentes actualizadas. Resultado verificado: 28/32 Cotizaciones ahora con Venta vinculada (las 4 restantes nunca tuvieron Factura ni Venta -- ver tambien el backfill de Requisiciones del mismo dia, mismos 4 proyectos).
+
+**Tests nuevos:** `apps/tenant/ventas/tests/test_sincronizacion_facturas_ventas.py::SincronizarUnaTests::test_sincroniza_crea_venta_nueva_propaga_cotizacion_uuid_de_la_factura` y `test_sincroniza_venta_manual_existente_hereda_cotizacion_uuid_de_la_factura` -- no ejecutados en esta sesion (pendiente de correr por el usuario).
 **Estado:** PRODUCTION READY (0 criticos) — auditoría 2026-06-18, ya desactualizada en varios puntos (ver §DOCUMENTATION DRIFT abajo). Re-auditado 2026-09-12: 1 CRÍTICO (V-1) y 1 ALTO (V-2) encontrados y corregidos, ver sección nueva abajo.
 **Ubicacion:** `apps/tenant/ventas/`
 **App Label:** `tenant_ventas`

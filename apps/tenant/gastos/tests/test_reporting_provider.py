@@ -3,6 +3,7 @@ GastosReportProvider -- regresion real (mision Reporting Hub, loop de
 expansion). Datos reales: 2 DocumentoSoporte activos (categorias distintas)
 + 1 anulado (no debe contar).
 """
+
 from decimal import Decimal
 
 from rest_framework.test import APIRequestFactory
@@ -23,31 +24,62 @@ class GastosReportProviderTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Reporting Gastos", nit="900000935", direccion="Calle Gastos",
+            razon_social="Empresa Reporting Gastos",
+            nit="900000935",
+            direccion="Calle Gastos",
         )
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
         self.resolucion = ResolucionDIAN.objects.create(
-            empresa=self.empresa, numero_resolucion="RES-RPT-1", prefijo="GRPT",
-            rango_desde=1, rango_hasta=100,
-            fecha_resolucion="2026-01-01", fecha_fin="2027-01-01", vigente=True,
+            empresa=self.empresa,
+            numero_resolucion="RES-RPT-1",
+            prefijo="GRPT",
+            rango_desde=1,
+            rango_hasta=100,
+            fecha_resolucion="2026-01-01",
+            fecha_fin="2027-01-01",
+            vigente=True,
         )
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor Reporting Gastos", numero_documento="900555111", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor Reporting Gastos",
+            numero_documento="900555111",
+            tipo_documento="NIT",
         )
         DocumentoSoporte.objects.create(
-            empresa=self.empresa, resolucion_dian=self.resolucion, consecutivo=1,
-            fecha="2026-06-01", proveedor=self.proveedor, subtotal=Decimal("500000"), total=Decimal("500000"),
-            descripcion="Arriendo RPT", categoria_contable="ARRENDAMIENTOS",
+            empresa=self.empresa,
+            resolucion_dian=self.resolucion,
+            consecutivo=1,
+            fecha="2026-06-01",
+            proveedor=self.proveedor,
+            subtotal=Decimal("500000"),
+            total=Decimal("500000"),
+            descripcion="Arriendo RPT",
+            categoria_contable="ARRENDAMIENTOS",
         )
         DocumentoSoporte.objects.create(
-            empresa=self.empresa, resolucion_dian=self.resolucion, consecutivo=2,
-            fecha="2026-06-02", proveedor=self.proveedor, subtotal=Decimal("200000"), total=Decimal("200000"),
-            descripcion="Servicios RPT", categoria_contable="SERVICIOS_PUBLICOS",
+            empresa=self.empresa,
+            resolucion_dian=self.resolucion,
+            consecutivo=2,
+            fecha="2026-06-02",
+            proveedor=self.proveedor,
+            subtotal=Decimal("200000"),
+            total=Decimal("200000"),
+            descripcion="Servicios RPT",
+            categoria_contable="SERVICIOS_PUBLICOS",
         )
         DocumentoSoporte.objects.create(
-            empresa=self.empresa, resolucion_dian=self.resolucion, consecutivo=3,
-            fecha="2026-06-03", proveedor=self.proveedor, subtotal=Decimal("999999"), total=Decimal("999999"),
-            descripcion="Anulado RPT", categoria_contable="ARRENDAMIENTOS", anulado=True,
+            empresa=self.empresa,
+            resolucion_dian=self.resolucion,
+            consecutivo=3,
+            fecha="2026-06-03",
+            proveedor=self.proveedor,
+            subtotal=Decimal("999999"),
+            total=Decimal("999999"),
+            descripcion="Anulado RPT",
+            categoria_contable="ARRENDAMIENTOS",
+            anulado=True,
         )
 
     def _authenticated_request(self):
@@ -65,7 +97,9 @@ class GastosReportProviderTests(SintelTenantTestCase):
 
     def test_agregado_por_categoria_excluye_anulado(self):
         request = self._authenticated_request()
-        report_request = ReportRequest(dataset_id="gastos.resumen", group_by=("categoria_contable",))
+        report_request = ReportRequest(
+            dataset_id="gastos.resumen", group_by=("categoria_contable",)
+        )
         result = ReportQueryEngine().execute(report_request, request)
 
         rows_by_categoria = {row["categoria_contable"]: row for row in result.rows}

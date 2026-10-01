@@ -21,4 +21,3 @@ __all__ = [
     "DEFAULT_TOKEN_TTL_HOURS",
     "send_password_reset_email",
 ]
- 

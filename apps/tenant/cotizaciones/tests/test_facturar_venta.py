@@ -15,6 +15,7 @@ al flujo oficial de Ventas (el objetivo real de esta suite), no el bloqueo
 de produccion en si (eso vive en
 apps/tenant/ventas/tests/test_bloqueo_emision_fiscal.py).
 """
+
 import datetime
 from decimal import Decimal
 from unittest import mock
@@ -29,7 +30,8 @@ from apps.tenant.facturas.models import Factura
 from apps.tenant.ventas.models import Venta
 
 _EMISION_HABILITADA = mock.patch(
-    "apps.tenant.ventas.services.business_service.EMISION_FISCAL_VENTA_AUTORIZADA", True,
+    "apps.tenant.ventas.services.business_service.EMISION_FISCAL_VENTA_AUTORIZADA",
+    True,
 )
 
 
@@ -38,16 +40,22 @@ def _crear_cotizacion_aprobada(empresa, cliente):
 
     ConfiguracionCotizacion.objects.get_or_create(
         empresa=empresa,
-        defaults={'dias_validez': 15, 'nombre_configuracion': 'Perfil General', 'es_activo': True},
+        defaults={"dias_validez": 15, "nombre_configuracion": "Perfil General", "es_activo": True},
     )
     payload = {
-        'cliente': cliente.id,
-        'fecha_emision': datetime.date(2026, 3, 30),
-        'items': [{
-            'tipo_item': 'PRODUCTO', 'descripcion': 'Switch 24 puertos',
-            'cantidad': 1, 'costo_unitario': 300, 'porcentaje_utilidad': 25,
-            'unidad': 'UND', 'orden': 1,
-        }],
+        "cliente": cliente.id,
+        "fecha_emision": datetime.date(2026, 3, 30),
+        "items": [
+            {
+                "tipo_item": "PRODUCTO",
+                "descripcion": "Switch 24 puertos",
+                "cantidad": 1,
+                "costo_unitario": 300,
+                "porcentaje_utilidad": 25,
+                "unidad": "UND",
+                "orden": 1,
+            }
+        ],
     }
     cotizacion = CotizacionService.crear_preforma(empresa, payload)
     CotizacionService.cambiar_estado(cotizacion, Cotizacion.Estado.ENVIADA)

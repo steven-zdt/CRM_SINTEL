@@ -4,15 +4,17 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('facturas', '0039_document_processing'),
+        ("facturas", "0039_document_processing"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='factura',
-            name='consecutivo',
-            field=models.IntegerField(help_text='Consecutivo INTERNO (Origen.INTERNO). Para Origen.EXTERNO vale 0 (sentinel de "no aplica", nunca un consecutivo real -- ver REM-P3-08). La identidad fiscal real de la factura es siempre "numero", no este campo.', verbose_name='Consecutivo'),
+            model_name="factura",
+            name="consecutivo",
+            field=models.IntegerField(
+                help_text='Consecutivo INTERNO (Origen.INTERNO). Para Origen.EXTERNO vale 0 (sentinel de "no aplica", nunca un consecutivo real -- ver REM-P3-08). La identidad fiscal real de la factura es siempre "numero", no este campo.',
+                verbose_name="Consecutivo",
+            ),
         ),
     ]

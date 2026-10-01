@@ -23,6 +23,7 @@ aunque su sede si sea correcta. La traduccion debe ser POR EJE segun
 cual sea el alcance real, no una regla global "EMPRESA=None,
 cualquier-otra-cosa=tal-cual".
 """
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext
@@ -59,7 +60,9 @@ class ConsultarCompraTool(BaseTool):
     confirmation_required = False
     idempotent = True
 
-    def run(self, context: AIContext, *, search: str = "", estado: str = "", limit: int = 10) -> ToolResult:
+    def run(
+        self, context: AIContext, *, search: str = "", estado: str = "", limit: int = 10
+    ) -> ToolResult:
         if limit < 1 or limit > 50:
             return ToolResult(status="VALIDATION_ERROR", message="limit debe estar entre 1 y 50.")
 

@@ -1,46 +1,82 @@
-from django.db.models import Q, Max, Sum, Count
+from django.db.models import Max, Q
+
 from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra, RecepcionCompra
 from apps.tenant.core.services.organizational_filters import filter_by_scope
 
-
 PLANTILLA_LIST_FIELDS = (
-    'id', 'uuid', 'nombre', 'prefijo', 'rango_desde', 'rango_hasta',
-    'consecutivo_actual', 'vigente', 'empresa_id', 'created_at', 'updated_at'
+    "id",
+    "uuid",
+    "tipo_documento",
+    "nombre",
+    "prefijo",
+    "rango_desde",
+    "rango_hasta",
+    "consecutivo_actual",
+    "vigente",
+    "empresa_id",
+    "created_at",
+    "updated_at",
 )
 
 PLANTILLA_DETAIL_FIELDS = PLANTILLA_LIST_FIELDS
 
 ORDEN_COMPRA_LIST_FIELDS = (
-    'id', 'uuid', 'consecutivo', 'numero_documento', 'plantilla_id', 'fecha', 'fecha_entrega',
-    'estado', 'subtotal', 'impuestos', 'total', 'empresa_id', 'sede_id', 'area_id',
-    'proveedor_id', 'proyecto_id', 'documento_soporte_id'
+    "id",
+    "uuid",
+    "consecutivo",
+    "numero_documento",
+    "plantilla_id",
+    "fecha",
+    "fecha_entrega",
+    "estado",
+    "subtotal",
+    "impuestos",
+    "total",
+    "empresa_id",
+    "sede_id",
+    "area_id",
+    "proveedor_id",
+    "proyecto_id",
+    "documento_soporte_id",
 )
 
 ORDEN_COMPRA_DETAIL_FIELDS = (
-    'id', 'uuid', 'consecutivo', 'numero_documento', 'plantilla_id', 'fecha', 'fecha_entrega',
-    'estado', 'subtotal', 'impuestos', 'total', 'observaciones',
-    'empresa_id', 'sede_id', 'area_id', 'proveedor_id', 'proyecto_id', 'documento_soporte_id',
-    'created_at', 'updated_at'
+    "id",
+    "uuid",
+    "consecutivo",
+    "numero_documento",
+    "plantilla_id",
+    "fecha",
+    "fecha_entrega",
+    "estado",
+    "subtotal",
+    "impuestos",
+    "total",
+    "observaciones",
+    "empresa_id",
+    "sede_id",
+    "area_id",
+    "proveedor_id",
+    "proyecto_id",
+    "documento_soporte_id",
+    "created_at",
+    "updated_at",
 )
 
 _PLANTILLA_TRAVERSALS = (
-    'plantilla__uuid',
-    'plantilla__nombre',
-    'plantilla__prefijo',
+    "plantilla__uuid",
+    "plantilla__nombre",
+    "plantilla__prefijo",
 )
 
 _PROVEEDOR_TRAVERSALS = (
-    'proveedor__razon_social',
-    'proveedor__numero_documento',
+    "proveedor__razon_social",
+    "proveedor__numero_documento",
 )
 
-_PROYECTO_TRAVERSALS = (
-    'proyecto__nombre',
-)
+_PROYECTO_TRAVERSALS = ("proyecto__nombre",)
 
-_DOCUMENTO_SOPORTE_TRAVERSALS = (
-    'documento_soporte__numero_documento_proveedor',
-)
+_DOCUMENTO_SOPORTE_TRAVERSALS = ("documento_soporte__numero_documento_proveedor",)
 
 # [OSF Fase F5] Hallazgo: ni el selector ni los serializers exponian de
 # donde (sede/area) era una Orden de Compra - invisible incluso para un
@@ -48,13 +84,9 @@ _DOCUMENTO_SOPORTE_TRAVERSALS = (
 # Necesario ahora que get_list() puede devolver ordenes de MULTIPLES sedes/
 # areas a la vez (F5, ver mas abajo) - antes, con una sola sede activa
 # filtrada, era menos critico distinguir visualmente.
-_SEDE_TRAVERSALS = (
-    'sede__nombre',
-)
+_SEDE_TRAVERSALS = ("sede__nombre",)
 
-_AREA_TRAVERSALS = (
-    'area__nombre',
-)
+_AREA_TRAVERSALS = ("area__nombre",)
 
 
 class PlantillaOrdenCompraSelector:
@@ -63,34 +95,39 @@ class PlantillaOrdenCompraSelector:
     """
 
     @staticmethod
-    def get_list(empresa_id: int, vigente_only: bool = False):
+    def get_list(empresa_id: int, vigente_only: bool = False, tipo_documento: str = None):
         """
-        Retorna el listado de plantillas de orden de compra.
+        Retorna el listado de plantillas de numeracion. `tipo_documento`
+        (PLAN_NUEVA_REQUISICION_NUMERACION_CLIENTE_COTIZACIONES.md Fase A):
+        filtra por ORDEN_COMPRA/REQUISICION -- None (default) devuelve todas,
+        mismo comportamiento previo a esta Fase.
         """
         qs = PlantillaOrdenCompra.objects.filter(empresa_id=empresa_id).only(*PLANTILLA_LIST_FIELDS)
         if vigente_only:
             qs = qs.filter(vigente=True)
-        return qs.order_by('-vigente', '-created_at')
+        if tipo_documento:
+            qs = qs.filter(tipo_documento=tipo_documento)
+        return qs.order_by("-vigente", "-created_at")
 
     @staticmethod
     def get_detail(empresa_id: int, plantilla_uuid: str):
         """
         Retorna el QuerySet optimizado para obtener el detalle de una plantilla.
         """
-        return PlantillaOrdenCompra.objects.filter(
-            empresa_id=empresa_id,
-            uuid=plantilla_uuid
-        ).only(*PLANTILLA_DETAIL_FIELDS)
+        return PlantillaOrdenCompra.objects.filter(empresa_id=empresa_id, uuid=plantilla_uuid).only(
+            *PLANTILLA_DETAIL_FIELDS
+        )
 
     @staticmethod
     def get_vigentes(empresa_id: int):
         """
         Retorna las plantillas vigentes disponibles para asociar a una orden de compra.
         """
-        return PlantillaOrdenCompra.objects.filter(
-            empresa_id=empresa_id,
-            vigente=True
-        ).only(*PLANTILLA_LIST_FIELDS).order_by('-created_at')
+        return (
+            PlantillaOrdenCompra.objects.filter(empresa_id=empresa_id, vigente=True)
+            .only(*PLANTILLA_LIST_FIELDS)
+            .order_by("-created_at")
+        )
 
 
 class OrdenCompraSelector:
@@ -99,7 +136,9 @@ class OrdenCompraSelector:
     """
 
     @staticmethod
-    def get_list(empresa_id: int, search: str = None, estado: str = None, sede_ids=None, area_ids=None):
+    def get_list(
+        empresa_id: int, search: str = None, estado: str = None, sede_ids=None, area_ids=None
+    ):
         """
         Retorna el listado de Ordenes de Compra filtrado y optimizado.
 
@@ -111,16 +150,22 @@ class OrdenCompraSelector:
         sedes asignadas a un perfil con alcance SEDE/AREA); este selector
         solo aplica el filtro via el helper reusable filter_by_scope().
         """
-        qs = filter_by_scope(OrdenCompra.objects.all(), empresa_id, sede_ids=sede_ids, area_ids=area_ids).select_related(
-            'proveedor', 'proyecto', 'documento_soporte', 'plantilla', 'sede', 'area'
-        ).only(
-            *ORDEN_COMPRA_LIST_FIELDS,
-            *_PLANTILLA_TRAVERSALS,
-            *_PROVEEDOR_TRAVERSALS,
-            *_PROYECTO_TRAVERSALS,
-            *_DOCUMENTO_SOPORTE_TRAVERSALS,
-            *_SEDE_TRAVERSALS,
-            *_AREA_TRAVERSALS,
+        qs = (
+            filter_by_scope(
+                OrdenCompra.objects.all(), empresa_id, sede_ids=sede_ids, area_ids=area_ids
+            )
+            .select_related(
+                "proveedor", "proyecto", "documento_soporte", "plantilla", "sede", "area"
+            )
+            .only(
+                *ORDEN_COMPRA_LIST_FIELDS,
+                *_PLANTILLA_TRAVERSALS,
+                *_PROVEEDOR_TRAVERSALS,
+                *_PROYECTO_TRAVERSALS,
+                *_DOCUMENTO_SOPORTE_TRAVERSALS,
+                *_SEDE_TRAVERSALS,
+                *_AREA_TRAVERSALS,
+            )
         )
 
         if estado:
@@ -128,26 +173,25 @@ class OrdenCompraSelector:
 
         if search:
             qs = qs.filter(
-                Q(consecutivo__icontains=search) |
-                Q(numero_documento__icontains=search) |
-                Q(proveedor__razon_social__icontains=search) |
-                Q(observaciones__icontains=search)
+                Q(consecutivo__icontains=search)
+                | Q(numero_documento__icontains=search)
+                | Q(proveedor__razon_social__icontains=search)
+                | Q(observaciones__icontains=search)
             )
 
-        return qs.order_by('-fecha', '-consecutivo')
+        return qs.order_by("-fecha", "-consecutivo")
 
     @staticmethod
     def get_detail(empresa_id: int, orden_uuid: str):
         """
         Retorna el QuerySet optimizado para obtener el detalle de una Orden de Compra.
         """
-        return OrdenCompra.objects.filter(
-            empresa_id=empresa_id,
-            uuid=orden_uuid
-        ).select_related(
-            'proveedor', 'proyecto', 'documento_soporte', 'plantilla', 'sede', 'area'
-        ).prefetch_related(
-            'items'
+        return (
+            OrdenCompra.objects.filter(empresa_id=empresa_id, uuid=orden_uuid)
+            .select_related(
+                "proveedor", "proyecto", "documento_soporte", "plantilla", "sede", "area"
+            )
+            .prefetch_related("items")
         )
 
     @staticmethod
@@ -155,16 +199,26 @@ class OrdenCompraSelector:
         """
         Obtiene de manera preliminar el siguiente consecutivo disponible.
         """
-        max_consecutivo = OrdenCompra.objects.filter(
-            empresa_id=empresa_id
-        ).aggregate(max_val=Max('consecutivo'))['max_val']
+        max_consecutivo = OrdenCompra.objects.filter(empresa_id=empresa_id).aggregate(
+            max_val=Max("consecutivo")
+        )["max_val"]
 
         return (max_consecutivo + 1) if max_consecutivo is not None else 1
 
 
 RECEPCION_LIST_FIELDS = (
-    'id', 'uuid', 'fecha', 'estado', 'observaciones', 'empresa_id', 'sede_id',
-    'area_id', 'orden_compra_id', 'usuario_id', 'created_at', 'updated_at',
+    "id",
+    "uuid",
+    "fecha",
+    "estado",
+    "observaciones",
+    "empresa_id",
+    "sede_id",
+    "area_id",
+    "orden_compra_id",
+    "usuario_id",
+    "created_at",
+    "updated_at",
 )
 
 RECEPCION_DETAIL_FIELDS = RECEPCION_LIST_FIELDS
@@ -174,22 +228,42 @@ class RecepcionCompraSelector:
     """Selectores optimizados de solo lectura para RecepcionCompra (F21)."""
 
     @staticmethod
-    def get_list(empresa_id: int, orden_compra_uuid: str = None, estado: str = None, sede_ids=None, area_ids=None):
-        qs = filter_by_scope(
-            RecepcionCompra.objects.all(), empresa_id, sede_ids=sede_ids, area_ids=area_ids,
-        ).select_related('orden_compra', 'sede', 'area', 'usuario').only(
-            *RECEPCION_LIST_FIELDS, 'orden_compra__uuid', 'orden_compra__numero_documento',
-            'sede__nombre', 'area__nombre',
+    def get_list(
+        empresa_id: int,
+        orden_compra_uuid: str = None,
+        estado: str = None,
+        sede_ids=None,
+        area_ids=None,
+    ):
+        qs = (
+            filter_by_scope(
+                RecepcionCompra.objects.all(),
+                empresa_id,
+                sede_ids=sede_ids,
+                area_ids=area_ids,
+            )
+            .select_related("orden_compra", "sede", "area", "usuario")
+            .only(
+                *RECEPCION_LIST_FIELDS,
+                "orden_compra__uuid",
+                "orden_compra__numero_documento",
+                "sede__nombre",
+                "area__nombre",
+            )
         )
         if orden_compra_uuid:
             qs = qs.filter(orden_compra__uuid=orden_compra_uuid)
         if estado:
             qs = qs.filter(estado=estado)
-        return qs.order_by('-fecha', '-id')
+        return qs.order_by("-fecha", "-id")
 
     @staticmethod
     def get_detail(empresa_id: int, recepcion_uuid: str):
-        return RecepcionCompra.objects.filter(
-            empresa_id=empresa_id, uuid=recepcion_uuid,
-        ).select_related('orden_compra', 'sede', 'area', 'usuario').prefetch_related('items')
-
+        return (
+            RecepcionCompra.objects.filter(
+                empresa_id=empresa_id,
+                uuid=recepcion_uuid,
+            )
+            .select_related("orden_compra", "sede", "area", "usuario")
+            .prefetch_related("items")
+        )

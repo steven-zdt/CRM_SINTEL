@@ -28,7 +28,15 @@ class ActivoFijoAdmin(admin.ModelAdmin):
 
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
-    list_display = ("codigo", "nombre", "categoria", "precio_venta", "stock_actual", "stock_minimo", "activo")
+    list_display = (
+        "codigo",
+        "nombre",
+        "categoria",
+        "precio_venta",
+        "stock_actual",
+        "stock_minimo",
+        "activo",
+    )
     list_filter = ("activo", "categoria", "empresa")
     search_fields = ("codigo", "nombre", "descripcion")
     list_editable = ("activo",)

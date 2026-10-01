@@ -88,13 +88,9 @@ class RetrievalTool(BaseTool):
         if not query or not query.strip():
             return ToolResult(status="VALIDATION_ERROR", message="query es obligatorio.")
         if not (1 <= int(k) <= MAX_K):
-            return ToolResult(
-                status="VALIDATION_ERROR", message=f"k debe estar entre 1 y {MAX_K}."
-            )
+            return ToolResult(status="VALIDATION_ERROR", message=f"k debe estar entre 1 y {MAX_K}.")
         if source_types is not None and not isinstance(source_types, list):
-            return ToolResult(
-                status="VALIDATION_ERROR", message="source_types debe ser una lista."
-            )
+            return ToolResult(status="VALIDATION_ERROR", message="source_types debe ser una lista.")
 
         # Import diferido -- no arrastrar el arbol de apps tenant en procesos
         # que solo importan apps.services.ai (mismo criterio que buscar_cliente).

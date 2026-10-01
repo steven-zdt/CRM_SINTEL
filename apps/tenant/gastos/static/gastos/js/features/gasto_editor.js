@@ -282,7 +282,7 @@
         // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
         const fmt = (n) => (window.DOMUtils && typeof window.DOMUtils.formatCurrency === 'function')
             ? window.DOMUtils.formatCurrency(n, { minimumFractionDigits: 2, maximumFractionDigits: 2, showSymbol: false })
-            : n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         // Actualizar badges de porcentaje
         const pctBadge = (id, pct) => {

@@ -23,6 +23,7 @@ Uso:
     python manage.py backfill_sede_area --tenants=1,2,3
     python manage.py backfill_sede_area --dry-run
 """
+
 import traceback
 
 from django.core.management.base import BaseCommand
@@ -36,41 +37,45 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--tenants',
+            "--tenants",
             type=str,
             default=None,
-            help='Comma-separated tenant IDs. Defaults to all tenants.',
+            help="Comma-separated tenant IDs. Defaults to all tenants.",
         )
         parser.add_argument(
-            '--dry-run',
-            action='store_true',
+            "--dry-run",
+            action="store_true",
             default=False,
-            help='Solo reporta que empresas carecen de Sede, sin crear nada.',
+            help="Solo reporta que empresas carecen de Sede, sin crear nada.",
         )
 
     def handle(self, *args, **options):
-        dry_run = options['dry_run']
+        dry_run = options["dry_run"]
 
-        if options['tenants']:
-            tenant_ids = [int(t.strip()) for t in options['tenants'].split(',')]
-            tenants = Tenant.objects.filter(pk__in=tenant_ids).exclude(schema_name='public')
+        if options["tenants"]:
+            tenant_ids = [int(t.strip()) for t in options["tenants"].split(",")]
+            tenants = Tenant.objects.filter(pk__in=tenant_ids).exclude(schema_name="public")
         else:
-            tenants = Tenant.objects.exclude(schema_name='public')
+            tenants = Tenant.objects.exclude(schema_name="public")
 
         if dry_run:
-            self.stdout.write(self.style.WARNING('DRY RUN: no se creara ninguna Sede/Area.'))
+            self.stdout.write(self.style.WARNING("DRY RUN: no se creara ninguna Sede/Area."))
 
-        totales = {'ya_tenian': 0, 'creadas': 0, 'errores': 0}
+        totales = {"ya_tenian": 0, "creadas": 0, "errores": 0}
 
         for tenant in tenants:
-            self.stdout.write(f'Tenant: {tenant.schema_name} (id={tenant.pk})')
+            self.stdout.write(f"Tenant: {tenant.schema_name} (id={tenant.pk})")
             with schema_context(tenant.schema_name):
                 from apps.tenant.empresa.models import Area, Empresa, Sede
 
                 empresa = Empresa.objects.first()
                 if not empresa:
-                    self.stderr.write(self.style.ERROR(f'  Tenant {tenant.schema_name} no tiene Empresa configurada.'))
-                    totales['errores'] += 1
+                    self.stderr.write(
+                        self.style.ERROR(
+                            f"  Tenant {tenant.schema_name} no tiene Empresa configurada."
+                        )
+                    )
+                    totales["errores"] += 1
                     continue
 
                 # Estado "correcto" es: existe una Sede (la primera por
@@ -79,32 +84,41 @@ class Command(BaseCommand):
                 # verificar sobre ESA sede puntual, no "algun Area en toda la
                 # empresa" (una empresa con 2 Sedes donde solo 1 tiene Area
                 # no debe reportarse como "completa").
-                primera_sede = Sede.objects.filter(empresa=empresa).order_by('nombre').first()
-                ya_completo = primera_sede is not None and Area.objects.filter(sede=primera_sede).exists()
+                primera_sede = Sede.objects.filter(empresa=empresa).order_by("nombre").first()
+                ya_completo = (
+                    primera_sede is not None and Area.objects.filter(sede=primera_sede).exists()
+                )
                 if ya_completo:
-                    self.stdout.write('  Ya tiene Sede con Area, se omite.')
-                    totales['ya_tenian'] += 1
+                    self.stdout.write("  Ya tiene Sede con Area, se omite.")
+                    totales["ya_tenian"] += 1
                     continue
 
                 if dry_run:
-                    falta = 'Sede "Principal"/Area "General"' if primera_sede is None else 'Area "General" (Sede existente sin ninguna Area)'
-                    self.stdout.write(self.style.WARNING(f'  [DRY RUN] crearia {falta}.'))
-                    totales['creadas'] += 1
+                    falta = (
+                        'Sede "Principal"/Area "General"'
+                        if primera_sede is None
+                        else 'Area "General" (Sede existente sin ninguna Area)'
+                    )
+                    self.stdout.write(self.style.WARNING(f"  [DRY RUN] crearia {falta}."))
+                    totales["creadas"] += 1
                     continue
 
                 try:
                     from apps.tenant.empresa.services.business_service import (
                         asegurar_estructura_organizacional_inicial,
                     )
-                    asegurar_estructura_organizacional_inicial(empresa)
-                    self.stdout.write(self.style.SUCCESS('  Sede "Principal"/Area "General" garantizadas.'))
-                    totales['creadas'] += 1
-                except Exception as exc:
-                    self.stderr.write(self.style.ERROR(f'  FALLO: {exc}'))
-                    self.stderr.write(traceback.format_exc())
-                    totales['errores'] += 1
 
-        label = 'DRY RUN — pendientes de crear' if dry_run else 'creadas'
+                    asegurar_estructura_organizacional_inicial(empresa)
+                    self.stdout.write(
+                        self.style.SUCCESS('  Sede "Principal"/Area "General" garantizadas.')
+                    )
+                    totales["creadas"] += 1
+                except Exception as exc:
+                    self.stderr.write(self.style.ERROR(f"  FALLO: {exc}"))
+                    self.stderr.write(traceback.format_exc())
+                    totales["errores"] += 1
+
+        label = "DRY RUN — pendientes de crear" if dry_run else "creadas"
         self.stdout.write(
             self.style.SUCCESS(
                 f'\nResumen: {label}={totales["creadas"]} '

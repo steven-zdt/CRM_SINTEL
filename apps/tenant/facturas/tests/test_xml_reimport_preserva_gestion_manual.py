@@ -6,6 +6,7 @@ ningun campo salvo cliente_uuid/proveedor_uuid si estaban vacios) para los
 6 campos de Gestion Manual (estado_pago, forma_pago, medio_pago_codigo,
 payment_due_date, fecha_pago, fecha_vencimiento).
 """
+
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
 from apps.tenant.facturas.services.business_service import FacturaBusinessService
@@ -16,7 +17,9 @@ class XmlReimportPreservaGestionManualTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Reimport XML", nit="900000962", direccion="Calle RX",
+            razon_social="Empresa Reimport XML",
+            nit="900000962",
+            direccion="Calle RX",
         )
         self.dto = {
             "numero": "FE-RX-1",
@@ -28,7 +31,9 @@ class XmlReimportPreservaGestionManualTests(SintelTenantTestCase):
         }
 
     def test_reimportar_mismo_cufe_no_sobrescribe_gestion_manual(self):
-        resultado, code = FacturaBusinessService.guardar_desde_dto(self.dto, empresa_id=self.empresa.id)
+        resultado, code = FacturaBusinessService.guardar_desde_dto(
+            self.dto, empresa_id=self.empresa.id
+        )
         self.assertEqual(code, 201, resultado)
         factura = Factura.objects.get(cufe="CUFE-RX-0001")
 
@@ -51,13 +56,19 @@ class XmlReimportPreservaGestionManualTests(SintelTenantTestCase):
 
         # Reimportacion del MISMO XML/CUFE (ej. el usuario vuelve a subir el
         # mismo archivo por error, o un reproceso automatico del pipeline).
-        resultado2, code2 = FacturaBusinessService.guardar_desde_dto(self.dto, empresa_id=self.empresa.id)
+        resultado2, code2 = FacturaBusinessService.guardar_desde_dto(
+            self.dto, empresa_id=self.empresa.id
+        )
         self.assertEqual(code2, 200, resultado2)
         self.assertFalse(resultado2.get("created", True))
 
         factura.refresh_from_db()
-        self.assertEqual(factura.estado_pago, "PAGADA", "estado_pago no debe resetearse en un re-import.")
-        self.assertEqual(str(factura.fecha_pago), "2026-06-10", "fecha_pago no debe borrarse en un re-import.")
+        self.assertEqual(
+            factura.estado_pago, "PAGADA", "estado_pago no debe resetearse en un re-import."
+        )
+        self.assertEqual(
+            str(factura.fecha_pago), "2026-06-10", "fecha_pago no debe borrarse en un re-import."
+        )
         self.assertEqual(factura.forma_pago, "Credito")
         self.assertEqual(factura.medio_pago_codigo, "10")
         self.assertEqual(str(factura.payment_due_date), "2026-07-01")

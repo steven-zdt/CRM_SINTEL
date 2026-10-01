@@ -4,18 +4,17 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('empresa', '0009_sedes_areas_explicit_fk'),
-        ('tenant_compras', '0004_add_alcance_and_sede_area_context'),
-        ('tenant_gastos', '0022_add_sede_to_documentosoporte'),
-        ('tenant_proveedores', '0018_representante_and_more'),
-        ('tenant_proyectos', '0020_itempresupuesto_tareadiaria_uuid'),
+        ("empresa", "0009_sedes_areas_explicit_fk"),
+        ("tenant_compras", "0004_add_alcance_and_sede_area_context"),
+        ("tenant_gastos", "0022_add_sede_to_documentosoporte"),
+        ("tenant_proveedores", "0018_representante_and_more"),
+        ("tenant_proyectos", "0020_itempresupuesto_tareadiaria_uuid"),
     ]
 
     operations = [
         migrations.AddIndex(
-            model_name='ordencompra',
-            index=models.Index(fields=['empresa', 'sede'], name='tenant_comp_empresa_896e90_idx'),
+            model_name="ordencompra",
+            index=models.Index(fields=["empresa", "sede"], name="tenant_comp_empresa_896e90_idx"),
         ),
     ]

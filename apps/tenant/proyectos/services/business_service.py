@@ -6,15 +6,18 @@ WARNING: SINTEL v3.5: Capa de Logica de Negocio y Orquestacion
 - Zero Trust: Validacion semantica y de empresa_id
 - Resiliencia: Gestion de snapshots desacoplada
 """
+
 from datetime import date
 from decimal import Decimal
-from django.db import models, transaction
+
+from django.db import transaction
 from django.db.models import F, Sum
 from rest_framework.exceptions import ValidationError
 
 from apps.tenant.empresa.models import Empresa
-from ..models import Proyecto, AsignacionPersonal, ItemPedido, TareaCorta, HistorialFaseProyecto
-from .crud_service import save_proyecto, delete_proyecto, save_tarea_corta, delete_tarea_corta
+
+from ..models import AsignacionPersonal, HistorialFaseProyecto, ItemPedido, Proyecto, TareaCorta
+from .crud_service import delete_tarea_corta, save_proyecto, save_tarea_corta
 from .documentos_service import documentos_obligatorios_faltantes
 
 try:
@@ -51,31 +54,28 @@ except ImportError:
 # INDICADORES FINANCIEROS (P&L)
 # ==============================================================================
 
+
 def calcular_costo_mano_obra(proyecto):
     """
     Calcula el costo total de mano de obra sumando asignaciones activas.
     """
-    total = AsignacionPersonal.objects.filter(
-        proyecto=proyecto,
-        activo=True
-    ).aggregate(
-        total=Sum('costo_total_asignacion')
-    )['total'] or Decimal('0.00')
-    
+    total = AsignacionPersonal.objects.filter(proyecto=proyecto, activo=True).aggregate(
+        total=Sum("costo_total_asignacion")
+    )["total"] or Decimal("0.00")
+
     return total
+
 
 def calcular_costo_materiales(proyecto):
     """
     Calcula el costo total de materiales sumando items de pedidos aprobados.
     """
     total = ItemPedido.objects.filter(
-        pedido__proyecto=proyecto,
-        pedido__estado='APROBADO'
-    ).aggregate(
-        total=Sum(F('cantidad') * F('precio_unitario'))
-    )['total'] or Decimal('0.00')
-    
+        pedido__proyecto=proyecto, pedido__estado="APROBADO"
+    ).aggregate(total=Sum(F("cantidad") * F("precio_unitario")))["total"] or Decimal("0.00")
+
     return total
+
 
 def calcular_costo_gastos(proyecto):
     """
@@ -95,9 +95,10 @@ def calcular_costo_gastos(proyecto):
         proyecto_uuid=proyecto.uuid,
         activo=True,
         anulado=False,
-    ).aggregate(total=Sum('subtotal'))['total'] or Decimal('0.00')
+    ).aggregate(total=Sum("subtotal"))["total"] or Decimal("0.00")
 
     return total
+
 
 def calcular_indicadores_financieros(proyecto):
     """
@@ -108,13 +109,13 @@ def calcular_indicadores_financieros(proyecto):
     costo_gastos = calcular_costo_gastos(proyecto)
     costo_total = costo_mano_obra + costo_materiales + costo_gastos
 
-    valor_contrato = proyecto.valor_contrato_proyectado or Decimal('0.00')
+    valor_contrato = proyecto.valor_contrato_proyectado or Decimal("0.00")
     utilidad_estimada = valor_contrato - costo_total
 
     if valor_contrato > 0:
-        margen_rentabilidad = (utilidad_estimada / valor_contrato) * Decimal('100.00')
+        margen_rentabilidad = (utilidad_estimada / valor_contrato) * Decimal("100.00")
     else:
-        margen_rentabilidad = Decimal('0.00')
+        margen_rentabilidad = Decimal("0.00")
 
     # Actualizacion optimizada via crud_service
     proyecto.costo_mano_obra_real = costo_mano_obra
@@ -123,23 +124,31 @@ def calcular_indicadores_financieros(proyecto):
     proyecto.utilidad_estimada = utilidad_estimada
     proyecto.margen_rentabilidad = margen_rentabilidad
 
-    save_proyecto(proyecto, update_fields=[
-        'costo_mano_obra_real', 'costo_materiales_real', 'costo_gastos_real',
-        'utilidad_estimada', 'margen_rentabilidad'
-    ])
+    save_proyecto(
+        proyecto,
+        update_fields=[
+            "costo_mano_obra_real",
+            "costo_materiales_real",
+            "costo_gastos_real",
+            "utilidad_estimada",
+            "margen_rentabilidad",
+        ],
+    )
 
     return {
-        'costo_mano_obra_real': costo_mano_obra,
-        'costo_materiales_real': costo_materiales,
-        'costo_gastos_real': costo_gastos,
-        'costo_total': costo_total,
-        'utilidad_estimada': utilidad_estimada,
-        'margen_rentabilidad': margen_rentabilidad,
+        "costo_mano_obra_real": costo_mano_obra,
+        "costo_materiales_real": costo_materiales,
+        "costo_gastos_real": costo_gastos,
+        "costo_total": costo_total,
+        "utilidad_estimada": utilidad_estimada,
+        "margen_rentabilidad": margen_rentabilidad,
     }
+
 
 # ==============================================================================
 # GENERACIoN DE CoDIGO uNICO
 # ==============================================================================
+
 
 def generar_codigo_proyecto(empresa):
     """
@@ -149,26 +158,26 @@ def generar_codigo_proyecto(empresa):
     del modelo actua como red de seguridad ante colisiones concurrentes.
     """
     year = date.today().year
-    prefix = f'PRJ-{year}-'
+    prefix = f"PRJ-{year}-"
 
-    codigos = Proyecto.objects.filter(
-        empresa=empresa,
-        codigo__startswith=prefix
-    ).values_list('codigo', flat=True)
+    codigos = Proyecto.objects.filter(empresa=empresa, codigo__startswith=prefix).values_list(
+        "codigo", flat=True
+    )
 
     numeros = []
     for c in codigos:
-        sufijo = c[len(prefix):]
+        sufijo = c[len(prefix) :]
         if sufijo.isdigit():
             numeros.append(int(sufijo))
 
     seq = max(numeros) + 1 if numeros else 1
-    return f'{prefix}{seq:04d}'
+    return f"{prefix}{seq:04d}"
 
 
 # ==============================================================================
 # SNAPSHOTS Y DESACOPLAMIENTO (Zero-Coupling)
 # ==============================================================================
+
 
 def asignar_snapshot_cliente(proyecto, cliente_id=None, cliente_nombre=None):
     """
@@ -178,9 +187,11 @@ def asignar_snapshot_cliente(proyecto, cliente_id=None, cliente_nombre=None):
         try:
             if _Cliente is None:
                 raise ImportError
-            cliente = _Cliente.objects.filter(
-                id=cliente_id, empresa_id=proyecto.empresa_id
-            ).only('razon_social').first()
+            cliente = (
+                _Cliente.objects.filter(id=cliente_id, empresa_id=proyecto.empresa_id)
+                .only("razon_social")
+                .first()
+            )
             if not cliente:
                 return
             proyecto.cliente_id = cliente_id
@@ -192,44 +203,51 @@ def asignar_snapshot_cliente(proyecto, cliente_id=None, cliente_nombre=None):
     elif cliente_nombre:
         proyecto.cliente_nombre = cliente_nombre
 
+
 def asignar_snapshot_responsable(proyecto, responsable_id=None, responsable_nombre=None, fase=None):
     """
     Resuelve y asigna al responsable en memoria segun la fase.
     """
     if not fase:
         fase = proyecto.fase_actual
-    
+
     if responsable_id and not responsable_nombre:
         try:
             if _Empleado is None:
                 raise ImportError
-            empleado = _Empleado.objects.filter(
-                id=responsable_id,
-                empresa_id=proyecto.empresa_id
-            ).only('id', 'primer_nombre', 'primer_apellido').first()
+            empleado = (
+                _Empleado.objects.filter(id=responsable_id, empresa_id=proyecto.empresa_id)
+                .only("id", "primer_nombre", "primer_apellido")
+                .first()
+            )
             if empleado:
-                responsable_nombre = getattr(empleado, 'nombre_completo', str(empleado))
+                responsable_nombre = getattr(empleado, "nombre_completo", str(empleado))
         except ImportError:
             pass
-            
+
     # Mapeo de fase a campo del responsable
-    if fase == 'INICIO':
+    if fase == "INICIO":
         proyecto.responsable_comercial_id = responsable_id
-        if responsable_nombre: proyecto.responsable_comercial_nombre = responsable_nombre
-    elif fase == 'PLANEACION':
+        if responsable_nombre:
+            proyecto.responsable_comercial_nombre = responsable_nombre
+    elif fase == "PLANEACION":
         proyecto.responsable_tecnico_id = responsable_id
-        if responsable_nombre: proyecto.responsable_tecnico_nombre = responsable_nombre
-    elif fase == 'EJECUCION':
+        if responsable_nombre:
+            proyecto.responsable_tecnico_nombre = responsable_nombre
+    elif fase == "EJECUCION":
         proyecto.responsable_operativo_id = responsable_id
-        if responsable_nombre: proyecto.responsable_operativo_nombre = responsable_nombre
-    elif fase == 'CIERRE':
+        if responsable_nombre:
+            proyecto.responsable_operativo_nombre = responsable_nombre
+    elif fase == "CIERRE":
         proyecto.responsable_administrativo_id = responsable_id
-        if responsable_nombre: proyecto.responsable_administrativo_nombre = responsable_nombre
-    
+        if responsable_nombre:
+            proyecto.responsable_administrativo_nombre = responsable_nombre
+
     # Responsable actual global
     proyecto.responsable_actual_id = responsable_id
     if responsable_nombre:
         proyecto.responsable_actual_nombre = responsable_nombre
+
 
 def asignar_snapshot_factura(proyecto, factura_id=None, factura_numero=None):
     """
@@ -245,27 +263,29 @@ def asignar_snapshot_factura(proyecto, factura_id=None, factura_numero=None):
         if _Factura is None:
             raise ImportError
         # Si ya es una instancia (o tiene .id), lo tratamos como tal
-        if hasattr(factura_id, 'id'):
-            if getattr(factura_id, 'empresa_id', None) != proyecto.empresa_id:
+        if hasattr(factura_id, "id"):
+            if getattr(factura_id, "empresa_id", None) != proyecto.empresa_id:
                 return
             proyecto.factura_costo = factura_id
             if not factura_numero:
-                proyecto.factura_costo_numero = getattr(factura_id, 'numero', '')
+                proyecto.factura_costo_numero = getattr(factura_id, "numero", "")
         else:
             # Es un ID puro (int/str)
             proyecto.factura_costo_id = factura_id
             if not factura_numero:
                 # Usar filter().only() para Zero Waste
-                factura = _Factura.objects.filter(
-                    id=factura_id,
-                    empresa_id=proyecto.empresa_id
-                ).only('id', 'numero', 'empresa_id').first()
+                factura = (
+                    _Factura.objects.filter(id=factura_id, empresa_id=proyecto.empresa_id)
+                    .only("id", "numero", "empresa_id")
+                    .first()
+                )
                 if factura:
                     proyecto.factura_costo_numero = factura.numero
     except (ImportError, ValueError, TypeError, Exception):
         # Fallback silencioso si no se puede resolver la factura
         if factura_numero:
             proyecto.factura_costo_numero = factura_numero
+
 
 def asignar_snapshot_proveedor(proyecto, proveedor_id=None, proveedor_nombre=None):
     """
@@ -275,9 +295,11 @@ def asignar_snapshot_proveedor(proyecto, proveedor_id=None, proveedor_nombre=Non
         try:
             if _Proveedor is None:
                 raise ImportError
-            proveedor = _Proveedor.objects.filter(
-                id=proveedor_id, empresa_id=proyecto.empresa_id
-            ).only('razon_social').first()
+            proveedor = (
+                _Proveedor.objects.filter(id=proveedor_id, empresa_id=proyecto.empresa_id)
+                .only("razon_social")
+                .first()
+            )
             if not proveedor:
                 return
             proyecto.proveedor_id = proveedor_id
@@ -288,6 +310,7 @@ def asignar_snapshot_proveedor(proyecto, proveedor_id=None, proveedor_nombre=Non
                 proyecto.proveedor_nombre = proveedor_nombre
     elif proveedor_nombre:
         proyecto.proveedor_nombre = proveedor_nombre
+
 
 def validar_servicio_asociado_dsv(proyecto, servicio_asociado):
     """
@@ -303,30 +326,28 @@ def validar_servicio_asociado_dsv(proyecto, servicio_asociado):
             raise ImportError
 
         # Si es instancia, verificar que la empresa coincida
-        if hasattr(servicio_asociado, 'empresa_id'):
+        if hasattr(servicio_asociado, "empresa_id"):
             if servicio_asociado.empresa_id != proyecto.empresa_id:
                 raise ValidationError(
-                    f'El servicio seleccionado no pertenece a la empresa actual. '
-                    f'Servicio empresa_id: {servicio_asociado.empresa_id}, '
-                    f'Proyecto empresa_id: {proyecto.empresa_id}.'
+                    f"El servicio seleccionado no pertenece a la empresa actual. "
+                    f"Servicio empresa_id: {servicio_asociado.empresa_id}, "
+                    f"Proyecto empresa_id: {proyecto.empresa_id}."
                 )
         else:
             # Si es un ID/UUID, consultar la BD con DSV
-            lookup = {'empresa_id': proyecto.empresa_id}
+            lookup = {"empresa_id": proyecto.empresa_id}
             servicio_str = str(servicio_asociado)
-            if '-' in servicio_str:
-                lookup['uuid'] = servicio_str
+            if "-" in servicio_str:
+                lookup["uuid"] = servicio_str
             else:
-                lookup['id'] = servicio_asociado
+                lookup["id"] = servicio_asociado
 
-            servicio = _Servicio.objects.filter(
-                **lookup
-            ).only('id', 'empresa_id').first()
+            servicio = _Servicio.objects.filter(**lookup).only("id", "empresa_id").first()
 
             if not servicio:
                 raise ValidationError(
                     f'El servicio con ID "{servicio_asociado}" no existe en esta empresa '
-                    f'o pertenece a otro tenant.'
+                    f"o pertenece a otro tenant."
                 )
     except ImportError:
         # Si inventario no esta disponible, no validar
@@ -334,7 +355,7 @@ def validar_servicio_asociado_dsv(proyecto, servicio_asociado):
     except ValidationError:
         raise  # Re-lanzar ValidationError
     except Exception as e:
-        raise ValidationError(f'Error validando servicio_asociado: {str(e)}')
+        raise ValidationError(f"Error validando servicio_asociado: {str(e)}") from e
 
 
 # ==============================================================================
@@ -347,25 +368,31 @@ def validar_servicio_asociado_dsv(proyecto, servicio_asociado):
 # gate documental resuelto ANTES de mutar cualquier campo.
 
 TRANSICIONES_VALIDAS_FASE = {
-    'BORRADOR': {'INICIO'},
-    'INICIO': {'PLANEACION'},
-    'PLANEACION': {'EJECUCION'},
-    'EJECUCION': {'CIERRE'},
-    'CIERRE': set(),
+    "BORRADOR": {"INICIO"},
+    "INICIO": {"PLANEACION"},
+    "PLANEACION": {"EJECUCION"},
+    "EJECUCION": {"CIERRE"},
+    "CIERRE": set(),
 }
 
 RESPONSABLE_FIELDS = [
-    'responsable_actual_id', 'responsable_actual_nombre',
-    'responsable_comercial_id', 'responsable_comercial_nombre',
-    'responsable_tecnico_id', 'responsable_tecnico_nombre',
-    'responsable_operativo_id', 'responsable_operativo_nombre',
-    'responsable_administrativo_id', 'responsable_administrativo_nombre',
+    "responsable_actual_id",
+    "responsable_actual_nombre",
+    "responsable_comercial_id",
+    "responsable_comercial_nombre",
+    "responsable_tecnico_id",
+    "responsable_tecnico_nombre",
+    "responsable_operativo_id",
+    "responsable_operativo_nombre",
+    "responsable_administrativo_id",
+    "responsable_administrativo_nombre",
 ]
 
 
 @transaction.atomic
-def cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id=None, responsable_nombre=None,
-                           usuario=None, motivo=''):
+def cambiar_fase_proyecto(
+    proyecto, nueva_fase, responsable_id=None, responsable_nombre=None, usuario=None, motivo=""
+):
     """
     Valida y cambia la fase del proyecto -- maquina de estados estricta (sin
     saltos de fase). El checklist documental es informativo, NO bloqueante
@@ -384,7 +411,7 @@ def cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id=None, responsable
     """
     fases_validas = dict(Proyecto.FASES)
     if nueva_fase not in fases_validas:
-        raise ValidationError({'detail': f'Fase invalida: {nueva_fase}'})
+        raise ValidationError({"detail": f"Fase invalida: {nueva_fase}"})
 
     # Lock de fila: dos POST /avanzar-fase/ simultaneos sobre el mismo
     # proyecto se serializan aqui (Fase 48 - concurrencia).
@@ -395,22 +422,28 @@ def cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id=None, responsable
         return proyecto  # idempotente: doble-click no rompe nada, no crea historial
 
     if nueva_fase not in TRANSICIONES_VALIDAS_FASE.get(fase_actual, set()):
-        raise ValidationError({'detail': f'Transicion no permitida: {fase_actual} -> {nueva_fase}.'})
+        raise ValidationError(
+            {"detail": f"Transicion no permitida: {fase_actual} -> {nueva_fase}."}
+        )
 
     # Decision de producto (2026-09-18): el checklist documental es
     # informativo, no bloqueante -- solo detienen la transicion los requisitos
     # marcados explicitamente como obligatorios (hoy ninguno). Antes CUALQUIER
     # documento faltante abortaba con 400 y dejaba el proyecto atascado en su
     # fase. La UI sigue viendo que falta via `requisitos_siguiente_fase`.
-    obligatorios_faltantes = documentos_obligatorios_faltantes(proyecto_actual, fase_actual, nueva_fase)
+    obligatorios_faltantes = documentos_obligatorios_faltantes(
+        proyecto_actual, fase_actual, nueva_fase
+    )
     if obligatorios_faltantes:
-        raise ValidationError({
-            'detail': f'No puede avanzar a {fases_validas.get(nueva_fase, nueva_fase)}. Faltan documentos obligatorios.',
-            'missing_documents': obligatorios_faltantes,
-        })
+        raise ValidationError(
+            {
+                "detail": f"No puede avanzar a {fases_validas.get(nueva_fase, nueva_fase)}. Faltan documentos obligatorios.",
+                "missing_documents": obligatorios_faltantes,
+            }
+        )
 
     proyecto.fase_actual = nueva_fase
-    update_fields = ['fase_actual', 'updated_at']
+    update_fields = ["fase_actual", "updated_at"]
     if responsable_id or responsable_nombre:
         asignar_snapshot_responsable(proyecto, responsable_id, responsable_nombre, nueva_fase)
         update_fields += RESPONSABLE_FIELDS
@@ -426,14 +459,16 @@ def cambiar_fase_proyecto(proyecto, nueva_fase, responsable_id=None, responsable
         fase_anterior=fase_actual,
         fase_nueva=nueva_fase,
         usuario=usuario,
-        motivo=motivo or '',
+        motivo=motivo or "",
     )
 
     return proyecto
 
+
 # ==============================================================================
 # ORQUESTACIoN CRUD (v3.5)
 # ==============================================================================
+
 
 @transaction.atomic
 def orchestrate_create_proyecto(empresa, data):
@@ -441,33 +476,35 @@ def orchestrate_create_proyecto(empresa, data):
     Orquestador para la creacion de proyectos con logica de negocio.
     """
     if not empresa or not isinstance(empresa, Empresa):
-        raise ValidationError({'empresa': 'Empresa invalida o no proporcionada.'})
-    
+        raise ValidationError({"empresa": "Empresa invalida o no proporcionada."})
+
     # WARNING: Generar o validar codigo unico
-    codigo = data.get('codigo', None)
-    
+    codigo = data.get("codigo", None)
+
     # [SHIELD] Normalizar codigo: quitar espacios en blanco
     if codigo:
         codigo = str(codigo).strip()
-    
+
     if not codigo:
         # Si no hay codigo, generar uno automaticamente
-        data['codigo'] = generar_codigo_proyecto(empresa)
+        data["codigo"] = generar_codigo_proyecto(empresa)
     else:
         # Validar que el codigo no exista ya
         if Proyecto.objects.filter(empresa=empresa, codigo=codigo).exists():
-            raise ValidationError({'codigo': f'El codigo "{codigo}" ya esta registrado para otro proyecto.'})
-        data['codigo'] = codigo
-    
-    cliente_id = data.pop('cliente_id', None)
-    cliente_nombre = data.pop('cliente_nombre', None)
-    responsable_id = data.pop('responsable_actual_id', None)
-    responsable_nombre = data.pop('responsable_actual_nombre', None)
-    factura_id = data.pop('factura_costo', None) or data.pop('factura_costo_id', None)
-    factura_numero = data.pop('factura_costo_numero', None)
-    proveedor_id = data.pop('proveedor_id', None)
-    proveedor_nombre = data.pop('proveedor_nombre', None)
-    servicio_asociado = data.pop('servicio_asociado', None)
+            raise ValidationError(
+                {"codigo": f'El codigo "{codigo}" ya esta registrado para otro proyecto.'}
+            )
+        data["codigo"] = codigo
+
+    cliente_id = data.pop("cliente_id", None)
+    cliente_nombre = data.pop("cliente_nombre", None)
+    responsable_id = data.pop("responsable_actual_id", None)
+    responsable_nombre = data.pop("responsable_actual_nombre", None)
+    factura_id = data.pop("factura_costo", None) or data.pop("factura_costo_id", None)
+    factura_numero = data.pop("factura_costo_numero", None)
+    proveedor_id = data.pop("proveedor_id", None)
+    proveedor_nombre = data.pop("proveedor_nombre", None)
+    servicio_asociado = data.pop("servicio_asociado", None)
 
     proyecto = Proyecto(empresa=empresa, **data)
     asignar_snapshot_cliente(proyecto, cliente_id, cliente_nombre)
@@ -484,10 +521,11 @@ def orchestrate_create_proyecto(empresa, data):
     if servicio_asociado:
         validar_servicio_asociado_dsv(proyecto, servicio_asociado)
         proyecto.servicio_asociado = servicio_asociado
-        
+
     proyecto = save_proyecto(proyecto)
     calcular_indicadores_financieros(proyecto)
     return proyecto
+
 
 @transaction.atomic
 def orchestrate_update_proyecto(proyecto, data):
@@ -495,34 +533,37 @@ def orchestrate_update_proyecto(proyecto, data):
     Orquestador para la actualizacion de proyectos con logica de negocio.
     """
     if not proyecto or not proyecto.empresa:
-        raise ValidationError({'proyecto': 'Proyecto invalido o sin empresa asociada.'})
-    
+        raise ValidationError({"proyecto": "Proyecto invalido o sin empresa asociada."})
+
     # WARNING: Validar codigo unico si se esta actualizando
-    codigo = data.get('codigo', None)
+    codigo = data.get("codigo", None)
     if codigo is not None:
         codigo = str(codigo).strip()
-        if codigo != proyecto.codigo and Proyecto.objects.filter(
-            empresa=proyecto.empresa, codigo=codigo
-        ).exclude(id=proyecto.id).exists():
-            raise ValidationError({'codigo': f'El codigo "{codigo}" ya existe para otro proyecto.'})
-        
+        if (
+            codigo != proyecto.codigo
+            and Proyecto.objects.filter(empresa=proyecto.empresa, codigo=codigo)
+            .exclude(id=proyecto.id)
+            .exists()
+        ):
+            raise ValidationError({"codigo": f'El codigo "{codigo}" ya existe para otro proyecto.'})
+
         # [SHIELD] Asegurar que el codigo vacio se maneje segun la regla de negocio
         if not codigo and not proyecto.codigo:
-             # Si no hay codigo previo y se envia vacio, generar uno
-             data['codigo'] = generar_codigo_proyecto(proyecto.empresa)
+            # Si no hay codigo previo y se envia vacio, generar uno
+            data["codigo"] = generar_codigo_proyecto(proyecto.empresa)
         else:
-             data['codigo'] = codigo
-    
-    cliente_id = data.pop('cliente_id', None)
-    cliente_nombre = data.pop('cliente_nombre', None)
-    responsable_id = data.pop('responsable_actual_id', None)
-    responsable_nombre = data.pop('responsable_actual_nombre', None)
-    factura_id = data.pop('factura_costo', None) or data.pop('factura_costo_id', None)
-    factura_numero = data.pop('factura_costo_numero', None)
-    proveedor_id = data.pop('proveedor_id', None)
-    proveedor_nombre = data.pop('proveedor_nombre', None)
-    servicio_asociado = data.pop('servicio_asociado', None)
-    nueva_fase = data.pop('fase_actual', None)
+            data["codigo"] = codigo
+
+    cliente_id = data.pop("cliente_id", None)
+    cliente_nombre = data.pop("cliente_nombre", None)
+    responsable_id = data.pop("responsable_actual_id", None)
+    responsable_nombre = data.pop("responsable_actual_nombre", None)
+    factura_id = data.pop("factura_costo", None) or data.pop("factura_costo_id", None)
+    factura_numero = data.pop("factura_costo_numero", None)
+    proveedor_id = data.pop("proveedor_id", None)
+    proveedor_nombre = data.pop("proveedor_nombre", None)
+    servicio_asociado = data.pop("servicio_asociado", None)
+    nueva_fase = data.pop("fase_actual", None)
 
     for key, value in data.items():
         if hasattr(proyecto, key):
@@ -545,7 +586,7 @@ def orchestrate_update_proyecto(proyecto, data):
     if servicio_asociado is not None:
         validar_servicio_asociado_dsv(proyecto, servicio_asociado)
         proyecto.servicio_asociado = servicio_asociado
-        
+
     proyecto = save_proyecto(proyecto)
     calcular_indicadores_financieros(proyecto)
     return proyecto
@@ -554,6 +595,7 @@ def orchestrate_update_proyecto(proyecto, data):
 # ==============================================================================
 # TAREAS CORTAS BUSINESS SERVICE (v3.10.0)
 # ==============================================================================
+
 
 class TareasCortasBusinessService:
     """
@@ -574,7 +616,7 @@ class TareasCortasBusinessService:
             )
 
     @staticmethod
-    def _validar_empresa_dsv(entidad, empresa, nombre='entidad'):
+    def _validar_empresa_dsv(entidad, empresa, nombre="entidad"):
         """
         Valida que una entidad relacionada pertenezca a la misma empresa (DSV).
         """
@@ -585,7 +627,17 @@ class TareasCortasBusinessService:
 
     @staticmethod
     @transaction.atomic
-    def crear_tarea_corta(empresa, empleado, fecha_inicio, fecha_fin, titulo, cliente=None, descripcion='', prioridad='NORMAL', notas_progreso=''):
+    def crear_tarea_corta(
+        empresa,
+        empleado,
+        fecha_inicio,
+        fecha_fin,
+        titulo,
+        cliente=None,
+        descripcion="",
+        prioridad="NORMAL",
+        notas_progreso="",
+    ):
         """
         Crea una nueva TareaCorta con logica de negocio.
         """
@@ -594,8 +646,8 @@ class TareasCortasBusinessService:
         if not empleado:
             raise ValidationError("La tarea corta requiere un empleado asignado.")
 
-        TareasCortasBusinessService._validar_empresa_dsv(cliente, empresa, 'cliente')
-        TareasCortasBusinessService._validar_empresa_dsv(empleado, empresa, 'empleado')
+        TareasCortasBusinessService._validar_empresa_dsv(cliente, empresa, "cliente")
+        TareasCortasBusinessService._validar_empresa_dsv(empleado, empresa, "empleado")
 
         TareasCortasBusinessService._validar_fechas(fecha_inicio, fecha_fin)
 
@@ -609,7 +661,7 @@ class TareasCortasBusinessService:
             descripcion=descripcion,
             prioridad=prioridad,
             notas_progreso=notas_progreso,
-            estado='PENDIENTE'
+            estado="PENDIENTE",
         )
 
         save_tarea_corta(tarea)
@@ -621,30 +673,42 @@ class TareasCortasBusinessService:
         """
         Actualiza los campos editables de una TareaCorta.
         """
-        permitidos = ['fecha_inicio', 'fecha_fin', 'titulo', 'descripcion', 'prioridad', 'notas_progreso', 'cliente', 'empleado']
+        permitidos = [
+            "fecha_inicio",
+            "fecha_fin",
+            "titulo",
+            "descripcion",
+            "prioridad",
+            "notas_progreso",
+            "cliente",
+            "empleado",
+        ]
 
-        if 'cliente' in data:
-            cliente = data['cliente']
+        if "cliente" in data:
+            cliente = data["cliente"]
             if not cliente:
                 raise ValidationError("La tarea corta requiere un cliente destino.")
-            TareasCortasBusinessService._validar_empresa_dsv(cliente, tarea_corta.empresa, 'cliente')
+            TareasCortasBusinessService._validar_empresa_dsv(
+                cliente, tarea_corta.empresa, "cliente"
+            )
             tarea_corta.cliente = cliente
 
-        if 'empleado' in data:
-            empleado = data['empleado']
+        if "empleado" in data:
+            empleado = data["empleado"]
             if not empleado:
                 raise ValidationError("La tarea corta requiere un empleado asignado.")
-            TareasCortasBusinessService._validar_empresa_dsv(empleado, tarea_corta.empresa, 'empleado')
+            TareasCortasBusinessService._validar_empresa_dsv(
+                empleado, tarea_corta.empresa, "empleado"
+            )
             tarea_corta.empleado = empleado
 
         for key in permitidos:
-            if key in data and key not in ('cliente', 'empleado'):
+            if key in data and key not in ("cliente", "empleado"):
                 setattr(tarea_corta, key, data[key])
 
-        if 'fecha_inicio' in data or 'fecha_fin' in data:
+        if "fecha_inicio" in data or "fecha_fin" in data:
             TareasCortasBusinessService._validar_fechas(
-                tarea_corta.fecha_inicio,
-                tarea_corta.fecha_fin
+                tarea_corta.fecha_inicio, tarea_corta.fecha_fin
             )
 
         save_tarea_corta(tarea_corta)

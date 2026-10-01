@@ -5,24 +5,23 @@ SINTEL v3.10.1: Arquitectura Service Layer Modular.
 - Hereda de BaseServiceMixin (canonical, consolidado)
 - Mantiene properties y service_* methods específicos de Clientes
 """
+
 import logging
 
 from apps.tenant.api.mixins import BaseServiceMixin
-from apps.tenant.clientes.services.selectors import (
-    ClienteSelector,
-    ContactoSelector,
-    CarteraSelector,
-    LIST_FIELDS,
-    DETAIL_FIELDS,
-)
 from apps.tenant.clientes.services.business_service import (
-    ClienteBusinessService,
     CarteraBusinessService,
+    ClienteBusinessService,
 )
 from apps.tenant.clientes.services.crud_service import (
+    CarteraCRUDService,
     ClienteCRUDService,
     ContactoCRUDService,
-    CarteraCRUDService,
+)
+from apps.tenant.clientes.services.selectors import (
+    CarteraSelector,
+    ClienteSelector,
+    ContactoSelector,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,13 +52,13 @@ class ClienteServiceMixin(BaseServiceMixin):
     def get_qs_list(self):
         """Retorna queryset de lista usando selector."""
         empresa_id = self._get_empresa_id_seguro()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
+        search = self.request.query_params.get("search") if hasattr(self, "request") else None
         return self.selector_class.get_cliente_list(empresa_id, search=search)
 
     def get_qs_detail(self):
         """Retorna queryset de detalle usando selector."""
         empresa_id = self._get_empresa_id_seguro()
-        uuid_val = self.kwargs.get('uuid')
+        uuid_val = self.kwargs.get("uuid")
         return self.selector_class.get_cliente_detail(empresa_id, uuid_val)
 
     def service_registrar_cliente(self, empresa_id, data, contactos_raw=None):
@@ -118,11 +117,15 @@ class CarteraServiceMixin(BaseServiceMixin):
         return self.crud_service_class()
 
     def get_qs_list(self):
-        empresa_id   = self._get_empresa_id_seguro()
-        req = getattr(self, 'request', None)
-        cliente_uuid = (req.query_params.get('cliente_uuid') or req.query_params.get('cliente_id')) if req else None
-        estado_pago  = self.request.query_params.get('estado_pago')
-        search       = self.request.query_params.get('search')
+        empresa_id = self._get_empresa_id_seguro()
+        req = getattr(self, "request", None)
+        cliente_uuid = (
+            (req.query_params.get("cliente_uuid") or req.query_params.get("cliente_id"))
+            if req
+            else None
+        )
+        estado_pago = self.request.query_params.get("estado_pago")
+        search = self.request.query_params.get("search")
         return self.selector_class.qs_list_facturas_venta(
             empresa_id=empresa_id,
             cliente_uuid=cliente_uuid,

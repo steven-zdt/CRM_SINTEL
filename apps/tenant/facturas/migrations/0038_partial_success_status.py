@@ -4,15 +4,29 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('facturas', '0037_backfill_origen_desde_venta'),
+        ("facturas", "0037_backfill_origen_desde_venta"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='mailingestionrun',
-            name='status',
-            field=models.CharField(choices=[('PENDING', 'PENDING'), ('RUNNING', 'RUNNING'), ('SUCCESS', 'SUCCESS'), ('PARTIAL_SUCCESS', 'PARTIAL_SUCCESS'), ('FAILED', 'FAILED'), ('CANCEL_REQUESTED', 'CANCEL_REQUESTED'), ('CANCELED', 'CANCELED'), ('ABORTED', 'ABORTED')], db_index=True, default='PENDING', max_length=20, verbose_name='Estado'),
+            model_name="mailingestionrun",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("PENDING", "PENDING"),
+                    ("RUNNING", "RUNNING"),
+                    ("SUCCESS", "SUCCESS"),
+                    ("PARTIAL_SUCCESS", "PARTIAL_SUCCESS"),
+                    ("FAILED", "FAILED"),
+                    ("CANCEL_REQUESTED", "CANCEL_REQUESTED"),
+                    ("CANCELED", "CANCELED"),
+                    ("ABORTED", "ABORTED"),
+                ],
+                db_index=True,
+                default="PENDING",
+                max_length=20,
+                verbose_name="Estado",
+            ),
         ),
     ]

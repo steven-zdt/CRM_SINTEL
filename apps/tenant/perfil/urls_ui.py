@@ -4,6 +4,7 @@ URLs UI (HTML server-rendered) para Perfil. Fase 5-BIS.
 Se incluye de forma defensiva en config/urls_tenant.py:
     path('ui/perfil/', include((perfil_ui_urlpatterns, 'perfil'), namespace='perfil_ui'))
 """
+
 from django.urls import path
 
 from apps.tenant.perfil.views import PerfilTableView

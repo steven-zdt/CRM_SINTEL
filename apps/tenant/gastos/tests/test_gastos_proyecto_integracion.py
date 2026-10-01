@@ -7,6 +7,7 @@ Cubre (ver docs/remediation/GASTOS_PROYECTOS_IMPLEMENTATION_STATUS.md):
 - Anular / desactivar un gasto asociado: sale del costo del proyecto.
 - Recalculo automatico via calcular_indicadores_financieros() (sin Signals).
 """
+
 import datetime
 from decimal import Decimal
 
@@ -19,24 +20,23 @@ from apps.tenant.proyectos.models import Proyecto
 
 
 class GastosProyectoIntegracionTests(TenantAPITestCase):
-
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first()
 
         self.proveedor = Proveedor.objects.create(
             empresa=self.empresa,
-            numero_documento='900111222',
-            razon_social='Proveedor Test SAS',
-            tipo_persona='JURIDICA',
-            tipo_documento='NIT',
-            regimen_tributario='ORDINARIO',
+            numero_documento="900111222",
+            razon_social="Proveedor Test SAS",
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            regimen_tributario="ORDINARIO",
             activo=True,
         )
         self.resolucion = ResolucionDIAN.objects.create(
             empresa=self.empresa,
-            numero_resolucion='RES-001',
-            prefijo='DS',
+            numero_resolucion="RES-001",
+            prefijo="DS",
             rango_desde=1,
             rango_hasta=1000,
             fecha_resolucion=datetime.date(2026, 1, 1),
@@ -45,29 +45,29 @@ class GastosProyectoIntegracionTests(TenantAPITestCase):
         )
         self.proyecto_a = Proyecto.objects.create(
             empresa=self.empresa,
-            nombre='Proyecto A',
-            codigo='PRJ-2026-A001',
-            tipo_servicio='PROYECTO_INTEGRAL',
-            valor_contrato_proyectado=Decimal('10000000.00'),
+            nombre="Proyecto A",
+            codigo="PRJ-2026-A001",
+            tipo_servicio="PROYECTO_INTEGRAL",
+            valor_contrato_proyectado=Decimal("10000000.00"),
         )
         self.proyecto_b = Proyecto.objects.create(
             empresa=self.empresa,
-            nombre='Proyecto B',
-            codigo='PRJ-2026-B001',
-            tipo_servicio='PROYECTO_INTEGRAL',
-            valor_contrato_proyectado=Decimal('5000000.00'),
+            nombre="Proyecto B",
+            codigo="PRJ-2026-B001",
+            tipo_servicio="PROYECTO_INTEGRAL",
+            valor_contrato_proyectado=Decimal("5000000.00"),
         )
 
-    def _crear_gasto(self, subtotal='1000000.00', proyecto_uuid=None):
+    def _crear_gasto(self, subtotal="1000000.00", proyecto_uuid=None):
         data = {
-            'resolucion_dian': self.resolucion.id,
-            'proveedor': self.proveedor.id,
-            'fecha': datetime.date(2026, 6, 1),
-            'subtotal': subtotal,
-            'numero_documento_proveedor': f'FAC-{DocumentoSoporte.objects.count() + 1}',
+            "resolucion_dian": self.resolucion.id,
+            "proveedor": self.proveedor.id,
+            "fecha": datetime.date(2026, 6, 1),
+            "subtotal": subtotal,
+            "numero_documento_proveedor": f"FAC-{DocumentoSoporte.objects.count() + 1}",
         }
         if proyecto_uuid is not None:
-            data['proyecto_uuid'] = str(proyecto_uuid)
+            data["proyecto_uuid"] = str(proyecto_uuid)
         success, result, status_code = GastoBusinessService.procesar_gasto(self.empresa, data)
         return success, result, status_code
 
@@ -82,16 +82,17 @@ class GastosProyectoIntegracionTests(TenantAPITestCase):
 
     def test_crear_gasto_con_proyecto_valido_recalcula(self):
         success, documento, status_code = self._crear_gasto(
-            subtotal='1000000.00', proyecto_uuid=self.proyecto_a.uuid
+            subtotal="1000000.00", proyecto_uuid=self.proyecto_a.uuid
         )
         self.assertTrue(success, documento)
         self.assertEqual(documento.proyecto_uuid, self.proyecto_a.uuid)
 
         self.proyecto_a.refresh_from_db()
-        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal('1000000.00'))
+        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal("1000000.00"))
 
     def test_crear_gasto_con_proyecto_uuid_inexistente_rechazado(self):
         import uuid as uuid_module
+
         count_antes = DocumentoSoporte.objects.count()
 
         success, result, status_code = self._crear_gasto(proyecto_uuid=uuid_module.uuid4())
@@ -113,13 +114,13 @@ class GastosProyectoIntegracionTests(TenantAPITestCase):
         try:
             _rs.RetencionesService.obtener_retenciones_desde_tercero = staticmethod(
                 lambda **kwargs: {
-                    'retefuente_porcentaje': Decimal('0.11'),
-                    'reteica_porcentaje': Decimal('0.00'),
-                    'reteiva_porcentaje': Decimal('0.00'),
+                    "retefuente_porcentaje": Decimal("0.11"),
+                    "reteica_porcentaje": Decimal("0.00"),
+                    "reteiva_porcentaje": Decimal("0.00"),
                 }
             )
             success, documento, _ = self._crear_gasto(
-                subtotal='1000000.00', proyecto_uuid=self.proyecto_a.uuid
+                subtotal="1000000.00", proyecto_uuid=self.proyecto_a.uuid
             )
             self.assertTrue(success, documento)
             self.assertLess(documento.total, documento.subtotal)
@@ -134,55 +135,60 @@ class GastosProyectoIntegracionTests(TenantAPITestCase):
     # Edicion: asociar / mover / desasociar (via PATCH -- perform_update)
     # ------------------------------------------------------------------
     def test_editar_gasto_asociar_proyecto_posteriormente(self):
-        _, documento, _ = self._crear_gasto(subtotal='500000.00')
+        _, documento, _ = self._crear_gasto(subtotal="500000.00")
         self.assertIsNone(documento.proyecto_uuid)
 
         resp = self.tpatch(
-            f'/api/v1/gastos/{documento.uuid}/',
-            data={'proyecto_uuid': str(self.proyecto_a.uuid)},
+            f"/api/v1/gastos/{documento.uuid}/",
+            data={"proyecto_uuid": str(self.proyecto_a.uuid)},
         )
         self.assertEqual(resp.status_code, 200, resp.content)
 
         self.proyecto_a.refresh_from_db()
-        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal('500000.00'))
+        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal("500000.00"))
 
     def test_editar_gasto_mover_de_proyecto_a_a_b(self):
-        _, documento, _ = self._crear_gasto(subtotal='700000.00', proyecto_uuid=self.proyecto_a.uuid)
+        _, documento, _ = self._crear_gasto(
+            subtotal="700000.00", proyecto_uuid=self.proyecto_a.uuid
+        )
         self.proyecto_a.refresh_from_db()
-        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal('700000.00'))
+        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal("700000.00"))
 
         resp = self.tpatch(
-            f'/api/v1/gastos/{documento.uuid}/',
-            data={'proyecto_uuid': str(self.proyecto_b.uuid)},
+            f"/api/v1/gastos/{documento.uuid}/",
+            data={"proyecto_uuid": str(self.proyecto_b.uuid)},
         )
         self.assertEqual(resp.status_code, 200, resp.content)
 
         self.proyecto_a.refresh_from_db()
         self.proyecto_b.refresh_from_db()
-        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal('0.00'))
-        self.assertEqual(self.proyecto_b.costo_gastos_real, Decimal('700000.00'))
+        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal("0.00"))
+        self.assertEqual(self.proyecto_b.costo_gastos_real, Decimal("700000.00"))
 
     def test_editar_gasto_desasociar_proyecto(self):
-        _, documento, _ = self._crear_gasto(subtotal='300000.00', proyecto_uuid=self.proyecto_a.uuid)
+        _, documento, _ = self._crear_gasto(
+            subtotal="300000.00", proyecto_uuid=self.proyecto_a.uuid
+        )
 
         resp = self.tpatch(
-            f'/api/v1/gastos/{documento.uuid}/',
-            data={'proyecto_uuid': None},
+            f"/api/v1/gastos/{documento.uuid}/",
+            data={"proyecto_uuid": None},
         )
         self.assertEqual(resp.status_code, 200, resp.content)
 
         self.proyecto_a.refresh_from_db()
         documento.refresh_from_db()
         self.assertIsNone(documento.proyecto_uuid)
-        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal('0.00'))
+        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal("0.00"))
 
     def test_editar_gasto_proyecto_uuid_inexistente_rechazado(self):
         import uuid as uuid_module
-        _, documento, _ = self._crear_gasto(subtotal='100000.00')
+
+        _, documento, _ = self._crear_gasto(subtotal="100000.00")
 
         resp = self.tpatch(
-            f'/api/v1/gastos/{documento.uuid}/',
-            data={'proyecto_uuid': str(uuid_module.uuid4())},
+            f"/api/v1/gastos/{documento.uuid}/",
+            data={"proyecto_uuid": str(uuid_module.uuid4())},
         )
         self.assertEqual(resp.status_code, 400, resp.content)
 
@@ -200,24 +206,28 @@ class GastosProyectoIntegracionTests(TenantAPITestCase):
     # Anular / Desactivar: sale del costo
     # ------------------------------------------------------------------
     def test_anular_gasto_asociado_sale_del_costo(self):
-        _, documento, _ = self._crear_gasto(subtotal='800000.00', proyecto_uuid=self.proyecto_a.uuid)
+        _, documento, _ = self._crear_gasto(
+            subtotal="800000.00", proyecto_uuid=self.proyecto_a.uuid
+        )
         self.proyecto_a.refresh_from_db()
-        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal('800000.00'))
+        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal("800000.00"))
 
         success, result, status_code = GastoBusinessService.anular_gasto(
-            documento.id, motivo='Prueba de anulacion', usuario=None, empresa_id=self.empresa.id
+            documento.id, motivo="Prueba de anulacion", usuario=None, empresa_id=self.empresa.id
         )
         self.assertTrue(success, result)
 
         self.proyecto_a.refresh_from_db()
-        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal('0.00'))
+        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal("0.00"))
 
     def test_desactivar_gasto_asociado_sale_del_costo(self):
-        _, documento, _ = self._crear_gasto(subtotal='250000.00', proyecto_uuid=self.proyecto_a.uuid)
+        _, documento, _ = self._crear_gasto(
+            subtotal="250000.00", proyecto_uuid=self.proyecto_a.uuid
+        )
         self.proyecto_a.refresh_from_db()
-        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal('250000.00'))
+        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal("250000.00"))
 
         GastoBusinessService.desactivar_gasto(documento.id, empresa_id=self.empresa.id)
 
         self.proyecto_a.refresh_from_db()
-        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal('0.00'))
+        self.assertEqual(self.proyecto_a.costo_gastos_real, Decimal("0.00"))

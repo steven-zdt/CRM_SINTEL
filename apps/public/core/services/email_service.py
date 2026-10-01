@@ -7,11 +7,13 @@ Centraliza templates, logica de reintentos y logging de comunicaciones.
 
 import logging
 from urllib.parse import urlparse
+
 from django.conf import settings
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 
 logger = logging.getLogger(__name__)
+
 
 class EmailService:
     @staticmethod
@@ -19,12 +21,12 @@ class EmailService:
         """Metodo interno para renderizar y enviar email."""
         try:
             full_template_path = f"public/core/emails/{template_name}"
-            
+
             logger.info(f"[EMAIL:SEND] Enviando a {recipient_list}: {subject}")
-            
+
             html_message = render_to_string(f"{full_template_path}.html", context)
             text_message = render_to_string(f"{full_template_path}.txt", context)
-            
+
             send_mail(
                 subject=subject,
                 message=text_message,
@@ -33,12 +35,14 @@ class EmailService:
                 html_message=html_message,
                 fail_silently=False,
             )
-            
+
             logger.info(f"[EMAIL:OK] Enviado exitosamente a {recipient_list}")
             return True
-            
+
         except Exception as e:
-            logger.error(f"[EMAIL:ERROR] Fallo al enviar a {recipient_list}: {str(e)}", exc_info=True)
+            logger.error(
+                f"[EMAIL:ERROR] Fallo al enviar a {recipient_list}: {str(e)}", exc_info=True
+            )
             if settings.DEBUG:
                 logger.warning(
                     f"[EMAIL:DEBUG] Email NO enviado (excepcion capturada). "
@@ -63,6 +67,7 @@ class EmailService:
           - Cualquier creacion futura de tenant privado
         """
         from apps.public.core.tasks import send_tenant_activation_email_task
+
         send_tenant_activation_email_task.delay(user.pk, tenant.pk)
         return True
 
@@ -80,6 +85,7 @@ class EmailService:
           - NO se usa URL firmada con token embebido.
         """
         from apps.public.tenants.services.invitations import generate_activation_code
+
         schema = getattr(tenant, "schema_name", "")
         domain_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
         protocol = getattr(settings, "SITE_PROTOCOL", "https")
@@ -99,7 +105,9 @@ class EmailService:
             "code": code,
             "activate_url": activate_url,
             "login_url": login_url,
-            "contact_email": getattr(settings, "CONTACT_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", "")),
+            "contact_email": getattr(
+                settings, "CONTACT_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", "")
+            ),
         }
         subject = f"Activa tu cuenta en {tenant_name} - SINTEL"
         return cls._send_email(subject, [user.email], "owner_invitation", context)
@@ -128,6 +136,7 @@ class EmailService:
 
         # Generar token firmado para el link directo de activacion del tenant
         from apps.public.tenants.services.invitations import generate_invitation_token
+
         try:
             signed_token = generate_invitation_token(
                 user_id=user.id,
@@ -141,7 +150,9 @@ class EmailService:
             )
         except Exception:
             # Fallback al dominio publico si hay error generando el token
-            activate_url = f"{protocol}://{schema}.{domain_base}/static/tenant/core/auth/activate.html"
+            activate_url = (
+                f"{protocol}://{schema}.{domain_base}/static/tenant/core/auth/activate.html"
+            )
 
         login_url = f"{protocol}://{schema}.{domain_base}/static/tenant/core/auth/login.html"
 
@@ -152,7 +163,9 @@ class EmailService:
             "code": code,
             "activate_url": activate_url,
             "login_url": login_url,
-            "contact_email": getattr(settings, "CONTACT_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", "")),
+            "contact_email": getattr(
+                settings, "CONTACT_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", "")
+            ),
         }
         subject = f"Activa tu cuenta en {tenant_name} - SINTEL"
         return cls._send_email(subject, [user.email], "owner_invitation", context)
@@ -161,6 +174,7 @@ class EmailService:
     def send_invitation_email(cls, user, tenant, activation_url: str) -> bool:
         """Planifica el envio de email de invitacion de forma asincrona via Celery."""
         from apps.public.core.tasks import send_invitation_email_task
+
         send_invitation_email_task.delay(user.pk, tenant.pk, activation_url)
         return True
 
@@ -174,11 +188,13 @@ class EmailService:
             "user": user,
             "tenant": tenant,
             "activation_url": activation_url,  # clave legacy
-            "activate_url": activation_url,     # alias — clave del template actual
+            "activate_url": activation_url,  # alias — clave del template actual
             "login_url": login_url,
             "code": "",
             "tenant_name": getattr(tenant, "nombre", "Tenant"),
-            "contact_email": getattr(settings, "CONTACT_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", "")),
+            "contact_email": getattr(
+                settings, "CONTACT_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", "")
+            ),
         }
 
         subject = f"Activa tu cuenta en {context['tenant_name']}"
@@ -188,6 +204,7 @@ class EmailService:
     def send_password_reset_code_email(cls, user, tenant, code: str) -> bool:
         """Despacha tarea Celery para enviar email de reset con codigo de 8 chars (v3.13.0)."""
         from apps.public.core.tasks import send_password_reset_code_email_task
+
         send_password_reset_code_email_task.delay(user.pk, tenant.pk, code)
         return True
 
@@ -198,14 +215,18 @@ class EmailService:
         schema = getattr(tenant, "schema_name", "")
         domain_base = getattr(settings, "TENANT_DOMAIN_BASE", "sintel.net.co")
         protocol = getattr(settings, "SITE_PROTOCOL", "https")
-        reset_url = f"{protocol}://{schema}.{domain_base}/static/tenant/core/auth/reset-confirm.html"
+        reset_url = (
+            f"{protocol}://{schema}.{domain_base}/static/tenant/core/auth/reset-confirm.html"
+        )
         context = {
             "user": user,
             "tenant": tenant,
             "tenant_name": tenant_name,
             "code": code,
             "reset_url": reset_url,
-            "contact_email": getattr(settings, "CONTACT_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", "")),
+            "contact_email": getattr(
+                settings, "CONTACT_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", "")
+            ),
         }
         subject = f"Codigo para restablecer tu contrasena en {tenant_name} - SINTEL"
         return cls._send_email(subject, [user.email], "password_reset", context)
@@ -214,6 +235,7 @@ class EmailService:
     def send_password_reset_email(cls, user, tenant, reset_url: str) -> bool:
         """Legacy: despacha tarea Celery con URL de reset (mantenido por compatibilidad)."""
         from apps.public.core.tasks import send_password_reset_email_task
+
         send_password_reset_email_task.delay(user.pk, tenant.pk, reset_url)
         return True
 
@@ -228,4 +250,3 @@ class EmailService:
         }
         subject = f"Restablecer contrasena en {context['tenant_name']}"
         return cls._send_email(subject, [user.email], "password_reset", context)
-

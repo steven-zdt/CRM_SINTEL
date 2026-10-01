@@ -16,10 +16,10 @@ Uso (Local):
 Uso (Docker - Comandos directos):
     # Para un tenant especifico:
     docker compose -f infra/compose/docker-compose.yml exec -T app python manage.py tenant_command limpiar_cotizaciones --schema=tenant_name --confirm
-    
+
     # Para todos los tenants:
     docker compose -f infra/compose/docker-compose.yml exec -T app python manage.py all_tenants_command limpiar_cotizaciones --confirm
-    
+
     # Modo simulacion (ver que se eliminaria):
     docker compose -f infra/compose/docker-compose.yml exec -T app python manage.py tenant_command limpiar_cotizaciones --schema=tenant_name --dry-run
 
@@ -27,11 +27,12 @@ Uso (Docker - Scripts helper):
     # Linux/Mac:
     ./scripts/limpiar_cotizaciones.sh tenant_name --confirm
     ./scripts/limpiar_cotizaciones.sh all --confirm
-    
+
     # Windows (PowerShell):
     .\\scripts\\limpiar_cotizaciones.ps1 tenant_name -Confirm
     .\\scripts\\limpiar_cotizaciones.ps1 all -Confirm
 """
+
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
@@ -44,19 +45,15 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--confirm',
-            action='store_true',
-            help='Confirmar eliminacion (requerido para ejecutar)'
+            "--confirm", action="store_true", help="Confirmar eliminacion (requerido para ejecutar)"
         )
         parser.add_argument(
-            '--dry-run',
-            action='store_true',
-            help='Simular sin eliminar (muestra conteos)'
+            "--dry-run", action="store_true", help="Simular sin eliminar (muestra conteos)"
         )
 
     def handle(self, *args, **options):
-        confirm = options.get('confirm', False)
-        dry_run = options.get('dry_run', False)
+        confirm = options.get("confirm", False)
+        dry_run = options.get("dry_run", False)
 
         if not confirm and not dry_run:
             raise CommandError(
@@ -73,22 +70,25 @@ class Command(BaseCommand):
 
         # Obtener informacion del schema actual (si esta disponible)
         from django.db import connection
-        schema_name = getattr(connection, 'schema_name', 'unknown')
-        
+
+        schema_name = getattr(connection, "schema_name", "unknown")
+
         # Obtener conteos antes de eliminar
         conteos = {
-            'cotizacion_items': CotizacionItem.objects.count(),
-            'cotizaciones': Cotizacion.objects.count(),
-            'productos': Producto.objects.count(),
-            'servicios': Servicio.objects.count(),
-            'configuraciones': ConfiguracionCotizacion.objects.count(),
+            "cotizacion_items": CotizacionItem.objects.count(),
+            "cotizaciones": Cotizacion.objects.count(),
+            "productos": Producto.objects.count(),
+            "servicios": Servicio.objects.count(),
+            "configuraciones": ConfiguracionCotizacion.objects.count(),
         }
 
-        self.stdout.write(self.style.WARNING("\n" + "="*60))
-        self.stdout.write(self.style.WARNING("# WARNING:  LIMPIEZA DE BASE DE DATOS - APP COTIZACIONES"))
-        self.stdout.write(self.style.WARNING("="*60 + "\n"))
-        
-        if schema_name != 'unknown':
+        self.stdout.write(self.style.WARNING("\n" + "=" * 60))
+        self.stdout.write(
+            self.style.WARNING("# WARNING:  LIMPIEZA DE BASE DE DATOS - APP COTIZACIONES")
+        )
+        self.stdout.write(self.style.WARNING("=" * 60 + "\n"))
+
+        if schema_name != "unknown":
             self.stdout.write(f"Schema: {schema_name}\n")
 
         self.stdout.write("Conteos actuales:")
@@ -147,12 +147,14 @@ class Command(BaseCommand):
                 # 5. Eliminar configuraciones
                 deleted_configs = ConfiguracionCotizacion.objects.all().delete()
                 self.stdout.write(
-                    self.style.SUCCESS(f"[OK] Eliminadas {deleted_configs[0]} ConfiguracionCotizacion")
+                    self.style.SUCCESS(
+                        f"[OK] Eliminadas {deleted_configs[0]} ConfiguracionCotizacion"
+                    )
                 )
 
-                self.stdout.write(self.style.SUCCESS("\n" + "="*60))
+                self.stdout.write(self.style.SUCCESS("\n" + "=" * 60))
                 self.stdout.write(self.style.SUCCESS("[OK] LIMPIEZA COMPLETADA EXITOSAMENTE"))
-                self.stdout.write(self.style.SUCCESS("="*60 + "\n"))
+                self.stdout.write(self.style.SUCCESS("=" * 60 + "\n"))
 
         except Exception as e:
-            raise CommandError(f"Error al eliminar datos: {str(e)}")
+            raise CommandError(f"Error al eliminar datos: {str(e)}") from e

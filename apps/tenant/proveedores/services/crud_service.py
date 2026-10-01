@@ -1,9 +1,12 @@
 """
 CRUD Service for Proveedores v3.5 - Atomic Persistence.
 """
-from django.db import transaction, IntegrityError
+
+from django.db import IntegrityError, transaction
 from rest_framework.exceptions import ValidationError
+
 from ..models import Proveedor, Representante
+
 
 class ProveedorCRUDService:
     """
@@ -40,21 +43,21 @@ class ProveedorCRUDService:
         """Busca o crea un proveedor el la base de datos (Idempotencia)."""
         try:
             return Proveedor.objects.update_or_create(
-                empresa_id=empresa_id,
-                **filter_data,
-                defaults=defaults
+                empresa_id=empresa_id, **filter_data, defaults=defaults
             )
         except IntegrityError as e:
             self._handle_integrity_error(e)
 
     def _handle_integrity_error(self, e):
         error_msg = str(e)
-        if 'uniq_proveedor_empresa' in error_msg or 'UNIQUE constraint' in error_msg:
-            raise ValidationError({
-                'numero_documento': [
-                    'Ya existe un proveedor registrado con este tipo y número de documento en esta empresa.'
-                ]
-            })
+        if "uniq_proveedor_empresa" in error_msg or "UNIQUE constraint" in error_msg:
+            raise ValidationError(
+                {
+                    "numero_documento": [
+                        "Ya existe un proveedor registrado con este tipo y número de documento en esta empresa."
+                    ]
+                }
+            )
         raise e
 
 
@@ -69,9 +72,7 @@ class RepresentanteCRUDService:
         """Crea un representante en la base de datos (DSV: empresa_id + proveedor_id)."""
         try:
             return Representante.objects.create(
-                empresa_id=empresa_id,
-                proveedor_id=proveedor_id,
-                **data
+                empresa_id=empresa_id, proveedor_id=proveedor_id, **data
             )
         except IntegrityError as e:
             self._handle_integrity_error(e)
@@ -94,10 +95,15 @@ class RepresentanteCRUDService:
 
     def _handle_integrity_error(self, e):
         error_msg = str(e)
-        if 'uniq_representante_empresa_proveedor_doc' in error_msg or 'UNIQUE constraint' in error_msg:
-            raise ValidationError({
-                'numero_documento': [
-                    'Ya existe un representante con este documento para este proveedor en esta empresa.'
-                ]
-            })
+        if (
+            "uniq_representante_empresa_proveedor_doc" in error_msg
+            or "UNIQUE constraint" in error_msg
+        ):
+            raise ValidationError(
+                {
+                    "numero_documento": [
+                        "Ya existe un representante con este documento para este proveedor en esta empresa."
+                    ]
+                }
+            )
         raise e

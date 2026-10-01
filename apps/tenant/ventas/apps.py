@@ -9,4 +9,5 @@ class VentasConfig(AppConfig):
 
     def ready(self) -> None:
         from apps.tenant.ventas.reporting import register
+
         register()

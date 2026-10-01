@@ -5,21 +5,35 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('empresa', '0009_sedes_areas_explicit_fk'),
-        ('tenant_compras', '0003_add_check_constraints_compras'),
+        ("empresa", "0009_sedes_areas_explicit_fk"),
+        ("tenant_compras", "0003_add_check_constraints_compras"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='ordencompra',
-            name='area',
-            field=models.ForeignKey(blank=True, help_text='Area ejecutora/solicitante del registro (Contexto Organizacional). Opcional.', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='%(app_label)s_%(class)s_related', to='empresa.area', verbose_name='Area'),
+            model_name="ordencompra",
+            name="area",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Area ejecutora/solicitante del registro (Contexto Organizacional). Opcional.",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="%(app_label)s_%(class)s_related",
+                to="empresa.area",
+                verbose_name="Area",
+            ),
         ),
         migrations.AddField(
-            model_name='ordencompra',
-            name='sede',
-            field=models.ForeignKey(help_text='Sede propietaria del registro (Contexto Organizacional). Obligatoria para nuevos registros.', null=True, on_delete=django.db.models.deletion.PROTECT, related_name='%(app_label)s_%(class)s_related', to='empresa.sede', verbose_name='Sede'),
+            model_name="ordencompra",
+            name="sede",
+            field=models.ForeignKey(
+                help_text="Sede propietaria del registro (Contexto Organizacional). Obligatoria para nuevos registros.",
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="%(app_label)s_%(class)s_related",
+                to="empresa.sede",
+                verbose_name="Sede",
+            ),
         ),
     ]

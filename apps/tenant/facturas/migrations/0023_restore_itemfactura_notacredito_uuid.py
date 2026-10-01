@@ -18,7 +18,6 @@ def populate_notacredito_uuid(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("facturas", "0022_factura_proveedor_uuid"),
     ]

@@ -4,19 +4,21 @@
 # no aplica un unico valor estatico a todas -- no requiere el patron de 3 fases.
 
 import uuid
+
 from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('contabilidad', '0014_asientocontable_uniq_documento_origen'),
+        ("contabilidad", "0014_asientocontable_uniq_documento_origen"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='configuracionretenciones',
-            name='uuid',
-            field=models.UUIDField(db_index=True, default=uuid.uuid4, editable=False, unique=True, verbose_name='UUID'),
+            model_name="configuracionretenciones",
+            name="uuid",
+            field=models.UUIDField(
+                db_index=True, default=uuid.uuid4, editable=False, unique=True, verbose_name="UUID"
+            ),
         ),
     ]

@@ -27,6 +27,7 @@ No se inventan verificaciones redundantes de tenant/usuario/rol solo para
 "completar la lista" - ya existen y funcionan; esta fase se enfoca en la
 unica pieza genuinamente nueva: sede/area.
 """
+
 from __future__ import annotations
 
 from apps.tenant.core.services.organizational_context import OrganizationalContext
@@ -71,7 +72,8 @@ def verify_organizational_dsv(
     obj_empresa_id = getattr(obj, "empresa_id", None)
     if obj_empresa_id != context.empresa_id:
         raise OrganizationalDSVError(
-            "empresa", f"El objeto pertenece a otra empresa (esperado {context.empresa_id}, obtenido {obj_empresa_id})."
+            "empresa",
+            f"El objeto pertenece a otra empresa (esperado {context.empresa_id}, obtenido {obj_empresa_id}).",
         )
 
     if context.alcance in ("SEDE", "AREA") and hasattr(obj, "sede_id"):
@@ -79,7 +81,8 @@ def verify_organizational_dsv(
         permitido = sedes_asignadas or []
         if obj_sede_id is not None and obj_sede_id not in permitido:
             raise OrganizationalDSVError(
-                "sede", f"El objeto pertenece a una sede fuera del alcance del perfil (sede_id={obj_sede_id})."
+                "sede",
+                f"El objeto pertenece a una sede fuera del alcance del perfil (sede_id={obj_sede_id}).",
             )
 
     if context.alcance == "AREA" and hasattr(obj, "area_id"):
@@ -87,7 +90,8 @@ def verify_organizational_dsv(
         permitido = areas_asignadas or []
         if obj_area_id is not None and obj_area_id not in permitido:
             raise OrganizationalDSVError(
-                "area", f"El objeto pertenece a un area fuera del alcance del perfil (area_id={obj_area_id})."
+                "area",
+                f"El objeto pertenece a un area fuera del alcance del perfil (area_id={obj_area_id}).",
             )
 
 
@@ -102,7 +106,9 @@ def is_organizationally_consistent(
     prefieren un `if` en vez de try/except (ej. filtrar una lista en
     memoria)."""
     try:
-        verify_organizational_dsv(obj, context, sedes_asignadas=sedes_asignadas, areas_asignadas=areas_asignadas)
+        verify_organizational_dsv(
+            obj, context, sedes_asignadas=sedes_asignadas, areas_asignadas=areas_asignadas
+        )
         return True
     except OrganizationalDSVError:
         return False

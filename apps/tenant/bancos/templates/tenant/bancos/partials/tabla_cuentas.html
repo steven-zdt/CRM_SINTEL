@@ -1,5 +1,28 @@
-{% load django_tables2 %}
-{# Fragmento HTMX: tabla de Cuentas Bancarias. Reemplaza #cuentas-panel completo. #}
-<div class="w-100" style="max-width:100%; overflow-x:auto;">
-  {% render_table table %}
+{# tabla_cuentas.html — DataTables 3.x (mismo patron ya validado en Ventas, #}
+{# ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md), extendido aqui  #}
+{# a Cuentas Bancarias. Esqueleto ESTATICO: se incluye una sola vez en      #}
+{# list_bancos.html y datatables.factory.js puebla <tbody> via ajax contra #}
+{# POST /api/v1/bancos/cuentas/dt/. Indices de columna deben coincidir 1:1 #}
+{# con fields_map/column_filters de CuentaBancariaViewSet.dt().            #}
+{# La fila de filtros por columna NO va aqui como HTML estatico -- se      #}
+{# construye e inserta en JS despues de crear el DataTable (ver            #}
+{# insertarFilaFiltros() en cuenta_list.js; DataTables reescribe el        #}
+{# <thead> completo al iniciarse y destruiria cualquier input estatico).   #}
+
+<div class="border rounded shadow-sm bg-white">
+  <div class="w-100" style="max-width:100%; overflow-x:auto;">
+    <table id="tabla-cuentas-bancarias" class="table table-hover align-middle mb-0 w-100">
+      <thead>
+        <tr>
+          <th>Nombre de la Cuenta</th>
+          <th>Banco</th>
+          <th>Tipo</th>
+          <th>Número</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>

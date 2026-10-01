@@ -4,15 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('empresa', '0009_sedes_areas_explicit_fk'),
-        ('tenant_empleados', '0015_empleado_motivo_retiro'),
+        ("empresa", "0009_sedes_areas_explicit_fk"),
+        ("tenant_empleados", "0015_empleado_motivo_retiro"),
     ]
 
     operations = [
         migrations.AddConstraint(
-            model_name='devengo',
-            constraint=models.UniqueConstraint(condition=models.Q(('anulado', False)), fields=('empleado', 'periodo'), name='uniq_nomina_activo_per_empleado_periodo'),
+            model_name="devengo",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("anulado", False)),
+                fields=("empleado", "periodo"),
+                name="uniq_nomina_activo_per_empleado_periodo",
+            ),
         ),
     ]

@@ -3,24 +3,10 @@
 {# Motor Fase 3: VENTA / COMPRA / GASTO / NOMINA #}
 <div id="ui-contabilidad-plantilla" class="ui-module ui-contabilidad">
 
-  {# Toolbar #}
+  {# Toolbar -- sin buscador propio: DataTables trae su buscador nativo #}
   <div class="d-flex flex-wrap align-items-center gap-2 mb-3" id="toolbar-contabilidad-plantilla">
 
-    <input id="search-plantilla" class="form-control form-control-sm"
-           type="search" placeholder="Buscar por nombre o tipo..."
-           style="width: 240px;"
-           hx-get="{% url 'contabilidad:plantilla-tabla' %}"
-           hx-trigger="keyup changed delay:400ms, search"
-           hx-target="#plantillas-panel"
-           hx-include="#filter-tipo-plantilla, #filter-activo-plantilla"
-           name="q" />
-
-    <select id="filter-tipo-plantilla" class="form-select form-select-sm" style="width: auto;"
-            hx-get="{% url 'contabilidad:plantilla-tabla' %}"
-            hx-trigger="change"
-            hx-target="#plantillas-panel"
-            hx-include="#search-plantilla, #filter-activo-plantilla"
-            name="tipo_transaccion">
+    <select id="filter-tipo-plantilla" class="form-select form-select-sm" style="width: auto;">
       <option value="">Todos los Tipos</option>
       <option value="VENTA">Venta</option>
       <option value="COMPRA">Compra</option>
@@ -28,20 +14,13 @@
       <option value="NOMINA">Nomina</option>
     </select>
 
-    <select id="filter-activo-plantilla" class="form-select form-select-sm" style="width: auto;"
-            hx-get="{% url 'contabilidad:plantilla-tabla' %}"
-            hx-trigger="change"
-            hx-target="#plantillas-panel"
-            hx-include="#search-plantilla, #filter-tipo-plantilla"
-            name="activo">
+    <select id="filter-activo-plantilla" class="form-select form-select-sm" style="width: auto;">
       <option value="">Todos los Estados</option>
       <option value="true">Activas</option>
       <option value="false">Inactivas</option>
     </select>
 
-    <button id="btn-refrescar-plantilla" class="btn btn-sm btn-outline-secondary" title="Refrescar"
-            hx-get="{% url 'contabilidad:plantilla-tabla' %}"
-            hx-target="#plantillas-panel">
+    <button id="btn-refrescar-plantilla" class="btn btn-sm btn-outline-secondary" title="Refrescar">
       <i class="bi bi-arrow-clockwise"></i>
     </button>
 
@@ -74,14 +53,8 @@
     <div id="error-message-plantilla"></div>
   </div>
 
-  {# Tabla server-rendered (django-tables2 + HTMX) #}
-  <div id="plantillas-panel"
-       hx-get="{% url 'contabilidad:plantilla-tabla' %}"
-       hx-trigger="load, plantilla-updated from:body"
-       hx-target="this"
-       hx-swap="innerHTML"
-       hx-boost="true">
-  </div>
+  {# Tabla -- esqueleto estatico, poblado via ajax por plantilla_list.js #}
+  {% include 'tenant/contabilidad/partials/tabla_plantillas.html' %}
 
   <div class="mt-2 text-muted small">
     <i class="bi bi-info-circle me-1"></i>

@@ -14,6 +14,7 @@ resultado NULL-safe correcto hoy (toda la data real es NULL) y
 correctamente restrictivo el dia que existan Cotizacion con sede real
 asignada.
 """
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext
@@ -40,7 +41,9 @@ class ConsultarCotizacionTool(BaseTool):
     confirmation_required = False
     idempotent = True
 
-    def run(self, context: AIContext, *, search: str = "", estado: str = "", limit: int = 10) -> ToolResult:
+    def run(
+        self, context: AIContext, *, search: str = "", estado: str = "", limit: int = 10
+    ) -> ToolResult:
         if limit < 1 or limit > 50:
             return ToolResult(status="VALIDATION_ERROR", message="limit debe estar entre 1 y 50.")
 
@@ -103,4 +106,6 @@ class ValidarCotizacionTool(BaseTool):
         from apps.tenant.empresa.models import Empresa
 
         empresa = Empresa.objects.only("id").get(id=context.empresa_id)
-        return validar_via_serializer(CotizacionSerializer, context, data, extra_context={"empresa": empresa})
+        return validar_via_serializer(
+            CotizacionSerializer, context, data, extra_context={"empresa": empresa}
+        )

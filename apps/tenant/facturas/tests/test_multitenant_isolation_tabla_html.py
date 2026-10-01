@@ -1,13 +1,16 @@
 """
-Aislamiento multi-tenant de la vista HTML nueva (django-tables2 + HTMX,
-PLAN_UNICO_CORRECCIONES.md Fase 5-BIS) que reemplaza la grilla Tabulator
-de Facturas. No es un backfill completo de TEST-C2 para `facturas` (esa
-app sigue sin `test_multitenant_isolation.py` de 3 niveles — ver Fase 7
-del plan) — este archivo cubre unicamente la superficie nueva introducida
-por esta fase: FacturaTableView no es un ViewSet DRF, usa SintelDSVMixin
-directamente, y por eso necesita su propia verificacion.
+Aislamiento multi-tenant del listado de Facturas. Migrado a DataTables (ver
+docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md, patron extendido aqui a
+un tercer modulo) -- FacturaTable/FacturaTableView (django-tables2)
+retirados, la grilla la sirve POST /api/v1/facturas/dt/?naturaleza=venta|compra
+(FacturaViewSet.dt()). No es un backfill completo de TEST-C2 para `facturas`
+(esa app sigue sin `test_multitenant_isolation.py` de 3 niveles) -- este
+archivo cubre unicamente el aislamiento del endpoint dt.
 """
+
 import pytest
+from django.contrib.auth import get_user_model
+from django.test import Client
 from django_tenants.utils import schema_context
 from rest_framework import status
 
@@ -15,18 +18,34 @@ from apps.public.tenants.models import TenantMembership
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
 from apps.tenant.perfil.models import TenantProfile
-from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
+DT_URL = "/api/v1/facturas/dt/?naturaleza=venta"
+
+
+def _dt_payload(**overrides):
+    payload = {
+        "draw": 1,
+        "start": 0,
+        "length": 10,
+        "search": {"value": ""},
+        "order": [],
+        "columns": [],
+    }
+    payload.update(overrides)
+    return payload
+
 
 @pytest.mark.django_db
-def test_multitenant_isolation_facturas_tabla_html(client, tenant1, tenant2):
+def test_multitenant_isolation_facturas_dt(client, tenant1, tenant2):
     with schema_context(tenant1.schema_name):
         emp1 = Empresa.objects.first()
-        user1 = User.objects.create_user(username="fact_user1", email="fu1@t.com", password="password")
+        user1 = User.objects.create_user(
+            username="fact_user1", email="fu1@t.com", password="password"
+        )
         TenantProfile.objects.create(user=user1, empresa=emp1, rol="ADMIN")
-        with schema_context('public'):
+        with schema_context("public"):
             TenantMembership.objects.create(client=tenant1, user=user1, rol="ADMIN")
 
         Factura.objects.create(
@@ -44,9 +63,11 @@ def test_multitenant_isolation_facturas_tabla_html(client, tenant1, tenant2):
 
     with schema_context(tenant2.schema_name):
         emp2 = Empresa.objects.first()
-        user2 = User.objects.create_user(username="fact_user2", email="fu2@t.com", password="password")
+        user2 = User.objects.create_user(
+            username="fact_user2", email="fu2@t.com", password="password"
+        )
         TenantProfile.objects.create(user=user2, empresa=emp2, rol="ADMIN")
-        with schema_context('public'):
+        with schema_context("public"):
             TenantMembership.objects.create(client=tenant2, user=user2, rol="ADMIN")
 
         Factura.objects.create(
@@ -67,14 +88,23 @@ def test_multitenant_isolation_facturas_tabla_html(client, tenant1, tenant2):
     # despues de que TenantMainMiddleware cambia de esquema (ver settings.py).
     with schema_context(tenant1.schema_name):
         client.force_login(user1)
-    resp = client.get("/ui/facturas/tabla/venta/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
+    resp = client.post(
+        DT_URL,
+        data=_dt_payload(),
+        content_type="application/json",
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co",
+    )
     assert resp.status_code == status.HTTP_200_OK
-    body = resp.content.decode()
-    assert "Cliente Tabla Tenant Uno" in body
-    assert "Cliente Tabla Tenant Dos" not in body
+    nombres = [row["receptor_razon_social"] for row in resp.json()["data"]]
+    assert "Cliente Tabla Tenant Uno" in nombres
+    assert "Cliente Tabla Tenant Dos" not in nombres
 
-    # Sin sesion: LoginRequiredMixin debe redirigir, no filtrar en silencio
-    from django.test import Client
+    # Sin sesion: DRF debe rechazar con 401/403, no filtrar en silencio
     anon_client = Client()
-    resp = anon_client.get("/ui/facturas/tabla/venta/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
-    assert resp.status_code in (status.HTTP_302_FOUND, status.HTTP_403_FORBIDDEN)
+    resp = anon_client.post(
+        DT_URL,
+        data=_dt_payload(),
+        content_type="application/json",
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co",
+    )
+    assert resp.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)

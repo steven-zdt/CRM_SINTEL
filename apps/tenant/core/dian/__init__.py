@@ -23,7 +23,8 @@ Modulos:
                         advertencia completa en adapters.py y
                         docs/fiscal/FISCAL_05_DIAN_ADAPTER.md antes de usar.
 """
-from apps.tenant.core.dian.xades_signer import XadesSignerService
+
+from apps.tenant.core.dian.adapters import DIANAdapter
 from apps.tenant.core.dian.attached_document import AttachedDocumentService
 from apps.tenant.core.dian.transport import (
     ElectronicDocument,
@@ -32,7 +33,7 @@ from apps.tenant.core.dian.transport import (
     NullTransportAdapter,
     TransmissionResult,
 )
-from apps.tenant.core.dian.adapters import DIANAdapter
+from apps.tenant.core.dian.xades_signer import XadesSignerService
 
 __all__ = [
     "XadesSignerService",

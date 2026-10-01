@@ -9,6 +9,7 @@ ni requieren `zeep` instalado.
 Puro Python, unittest.TestCase sin pytest.mark.django_db (solo
 apps.tenant.core.dian.transport.ElectronicDocument, sin modelos).
 """
+
 import base64
 import io
 import unittest
@@ -32,7 +33,9 @@ def _documento_de_prueba() -> ElectronicDocument:
 
 class DIANAdapterConfiguracionTests(unittest.TestCase):
     def test_sin_wsdl_configurado_retorna_error_transmision_sin_intentar_conectar(self):
-        adapter = DIANAdapter(wsdl_url="", _client_factory=MagicMock(side_effect=AssertionError("no debe llamarse")))
+        adapter = DIANAdapter(
+            wsdl_url="", _client_factory=MagicMock(side_effect=AssertionError("no debe llamarse"))
+        )
 
         resultado = adapter.send(_documento_de_prueba())
 
@@ -56,7 +59,9 @@ class DIANAdapterEmpaquetadoTests(unittest.TestCase):
 
 class DIANAdapterParseoRespuestaTests(unittest.TestCase):
     def test_respuesta_valida_true_mapea_a_aceptado(self):
-        respuesta = MagicMock(IsValid=True, StatusCode="00", StatusDescription="Ok", XmlDocumentKey="track-1")
+        respuesta = MagicMock(
+            IsValid=True, StatusCode="00", StatusDescription="Ok", XmlDocumentKey="track-1"
+        )
 
         resultado = DIANAdapter._parsear_respuesta(respuesta)
 
@@ -65,11 +70,16 @@ class DIANAdapterParseoRespuestaTests(unittest.TestCase):
         self.assertEqual(resultado.track_id, "track-1")
 
     def test_respuesta_valida_false_mapea_a_rechazado_sin_perder_el_mensaje(self):
-        respuesta = MagicMock(IsValid=False, StatusCode="99", StatusDescription="XML invalido", XmlDocumentKey=None)
+        respuesta = MagicMock(
+            IsValid=False, StatusCode="99", StatusDescription="XML invalido", XmlDocumentKey=None
+        )
 
         resultado = DIANAdapter._parsear_respuesta(respuesta)
 
-        self.assertTrue(resultado.success, "el roundtrip SOAP si se completo -- es un rechazo de negocio, no un error de transporte")
+        self.assertTrue(
+            resultado.success,
+            "el roundtrip SOAP si se completo -- es un rechazo de negocio, no un error de transporte",
+        )
         self.assertEqual(resultado.status, "RECHAZADO")
         self.assertIn("XML invalido", resultado.errors)
 
@@ -87,9 +97,14 @@ class DIANAdapterEnvioTests(unittest.TestCase):
     def test_send_feliz_usa_el_client_factory_inyectado(self):
         cliente_falso = MagicMock()
         cliente_falso.service.SendBillSync.return_value = MagicMock(
-            IsValid=True, StatusCode="00", StatusDescription="Ok", XmlDocumentKey="track-2",
+            IsValid=True,
+            StatusCode="00",
+            StatusDescription="Ok",
+            XmlDocumentKey="track-2",
         )
-        adapter = DIANAdapter(wsdl_url="https://wsdl-de-prueba.invalido/", _client_factory=lambda url: cliente_falso)
+        adapter = DIANAdapter(
+            wsdl_url="https://wsdl-de-prueba.invalido/", _client_factory=lambda url: cliente_falso
+        )
 
         resultado = adapter.send(_documento_de_prueba())
 
@@ -103,10 +118,13 @@ class DIANAdapterEnvioTests(unittest.TestCase):
         """Critico para FISCAL-04: ElectronicInvoiceApplicationService.transmitir()
         depende de que las excepciones de red SALGAN de send() sin ser
         atrapadas aqui, para tratarlas como transmision AMBIGUA."""
+
         def factory_que_falla(url):
             raise ConnectionError("timeout simulado")
 
-        adapter = DIANAdapter(wsdl_url="https://wsdl-de-prueba.invalido/", _client_factory=factory_que_falla)
+        adapter = DIANAdapter(
+            wsdl_url="https://wsdl-de-prueba.invalido/", _client_factory=factory_que_falla
+        )
 
         with self.assertRaises(ConnectionError):
             adapter.send(_documento_de_prueba())

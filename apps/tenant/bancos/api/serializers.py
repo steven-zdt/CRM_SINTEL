@@ -13,6 +13,7 @@ from apps.tenant.empresa.models import Sede
 
 TOLERANCIA_APLICACION = Decimal("0.01")
 
+
 class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
     """Field that accepts either UUID (string) or internal PK (integer) for lookups, scoped to the current tenant."""
 
@@ -41,6 +42,7 @@ class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
                 self.fail("does_not_exist", pk_value=data)
         return super().to_internal_value(data)
 
+
 class CuentaBancariaSerializer(serializers.ModelSerializer):
     """Serializer for CuentaBancaria."""
 
@@ -61,19 +63,23 @@ class CuentaBancariaSerializer(serializers.ModelSerializer):
         # el serializer generico de edicion).
         read_only_fields = ("id", "uuid", "activo")
 
+
 class ExtractoBancarioListSerializer(serializers.ModelSerializer):
     """Serializer for ExtractoBancario lists with conciliacion summary."""
-    cuenta_nombre         = serializers.CharField(source="cuenta.nombre", read_only=True)
-    cuenta_numero         = serializers.CharField(source="cuenta.numero", read_only=True)
-    cuenta_uuid           = serializers.UUIDField(source="cuenta.uuid", read_only=True)
-    total_transacciones   = serializers.IntegerField(read_only=True, default=0)
-    tx_conciliadas        = serializers.IntegerField(read_only=True, default=0)
-    tx_pendientes         = serializers.SerializerMethodField()
-    sede_nombre           = serializers.CharField(source="sede.nombre", read_only=True, allow_null=True)  # BAN-11
+
+    cuenta_nombre = serializers.CharField(source="cuenta.nombre", read_only=True)
+    cuenta_numero = serializers.CharField(source="cuenta.numero", read_only=True)
+    cuenta_uuid = serializers.UUIDField(source="cuenta.uuid", read_only=True)
+    total_transacciones = serializers.IntegerField(read_only=True, default=0)
+    tx_conciliadas = serializers.IntegerField(read_only=True, default=0)
+    tx_pendientes = serializers.SerializerMethodField()
+    sede_nombre = serializers.CharField(
+        source="sede.nombre", read_only=True, allow_null=True
+    )  # BAN-11
 
     def get_tx_pendientes(self, obj):
-        total = getattr(obj, 'total_transacciones', 0) or 0
-        conc  = getattr(obj, 'tx_conciliadas', 0) or 0
+        total = getattr(obj, "total_transacciones", 0) or 0
+        conc = getattr(obj, "tx_conciliadas", 0) or 0
         return max(total - conc, 0)
 
     class Meta:
@@ -98,11 +104,15 @@ class ExtractoBancarioListSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+
 class ExtractoBancarioCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating an ExtractoBancario."""
+
     cuenta = UUIDOrPKRelatedField(queryset=CuentaBancaria.objects.none())
     sede = UUIDOrPKRelatedField(
-        queryset=Sede.objects.none(), required=False, allow_null=True,
+        queryset=Sede.objects.none(),
+        required=False,
+        allow_null=True,
         help_text="UUID de la sede a la que pertenece este extracto (opcional).",
     )  # BAN-11 (DT-SEDE-01)
 
@@ -161,32 +171,35 @@ class ExtractoBancarioCreateSerializer(serializers.ModelSerializer):
             )
         if sede:
             from apps.tenant.core.services.organizational_scope import sede_esta_en_alcance
+
             if not sede_esta_en_alcance(sede.id, self.context.get("request")):
                 raise serializers.ValidationError(
-                    {"sede": "No tiene permiso para asignar esta sede (fuera de su alcance organizacional)."}
+                    {
+                        "sede": "No tiene permiso para asignar esta sede (fuera de su alcance organizacional)."
+                    }
                 )
 
         # Check for duplicates on creation
         request = self.context.get("request")
-        if request and request.method == "POST":
-            if ExtractoBancario.objects.filter(
-                empresa_id=empresa_id,
-                cuenta=cuenta,
-                mes=mes,
-                anio=anio
-            ).exists():
-                raise serializers.ValidationError(
-                    "Ya existe un extracto registrado para esta cuenta en el periodo indicado."
-                )
+        if request and request.method == "POST" and ExtractoBancario.objects.filter(
+            empresa_id=empresa_id, cuenta=cuenta, mes=mes, anio=anio
+        ).exists():
+            raise serializers.ValidationError(
+                "Ya existe un extracto registrado para esta cuenta en el periodo indicado."
+            )
 
         return attrs
 
+
 class ExtractoBancarioDetailSerializer(serializers.ModelSerializer):
     """Detailed serializer for ExtractoBancario."""
+
     cuenta = CuentaBancariaSerializer(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
-    sede_nombre = serializers.CharField(source="sede.nombre", read_only=True, allow_null=True)  # BAN-11
+    sede_nombre = serializers.CharField(
+        source="sede.nombre", read_only=True, allow_null=True
+    )  # BAN-11
 
     class Meta:
         model = ExtractoBancario
@@ -206,17 +219,19 @@ class ExtractoBancarioDetailSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+
 class TransaccionBancariaListSerializer(serializers.ModelSerializer):
     """Serializer para listados Tabulator con campos de conciliacion y display."""
-    extracto_uuid       = serializers.UUIDField(source="extracto.uuid", read_only=True)
-    tipo_movimiento     = serializers.CharField(read_only=True)   # @property: DEBITO | CREDITO
-    monto               = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)  # abs(valor)
-    factura_info        = serializers.SerializerMethodField(read_only=True)
-    proveedor_info      = serializers.SerializerMethodField(read_only=True)
+
+    extracto_uuid = serializers.UUIDField(source="extracto.uuid", read_only=True)
+    tipo_movimiento = serializers.CharField(read_only=True)  # @property: DEBITO | CREDITO
+    monto = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)  # abs(valor)
+    factura_info = serializers.SerializerMethodField(read_only=True)
+    proveedor_info = serializers.SerializerMethodField(read_only=True)
     conciliacion_display = serializers.SerializerMethodField(read_only=True)
-    monto_aplicado      = serializers.SerializerMethodField(read_only=True)
-    monto_pendiente     = serializers.SerializerMethodField(read_only=True)
-    estado_aplicacion   = serializers.SerializerMethodField(read_only=True)
+    monto_aplicado = serializers.SerializerMethodField(read_only=True)
+    monto_pendiente = serializers.SerializerMethodField(read_only=True)
+    estado_aplicacion = serializers.SerializerMethodField(read_only=True)
 
     def _monto_aplicado_total(self, obj):
         # Viene anotado por el selector (Sum) -- evita N+1 en listados.
@@ -241,53 +256,68 @@ class TransaccionBancariaListSerializer(serializers.ModelSerializer):
     def get_factura_info(self, obj):
         """Info snapshot de factura (read-only)."""
         if obj.factura_uuid:
-            return {'uuid': str(obj.factura_uuid)}
+            return {"uuid": str(obj.factura_uuid)}
         return None
 
     def get_proveedor_info(self, obj):
         """Info snapshot de proveedor (read-only)."""
         if obj.proveedor_uuid:
-            return {'uuid': str(obj.proveedor_uuid)}
+            return {"uuid": str(obj.proveedor_uuid)}
         return None
 
     def get_conciliacion_display(self, obj):
         partes = []
         if obj.factura_uuid:
-            partes.append('Factura')
+            partes.append("Factura")
         if obj.proveedor_uuid:
-            partes.append('Proveedor')
+            partes.append("Proveedor")
         if obj.cliente_uuid:
-            partes.append('Cliente')
+            partes.append("Cliente")
         if obj.conciliado and partes:
-            return 'Vinculado: ' + ' + '.join(partes)
+            return "Vinculado: " + " + ".join(partes)
         if obj.conciliado:
-            return 'Conciliado'
-        return 'No conciliado'
+            return "Conciliado"
+        return "No conciliado"
 
     class Meta:
         model = TransaccionBancaria
         fields = (
-            "id", "uuid", "extracto_uuid",
-            "fecha", "descripcion", "sucursal", "dcto",
-            "valor", "monto", "saldo",
+            "id",
+            "uuid",
+            "extracto_uuid",
+            "fecha",
+            "descripcion",
+            "sucursal",
+            "dcto",
+            "valor",
+            "monto",
+            "saldo",
             "tipo_movimiento",
-            "factura_uuid", "proveedor_uuid", "cliente_uuid", "conciliado",
-            "factura_info", "proveedor_info", "conciliacion_display",
+            "factura_uuid",
+            "proveedor_uuid",
+            "cliente_uuid",
+            "conciliado",
+            "factura_info",
+            "proveedor_info",
+            "conciliacion_display",
             "notas_conciliacion",
-            "monto_aplicado", "monto_pendiente", "estado_aplicacion",
+            "monto_aplicado",
+            "monto_pendiente",
+            "estado_aplicacion",
         )
         read_only_fields = fields
 
 
 class TransaccionBancariaDetailSerializer(serializers.ModelSerializer):
     """Serializer de detalle con relacion extracto completa."""
-    extracto        = ExtractoBancarioDetailSerializer(read_only=True)
+
+    extracto = ExtractoBancarioDetailSerializer(read_only=True)
     tipo_movimiento = serializers.CharField(read_only=True)
-    monto           = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
-    created_at      = serializers.DateTimeField(read_only=True)
-    updated_at      = serializers.DateTimeField(read_only=True)
-    monto_aplicado    = serializers.SerializerMethodField(read_only=True)
-    monto_pendiente   = serializers.SerializerMethodField(read_only=True)
+    monto = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+    monto_aplicado = serializers.SerializerMethodField(read_only=True)
+    monto_pendiente = serializers.SerializerMethodField(read_only=True)
     estado_aplicacion = serializers.SerializerMethodField(read_only=True)
 
     def _monto_aplicado_total(self, obj):
@@ -313,14 +343,27 @@ class TransaccionBancariaDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = TransaccionBancaria
         fields = (
-            "id", "uuid", "extracto",
-            "fecha", "descripcion", "sucursal", "dcto",
-            "valor", "monto", "saldo",
+            "id",
+            "uuid",
+            "extracto",
+            "fecha",
+            "descripcion",
+            "sucursal",
+            "dcto",
+            "valor",
+            "monto",
+            "saldo",
             "tipo_movimiento",
-            "factura_uuid", "proveedor_uuid", "cliente_uuid", "conciliado",
-            "created_at", "updated_at",
+            "factura_uuid",
+            "proveedor_uuid",
+            "cliente_uuid",
+            "conciliado",
+            "created_at",
+            "updated_at",
             "notas_conciliacion",
-            "monto_aplicado", "monto_pendiente", "estado_aplicacion",
+            "monto_aplicado",
+            "monto_pendiente",
+            "estado_aplicacion",
         )
         read_only_fields = fields
 
@@ -330,12 +373,24 @@ class TransaccionBancariaConciliarSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TransaccionBancaria
-        fields = ("factura_uuid", "proveedor_uuid", "cliente_uuid", "conciliado", "notas_conciliacion")
+        fields = (
+            "factura_uuid",
+            "proveedor_uuid",
+            "cliente_uuid",
+            "conciliado",
+            "notas_conciliacion",
+        )
 
     def validate(self, attrs):
-        factura_uuid   = attrs.get("factura_uuid",   self.instance.factura_uuid   if self.instance else None)
-        proveedor_uuid = attrs.get("proveedor_uuid", self.instance.proveedor_uuid if self.instance else None)
-        cliente_uuid   = attrs.get("cliente_uuid",   self.instance.cliente_uuid   if self.instance else None)
+        factura_uuid = attrs.get(
+            "factura_uuid", self.instance.factura_uuid if self.instance else None
+        )
+        proveedor_uuid = attrs.get(
+            "proveedor_uuid", self.instance.proveedor_uuid if self.instance else None
+        )
+        cliente_uuid = attrs.get(
+            "cliente_uuid", self.instance.cliente_uuid if self.instance else None
+        )
         if factura_uuid or proveedor_uuid or cliente_uuid:
             attrs.setdefault("conciliado", True)
         return attrs
@@ -343,8 +398,11 @@ class TransaccionBancariaConciliarSerializer(serializers.ModelSerializer):
 
 class MovimientoBancarioAplicacionSerializer(serializers.ModelSerializer):
     """Serializer de lectura/creacion para aplicaciones multiples (Fase 5/17)."""
+
     transaccion_uuid = serializers.UUIDField(source="transaccion.uuid", read_only=True)
-    tipo_referencia_display = serializers.CharField(source="get_tipo_referencia_display", read_only=True)
+    tipo_referencia_display = serializers.CharField(
+        source="get_tipo_referencia_display", read_only=True
+    )
     # Opcional: el frontend no siempre la envia (el flujo tipico es "aplicar
     # hoy") -- crud_service.crear_aplicacion() la completa con la fecha
     # actual cuando no se especifica.
@@ -353,14 +411,28 @@ class MovimientoBancarioAplicacionSerializer(serializers.ModelSerializer):
     class Meta:
         model = MovimientoBancarioAplicacion
         fields = (
-            "id", "uuid", "transaccion_uuid",
-            "tipo_referencia", "tipo_referencia_display", "referencia_uuid",
-            "tercero_tipo", "tercero_uuid",
-            "monto_aplicado", "fecha_aplicacion", "notas",
-            "origen_matching", "confianza",
+            "id",
+            "uuid",
+            "transaccion_uuid",
+            "tipo_referencia",
+            "tipo_referencia_display",
+            "referencia_uuid",
+            "tercero_tipo",
+            "tercero_uuid",
+            "monto_aplicado",
+            "fecha_aplicacion",
+            "notas",
+            "origen_matching",
+            "confianza",
             "created_at",
         )
-        read_only_fields = ("id", "uuid", "transaccion_uuid", "tipo_referencia_display", "created_at")
+        read_only_fields = (
+            "id",
+            "uuid",
+            "transaccion_uuid",
+            "tipo_referencia_display",
+            "created_at",
+        )
 
     def validate_monto_aplicado(self, value):
         if value <= 0:
@@ -372,6 +444,7 @@ class MovimientoBancarioSugerenciaSerializer(serializers.Serializer):
     """Serializer de solo-lectura para los candidatos que produce
     BankTransactionMatchingService (Fase 8). No es un ModelSerializer --
     los candidatos son dicts, nunca se persisten desde aqui."""
+
     tipo = serializers.CharField()
     uuid = serializers.CharField()
     descripcion = serializers.CharField()

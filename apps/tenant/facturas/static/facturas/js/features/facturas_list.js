@@ -1,14 +1,21 @@
 /**
- * Feature: Listado de Facturas v4.0.0
- * - Tablas server-rendered via django-tables2 + HTMX (#panel-ventas / #panel-compras,
- *   cargadas por los atributos hx-get/hx-trigger declarados en list_factura.html).
- * - Este archivo solo maneja: acciones de fila (editar/ver/eliminar), el resumen
- *   de KPIs (Ventas Netas / Compras Netas, independiente de la tabla), y el
- *   despacho del evento 'facturaGuardada' que hace que HTMX recargue ambos
- *   paneles tras crear/editar/eliminar una factura.
- * - PLAN_UNICO_CORRECCIONES.md Fase 5-BIS: reemplazo de Tabulator. Los filtros
- *   rápidos de "Pago" y la búsqueda ahora son server-side (ver tables.py/views.py
- *   en apps/tenant/facturas/), no reimplementar aquí lógica de columnas/filtrado.
+ * Feature: Listado de Facturas v5.0.0
+ * - Tablas DataTables 3.x (#tabla-facturas-venta / #tabla-facturas-compra,
+ *   mismo patron ya validado en Ventas/Bancos -- ver
+ *   docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md), pobladas via ajax
+ *   contra POST /api/v1/facturas/dt/?naturaleza=venta|compra. Reemplaza
+ *   FacturaTable/FacturaTableView (django-tables2, retirados).
+ * - Este archivo maneja: init de ambas tablas, acciones de fila
+ *   (editar/ver/eliminar), los botones rapidos de "Pago" (columna 5,
+ *   estado_pago), el resumen de KPIs (Ventas Netas / Compras Netas,
+ *   independiente de la tabla), y el evento 'facturaGuardada' que ahora
+ *   recarga ambas tablas via ajax.reload() en vez de HTMX.
+ * - No se replico la fila de filtro por columna completa (Cliente/
+ *   Vencimiento/Total/DIAN/Cot.) que si tiene Ventas -- alcance acotado
+ *   para cubrir primero todas las apps a nivel de UI (busqueda global +
+ *   filtro rapido de Pago, que ya cubre el caso de uso mas pedido);
+ *   ampliar despues si se prioriza, mismo patron ya probado
+ *   (insertarFilaFiltros() post-init) si hace falta.
  * - Simplificación consciente respecto a la versión Tabulator: se retiró el
  *   click-en-fila para abrir el detalle (el botón "Ver" ya cubre ese caso) —
  *   ver REPORTE_FASE_5_PILOTO_TABLAS.md para el detalle de esta decisión.
@@ -17,6 +24,136 @@
     'use strict';
 
     const MOD = '[facturas.list]';
+
+    // ── DataTables (Ventas / Compras) ───────────────────────────────────────
+
+    var TABLAS = [
+        { selector: '#tabla-facturas-venta', url: '/api/v1/facturas/dt/?naturaleza=venta' },
+        { selector: '#tabla-facturas-compra', url: '/api/v1/facturas/dt/?naturaleza=compra' },
+    ];
+
+    var BADGE_DIAN = {
+        ACEPTADA: ['bg-success', 'bi-check-circle-fill', 'Aceptada'],
+        ENVIADA: ['bg-info', 'bi-send-fill', 'Enviada'],
+        BORRADOR: ['bg-secondary', 'bi-pencil', 'Borrador'],
+        RECHAZADA: ['bg-danger', 'bi-x-circle-fill', 'Rechazada'],
+        ANULADA: ['bg-dark', 'bi-slash-circle', 'Anulada'],
+    };
+
+    function escapeHtml(str) {
+        var div = d.createElement('div');
+        div.textContent = str == null ? '' : String(str);
+        return div.innerHTML;
+    }
+
+    function formatFecha(iso) {
+        if (!iso) return null;
+        var parsed = new Date(iso + 'T00:00:00');
+        if (isNaN(parsed.getTime())) return escapeHtml(iso);
+        return parsed.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: '2-digit' });
+    }
+
+    function renderNumero(data, type, row) {
+        var ncBadge = row.has_nc
+            ? '<span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;">NC</span>' : '';
+        var fecha = formatFecha(row.fecha_emision);
+        var fechaHtml = fecha
+            ? '<div class="text-muted small"><i class="bi bi-calendar2 me-1"></i>' + fecha + '</div>' : '';
+        return '<div class="fw-semibold">' + escapeHtml(row.numero || '---') + ncBadge + '</div>' + fechaHtml;
+    }
+
+    function renderContraparte(data, type, row) {
+        var isVenta = row.naturaleza === 'VENTA';
+        var nombre = isVenta ? row.receptor_razon_social : row.emisor_razon_social;
+        var nit = isVenta ? row.receptor_nit : row.emisor_nit;
+        var vinculado = isVenta ? !!row.cliente_uuid : !!row.proveedor_uuid;
+        var pin = vinculado ? '<i class="bi bi-link-45deg text-success me-1"></i>' : '';
+        return '<div class="text-truncate">' + pin + escapeHtml(nombre || '---') + '</div>' +
+            '<div class="text-muted small">NIT: ' + escapeHtml(nit || '—') + '</div>';
+    }
+
+    function renderVencimiento(data, type, row) {
+        var val = row.payment_due_date;
+        if (!val) return '<span class="text-muted">—</span>';
+        var hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        var vencimiento = new Date(val + 'T00:00:00');
+        var vencida = row.estado_pago !== 'PAGADA' && vencimiento < hoy;
+        var cls = vencida ? 'text-danger fw-semibold' : '';
+        var icono = vencida ? '<i class="bi bi-exclamation-triangle-fill me-1"></i>' : '';
+        return '<span class="' + cls + '">' + icono + escapeHtml(formatFecha(val) || '—') + '</span>';
+    }
+
+    function renderTotal(value) {
+        var formatted = (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
+            ? w.DOMUtils.formatCurrency(value) : value;
+        return '<span class="fw-semibold">' + formatted + '</span>';
+    }
+
+    function renderEstado(value) {
+        var cfg = BADGE_DIAN[value] || ['bg-secondary', 'bi-question-circle', value || '---'];
+        return '<span class="badge ' + cfg[0] + ' badge-sm"><i class="bi ' + cfg[1] + ' me-1"></i>' + escapeHtml(cfg[2]) + '</span>';
+    }
+
+    function renderEstadoPago(value) {
+        if (value === 'PAGADA') return '<span class="badge bg-success badge-sm"><i class="bi bi-check2-all me-1"></i>Pagada</span>';
+        if (value === 'PAGO_PARCIAL') return '<span class="badge bg-warning text-dark badge-sm"><i class="bi bi-clock-history me-1"></i>Parcial</span>';
+        return '<span class="badge bg-danger badge-sm"><i class="bi bi-exclamation-circle me-1"></i>Pendiente</span>';
+    }
+
+    function renderCotizacion(value) {
+        if (!value) return '<span class="text-muted">—</span>';
+        return '<span class="badge text-bg-light border text-truncate" title="' + escapeHtml(value) +
+            '" style="font-size:0.7rem;max-width:80px;"><i class="bi bi-receipt me-1"></i>' + escapeHtml(value) + '</span>';
+    }
+
+    function renderAcciones(data, type, row) {
+        return '<div class="btn-group btn-group-sm">' +
+            '<button type="button" class="btn btn-outline-secondary btn-edit-factura" data-id="' + escapeHtml(row.uuid) + '" title="Editar"><i class="bi bi-pencil"></i></button>' +
+            '<button type="button" class="btn btn-outline-primary btn-view-factura" data-id="' + escapeHtml(row.uuid) + '" title="Ver"><i class="bi bi-eye"></i></button>' +
+            '<button type="button" class="btn btn-outline-danger btn-delete-factura" data-id="' + escapeHtml(row.uuid) + '" title="Eliminar"><i class="bi bi-trash"></i></button>' +
+            '</div>';
+    }
+
+    var COLUMNS = [
+        { data: 'numero', title: 'Factura', render: renderNumero },
+        { data: null, title: 'Cliente / Proveedor', orderable: false, render: renderContraparte },
+        { data: 'payment_due_date', title: 'Vencimiento', render: renderVencimiento },
+        { data: 'total', title: 'Total', className: 'text-end', render: function (v) { return renderTotal(v); } },
+        { data: 'estado', title: 'DIAN', render: renderEstado },
+        { data: 'estado_pago', title: 'Pago', render: renderEstadoPago },
+        { data: 'cotizacion_numero', title: 'Cot.', orderable: false, render: renderCotizacion },
+        { data: null, title: '', orderable: false, searchable: false, render: renderAcciones },
+    ];
+
+    function bindFiltroPago(tabla) {
+        var contenedor = d.querySelector('[data-filtros-pago="' + tabla.selector.replace('#', '') + '"]');
+        if (!contenedor) return;
+        contenedor.addEventListener('click', function (ev) {
+            var btn = ev.target.closest('[data-estado-pago]');
+            if (!btn) return;
+            contenedor.querySelectorAll('[data-estado-pago]').forEach(function (b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            w.Sintel.Core.DataTablesFactory.columnSearch(tabla.selector, 5, btn.getAttribute('data-estado-pago'));
+        });
+    }
+
+    function initTablas() {
+        if (typeof DataTable === 'undefined' || !w.Sintel.Core || !w.Sintel.Core.DataTablesFactory) return;
+        TABLAS.forEach(function (tabla) {
+            if (!d.querySelector(tabla.selector)) return;
+            w.Sintel.Core.DataTablesFactory.create(tabla.selector, tabla.url, COLUMNS, {
+                pageLength: 20,
+                order: [],
+            });
+            bindFiltroPago(tabla);
+        });
+    }
+
+    function recargarTablas() {
+        TABLAS.forEach(function (tabla) {
+            if (d.querySelector(tabla.selector)) w.Sintel.Core.DataTablesFactory.reload(tabla.selector);
+        });
+    }
 
     // ── Event Delegation (Editar / Ver / Eliminar) ─────────────────────────────
     // Los botones son server-rendered por tables.py (render_acciones) y
@@ -230,9 +367,9 @@
                 if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
                     return w.DOMUtils.formatCurrency(num, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
                 }
-                return new Intl.NumberFormat('es-CO', {
+                return new Intl.NumberFormat('en-US', {
                     style: 'currency',
-                    currency: 'COP',
+                    currency: 'USD',
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 2
                 }).format(num);
@@ -256,18 +393,19 @@
         }
     }
 
-    // ── Recarga reactiva del resumen tras guardar factura ──────────────────────
-    // (la recarga de los paneles de tabla ya la maneja HTMX via hx-trigger)
+    // ── Recarga reactiva del resumen + tablas tras guardar factura ──────────
     function initEventListeners() {
         d.addEventListener('facturaGuardada', () => {
             loadSummary();
-            console.log(`${MOD} Summary refrescado tras guardar factura`);
+            recargarTablas();
+            console.log(`${MOD} Summary y tablas refrescados tras guardar factura`);
         });
     }
 
     // ── Inicialización principal ────────────────────────────────────────────
     function init() {
         console.log(`${MOD} Inicializando módulo de listado...`);
+        initTablas();
         initListEvents();
         initEventListeners();
         loadSummary();

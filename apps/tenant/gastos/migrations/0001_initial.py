@@ -9,125 +9,523 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('empresa', '0001_initial'),
+        ("empresa", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ResolucionDIAN',
+            name="ResolucionDIAN",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('numero_resolucion', models.CharField(db_index=True, max_length=50, verbose_name='Numero Resolucion DIAN')),
-                ('prefijo', models.CharField(max_length=10, verbose_name='Prefijo')),
-                ('rango_desde', models.IntegerField(validators=[django.core.validators.MinValueValidator(1)], verbose_name='Rango Desde')),
-                ('rango_hasta', models.IntegerField(validators=[django.core.validators.MinValueValidator(1)], verbose_name='Rango Hasta')),
-                ('fecha_resolucion', models.DateField(help_text='Fecha en la que la DIAN emitio la resolucion', verbose_name='Fecha de Emision')),
-                ('fecha_inicio', models.DateField(default=datetime.date.today, help_text='Fecha desde la cual se empezara a usar en el sistema', verbose_name='Fecha Inicio Aplicacion')),
-                ('fecha_fin', models.DateField(help_text='Fecha de vencimiento de la resolucion', verbose_name='Fecha Final Aplicacion')),
-                ('clave_tecnica', models.CharField(blank=True, max_length=100, null=True)),
-                ('vigente', models.BooleanField(db_index=True, default=True, help_text='Solo una resolucion puede estar vigente para ser usada por defecto.', verbose_name='Vigente (Prestablecida)')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('empresa', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='resoluciones_dian', to='empresa.empresa')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "numero_resolucion",
+                    models.CharField(
+                        db_index=True, max_length=50, verbose_name="Numero Resolucion DIAN"
+                    ),
+                ),
+                ("prefijo", models.CharField(max_length=10, verbose_name="Prefijo")),
+                (
+                    "rango_desde",
+                    models.IntegerField(
+                        validators=[django.core.validators.MinValueValidator(1)],
+                        verbose_name="Rango Desde",
+                    ),
+                ),
+                (
+                    "rango_hasta",
+                    models.IntegerField(
+                        validators=[django.core.validators.MinValueValidator(1)],
+                        verbose_name="Rango Hasta",
+                    ),
+                ),
+                (
+                    "fecha_resolucion",
+                    models.DateField(
+                        help_text="Fecha en la que la DIAN emitio la resolucion",
+                        verbose_name="Fecha de Emision",
+                    ),
+                ),
+                (
+                    "fecha_inicio",
+                    models.DateField(
+                        default=datetime.date.today,
+                        help_text="Fecha desde la cual se empezara a usar en el sistema",
+                        verbose_name="Fecha Inicio Aplicacion",
+                    ),
+                ),
+                (
+                    "fecha_fin",
+                    models.DateField(
+                        help_text="Fecha de vencimiento de la resolucion",
+                        verbose_name="Fecha Final Aplicacion",
+                    ),
+                ),
+                ("clave_tecnica", models.CharField(blank=True, max_length=100, null=True)),
+                (
+                    "vigente",
+                    models.BooleanField(
+                        db_index=True,
+                        default=True,
+                        help_text="Solo una resolucion puede estar vigente para ser usada por defecto.",
+                        verbose_name="Vigente (Prestablecida)",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="resoluciones_dian",
+                        to="empresa.empresa",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Resolucion DIAN',
-                'verbose_name_plural': 'Resoluciones DIAN',
-                'ordering': ['-vigente', '-fecha_resolucion'],
+                "verbose_name": "Resolucion DIAN",
+                "verbose_name_plural": "Resoluciones DIAN",
+                "ordering": ["-vigente", "-fecha_resolucion"],
             },
         ),
         migrations.CreateModel(
-            name='DocumentoSoporte',
+            name="DocumentoSoporte",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('prefijo', models.CharField(help_text='Prefijo del documento (ej: SI)', max_length=10, verbose_name='Prefijo')),
-                ('consecutivo', models.IntegerField(db_index=True, editable=False, help_text='Numero consecutivo del documento (dentro del rango de la resolucion)', verbose_name='Consecutivo')),
-                ('fecha', models.DateField(help_text='Fecha de emision del documento soporte', verbose_name='Fecha del Documento')),
-                ('vendedor_nombre', models.CharField(help_text='Nombre o razon social del vendedor (snapshot historico)', max_length=200, verbose_name='Nombre/Razon Social Vendedor')),
-                ('vendedor_nit', models.CharField(db_index=True, help_text='NIT del vendedor (snapshot historico)', max_length=20, verbose_name='NIT Vendedor')),
-                ('vendedor_direccion', models.CharField(blank=True, help_text='Direccion del vendedor (snapshot historico)', max_length=500, null=True, verbose_name='Direccion Vendedor')),
-                ('vendedor_telefono', models.CharField(blank=True, help_text='Telefono del vendedor (snapshot historico)', max_length=20, null=True, verbose_name='Telefono Vendedor')),
-                ('numero_factura_proveedor', models.CharField(blank=True, db_index=True, help_text='Numero de factura o comprobante emitido por el proveedor (referencia)', max_length=100, null=True, verbose_name='Numero Factura Proveedor')),
-                ('subtotal', models.DecimalField(decimal_places=2, help_text='Subtotal del documento (antes de retenciones)', max_digits=15, validators=[django.core.validators.MinValueValidator(Decimal('0.00'))], verbose_name='Subtotal')),
-                ('retefuente_porcentaje', models.CharField(choices=[('0.00', '0% - Sin Retefuente'), ('0.04', '4% - Servicios (Declarantes)'), ('0.06', '6% - Servicios (No Declarantes)'), ('0.10', '10% - Honorarios y Consultoria (Persona Natural no declarante)'), ('0.11', '11% - Honorarios y Consultoria (Persona Juridica o declarante)')], default='0.00', help_text='Porcentaje de retencion en la fuente aplicado', max_length=10, verbose_name='Porcentaje Retefuente')),
-                ('retefuente', models.DecimalField(decimal_places=2, default=Decimal('0.00'), help_text='Valor calculado de retencion en la fuente (subtotal * porcentaje)', max_digits=15, validators=[django.core.validators.MinValueValidator(Decimal('0.00'))], verbose_name='Retefuente')),
-                ('reteica_porcentaje', models.CharField(choices=[('0.00', '0% - Exento'), ('0.0069', '0.69% - Tarifa 0.69% (6.9/1000)'), ('0.00966', '0.966% - Tarifa 0.966% (9.66/1000)'), ('0.01104', '1.104% - Tarifa 1.104% (11.04/1000)')], default='0.00', help_text='Porcentaje de retencion ICA aplicado', max_length=10, verbose_name='Porcentaje ReteICA')),
-                ('reteica', models.DecimalField(decimal_places=2, default=Decimal('0.00'), help_text='Valor calculado de retencion ICA (subtotal * porcentaje)', max_digits=15, validators=[django.core.validators.MinValueValidator(Decimal('0.00'))], verbose_name='ReteICA')),
-                ('total', models.DecimalField(decimal_places=2, help_text='Total del documento (Subtotal - Retefuente - ReteICA)', max_digits=15, validators=[django.core.validators.MinValueValidator(Decimal('0.00'))], verbose_name='Total')),
-                ('adjunto', models.FileField(blank=True, help_text='Archivo del documento soporte (PDF, imagen o XML)', null=True, upload_to='documentos_soporte/%Y/%m/', validators=[django.core.validators.FileExtensionValidator(allowed_extensions=['pdf', 'jpg', 'jpeg', 'png', 'xml'])], verbose_name='Archivo Adjunto')),
-                ('activo', models.BooleanField(db_index=True, default=True, help_text='Indica si el documento soporte esta activo. Debe estar desactivado para poder anular.', verbose_name='Activo')),
-                ('anulado', models.BooleanField(db_index=True, default=False, help_text='Indica si el documento soporte ha sido anulado. Solo se puede anular si esta desactivado.', verbose_name='Anulado')),
-                ('fecha_anulacion', models.DateTimeField(blank=True, help_text='Fecha y hora de anulacion', null=True, verbose_name='Fecha de Anulacion')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('empresa', models.ForeignKey(help_text='Empresa propietaria del documento (SSoT por tenant).', on_delete=django.db.models.deletion.PROTECT, related_name='documentos_soporte', to='empresa.empresa')),
-                ('resolucion_dian', models.ForeignKey(help_text='Resolucion DIAN que autoriza este documento', on_delete=django.db.models.deletion.PROTECT, related_name='documentos_soporte', to='tenant_gastos.resoluciondian', verbose_name='Resolucion DIAN')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "prefijo",
+                    models.CharField(
+                        help_text="Prefijo del documento (ej: SI)",
+                        max_length=10,
+                        verbose_name="Prefijo",
+                    ),
+                ),
+                (
+                    "consecutivo",
+                    models.IntegerField(
+                        db_index=True,
+                        editable=False,
+                        help_text="Numero consecutivo del documento (dentro del rango de la resolucion)",
+                        verbose_name="Consecutivo",
+                    ),
+                ),
+                (
+                    "fecha",
+                    models.DateField(
+                        help_text="Fecha de emision del documento soporte",
+                        verbose_name="Fecha del Documento",
+                    ),
+                ),
+                (
+                    "vendedor_nombre",
+                    models.CharField(
+                        help_text="Nombre o razon social del vendedor (snapshot historico)",
+                        max_length=200,
+                        verbose_name="Nombre/Razon Social Vendedor",
+                    ),
+                ),
+                (
+                    "vendedor_nit",
+                    models.CharField(
+                        db_index=True,
+                        help_text="NIT del vendedor (snapshot historico)",
+                        max_length=20,
+                        verbose_name="NIT Vendedor",
+                    ),
+                ),
+                (
+                    "vendedor_direccion",
+                    models.CharField(
+                        blank=True,
+                        help_text="Direccion del vendedor (snapshot historico)",
+                        max_length=500,
+                        null=True,
+                        verbose_name="Direccion Vendedor",
+                    ),
+                ),
+                (
+                    "vendedor_telefono",
+                    models.CharField(
+                        blank=True,
+                        help_text="Telefono del vendedor (snapshot historico)",
+                        max_length=20,
+                        null=True,
+                        verbose_name="Telefono Vendedor",
+                    ),
+                ),
+                (
+                    "numero_factura_proveedor",
+                    models.CharField(
+                        blank=True,
+                        db_index=True,
+                        help_text="Numero de factura o comprobante emitido por el proveedor (referencia)",
+                        max_length=100,
+                        null=True,
+                        verbose_name="Numero Factura Proveedor",
+                    ),
+                ),
+                (
+                    "subtotal",
+                    models.DecimalField(
+                        decimal_places=2,
+                        help_text="Subtotal del documento (antes de retenciones)",
+                        max_digits=15,
+                        validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                        verbose_name="Subtotal",
+                    ),
+                ),
+                (
+                    "retefuente_porcentaje",
+                    models.CharField(
+                        choices=[
+                            ("0.00", "0% - Sin Retefuente"),
+                            ("0.04", "4% - Servicios (Declarantes)"),
+                            ("0.06", "6% - Servicios (No Declarantes)"),
+                            (
+                                "0.10",
+                                "10% - Honorarios y Consultoria (Persona Natural no declarante)",
+                            ),
+                            (
+                                "0.11",
+                                "11% - Honorarios y Consultoria (Persona Juridica o declarante)",
+                            ),
+                        ],
+                        default="0.00",
+                        help_text="Porcentaje de retencion en la fuente aplicado",
+                        max_length=10,
+                        verbose_name="Porcentaje Retefuente",
+                    ),
+                ),
+                (
+                    "retefuente",
+                    models.DecimalField(
+                        decimal_places=2,
+                        default=Decimal("0.00"),
+                        help_text="Valor calculado de retencion en la fuente (subtotal * porcentaje)",
+                        max_digits=15,
+                        validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                        verbose_name="Retefuente",
+                    ),
+                ),
+                (
+                    "reteica_porcentaje",
+                    models.CharField(
+                        choices=[
+                            ("0.00", "0% - Exento"),
+                            ("0.0069", "0.69% - Tarifa 0.69% (6.9/1000)"),
+                            ("0.00966", "0.966% - Tarifa 0.966% (9.66/1000)"),
+                            ("0.01104", "1.104% - Tarifa 1.104% (11.04/1000)"),
+                        ],
+                        default="0.00",
+                        help_text="Porcentaje de retencion ICA aplicado",
+                        max_length=10,
+                        verbose_name="Porcentaje ReteICA",
+                    ),
+                ),
+                (
+                    "reteica",
+                    models.DecimalField(
+                        decimal_places=2,
+                        default=Decimal("0.00"),
+                        help_text="Valor calculado de retencion ICA (subtotal * porcentaje)",
+                        max_digits=15,
+                        validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                        verbose_name="ReteICA",
+                    ),
+                ),
+                (
+                    "total",
+                    models.DecimalField(
+                        decimal_places=2,
+                        help_text="Total del documento (Subtotal - Retefuente - ReteICA)",
+                        max_digits=15,
+                        validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                        verbose_name="Total",
+                    ),
+                ),
+                (
+                    "adjunto",
+                    models.FileField(
+                        blank=True,
+                        help_text="Archivo del documento soporte (PDF, imagen o XML)",
+                        null=True,
+                        upload_to="documentos_soporte/%Y/%m/",
+                        validators=[
+                            django.core.validators.FileExtensionValidator(
+                                allowed_extensions=["pdf", "jpg", "jpeg", "png", "xml"]
+                            )
+                        ],
+                        verbose_name="Archivo Adjunto",
+                    ),
+                ),
+                (
+                    "activo",
+                    models.BooleanField(
+                        db_index=True,
+                        default=True,
+                        help_text="Indica si el documento soporte esta activo. Debe estar desactivado para poder anular.",
+                        verbose_name="Activo",
+                    ),
+                ),
+                (
+                    "anulado",
+                    models.BooleanField(
+                        db_index=True,
+                        default=False,
+                        help_text="Indica si el documento soporte ha sido anulado. Solo se puede anular si esta desactivado.",
+                        verbose_name="Anulado",
+                    ),
+                ),
+                (
+                    "fecha_anulacion",
+                    models.DateTimeField(
+                        blank=True,
+                        help_text="Fecha y hora de anulacion",
+                        null=True,
+                        verbose_name="Fecha de Anulacion",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        help_text="Empresa propietaria del documento (SSoT por tenant).",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="documentos_soporte",
+                        to="empresa.empresa",
+                    ),
+                ),
+                (
+                    "resolucion_dian",
+                    models.ForeignKey(
+                        help_text="Resolucion DIAN que autoriza este documento",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="documentos_soporte",
+                        to="tenant_gastos.resoluciondian",
+                        verbose_name="Resolucion DIAN",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Documento Soporte',
-                'verbose_name_plural': 'Documentos Soporte',
-                'ordering': ['-fecha', '-consecutivo'],
+                "verbose_name": "Documento Soporte",
+                "verbose_name_plural": "Documentos Soporte",
+                "ordering": ["-fecha", "-consecutivo"],
             },
         ),
         migrations.CreateModel(
-            name='Gasto',
+            name="Gasto",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('centro_costo', models.CharField(blank=True, choices=[('ADMINISTRATIVOS', 'Administrativos'), ('MATERIA_PRIMA', 'Materia Prima'), ('MANUTENCION', 'Mantenimiento'), ('VIATICOS', 'Viaticos'), ('SERVICIOS_PUBLICOS', 'Servicios Publicos'), ('TRANSPORTE', 'Transporte'), ('COMUNICACIONES', 'Comunicaciones'), ('SEGUROS', 'Seguros'), ('ARRIENDOS', 'Arriendos'), ('SERVICIOS_PROFESIONALES', 'Servicios Profesionales'), ('PUBLICIDAD', 'Publicidad y Marketing'), ('CAPACITACION', 'Capacitacion'), ('HERRAMIENTAS', 'Herramientas y Equipos'), ('INSUMOS', 'Insumos y Materiales'), ('ENERGIA', 'Energia y Combustibles'), ('LIMPEZA', 'Limpieza y Aseo'), ('SEGURIDAD', 'Seguridad'), ('TECNOLOGIA', 'Tecnologia e Informatica'), ('LEGALES', 'Gastos Legales'), ('TRIBUTARIOS', 'Gastos Tributarios'), ('OTROS', 'Otros Gastos')], help_text='Centro de costo para clasificacion contable', max_length=100, null=True, verbose_name='Centro de Costo')),
-                ('categoria_contable', models.CharField(blank=True, choices=[('ARRENDAMIENTOS', 'Arrendamientos'), ('SERVICIOS_PUBLICOS', 'Servicios Publicos'), ('PAPELERIA_UTILES', 'Papeleria y Utiles'), ('MANTENIMIENTO_REPARACIONES', 'Mantenimiento y Reparaciones'), ('EQUIPOS_HERRAMIENTAS', 'Equipos y Herramientas'), ('LICENCIAS_SOFTWARE', 'Licencias y Software'), ('HOSTING_DOMINIO', 'Hosting y Dominios'), ('TRANSPORTE_FLETES', 'Transporte y Fletes'), ('COMBUSTIBLE', 'Combustible'), ('VIATICOS', 'Viaticos'), ('PUBLICIDAD_MARKETING', 'Publicidad y Marketing'), ('SEGUROS', 'Seguros'), ('IMPUESTOS_TASAS', 'Impuestos, Tasas y Contribuciones'), ('HONORARIOS', 'Honorarios'), ('SERVICIOS_PROFESIONALES', 'Servicios Profesionales'), ('ASEO_CAFETERIA', 'Aseo y Cafeteria'), ('VIGILANCIA_SEGURIDAD', 'Vigilancia y Seguridad'), ('CAPACITACION', 'Capacitacion'), ('GASTOS_FINANCIEROS', 'Gastos Financieros'), ('COMISIONES_BANCARIAS', 'Comisiones Bancarias'), ('SUSCRIPCIONES', 'Suscripciones'), ('ELEMENTOS_PROTECCION', 'Elementos de Proteccion'), ('MATERIALES_INSUMOS', 'Materiales e Insumos'), ('ADECUACIONES_INSTALACIONES', 'Adecuaciones e Instalaciones'), ('COMUNICACIONES', 'Comunicaciones'), ('ENERGIA', 'Energia'), ('LIMPEZA_ASEO', 'Limpieza y Aseo'), ('TECNOLOGIA_INFORMATICA', 'Tecnologia e Informatica'), ('GASTOS_LEGALES', 'Gastos Legales'), ('TRIBUTARIOS', 'Gastos Tributarios'), ('OTROS', 'Otros Gastos')], help_text='Categoria contable del gasto (excluye personal)', max_length=100, null=True, verbose_name='Categoria Contable')),
-                ('periodo', models.CharField(help_text='Periodo contable. Ej: 2026-01', max_length=7, verbose_name='Periodo Contable')),
-                ('descripcion', models.TextField(blank=True, help_text='Descripcion adicional del gasto', verbose_name='Descripcion')),
-                ('observaciones', models.TextField(blank=True, help_text='Observaciones adicionales', verbose_name='Observaciones')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('documento_soporte', models.OneToOneField(help_text='Documento Soporte asociado (evidencia legal)', on_delete=django.db.models.deletion.PROTECT, related_name='gasto', to='tenant_gastos.documentosoporte', verbose_name='Documento Soporte')),
-                ('empresa', models.ForeignKey(help_text='Empresa propietaria del gasto (SSoT por tenant).', on_delete=django.db.models.deletion.PROTECT, related_name='gastos', to='empresa.empresa')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "centro_costo",
+                    models.CharField(
+                        blank=True,
+                        choices=[
+                            ("ADMINISTRATIVOS", "Administrativos"),
+                            ("MATERIA_PRIMA", "Materia Prima"),
+                            ("MANUTENCION", "Mantenimiento"),
+                            ("VIATICOS", "Viaticos"),
+                            ("SERVICIOS_PUBLICOS", "Servicios Publicos"),
+                            ("TRANSPORTE", "Transporte"),
+                            ("COMUNICACIONES", "Comunicaciones"),
+                            ("SEGUROS", "Seguros"),
+                            ("ARRIENDOS", "Arriendos"),
+                            ("SERVICIOS_PROFESIONALES", "Servicios Profesionales"),
+                            ("PUBLICIDAD", "Publicidad y Marketing"),
+                            ("CAPACITACION", "Capacitacion"),
+                            ("HERRAMIENTAS", "Herramientas y Equipos"),
+                            ("INSUMOS", "Insumos y Materiales"),
+                            ("ENERGIA", "Energia y Combustibles"),
+                            ("LIMPEZA", "Limpieza y Aseo"),
+                            ("SEGURIDAD", "Seguridad"),
+                            ("TECNOLOGIA", "Tecnologia e Informatica"),
+                            ("LEGALES", "Gastos Legales"),
+                            ("TRIBUTARIOS", "Gastos Tributarios"),
+                            ("OTROS", "Otros Gastos"),
+                        ],
+                        help_text="Centro de costo para clasificacion contable",
+                        max_length=100,
+                        null=True,
+                        verbose_name="Centro de Costo",
+                    ),
+                ),
+                (
+                    "categoria_contable",
+                    models.CharField(
+                        blank=True,
+                        choices=[
+                            ("ARRENDAMIENTOS", "Arrendamientos"),
+                            ("SERVICIOS_PUBLICOS", "Servicios Publicos"),
+                            ("PAPELERIA_UTILES", "Papeleria y Utiles"),
+                            ("MANTENIMIENTO_REPARACIONES", "Mantenimiento y Reparaciones"),
+                            ("EQUIPOS_HERRAMIENTAS", "Equipos y Herramientas"),
+                            ("LICENCIAS_SOFTWARE", "Licencias y Software"),
+                            ("HOSTING_DOMINIO", "Hosting y Dominios"),
+                            ("TRANSPORTE_FLETES", "Transporte y Fletes"),
+                            ("COMBUSTIBLE", "Combustible"),
+                            ("VIATICOS", "Viaticos"),
+                            ("PUBLICIDAD_MARKETING", "Publicidad y Marketing"),
+                            ("SEGUROS", "Seguros"),
+                            ("IMPUESTOS_TASAS", "Impuestos, Tasas y Contribuciones"),
+                            ("HONORARIOS", "Honorarios"),
+                            ("SERVICIOS_PROFESIONALES", "Servicios Profesionales"),
+                            ("ASEO_CAFETERIA", "Aseo y Cafeteria"),
+                            ("VIGILANCIA_SEGURIDAD", "Vigilancia y Seguridad"),
+                            ("CAPACITACION", "Capacitacion"),
+                            ("GASTOS_FINANCIEROS", "Gastos Financieros"),
+                            ("COMISIONES_BANCARIAS", "Comisiones Bancarias"),
+                            ("SUSCRIPCIONES", "Suscripciones"),
+                            ("ELEMENTOS_PROTECCION", "Elementos de Proteccion"),
+                            ("MATERIALES_INSUMOS", "Materiales e Insumos"),
+                            ("ADECUACIONES_INSTALACIONES", "Adecuaciones e Instalaciones"),
+                            ("COMUNICACIONES", "Comunicaciones"),
+                            ("ENERGIA", "Energia"),
+                            ("LIMPEZA_ASEO", "Limpieza y Aseo"),
+                            ("TECNOLOGIA_INFORMATICA", "Tecnologia e Informatica"),
+                            ("GASTOS_LEGALES", "Gastos Legales"),
+                            ("TRIBUTARIOS", "Gastos Tributarios"),
+                            ("OTROS", "Otros Gastos"),
+                        ],
+                        help_text="Categoria contable del gasto (excluye personal)",
+                        max_length=100,
+                        null=True,
+                        verbose_name="Categoria Contable",
+                    ),
+                ),
+                (
+                    "periodo",
+                    models.CharField(
+                        help_text="Periodo contable. Ej: 2026-01",
+                        max_length=7,
+                        verbose_name="Periodo Contable",
+                    ),
+                ),
+                (
+                    "descripcion",
+                    models.TextField(
+                        blank=True,
+                        help_text="Descripcion adicional del gasto",
+                        verbose_name="Descripcion",
+                    ),
+                ),
+                (
+                    "observaciones",
+                    models.TextField(
+                        blank=True,
+                        help_text="Observaciones adicionales",
+                        verbose_name="Observaciones",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "documento_soporte",
+                    models.OneToOneField(
+                        help_text="Documento Soporte asociado (evidencia legal)",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="gasto",
+                        to="tenant_gastos.documentosoporte",
+                        verbose_name="Documento Soporte",
+                    ),
+                ),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        help_text="Empresa propietaria del gasto (SSoT por tenant).",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="gastos",
+                        to="empresa.empresa",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Gasto',
-                'verbose_name_plural': 'Gastos',
-                'ordering': ['-documento_soporte__fecha', '-documento_soporte__consecutivo'],
-                'indexes': [models.Index(fields=['empresa', 'periodo'], name='tenant_gast_empresa_d06d8d_idx'), models.Index(fields=['centro_costo', 'categoria_contable'], name='tenant_gast_centro__968db9_idx'), models.Index(fields=['documento_soporte'], name='tenant_gast_documen_d5a086_idx')],
+                "verbose_name": "Gasto",
+                "verbose_name_plural": "Gastos",
+                "ordering": ["-documento_soporte__fecha", "-documento_soporte__consecutivo"],
+                "indexes": [
+                    models.Index(
+                        fields=["empresa", "periodo"], name="tenant_gast_empresa_d06d8d_idx"
+                    ),
+                    models.Index(
+                        fields=["centro_costo", "categoria_contable"],
+                        name="tenant_gast_centro__968db9_idx",
+                    ),
+                    models.Index(
+                        fields=["documento_soporte"], name="tenant_gast_documen_d5a086_idx"
+                    ),
+                ],
             },
         ),
         migrations.AddIndex(
-            model_name='resoluciondian',
-            index=models.Index(fields=['empresa', 'vigente'], name='tenant_gast_empresa_030016_idx'),
+            model_name="resoluciondian",
+            index=models.Index(
+                fields=["empresa", "vigente"], name="tenant_gast_empresa_030016_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='documentosoporte',
-            index=models.Index(fields=['empresa', 'fecha'], name='tenant_gast_empresa_2af54f_idx'),
+            model_name="documentosoporte",
+            index=models.Index(fields=["empresa", "fecha"], name="tenant_gast_empresa_2af54f_idx"),
         ),
         migrations.AddIndex(
-            model_name='documentosoporte',
-            index=models.Index(fields=['resolucion_dian', 'consecutivo'], name='tenant_gast_resoluc_b5577c_idx'),
+            model_name="documentosoporte",
+            index=models.Index(
+                fields=["resolucion_dian", "consecutivo"], name="tenant_gast_resoluc_b5577c_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='documentosoporte',
-            index=models.Index(fields=['prefijo', 'consecutivo'], name='tenant_gast_prefijo_2889a4_idx'),
+            model_name="documentosoporte",
+            index=models.Index(
+                fields=["prefijo", "consecutivo"], name="tenant_gast_prefijo_2889a4_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='documentosoporte',
-            index=models.Index(fields=['vendedor_nit', 'numero_factura_proveedor'], name='tenant_gast_vendedo_11479e_idx'),
+            model_name="documentosoporte",
+            index=models.Index(
+                fields=["vendedor_nit", "numero_factura_proveedor"],
+                name="tenant_gast_vendedo_11479e_idx",
+            ),
         ),
         migrations.AddIndex(
-            model_name='documentosoporte',
-            index=models.Index(fields=['activo'], name='tenant_gast_activo_5624b1_idx'),
+            model_name="documentosoporte",
+            index=models.Index(fields=["activo"], name="tenant_gast_activo_5624b1_idx"),
         ),
         migrations.AddIndex(
-            model_name='documentosoporte',
-            index=models.Index(fields=['anulado'], name='tenant_gast_anulado_0a96cb_idx'),
+            model_name="documentosoporte",
+            index=models.Index(fields=["anulado"], name="tenant_gast_anulado_0a96cb_idx"),
         ),
         migrations.AddConstraint(
-            model_name='documentosoporte',
-            constraint=models.UniqueConstraint(fields=('resolucion_dian', 'consecutivo'), name='unique_ds_resolucion_consecutivo', violation_error_message='Ya existe un Documento Soporte con este consecutivo en esta resolucion.'),
+            model_name="documentosoporte",
+            constraint=models.UniqueConstraint(
+                fields=("resolucion_dian", "consecutivo"),
+                name="unique_ds_resolucion_consecutivo",
+                violation_error_message="Ya existe un Documento Soporte con este consecutivo en esta resolucion.",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='documentosoporte',
-            constraint=models.UniqueConstraint(condition=models.Q(('anulado', False)), fields=('empresa', 'vendedor_nit', 'numero_factura_proveedor'), name='unique_ds_vendedor_factura', violation_error_message='Ya existe un Documento Soporte activo con este vendedor y numero de factura.'),
+            model_name="documentosoporte",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("anulado", False)),
+                fields=("empresa", "vendedor_nit", "numero_factura_proveedor"),
+                name="unique_ds_vendedor_factura",
+                violation_error_message="Ya existe un Documento Soporte activo con este vendedor y numero de factura.",
+            ),
         ),
     ]

@@ -1,97 +1,79 @@
 """
-Vista HTML server-rendered (django-tables2 + HTMX) para el listado de
-Ordenes de Compra. Expansion Fase 5-BIS (ver PLAN_UNICO_CORRECCIONES.md).
+Vista HTML server-rendered (HTMX) para los KPIs del listado de Ordenes de
+Compra. Ambas grillas ("Ordenes de Compra" y "Plantillas de Numeracion")
+migraron a DataTables -- POST /api/v1/compras/{dt,plantillas/dt}/
+(OrdenCompraViewSet.dt()/PlantillaOrdenCompraViewSet.dt()) + DataTables JS,
+ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md. OrdenCompraTable/
+OrdenCompraTableView y PlantillaOrdenCompraTable/PlantillaOrdenCompraTableView
+(django-tables2) retirados. Solo queda OrdenCompraKpisView (KPIs de
+"Ordenes de Compra").
 
 No reemplaza la API DRF (apps/tenant/compras/api/viewsets.py), que sigue
 viva para crear/editar/cambiar-estado y para consumidores API-first.
 """
+
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q, Sum
-from django_tables2 import SingleTableView
+from django.db.models import Count, Q, Sum
+from django.views.generic import TemplateView
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from apps.tenant.api.mixins import SintelDSVMixin
-from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra
-from apps.tenant.compras.services.selectors import OrdenCompraSelector, PlantillaOrdenCompraSelector
-from apps.tenant.compras.tables import OrdenCompraTable, PlantillaOrdenCompraTable
+from apps.tenant.compras.services.selectors import OrdenCompraSelector
 
 logger = logging.getLogger(__name__)
 
 
-class OrdenCompraTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
-    model = OrdenCompra
-    table_class = OrdenCompraTable
-    template_name = "tenant/compras/partials/tabla_compras.html"
-    table_pagination = {"per_page": 20}
-
-    def get_queryset(self):
-        self._empresa_id = None
-        try:
-            self._empresa_id = self.get_empresa_id()
-        except DRFValidationError:
-            logger.warning("[OrdenCompraTableView] Sin empresa resuelta para user=%s", self.request.user.pk)
-            return OrdenCompra.objects.none()
-
-        search = (self.request.GET.get("q") or "").strip() or None
-        estado = self.request.GET.get("estado") or None
-
-        # [OSF Fase F5] Hallazgo real: esta vista (la grilla HTML/HTMX que
-        # el usuario realmente ve, a diferencia de OrdenCompraViewSet, que
-        # es la API DRF) nunca aplicaba ningun filtro de sede/area - un
-        # perfil con alcance SEDE/AREA veia TODAS las ordenes de la empresa
-        # en la tabla real, sin restriccion. Corregido usando
-        # OrganizationalScope (conjunto completo de sedes/areas permitidas).
-        from apps.tenant.core.services.organizational_scope import (
-            OrganizationalScope,
-            OrganizationalScopeError,
-        )
-        try:
-            scope = OrganizationalScope.resolve(self.request)
-            sede_ids, area_ids = scope.sede_ids, scope.area_ids
-        except OrganizationalScopeError:
-            sede_ids, area_ids = None, None
-
-        return OrdenCompraSelector.get_list(
-            empresa_id=self._empresa_id, search=search, estado=estado,
-            sede_ids=sede_ids, area_ids=area_ids,
-        )
+class OrdenCompraKpisView(LoginRequiredMixin, SintelDSVMixin, TemplateView):
+    template_name = "tenant/compras/partials/kpis_compras.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        empresa_id = getattr(self, "_empresa_id", None)
+        try:
+            empresa_id = self.get_empresa_id()
+        except DRFValidationError:
+            logger.warning(
+                "[OrdenCompraKpisView] Sin empresa resuelta para user=%s", self.request.user.pk
+            )
+            empresa_id = None
+
         if empresa_id:
-            qs = self.object_list
-            context["kpi_total_ordenes"] = qs.count()
-            context["kpi_monto_total"] = qs.exclude(estado="ANULADA").aggregate(t=Sum("total"))["t"] or 0
-            context["kpi_aprobadas"] = qs.filter(Q(estado="APROBADA") | Q(estado="RECIBIDA")).count()
-            context["kpi_pendientes"] = qs.filter(estado="PENDIENTE").count()
+            # Mismo alcance sede/area (OrganizationalScope) que ya usa
+            # OrdenCompraViewSet.dt()/get_qs_list() para la grilla real --
+            # los KPIs deben reflejar el mismo conjunto de filas.
+            from apps.tenant.core.services.organizational_scope import (
+                OrganizationalScope,
+                OrganizationalScopeError,
+            )
+
+            try:
+                scope = OrganizationalScope.resolve(self.request)
+                sede_ids, area_ids = scope.sede_ids, scope.area_ids
+            except OrganizationalScopeError:
+                sede_ids, area_ids = None, None
+
+            qs = OrdenCompraSelector.get_list(
+                empresa_id=empresa_id,
+                sede_ids=sede_ids,
+                area_ids=area_ids,
+            )
+            # Fase 3 (PLAN_OPTIMIZACION_COMPRAS...): un unico aggregate() con
+            # Count/Sum condicionados en vez de 4 queries independientes
+            # sobre el mismo queryset base.
+            agregados = qs.aggregate(
+                total_ordenes=Count("id"),
+                monto_total=Sum("total", filter=~Q(estado="ANULADA")),
+                aprobadas=Count("id", filter=Q(estado="APROBADA") | Q(estado="RECIBIDA")),
+                pendientes=Count("id", filter=Q(estado="PENDIENTE")),
+            )
+            context["kpi_total_ordenes"] = agregados["total_ordenes"]
+            context["kpi_monto_total"] = agregados["monto_total"] or 0
+            context["kpi_aprobadas"] = agregados["aprobadas"]
+            context["kpi_pendientes"] = agregados["pendientes"]
         else:
             context["kpi_total_ordenes"] = 0
             context["kpi_monto_total"] = 0
             context["kpi_aprobadas"] = 0
             context["kpi_pendientes"] = 0
         return context
-
-
-class PlantillaOrdenCompraTableView(LoginRequiredMixin, SintelDSVMixin, SingleTableView):
-    """
-    CO-1 (2026-09-12): pantalla de gestion de plantillas -- antes solo se
-    podian crear (offcanvas_crear_plantilla.html), nunca listar/ver las
-    existentes. Muestra TODAS las plantillas (vigente_only=False, a
-    diferencia del dropdown de "Nueva Orden" que solo trae las vigentes)
-    para que una plantilla desactivada sea visible y reactivable.
-    """
-    model = PlantillaOrdenCompra
-    table_class = PlantillaOrdenCompraTable
-    template_name = "tenant/compras/partials/tabla_plantillas.html"
-    table_pagination = {"per_page": 20}
-
-    def get_queryset(self):
-        try:
-            empresa_id = self.get_empresa_id()
-        except DRFValidationError:
-            logger.warning("[PlantillaOrdenCompraTableView] Sin empresa resuelta para user=%s", self.request.user.pk)
-            return PlantillaOrdenCompra.objects.none()
-        return PlantillaOrdenCompraSelector.get_list(empresa_id=empresa_id, vigente_only=False)

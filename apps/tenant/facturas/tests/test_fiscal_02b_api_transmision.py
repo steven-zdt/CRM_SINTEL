@@ -8,6 +8,7 @@ traiga la request -- nunca finge una transmision DIAN real ante un
 usuario real. Solo con el flag activo (entorno de desarrollo/QA) y
 ?_mock_scenario= explicito se ejercitan los escenarios simulados via HTTP.
 """
+
 from decimal import Decimal
 
 from django.test import override_settings
@@ -15,7 +16,7 @@ from rest_framework import status
 
 from apps.config.tests.base_tenant import TenantAPITestCase
 from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.models import Factura, FacturaAnexos, TransmisionFactura
+from apps.tenant.facturas.models import Factura, FacturaAnexos
 
 
 class FacturaTransmitirAPITests(TenantAPITestCase):
@@ -23,11 +24,21 @@ class FacturaTransmitirAPITests(TenantAPITestCase):
         super().setUp()
         self.empresa = Empresa.objects.first()
         self.factura = Factura.objects.create(
-            empresa=self.empresa, numero="FE-API-1", prefijo="FE", consecutivo=1, tipo="FE",
-            naturaleza=Factura.Naturaleza.VENTA, estado=Factura.Estado.BORRADOR, fecha_emision="2026-06-25",
-            emisor_nit="900123456", emisor_razon_social="Empresa Emisora S.A.S.",
-            receptor_nit="800654321", receptor_razon_social="Cliente Receptor S.A.S.",
-            subtotal=Decimal("100000.00"), impuestos=Decimal("19000.00"), total=Decimal("119000.00"),
+            empresa=self.empresa,
+            numero="FE-API-1",
+            prefijo="FE",
+            consecutivo=1,
+            tipo="FE",
+            naturaleza=Factura.Naturaleza.VENTA,
+            estado=Factura.Estado.BORRADOR,
+            fecha_emision="2026-06-25",
+            emisor_nit="900123456",
+            emisor_razon_social="Empresa Emisora S.A.S.",
+            receptor_nit="800654321",
+            receptor_razon_social="Cliente Receptor S.A.S.",
+            subtotal=Decimal("100000.00"),
+            impuestos=Decimal("19000.00"),
+            total=Decimal("119000.00"),
             cufe="cufe-api-test",
         )
         FacturaAnexos.objects.create(factura=self.factura, ubl_xml="<Invoice>contenido</Invoice>")
@@ -40,7 +51,10 @@ class FacturaTransmitirAPITests(TenantAPITestCase):
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
         self.assertFalse(data["resultado"]["success"])
-        self.assertIn("no hay un adaptador de transporte dian real configurado", data["resultado"]["response_message"].lower())
+        self.assertIn(
+            "no hay un adaptador de transporte dian real configurado",
+            data["resultado"]["response_message"].lower(),
+        )
         self.factura.refresh_from_db()
         self.assertEqual(self.factura.estado, Factura.Estado.ERROR_TRANSMISION)
 
@@ -49,20 +63,24 @@ class FacturaTransmitirAPITests(TenantAPITestCase):
         FISCAL_ALLOW_MOCK_TRANSPORT=True debe usarse NullTransportAdapter
         de todas formas -- esta es la guarda de seguridad critica."""
         response = self.tpost(
-            f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_ACCEPTED", {},
+            f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_ACCEPTED",
+            {},
         )
 
         data = response.json()
         self.assertEqual(data["resultado"]["status"], "ERROR_TRANSMISION")
         self.factura.refresh_from_db()
-        self.assertNotEqual(self.factura.estado, Factura.Estado.ACEPTADA, "el mock NUNCA debe activarse sin el flag")
+        self.assertNotEqual(
+            self.factura.estado, Factura.Estado.ACEPTADA, "el mock NUNCA debe activarse sin el flag"
+        )
 
     # ---- Con el flag activo (entorno de desarrollo/QA): validacion funcional real ----
 
     @override_settings(FISCAL_ALLOW_MOCK_TRANSPORT=True)
     def test_con_flag_activo_mock_scenario_aceptado_funciona_via_http(self):
         response = self.tpost(
-            f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_ACCEPTED", {},
+            f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_ACCEPTED",
+            {},
         )
 
         self.assertJSONResponse(response, status.HTTP_200_OK)
@@ -75,7 +93,8 @@ class FacturaTransmitirAPITests(TenantAPITestCase):
     @override_settings(FISCAL_ALLOW_MOCK_TRANSPORT=True)
     def test_con_flag_activo_mock_scenario_rechazado_funciona_via_http(self):
         response = self.tpost(
-            f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_REJECTED", {},
+            f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_REJECTED",
+            {},
         )
 
         data = response.json()
@@ -84,10 +103,14 @@ class FacturaTransmitirAPITests(TenantAPITestCase):
 
     @override_settings(FISCAL_ALLOW_MOCK_TRANSPORT=True)
     def test_idempotencia_via_http_segundo_intento_inmediato_es_400(self):
-        primer = self.tpost(f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_PENDING", {})
+        primer = self.tpost(
+            f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_PENDING", {}
+        )
         self.assertEqual(primer.status_code, status.HTTP_200_OK)
 
-        segundo = self.tpost(f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_ACCEPTED", {})
+        segundo = self.tpost(
+            f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_ACCEPTED", {}
+        )
 
         self.assertEqual(segundo.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -104,12 +127,15 @@ class FacturaTransmitirAPITests(TenantAPITestCase):
         de la request anterior) retorna "not_found" honestamente, nunca
         ACEPTADO/RECHAZADO inventados. Mismo comportamiento esperado de un
         adaptador real cuyo proceso no comparte memoria entre requests."""
-        self.tpost(f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_PENDING", {})
+        self.tpost(
+            f"/api/v1/facturas/{self.factura.uuid}/transmitir/?_mock_scenario=TEST_PENDING", {}
+        )
         self.factura.refresh_from_db()
         self.assertEqual(self.factura.estado, Factura.Estado.ENVIADA)
 
         response = self.tpost(
-            f"/api/v1/facturas/{self.factura.uuid}/reconciliar/?_mock_scenario=TEST_ACCEPTED", {},
+            f"/api/v1/facturas/{self.factura.uuid}/reconciliar/?_mock_scenario=TEST_ACCEPTED",
+            {},
         )
 
         self.assertJSONResponse(response, status.HTTP_200_OK)

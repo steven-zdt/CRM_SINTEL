@@ -13,11 +13,10 @@ corsheaders.middleware.CorsMiddleware -- y terminaba reflejandose en
 Django (p.ej. ":8000") incluso para requests que llegaron por Nginx en 80/443.
 """
 
+from corsheaders.middleware import CorsMiddleware
 from django.conf import settings
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
-
-from corsheaders.middleware import CorsMiddleware
 
 from apps.public.core.middleware import CSRFTrustedOriginMiddleware
 
@@ -83,7 +82,7 @@ class CSRFTrustedOriginMiddlewareTests(TestCase):
         chain = CorsMiddleware(CSRFTrustedOriginMiddleware(_view))
         response = chain(request)
 
-        headers = {k.lower() for k in response.headers.keys()}
+        headers = {k.lower() for k in response.headers}
         self.assertNotIn("access-control-allow-origin", headers)
 
     @override_settings(
@@ -107,7 +106,9 @@ class CSRFTrustedOriginMiddlewareTests(TestCase):
         chain = CorsMiddleware(CSRFTrustedOriginMiddleware(_view))
         response = chain(request)
 
-        self.assertEqual(response.headers.get("access-control-allow-origin"), "http://tenant1.sintel.net.co")
+        self.assertEqual(
+            response.headers.get("access-control-allow-origin"), "http://tenant1.sintel.net.co"
+        )
 
     @override_settings(DEBUG=False, CSRF_TRUSTED_ORIGINS=["http://sintel.net.co"])
     def test_middleware_is_noop_outside_debug(self):

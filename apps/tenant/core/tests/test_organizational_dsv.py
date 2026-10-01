@@ -5,6 +5,7 @@ Usa OrdenCompra (compras, unico modelo SedeAwareModel real hoy - ADR-003) y
 Proveedor (sin sede/area, la mayoria de modelos del proyecto - ver Fase 0)
 para probar contra datos reales, no mocks sinteticos.
 """
+
 from apps.tenant.compras.models import OrdenCompra
 from apps.tenant.core.services.organizational_context import OrganizationalContext
 from apps.tenant.core.services.organizational_dsv import (
@@ -19,8 +20,17 @@ from tests.tenant.base_test import SintelTenantTestCase
 
 def _context(empresa_id, alcance="EMPRESA", sede_id=None) -> OrganizationalContext:
     return OrganizationalContext(
-        tenant_schema="test", tenant_id=1, empresa_id=empresa_id, sede_id=sede_id, area_id=None,
-        user_id=1, perfil_id=1, rol="OPERADOR", alcance=alcance, timezone="UTC", configuracion={},
+        tenant_schema="test",
+        tenant_id=1,
+        empresa_id=empresa_id,
+        sede_id=sede_id,
+        area_id=None,
+        user_id=1,
+        perfil_id=1,
+        rol="OPERADOR",
+        alcance=alcance,
+        timezone="UTC",
+        configuracion={},
     )
 
 
@@ -28,7 +38,9 @@ class OrganizationalDSVTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase5", nit="900000444", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase5",
+            nit="900000444",
+            direccion="Calle 1",
         )
         # Empresa es singleton por schema (UniqueConstraint singleton_key) -
         # no se puede crear una segunda fila en el mismo tenant. Para probar
@@ -38,11 +50,20 @@ class OrganizationalDSVTests(SintelTenantTestCase):
         self.sede_norte = Sede.objects.create(empresa=self.empresa, nombre="Norte")
         self.sede_sur = Sede.objects.create(empresa=self.empresa, nombre="Sur")
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor DSV", numero_documento="123", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor DSV",
+            numero_documento="123",
+            tipo_documento="NIT",
         )
         self.orden = OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede_norte, proveedor=self.proveedor,
-            consecutivo=1, fecha="2026-08-01", subtotal=100, impuestos=19, total=119,
+            empresa=self.empresa,
+            sede=self.sede_norte,
+            proveedor=self.proveedor,
+            consecutivo=1,
+            fecha="2026-08-01",
+            subtotal=100,
+            impuestos=19,
+            total=119,
         )
 
     def test_rejects_object_from_another_empresa(self):
@@ -66,7 +87,9 @@ class OrganizationalDSVTests(SintelTenantTestCase):
 
     def test_alcance_sede_accepts_orden_from_assigned_sede(self):
         context = _context(empresa_id=self.empresa.id, alcance="SEDE")
-        verify_organizational_dsv(self.orden, context, sedes_asignadas=[self.sede_norte.id])  # no lanza
+        verify_organizational_dsv(
+            self.orden, context, sedes_asignadas=[self.sede_norte.id]
+        )  # no lanza
 
     def test_alcance_sede_with_no_sedes_asignadas_is_fail_closed(self):
         context = _context(empresa_id=self.empresa.id, alcance="SEDE")
@@ -84,6 +107,8 @@ class OrganizationalDSVTests(SintelTenantTestCase):
         context_ok = _context(empresa_id=self.empresa.id, alcance="SEDE")
         context_bad = _context(empresa_id=self.otra_empresa_id)
         self.assertTrue(
-            is_organizationally_consistent(self.orden, context_ok, sedes_asignadas=[self.sede_norte.id])
+            is_organizationally_consistent(
+                self.orden, context_ok, sedes_asignadas=[self.sede_norte.id]
+            )
         )
         self.assertFalse(is_organizationally_consistent(self.orden, context_bad))

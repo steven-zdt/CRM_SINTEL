@@ -5,53 +5,134 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('empresa', '0001_initial'),
+        ("empresa", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Proveedor',
+            name="Proveedor",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('tipo_persona', models.CharField(choices=[('NATURAL', 'Persona natural'), ('JURIDICA', 'Persona jurídica')], default='JURIDICA', max_length=10)),
-                ('tipo_documento', models.CharField(choices=[('NIT', 'NIT'), ('CC', 'Cédula de ciudadanía'), ('CE', 'Cédula de extranjería'), ('PA', 'Pasaporte')], default='NIT', max_length=5)),
-                ('numero_documento', models.CharField(help_text='Sin dígito de verificación', max_length=32)),
-                ('digito_verificacion', models.CharField(blank=True, max_length=1, null=True)),
-                ('razon_social', models.CharField(help_text='Nombre legal completo', max_length=200)),
-                ('nombre_comercial', models.CharField(blank=True, max_length=200)),
-                ('regimen_tributario', models.CharField(choices=[('SIMPLE', 'Régimen Simple'), ('ORDINARIO', 'Régimen Ordinario'), ('NO_RESP', 'No responsable de IVA')], default='ORDINARIO', max_length=15)),
-                ('actividad_economica_ciiu', models.CharField(blank=True, help_text='Código CIIU Principal', max_length=10)),
-                ('responsable_iva', models.BooleanField(default=True)),
-                ('gran_contribuyente', models.BooleanField(default=False)),
-                ('autoretenedor', models.BooleanField(default=False)),
-                ('email_contacto', models.EmailField(blank=True, max_length=254)),
-                ('telefono_contacto', models.CharField(blank=True, max_length=50)),
-                ('direccion', models.CharField(blank=True, max_length=255)),
-                ('ciudad', models.CharField(blank=True, max_length=100)),
-                ('plazo_pago_dias', models.PositiveIntegerField(default=30, help_text='Días de crédito estándar')),
-                ('banco', models.CharField(blank=True, max_length=100)),
-                ('tipo_cuenta', models.CharField(blank=True, choices=[('AHORROS', 'Ahorros'), ('CORRIENTE', 'Corriente')], max_length=20)),
-                ('numero_cuenta', models.CharField(blank=True, max_length=50)),
-                ('activo', models.BooleanField(default=True)),
-                ('codigo_contable', models.CharField(blank=True, db_index=True, help_text='Codigo NIIF de subcuenta (Clase 2)', max_length=10, null=True)),
-                ('observaciones', models.TextField(blank=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('empresa', models.ForeignKey(help_text='SSoT Empresa', on_delete=django.db.models.deletion.PROTECT, related_name='proveedores', to='empresa.empresa')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "tipo_persona",
+                    models.CharField(
+                        choices=[("NATURAL", "Persona natural"), ("JURIDICA", "Persona jurídica")],
+                        default="JURIDICA",
+                        max_length=10,
+                    ),
+                ),
+                (
+                    "tipo_documento",
+                    models.CharField(
+                        choices=[
+                            ("NIT", "NIT"),
+                            ("CC", "Cédula de ciudadanía"),
+                            ("CE", "Cédula de extranjería"),
+                            ("PA", "Pasaporte"),
+                        ],
+                        default="NIT",
+                        max_length=5,
+                    ),
+                ),
+                (
+                    "numero_documento",
+                    models.CharField(help_text="Sin dígito de verificación", max_length=32),
+                ),
+                ("digito_verificacion", models.CharField(blank=True, max_length=1, null=True)),
+                (
+                    "razon_social",
+                    models.CharField(help_text="Nombre legal completo", max_length=200),
+                ),
+                ("nombre_comercial", models.CharField(blank=True, max_length=200)),
+                (
+                    "regimen_tributario",
+                    models.CharField(
+                        choices=[
+                            ("SIMPLE", "Régimen Simple"),
+                            ("ORDINARIO", "Régimen Ordinario"),
+                            ("NO_RESP", "No responsable de IVA"),
+                        ],
+                        default="ORDINARIO",
+                        max_length=15,
+                    ),
+                ),
+                (
+                    "actividad_economica_ciiu",
+                    models.CharField(blank=True, help_text="Código CIIU Principal", max_length=10),
+                ),
+                ("responsable_iva", models.BooleanField(default=True)),
+                ("gran_contribuyente", models.BooleanField(default=False)),
+                ("autoretenedor", models.BooleanField(default=False)),
+                ("email_contacto", models.EmailField(blank=True, max_length=254)),
+                ("telefono_contacto", models.CharField(blank=True, max_length=50)),
+                ("direccion", models.CharField(blank=True, max_length=255)),
+                ("ciudad", models.CharField(blank=True, max_length=100)),
+                (
+                    "plazo_pago_dias",
+                    models.PositiveIntegerField(default=30, help_text="Días de crédito estándar"),
+                ),
+                ("banco", models.CharField(blank=True, max_length=100)),
+                (
+                    "tipo_cuenta",
+                    models.CharField(
+                        blank=True,
+                        choices=[("AHORROS", "Ahorros"), ("CORRIENTE", "Corriente")],
+                        max_length=20,
+                    ),
+                ),
+                ("numero_cuenta", models.CharField(blank=True, max_length=50)),
+                ("activo", models.BooleanField(default=True)),
+                (
+                    "codigo_contable",
+                    models.CharField(
+                        blank=True,
+                        db_index=True,
+                        help_text="Codigo NIIF de subcuenta (Clase 2)",
+                        max_length=10,
+                        null=True,
+                    ),
+                ),
+                ("observaciones", models.TextField(blank=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        help_text="SSoT Empresa",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="proveedores",
+                        to="empresa.empresa",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Proveedor',
-                'verbose_name_plural': 'Proveedores',
-                'ordering': ['razon_social'],
-                'indexes': [models.Index(fields=['empresa', 'activo'], name='tenant_prov_empresa_520153_idx'), models.Index(fields=['numero_documento'], name='tenant_prov_numero__80adf0_idx'), models.Index(fields=['razon_social'], name='tenant_prov_razon_s_d77997_idx')],
+                "verbose_name": "Proveedor",
+                "verbose_name_plural": "Proveedores",
+                "ordering": ["razon_social"],
+                "indexes": [
+                    models.Index(
+                        fields=["empresa", "activo"], name="tenant_prov_empresa_520153_idx"
+                    ),
+                    models.Index(
+                        fields=["numero_documento"], name="tenant_prov_numero__80adf0_idx"
+                    ),
+                    models.Index(fields=["razon_social"], name="tenant_prov_razon_s_d77997_idx"),
+                ],
             },
         ),
         migrations.AddConstraint(
-            model_name='proveedor',
-            constraint=models.UniqueConstraint(fields=('empresa', 'tipo_documento', 'numero_documento'), name='uniq_proveedor_empresa'),
+            model_name="proveedor",
+            constraint=models.UniqueConstraint(
+                fields=("empresa", "tipo_documento", "numero_documento"),
+                name="uniq_proveedor_empresa",
+            ),
         ),
     ]

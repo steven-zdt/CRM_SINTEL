@@ -9,6 +9,7 @@ Reporting aqui es la INTERSECCION descrita en FASE 11: el filtro que el
 usuario solicita (`sede=X`) nunca puede superar lo que su OrganizationalScope
 permite -- si lo supera, se rechaza con 403 en vez de devolver datos.
 """
+
 from __future__ import annotations
 
 from typing import Any

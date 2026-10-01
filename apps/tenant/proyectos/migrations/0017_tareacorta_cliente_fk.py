@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("empresa", "0009_sedes_areas_explicit_fk"),
         ("tenant_clientes", "0006_alter_cliente_aplica_retefuente_and_more"),

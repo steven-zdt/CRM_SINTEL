@@ -7,6 +7,7 @@ artificial. Valida el release gate exacto pedido por la mision:
     creditos=8,656,342.15  debitos=9,633,350.20
     saldo_inicial=986,830.85  saldo_final=9,822.80
 """
+
 import os
 from decimal import Decimal
 
@@ -24,12 +25,19 @@ class ImportXLSXFixtureRealTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Fixture Real", nit="900000900", direccion="Calle 1",
+            razon_social="Empresa Fixture Real",
+            nit="900000900",
+            direccion="Calle 1",
         )
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
         self.cuenta = CuentaBancaria.objects.create(
-            empresa=self.empresa, nombre="Cuenta Fixture", banco="Banco Test",
-            tipo="AHORROS", numero="10800014844",
+            empresa=self.empresa,
+            nombre="Cuenta Fixture",
+            banco="Banco Test",
+            tipo="AHORROS",
+            numero="10800014844",
         )
 
     def _crear_y_procesar_extracto(self):
@@ -38,7 +46,8 @@ class ImportXLSXFixtureRealTests(SintelTenantTestCase):
 
         with open(FIXTURE_PATH, "rb") as f:
             archivo = SimpleUploadedFile(
-                "10800014844_AGO2026.xlsx", f.read(),
+                "10800014844_AGO2026.xlsx",
+                f.read(),
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         resp_crear = self.api_client.post(
@@ -103,13 +112,17 @@ class ImportXLSXFixtureRealTests(SintelTenantTestCase):
 
         resp = self.api_client.post(f"/api/v1/bancos/extractos/{extracto_uuid}/procesar/")
         self.assertEqual(resp.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, resp.content)
-        self.assertEqual(TransaccionBancaria.objects.filter(extracto__uuid=extracto_uuid).count(), 60)
+        self.assertEqual(
+            TransaccionBancaria.objects.filter(extracto__uuid=extracto_uuid).count(), 60
+        )
 
     def test_render_offcanvas_detalle_incluye_kpis_fase19(self):
         """Fase 19: el offcanvas de detalle debe renderizar sin error y
         exponer el resumen KPI (ingresos/egresos/neto/pendientes/conciliados)."""
         extracto_uuid, _ = self._crear_y_procesar_extracto()
-        resp = self.api_client.get(f"/api/v1/bancos/extractos/{extracto_uuid}/render-offcanvas/detalle/")
+        resp = self.api_client.get(
+            f"/api/v1/bancos/extractos/{extracto_uuid}/render-offcanvas/detalle/"
+        )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
         contenido = resp.content.decode("utf-8")
         self.assertIn("Ingresos", contenido)
@@ -129,5 +142,7 @@ class ImportXLSXFixtureRealTests(SintelTenantTestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
         # Reemplazadas -- la que se marco conciliado ya no existe (fue borrada e reinsertada).
         self.assertFalse(
-            TransaccionBancaria.objects.filter(extracto__uuid=extracto_uuid, conciliado=True).exists()
+            TransaccionBancaria.objects.filter(
+                extracto__uuid=extracto_uuid, conciliado=True
+            ).exists()
         )

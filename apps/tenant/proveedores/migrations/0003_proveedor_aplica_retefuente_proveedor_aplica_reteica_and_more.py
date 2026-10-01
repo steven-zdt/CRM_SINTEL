@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("tenant_proveedores", "0002_add_uuid_to_proveedor"),
     ]
@@ -13,29 +12,21 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="proveedor",
             name="aplica_retefuente",
-            field=models.BooleanField(
-                default=False, verbose_name="Aplica Retención en la Fuente"
-            ),
+            field=models.BooleanField(default=False, verbose_name="Aplica Retención en la Fuente"),
         ),
         migrations.AddField(
             model_name="proveedor",
             name="aplica_reteica",
-            field=models.BooleanField(
-                default=False, verbose_name="Aplica Retención de ICA"
-            ),
+            field=models.BooleanField(default=False, verbose_name="Aplica Retención de ICA"),
         ),
         migrations.AddField(
             model_name="proveedor",
             name="aplica_reteiva",
-            field=models.BooleanField(
-                default=False, verbose_name="Aplica Retención de IVA"
-            ),
+            field=models.BooleanField(default=False, verbose_name="Aplica Retención de IVA"),
         ),
         migrations.AddField(
             model_name="proveedor",
             name="es_retenedor",
-            field=models.BooleanField(
-                default=False, verbose_name="Es Agente Retenedor"
-            ),
+            field=models.BooleanField(default=False, verbose_name="Es Agente Retenedor"),
         ),
     ]

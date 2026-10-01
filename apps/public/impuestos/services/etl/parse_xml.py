@@ -28,7 +28,9 @@ def parse_xml_catalog(xml_bytes: bytes) -> dict:
         root = etree.fromstring(xml_bytes, parser=_safe_parser)
     except etree.XMLSyntaxError:
         # Intentar parsear con recuperación de errores
-        parser = etree.XMLParser(recover=True, resolve_entities=False, load_dtd=False, no_network=True)
+        parser = etree.XMLParser(
+            recover=True, resolve_entities=False, load_dtd=False, no_network=True
+        )
         root = etree.fromstring(xml_bytes, parser=parser)
 
     root_tag = root.tag

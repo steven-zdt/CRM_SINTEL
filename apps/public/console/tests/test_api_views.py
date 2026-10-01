@@ -13,14 +13,19 @@ Convenciones:
 - DataTables payload minimo: {draw, start, length, search: {value: ""}}
 - delete_user_service se mockea para aislar la prueba de cascada cross-schema
 """
+
 from unittest.mock import patch
 
-from django.urls import reverse
 from rest_framework import status
 
 from apps.config.tests.base_public import PublicAPITestCase
 
-from .conftest import make_console_action_log, make_normal_user, make_staff_user, make_tenant_with_domain
+from .conftest import (
+    make_console_action_log,
+    make_normal_user,
+    make_staff_user,
+    make_tenant_with_domain,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers internos
@@ -46,6 +51,7 @@ def _dt_payload(**overrides) -> dict:
 # ---------------------------------------------------------------------------
 # TenantsDataTableView
 # ---------------------------------------------------------------------------
+
 
 class TenantsDataTableViewTest(PublicAPITestCase):
     """Tests para POST /api/admin/v1/console/dt/tenants/."""
@@ -128,6 +134,7 @@ class TenantsDataTableViewTest(PublicAPITestCase):
 # TenantDomainsDataTableView
 # ---------------------------------------------------------------------------
 
+
 class TenantDomainsDataTableViewTest(PublicAPITestCase):
     """Tests para POST /api/admin/v1/console/dt/tenant-domains/."""
 
@@ -164,6 +171,7 @@ class TenantDomainsDataTableViewTest(PublicAPITestCase):
 # ---------------------------------------------------------------------------
 # UsersDataTableView — GET (detalle de usuario)
 # ---------------------------------------------------------------------------
+
 
 class UsersDataTableGetTest(PublicAPITestCase):
     """Tests para GET /api/admin/v1/console/dt/users/{id}/."""
@@ -205,6 +213,7 @@ class UsersDataTableGetTest(PublicAPITestCase):
 # UsersDataTableView — POST (listar via DataTables)
 # ---------------------------------------------------------------------------
 
+
 class UsersDataTableListTest(PublicAPITestCase):
     """Tests para POST /api/admin/v1/console/dt/users/ en modo listado (draw presente)."""
 
@@ -236,15 +245,18 @@ class UsersDataTableListTest(PublicAPITestCase):
         """
         from django.contrib.auth import get_user_model
         from django.db.models import Exists, OuterRef, Q
+
         from apps.public.tenants.models import TenantMembership
 
         User = get_user_model()
         _has_primary = TenantMembership.objects.filter(
             user=OuterRef("pk"), is_primary_admin=True, is_active=True
         )
-        visible = User.objects.filter(
-            Q(is_staff=True, is_superuser=True) | Q(Exists(_has_primary))
-        ).distinct().count()
+        visible = (
+            User.objects.filter(Q(is_staff=True, is_superuser=True) | Q(Exists(_has_primary)))
+            .distinct()
+            .count()
+        )
 
         response = self.client.post(self.URL, _dt_payload(), format="json")
         self.assertEqual(response.json()["recordsTotal"], visible)
@@ -274,6 +286,7 @@ class UsersDataTableListTest(PublicAPITestCase):
 # UsersDataTableView — POST (crear usuario)
 # ---------------------------------------------------------------------------
 
+
 class UsersDataTableCreateTest(PublicAPITestCase):
     """Tests para POST /api/admin/v1/console/dt/users/ en modo creacion (sin draw)."""
 
@@ -301,6 +314,7 @@ class UsersDataTableCreateTest(PublicAPITestCase):
     def test_create_user_persists_in_db(self) -> None:
         """El usuario creado existe en la base de datos."""
         from django.contrib.auth import get_user_model
+
         User = get_user_model()
         email = "persisted@console.test"
         self.client.post(
@@ -328,6 +342,7 @@ class UsersDataTableCreateTest(PublicAPITestCase):
 # UsersDataTableView — PATCH (actualizar usuario)
 # ---------------------------------------------------------------------------
 
+
 class UsersDataTablePatchTest(PublicAPITestCase):
     """Tests para PATCH /api/admin/v1/console/dt/users/{id}/."""
 
@@ -346,7 +361,8 @@ class UsersDataTablePatchTest(PublicAPITestCase):
     def test_patch_update_persists_in_db(self) -> None:
         """El cambio de is_active se persiste en la base de datos."""
         from django.contrib.auth import get_user_model
-        User = get_user_model()
+
+        get_user_model()
         self.client.patch(self.url, {"is_active": False}, format="json")
         self.target_user.refresh_from_db()
         self.assertFalse(self.target_user.is_active)
@@ -377,6 +393,7 @@ class UsersDataTablePatchTest(PublicAPITestCase):
 # ---------------------------------------------------------------------------
 # UsersDataTableView — DELETE (eliminar usuario via delete_user_service)
 # ---------------------------------------------------------------------------
+
 
 class UsersDataTableDeleteTest(PublicAPITestCase):
     """Tests para DELETE /api/admin/v1/console/dt/users/{id}/."""
@@ -438,6 +455,7 @@ class UsersDataTableDeleteTest(PublicAPITestCase):
 # ConsoleHealthView
 # ---------------------------------------------------------------------------
 
+
 class ConsoleHealthViewTest(PublicAPITestCase):
     """Tests para GET /api/admin/v1/console/health/."""
 
@@ -492,6 +510,7 @@ class ConsoleHealthViewTest(PublicAPITestCase):
 # ConsoleActionLog — fixture y acceso
 # ---------------------------------------------------------------------------
 
+
 class ConsoleActionLogFixtureTest(PublicAPITestCase):
     """Verifica que el fixture ConsoleActionLog se crea y se consulta correctamente."""
 
@@ -510,7 +529,6 @@ class ConsoleActionLogFixtureTest(PublicAPITestCase):
 
     def test_log_created_with_correct_fields(self) -> None:
         """El ConsoleActionLog tiene los campos correctos tras creacion."""
-        from apps.public.console.models import ConsoleActionLog
 
         self.assertEqual(self.log.action, "TENANT_CREATE")
         self.assertEqual(self.log.actor.pk, self.admin_user.pk)

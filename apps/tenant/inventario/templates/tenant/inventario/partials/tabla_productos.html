@@ -1,25 +1,21 @@
-{% load django_tables2 %}
-{# Fragmento HTMX: KPIs + tabla de Productos. Reemplaza #productos-panel completo. #}
-<div id="prod-kpis" class="d-flex gap-2 mb-2 flex-wrap">
-  <div class="kpi-card">
-    <div class="kpi-label">SKUs</div>
-    <div class="kpi-val">{{ kpi_skus }}</div>
-  </div>
-  <div class="kpi-card">
-    <div class="kpi-label">Activos</div>
-    <div class="kpi-val text-success">{{ kpi_activos }}</div>
-  </div>
-  {% if kpi_alertas > 0 %}
-  <div class="kpi-card border-danger">
-    <div class="kpi-label text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>Stock Bajo</div>
-    <div class="kpi-val text-danger">{{ kpi_alertas }}</div>
-  </div>
-  {% endif %}
-  <div class="kpi-card">
-    <div class="kpi-label">Valor Inventario</div>
-    <div class="kpi-val">${{ kpi_valor_total|floatformat:0 }}</div>
-  </div>
-</div>
+{# tabla_productos.html — DataTables 3.x (mismo patron ya validado en      #}
+{# Ventas/Bancos/Facturas/Clientes/Proveedores/Compras/Gastos/Empleados/   #}
+{# Proyectos, ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md).     #}
+{# Esqueleto ESTATICO, poblado via ajax por productos_list.js contra       #}
+{# POST /api/v1/inventario/productos/dt/. Indices de columna deben         #}
+{# coincidir 1:1 con fields_map/column_filters de ProductoViewSet.dt().    #}
+
 <div class="w-100" style="max-width:100%; overflow-x:auto;">
-  {% render_table table %}
+  <table id="tabla-productos" class="table table-hover align-middle mb-0 w-100">
+    <thead>
+      <tr>
+        <th>Producto</th>
+        <th>Stock</th>
+        <th>Precio / Costo</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 </div>

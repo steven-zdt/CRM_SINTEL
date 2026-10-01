@@ -1,5 +1,24 @@
-{% load django_tables2 %}
-{# Fragmento HTMX: tabla de Proveedores. Reemplaza #proveedores-panel completo. #}
+{# tabla_proveedores.html — DataTables 3.x (mismo patron ya validado en    #}
+{# Ventas/Bancos/Facturas/Clientes, ver                                    #}
+{# docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Esqueleto ESTATICO, #}
+{# poblado via ajax por proveedores_main.js contra POST                    #}
+{# /api/v1/proveedores/dt/. Indices de columna deben coincidir 1:1 con     #}
+{# fields_map/column_filters de ProveedorViewSet.dt().                     #}
+
 <div class="w-100" style="max-width:100%; overflow-x:auto;">
-  {% render_table table %}
+  <table id="tabla-proveedores" class="table table-hover align-middle mb-0 w-100">
+    <thead>
+      <tr>
+        <th>Proveedor</th>
+        <th>Tipo</th>
+        <th>Documento</th>
+        <th>Régimen</th>
+        <th>Contacto</th>
+        <th>Estado</th>
+        <th>Cartera</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 </div>

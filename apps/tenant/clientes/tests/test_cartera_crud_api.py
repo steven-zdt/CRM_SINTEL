@@ -1,13 +1,13 @@
-import pytest
-from django_tenants.utils import schema_context
 from decimal import Decimal
 
-from apps.public.tenants.models import TenantMembership
-from apps.tenant.clientes.models import Cliente, Cartera
+import pytest
+from django_tenants.utils import schema_context
+
+from apps.tenant.clientes.models import Cartera, Cliente
 from apps.tenant.clientes.services.business_service import CarteraBusinessService
-from apps.tenant.clientes.services.selectors import CarteraSelector
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
+
 
 @pytest.mark.django_db
 def test_cartera_creation_and_abono(tenant):
@@ -58,9 +58,7 @@ def test_cartera_creation_and_abono(tenant):
 
         # Test abono
         cartera, abono_aplicado = CarteraBusinessService.registrar_abono(
-            empresa_id=empresa.id,
-            cartera_uuid=cartera.uuid,
-            monto=Decimal("400.00")
+            empresa_id=empresa.id, cartera_uuid=cartera.uuid, monto=Decimal("400.00")
         )
         assert abono_aplicado == Decimal("400.00")
         assert cartera.valor_pagado == Decimal("400.00")
@@ -69,9 +67,7 @@ def test_cartera_creation_and_abono(tenant):
 
         # Full payment
         cartera, abono_aplicado = CarteraBusinessService.registrar_abono(
-            empresa_id=empresa.id,
-            cartera_uuid=cartera.uuid,
-            monto=Decimal("800.00")
+            empresa_id=empresa.id, cartera_uuid=cartera.uuid, monto=Decimal("800.00")
         )
         assert abono_aplicado == Decimal("800.00")
         assert cartera.valor_pagado == Decimal("1200.00")
@@ -156,7 +152,9 @@ def test_cartera_api_endpoints(client, admin_user, tenant):
     assert data["results"][0]["numero_factura"] == "FE-456"
 
     # 2. Test GET kpis (lee de Factura.VENTA, no de Cartera)
-    resp = client.get("/api/v1/clientes/cartera/kpis/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+    resp = client.get(
+        "/api/v1/clientes/cartera/kpis/", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
     assert resp.status_code == 200
     kpis = resp.json()
     assert Decimal(kpis["pendiente_monto"]) == Decimal("500.00")
@@ -167,7 +165,7 @@ def test_cartera_api_endpoints(client, admin_user, tenant):
         f"/api/v1/clientes/cartera/{cartera.uuid}/registrar-abono/",
         data={"monto": "200.00"},
         content_type="application/json",
-        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
     assert resp.status_code == 200
     res_data = resp.json()

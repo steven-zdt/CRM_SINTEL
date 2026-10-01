@@ -17,6 +17,7 @@ igual que en produccion.
 
 Ver docs/remediation/AUDIT_BASELINE_20260912.md hallazgo C-1.
 """
+
 from decimal import Decimal
 
 import pytest
@@ -36,32 +37,47 @@ def test_factura_pagada_solo_via_abono_manual_aparece_en_filtros_y_kpis(client, 
     with schema_context(tenant.schema_name):
         empresa = Empresa.objects.first()
         cliente = Cliente.objects.create(
-            empresa=empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900333444", razon_social="Cliente Pagado Solo Cartera",
-            regimen_tributario="ORDINARIO", activo=True,
+            empresa=empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900333444",
+            razon_social="Cliente Pagado Solo Cartera",
+            regimen_tributario="ORDINARIO",
+            activo=True,
         )
         # Factura.estado_pago se deja en su default real (NO_PAGADA) -- como
         # en produccion, ningun proceso lo mueve fuera de la conciliacion
         # bancaria. El pago aqui es 100% manual via Cartera.
         factura = Factura.objects.create(
-            empresa=empresa, numero="FE-C1-1", consecutivo=1001,
+            empresa=empresa,
+            numero="FE-C1-1",
+            consecutivo=1001,
             naturaleza=Factura.Naturaleza.VENTA,
-            emisor_nit=empresa.nit, emisor_razon_social=empresa.razon_social,
-            receptor_nit=cliente.numero_documento, receptor_razon_social=cliente.razon_social,
+            emisor_nit=empresa.nit,
+            emisor_razon_social=empresa.razon_social,
+            receptor_nit=cliente.numero_documento,
+            receptor_razon_social=cliente.razon_social,
             cliente_uuid=cliente.uuid,
-            fecha_emision="2026-06-01T00:00:00Z", payment_due_date="2020-07-01",
-            subtotal=Decimal("1000000.00"), total=Decimal("1000000.00"),
+            fecha_emision="2026-06-01T00:00:00Z",
+            payment_due_date="2020-07-01",
+            subtotal=Decimal("1000000.00"),
+            total=Decimal("1000000.00"),
         )
         assert factura.estado_pago == Factura.EstadoPago.NO_PAGADA
 
         cartera = Cartera.objects.create(
-            empresa=empresa, cliente=cliente, numero_factura="FE-C1-1",
+            empresa=empresa,
+            cliente=cliente,
+            numero_factura="FE-C1-1",
             factura_uuid=str(factura.uuid),
-            fecha_emision="2026-06-01", fecha_vencimiento="2020-07-01",
+            fecha_emision="2026-06-01",
+            fecha_vencimiento="2020-07-01",
             valor_total=Decimal("1000000.00"),
         )
         CarteraBusinessService.registrar_abono(
-            empresa_id=empresa.id, cartera_uuid=cartera.uuid, monto=Decimal("1000000.00"),
+            empresa_id=empresa.id,
+            cartera_uuid=cartera.uuid,
+            monto=Decimal("1000000.00"),
         )
         cartera.refresh_from_db()
         assert cartera.estado_pago == "PAGADA"

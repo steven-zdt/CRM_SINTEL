@@ -38,6 +38,7 @@ debe migrar los selectors a `OrganizationalScope.filter()`, no a
 en esta fase (F2 es solo "definir el contrato") - queda documentado aqui y en
 el plan maestro para que F7 lo resuelva con codigo, no solo con nota.
 """
+
 from __future__ import annotations
 
 import logging
@@ -157,12 +158,15 @@ class OrganizationalScope:
             if empresa:
                 logger.warning(
                     "[OrganizationalScope:DEBUG] Fallback empresa_id=%s para user=%s sin tenant_profile",
-                    empresa.id, user.id,
+                    empresa.id,
+                    user.id,
                 )
                 empresa_id = empresa.id
 
         if empresa_id is None:
-            raise OrganizationalScopeError("No se encontro configuracion de empresa para este tenant.")
+            raise OrganizationalScopeError(
+                "No se encontro configuracion de empresa para este tenant."
+            )
 
         alcance = getattr(perfil, "alcance", "") or "EMPRESA"
 

@@ -6,6 +6,7 @@ solo por empresa_id (afecta retrieve/update/partial_update/destroy). Tambien
 `service_movimiento_get_offcanvas_context()` (accion gestor-offcanvas) bypaseaba
 el scope de la misma forma.
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa, Sede
@@ -18,23 +19,33 @@ class MovimientoObjectLevelScopeF13Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F13 Inventario", nit="900000789", direccion="Calle 1",
+            razon_social="Empresa Test F13 Inventario",
+            nit="900000789",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F13 Inv")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F13 Inv")
         self.producto = Producto.objects.create(
-            empresa=self.empresa, codigo="SKU-F13", nombre="Producto F13",
+            empresa=self.empresa,
+            codigo="SKU-F13",
+            nombre="Producto F13",
         )
 
     def _crear(self, sede=None):
         return MovimientoInventario.objects.create(
-            empresa=self.empresa, tipo="ENTRADA_AJUSTE", cantidad=1, sede=sede,
+            empresa=self.empresa,
+            tipo="ENTRADA_AJUSTE",
+            cantidad=1,
+            sede=sede,
             producto=self.producto,
         )
 
     def _asignar_perfil_sede(self, sedes):
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set(sedes)
         return perfil
@@ -68,7 +79,9 @@ class MovimientoObjectLevelScopeF13Tests(SintelTenantTestCase):
 
     def test_alcance_empresa_puede_ver_cualquier_sede(self):
         mov_b = self._crear(sede=self.sede_b)
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         resp = self.api_client.get(f"/api/v1/inventario/movimientos/{mov_b.uuid}/")
 

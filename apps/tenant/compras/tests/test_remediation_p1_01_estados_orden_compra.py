@@ -6,6 +6,7 @@ OrdenCompraBusinessService.TRANSICIONES_VALIDAS, con self-loops explicitos
 para no romper el flujo real ya probado en test_sincronizacion_cuentas_
 pagar.py (BORRADOR->APROBADA directo, re-aprobar idempotente).
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -20,23 +21,40 @@ class OrdenCompraTransicionesP1_01Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa P1-01", nit="900000795", direccion="Calle P1-01",
+            razon_social="Empresa P1-01",
+            nit="900000795",
+            direccion="Calle P1-01",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Sede P1-01")
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor P1-01", numero_documento="P101-1",
+            empresa=self.empresa,
+            razon_social="Proveedor P1-01",
+            numero_documento="P101-1",
             tipo_documento="NIT",
         )
         self.plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla P1-01", prefijo="P101",
-            rango_desde=1, rango_hasta=1000, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla P1-01",
+            prefijo="P101",
+            rango_desde=1,
+            rango_hasta=1000,
+            consecutivo_actual=1,
+            vigente=True,
         )
 
     def _crear_orden(self, estado):
         return OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede, proveedor=self.proveedor, plantilla=self.plantilla,
-            fecha=date(2026, 6, 1), consecutivo=1, numero_documento=f"P101-{estado}", estado=estado,
-            subtotal=Decimal("1000.00"), impuestos=Decimal("190.00"), total=Decimal("1190.00"),
+            empresa=self.empresa,
+            sede=self.sede,
+            proveedor=self.proveedor,
+            plantilla=self.plantilla,
+            fecha=date(2026, 6, 1),
+            consecutivo=1,
+            numero_documento=f"P101-{estado}",
+            estado=estado,
+            subtotal=Decimal("1000.00"),
+            impuestos=Decimal("190.00"),
+            total=Decimal("1190.00"),
         )
 
     def test_salto_de_recibida_a_borrador_es_rechazado(self):
@@ -44,7 +62,9 @@ class OrdenCompraTransicionesP1_01Tests(SintelTenantTestCase):
         retroceder a BORRADOR via cambiar_estado."""
         orden = self._crear_orden("RECIBIDA")
         ok, resultado, code = OrdenCompraBusinessService.cambiar_estado_orden_compra(
-            str(orden.uuid), "BORRADOR", self.empresa.id,
+            str(orden.uuid),
+            "BORRADOR",
+            self.empresa.id,
         )
         self.assertFalse(ok)
         self.assertEqual(code, 400)
@@ -57,7 +77,9 @@ class OrdenCompraTransicionesP1_01Tests(SintelTenantTestCase):
         correccion (ver REM-P1-01.md)."""
         orden = self._crear_orden("RECIBIDA")
         ok, resultado, code = OrdenCompraBusinessService.cambiar_estado_orden_compra(
-            str(orden.uuid), "ANULADA", self.empresa.id,
+            str(orden.uuid),
+            "ANULADA",
+            self.empresa.id,
         )
         self.assertFalse(ok)
         self.assertEqual(code, 400)
@@ -65,7 +87,9 @@ class OrdenCompraTransicionesP1_01Tests(SintelTenantTestCase):
     def test_anular_orden_aprobada_sigue_permitido(self):
         orden = self._crear_orden("APROBADA")
         ok, resultado, code = OrdenCompraBusinessService.cambiar_estado_orden_compra(
-            str(orden.uuid), "ANULADA", self.empresa.id,
+            str(orden.uuid),
+            "ANULADA",
+            self.empresa.id,
         )
         self.assertTrue(ok, resultado)
         self.assertEqual(code, 200)
@@ -75,7 +99,9 @@ class OrdenCompraTransicionesP1_01Tests(SintelTenantTestCase):
         test_sincronizacion_cuentas_pagar.py."""
         orden = self._crear_orden("BORRADOR")
         ok, resultado, code = OrdenCompraBusinessService.cambiar_estado_orden_compra(
-            str(orden.uuid), "APROBADA", self.empresa.id,
+            str(orden.uuid),
+            "APROBADA",
+            self.empresa.id,
         )
         self.assertTrue(ok, resultado)
         self.assertEqual(code, 200)

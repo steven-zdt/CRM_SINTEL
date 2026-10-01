@@ -12,7 +12,7 @@ WARNING: AUTENTICACIÓN:
 import logging
 
 from django.contrib.auth import get_user_model
-from django.db.models import Exists, OuterRef, Q, QuerySet, Subquery
+from django.db.models import Exists, OuterRef, QuerySet, Subquery
 from django.utils.timezone import now
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAdminUser
@@ -55,10 +55,14 @@ class TenantsDataTableView(APIView):
 
         base_qs: QuerySet = (
             Client.objects.exclude(schema_name="public")
-            .only("id", "nombre", "schema_name", "is_active", "on_trial", "paid_until", "created_on")
+            .only(
+                "id", "nombre", "schema_name", "is_active", "on_trial", "paid_until", "created_on"
+            )
             .annotate(
                 primary_domain=Subquery(
-                    Domain.objects.filter(tenant=OuterRef("pk"), is_primary=True).values("domain")[:1]
+                    Domain.objects.filter(tenant=OuterRef("pk"), is_primary=True).values("domain")[
+                        :1
+                    ]
                 ),
                 owner_email=Subquery(_base_membership.values("user__email")[:1]),
                 owner_password=Subquery(_base_membership.values("user__password")[:1]),
@@ -155,24 +159,41 @@ class UsersDataTableView(APIView):
                 is_primary_admin=True,
                 is_active=True,
             )
-            memberships_qs = TenantMembership.objects.filter(
-                is_active=True
-            ).select_related("client").only(
-                "user_id", "client_id", "rol", "is_primary_admin", "is_active",
-                "client__id", "client__nombre", "client__schema_name",
+            memberships_qs = (
+                TenantMembership.objects.filter(is_active=True)
+                .select_related("client")
+                .only(
+                    "user_id",
+                    "client_id",
+                    "rol",
+                    "is_primary_admin",
+                    "is_active",
+                    "client__id",
+                    "client__nombre",
+                    "client__schema_name",
+                )
             )
             base_qs = (
                 User.objects.filter(
-                    Q(is_staff=True, is_superuser=True) |  # Admins del sistema
-                    Q(Exists(_has_primary_admin))           # Owners de tenants privados
+                    Q(is_staff=True, is_superuser=True)  # Admins del sistema
+                    | Q(Exists(_has_primary_admin))  # Owners de tenants privados
                 )
                 .distinct()
                 .only(
-                    "id", "email", "first_name", "last_name",
-                    "is_active", "is_staff", "is_superuser", "date_joined", "telefono",
+                    "id",
+                    "email",
+                    "first_name",
+                    "last_name",
+                    "is_active",
+                    "is_staff",
+                    "is_superuser",
+                    "date_joined",
+                    "telefono",
                 )
                 .prefetch_related(
-                    Prefetch("tenant_memberships", queryset=memberships_qs, to_attr="_tenant_memberships")
+                    Prefetch(
+                        "tenant_memberships", queryset=memberships_qs, to_attr="_tenant_memberships"
+                    )
                 )
             )
 
@@ -252,7 +273,7 @@ class OrphanTenantsView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request, *args, **kwargs):
-        from django.db.models import Subquery, OuterRef, Exists
+        from django.db.models import OuterRef, Subquery
 
         has_primary_admin = TenantMembership.objects.filter(
             client=OuterRef("pk"),
@@ -267,7 +288,9 @@ class OrphanTenantsView(APIView):
             .only("id", "nombre", "schema_name")
             .annotate(
                 primary_domain=Subquery(
-                    Domain.objects.filter(tenant=OuterRef("pk"), is_primary=True).values("domain")[:1]
+                    Domain.objects.filter(tenant=OuterRef("pk"), is_primary=True).values("domain")[
+                        :1
+                    ]
                 )
             )
         )
@@ -324,9 +347,9 @@ class AssignTenantView(APIView):
 
         # Si va a ser primary_admin, desmarcar al anterior
         if is_primary:
-            TenantMembership.objects.filter(
-                client=tenant, is_primary_admin=True
-            ).update(is_primary_admin=False)
+            TenantMembership.objects.filter(client=tenant, is_primary_admin=True).update(
+                is_primary_admin=False
+            )
 
         membership, created = TenantMembership.objects.update_or_create(
             client=tenant,
@@ -372,8 +395,13 @@ class UserTenantsView(APIView):
             TenantMembership.objects.filter(user_id=user_id)
             .select_related("client")
             .only(
-                "id", "rol", "is_primary_admin", "is_active",
-                "client__id", "client__nombre", "client__schema_name",
+                "id",
+                "rol",
+                "is_primary_admin",
+                "is_active",
+                "client__id",
+                "client__nombre",
+                "client__schema_name",
             )
         )
         data = [

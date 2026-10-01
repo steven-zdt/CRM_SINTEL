@@ -1,17 +1,77 @@
 /**
  * periodo_list.js - Feature List para PeriodoContable
- * Fase 5-BIS: tabla server-rendered via django-tables2 + HTMX (#periodos-panel,
- * cargada por atributos hx-get/hx-trigger declarados en list_periodos.html).
- * Este archivo solo maneja: acciones de fila (ver/editar/cerrar/eliminar),
- * apertura de offcanvas, y el disparo del evento que hace que HTMX vuelva a
- * pedir la tabla al backend tras una mutacion. Columnas/orden/paginacion/
- * filtros viven en tables.py/views.py (server-side) -- no reimplementar aqui.
+ *
+ * DataTables 3.x (mismo patron ya validado en Ventas/Bancos/Facturas/
+ * Clientes/Proveedores/Compras/Gastos/Empleados/Proyectos/Inventario/
+ * Contabilidad -- ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md):
+ * la tabla (#tabla-periodos-contables) se puebla via ajax contra
+ * POST /api/v1/contabilidad/periodos-contables/dt/
+ * (PeriodoContableViewSet.dt()). django-tables2/PeriodoContableTable
+ * retirados.
+ *
+ * Este archivo maneja: init de la tabla, acciones de fila (ver/editar/
+ * cerrar/eliminar), apertura de offcanvas, y el refresco tras una mutacion.
  */
 (function (w, d) {
   'use strict';
 
-  const PANEL_SELECTOR = '#periodos-panel';
-  const API_URL = '/api/v1/contabilidad/periodos-contables/';
+  var TABLA_SELECTOR = '#tabla-periodos-contables';
+  var DT_URL = '/api/v1/contabilidad/periodos-contables/dt/';
+  var API_URL = '/api/v1/contabilidad/periodos-contables/';
+  var inicializada = false;
+
+  var BADGE_ESTADO = { ABIERTO: 'success', CERRADO: 'danger' };
+
+  function escapeHtml(str) {
+    var div = d.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  function renderEstado(data, type, row) {
+    var cls = BADGE_ESTADO[row.estado] || 'light text-dark';
+    return '<span class="badge bg-' + cls + '">' + escapeHtml(row.estado_display || row.estado) + '</span>';
+  }
+
+  function renderFechaCierre(value) {
+    if (!value) return '<span class="text-muted">—</span>';
+    return escapeHtml(value);
+  }
+
+  function renderAcciones(data, type, row) {
+    var cerrarBtn = row.estado === 'ABIERTO'
+      ? '<button type="button" class="btn btn-outline-warning btn-cerrar-periodo" data-uuid="' + escapeHtml(row.uuid) +
+        '" title="Cerrar periodo"><i class="bi bi-lock"></i></button>'
+      : '';
+    return '<div class="btn-group btn-group-sm">' +
+      '<button type="button" class="btn btn-outline-secondary btn-ver-periodo" data-uuid="' + escapeHtml(row.uuid) +
+      '" title="Ver detalle"><i class="bi bi-eye"></i></button>' +
+      '<button type="button" class="btn btn-outline-primary btn-editar-periodo" data-uuid="' + escapeHtml(row.uuid) +
+      '" title="Editar"><i class="bi bi-pencil"></i></button>' +
+      cerrarBtn +
+      '<button type="button" class="btn btn-outline-danger btn-eliminar-periodo" data-uuid="' + escapeHtml(row.uuid) +
+      '" title="Eliminar"><i class="bi bi-trash"></i></button>' +
+      '</div>';
+  }
+
+  var COLUMNS = [
+    { data: 'periodo', title: 'Periodo' },
+    { data: 'fecha_inicio', title: 'Fecha Inicio' },
+    { data: 'fecha_fin', title: 'Fecha Fin' },
+    { data: null, title: 'Estado', render: renderEstado },
+    { data: 'fecha_cierre', title: 'Fecha Cierre', render: function (v) { return renderFechaCierre(v); } },
+    { data: null, title: '', orderable: false, searchable: false, render: renderAcciones },
+  ];
+
+  function initTabla() {
+    if (inicializada) return;
+    if (typeof DataTable === 'undefined' || !w.Sintel || !w.Sintel.Core || !w.Sintel.Core.DataTablesFactory) return;
+    w.Sintel.Core.DataTablesFactory.create(TABLA_SELECTOR, DT_URL, COLUMNS, {
+      pageLength: 20,
+      order: [[0, 'desc']],
+    });
+    inicializada = true;
+  }
 
   function showOffcanvas(id) {
     const el = d.getElementById(id);
@@ -26,10 +86,9 @@
   }
 
   function attachTableListeners() {
-    const panel = d.querySelector(PANEL_SELECTOR);
-    if (!panel) return;
+    d.body.addEventListener('click', async (ev) => {
+      if (!ev.target.closest(TABLA_SELECTOR)) return;
 
-    panel.addEventListener('click', async (ev) => {
       const btnVer = ev.target.closest('.btn-ver-periodo');
       const btnEditar = ev.target.closest('.btn-editar-periodo');
       const btnCerrar = ev.target.closest('.btn-cerrar-periodo');
@@ -70,8 +129,32 @@
     });
   }
 
+  function reload() {
+    if (w.Sintel.Core && w.Sintel.Core.DataTablesFactory) {
+      w.Sintel.Core.DataTablesFactory.reload(TABLA_SELECTOR);
+    }
+  }
+
+  function attachToolbarListeners() {
+    var selectEstado = d.getElementById('filter-estado-periodo');
+    if (selectEstado) {
+      selectEstado.addEventListener('change', function () {
+        if (w.Sintel.Core && w.Sintel.Core.DataTablesFactory) {
+          w.Sintel.Core.DataTablesFactory.columnSearch(TABLA_SELECTOR, 3, selectEstado.value);
+        }
+      });
+    }
+
+    var btnRefrescar = d.getElementById('btn-refrescar-periodos');
+    if (btnRefrescar) {
+      btnRefrescar.addEventListener('click', reload);
+    }
+  }
+
   function init() {
+    initTabla();
     attachTableListeners();
+    attachToolbarListeners();
   }
 
   if (d.readyState === 'loading') {
@@ -83,6 +166,6 @@
   // Exportar API pública -- PeriodoEditor llama a reload() tras crear/editar/cerrar/eliminar
   w.PeriodoList = Object.freeze({
     init,
-    reload: () => d.body.dispatchEvent(new CustomEvent('periodo-updated')),
+    reload,
   });
 })(window, document);

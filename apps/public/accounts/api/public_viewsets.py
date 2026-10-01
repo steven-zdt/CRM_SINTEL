@@ -68,10 +68,10 @@ class PublicUserViewSet(
         return [permissions.IsAdminUser()]
 
     def create(self, request, *args, **kwargs):
-        data = request.data.copy() if hasattr(request, 'data') else {}
+        data = request.data.copy() if hasattr(request, "data") else {}
         # Allow clients to omit password2 by mirroring password when absent
-        if 'password' in data and 'password2' not in data:
-            data['password2'] = data.get('password')
+        if "password" in data and "password2" not in data:
+            data["password2"] = data.get("password")
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         validated_data = serializer.validated_data.copy()
@@ -109,17 +109,29 @@ class PublicUserViewSet(
         borrado ORM directo como fallback (mismo patron que UserAdminViewSet).
         """
         user = self.get_object()
-        logger.info("PublicUserViewSet.destroy: requested delete user_id=%s by=%s", user.pk, getattr(request.user, 'pk', None))
+        logger.info(
+            "PublicUserViewSet.destroy: requested delete user_id=%s by=%s",
+            user.pk,
+            getattr(request.user, "pk", None),
+        )
         try:
             delete_user_service(user.pk, cascade=True, deleted_by_id=request.user.pk)
-            logger.info("PublicUserViewSet.destroy: delete_user_service completed for user_id=%s", user.pk)
+            logger.info(
+                "PublicUserViewSet.destroy: delete_user_service completed for user_id=%s", user.pk
+            )
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Exception:
-            logger.exception("PublicUserViewSet.destroy: delete_user_service failed for user_id=%s, falling back to super().destroy", user.pk)
+            logger.exception(
+                "PublicUserViewSet.destroy: delete_user_service failed for user_id=%s, falling back to super().destroy",
+                user.pk,
+            )
             try:
                 return super().destroy(request, *args, **kwargs)
             except Exception:
-                logger.exception("PublicUserViewSet.destroy: fallback ORM destroy also failed for user_id=%s", user.pk)
+                logger.exception(
+                    "PublicUserViewSet.destroy: fallback ORM destroy also failed for user_id=%s",
+                    user.pk,
+                )
                 return Response(status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=["get", "put", "patch"], url_path="me")

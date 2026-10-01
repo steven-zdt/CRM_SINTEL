@@ -6,6 +6,7 @@ Orquesta: Registry -> Dataset -> validacion contra catalogo (Regla Absoluta
 (FASE 10/11) -> Provider.execute() -> ReportResult. No conoce modelos
 Django de ningun dominio -- solo el vocabulario declarado en contracts.py.
 """
+
 from __future__ import annotations
 
 import logging

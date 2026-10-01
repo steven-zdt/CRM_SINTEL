@@ -1,15 +1,14 @@
 """
 Modelos de Cotizaciones v2.62.0 - SINTEL FSD
 """
+
 import uuid
-from decimal import Decimal
 
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.tenant.core.models import SintelTenantBaseModel  # [v2.61.4] Herencia SSoT
-from apps.tenant.empresa.models import Empresa
 
 
 def _cotizacion_anexo_upload_path(instance, filename):
@@ -23,18 +22,19 @@ def _hoy():
     Cotizaciones, 2026-08-26)."""
     return timezone.now().date()
 
+
 class Producto(SintelTenantBaseModel):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
     codigo = models.CharField(max_length=50, blank=True)
     nombre = models.CharField(max_length=255)
     marca = models.CharField(max_length=100, blank=True)
     referencia = models.CharField(max_length=100, blank=True)
-    unidad = models.CharField(max_length=20, default='UND')
+    unidad = models.CharField(max_length=20, default="UND")
     precio_venta = models.DecimalField(max_digits=15, decimal_places=2)
     activo = models.BooleanField(default=True)
 
     class Meta:
-        db_table = 'tenant_cotizaciones_producto'
+        db_table = "tenant_cotizaciones_producto"
         constraints = [
             # Antes solo se validaba en ProductoBusinessService.registrar()
             # (query + ValueError, sin select_for_update) -- condicion de
@@ -44,11 +44,12 @@ class Producto(SintelTenantBaseModel):
             # romper productos sin codigo, mismo criterio que la validacion
             # de aplicacion existente (`if codigo:`).
             models.UniqueConstraint(
-                fields=['empresa', 'codigo'],
-                condition=models.Q(codigo__gt=''),
-                name='uniq_producto_codigo_por_empresa',
+                fields=["empresa", "codigo"],
+                condition=models.Q(codigo__gt=""),
+                name="uniq_producto_codigo_por_empresa",
             ),
         ]
+
 
 class Servicio(SintelTenantBaseModel):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
@@ -56,7 +57,9 @@ class Servicio(SintelTenantBaseModel):
     precio_venta = models.DecimalField(max_digits=15, decimal_places=2)
     activo = models.BooleanField(default=True)
 
-    class Meta: db_table = 'tenant_cotizaciones_servicio'
+    class Meta:
+        db_table = "tenant_cotizaciones_servicio"
+
 
 class Cotizacion(SintelTenantBaseModel):
     class Estado(models.TextChoices):
@@ -70,36 +73,41 @@ class Cotizacion(SintelTenantBaseModel):
         es configurable via CotizacionEstadoConfig; el `value` de este enum
         (lo que se persiste en BD y lo que usa TRANSICIONES_VALIDAS) NO debe
         cambiar nunca sin una migracion de datos explicita."""
-        BORRADOR = 'BORRADOR', _('Borrador')
-        ENVIADA = 'ENVIADA', _('Enviada')
-        APROBADA = 'APROBADA', _('Aprobada')
-        RECHAZADA = 'RECHAZADA', _('Rechazada')
-        ARCHIVADA = 'ARCHIVADA', _('Archivada')
+
+        BORRADOR = "BORRADOR", _("Borrador")
+        ENVIADA = "ENVIADA", _("Enviada")
+        APROBADA = "APROBADA", _("Aprobada")
+        RECHAZADA = "RECHAZADA", _("Rechazada")
+        ARCHIVADA = "ARCHIVADA", _("Archivada")
 
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    numero_cotizacion = models.CharField(max_length=50) 
-    
+    numero_cotizacion = models.CharField(max_length=50)
+
     codigo_unico = models.CharField(
         max_length=100,
         unique=True,
         db_index=True,
         blank=True,
         null=True,
-        verbose_name=_('Codigo Unico'),
-        help_text=_('Codigo unico generado automaticamente desde el perfil de configuracion (ej: "STS. 0422-2026")')
+        verbose_name=_("Codigo Unico"),
+        help_text=_(
+            'Codigo unico generado automaticamente desde el perfil de configuracion (ej: "STS. 0422-2026")'
+        ),
     )
-    
+
     # empresa field inherited from SintelTenantBaseModel
-    cliente = models.ForeignKey('tenant_clientes.Cliente', on_delete=models.SET_NULL, null=True, blank=True)
+    cliente = models.ForeignKey(
+        "tenant_clientes.Cliente", on_delete=models.SET_NULL, null=True, blank=True
+    )
 
     configuracion = models.ForeignKey(
-        'tenant_cotizaciones.ConfiguracionCotizacion', 
-        on_delete=models.SET_NULL, 
-        null=True, 
+        "tenant_cotizaciones.ConfiguracionCotizacion",
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        related_name='cotizaciones'
+        related_name="cotizaciones",
     )
-    tipo_cotizacion = models.CharField(max_length=20, default='MIXTO')
+    tipo_cotizacion = models.CharField(max_length=20, default="MIXTO")
     # NO auto_now_add: CotizacionService._build_header_fields() siempre
     # calcula y pasa fecha_emision explicitamente (payload o
     # timezone.now().date() por defecto) -- con auto_now_add=True, Django
@@ -112,14 +120,14 @@ class Cotizacion(SintelTenantBaseModel):
     fecha_emision = models.DateField(default=_hoy)
     fecha_vencimiento = models.DateField()
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.BORRADOR)
-    
+
     # DNA Financiero
     porcentaje_aiu_admin = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     porcentaje_aiu_imprevistos = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     porcentaje_aiu_utilidad = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     iva_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=19.00)
     total_con_impuestos = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-    
+
     # Tiempos del Proyecto (v2.62.0)
     dias_totales = models.PositiveIntegerField(default=1)
     dias_infraestructura = models.PositiveIntegerField(default=0)
@@ -129,14 +137,16 @@ class Cotizacion(SintelTenantBaseModel):
 
     # Sede — vinculacion para indicadores y KPIs por sede (DT-SEDE-04)
     sede = models.ForeignKey(
-        'empresa.Sede',
+        "empresa.Sede",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='cotizaciones',
-        verbose_name=_('Sede'),
-        help_text=_('Sede de la empresa que emite la cotizacion. '
-                    'Opcional — si no se asigna aplica a toda la empresa.'),
+        related_name="cotizaciones",
+        verbose_name=_("Sede"),
+        help_text=_(
+            "Sede de la empresa que emite la cotizacion. "
+            "Opcional — si no se asigna aplica a toda la empresa."
+        ),
         db_index=True,
     )
 
@@ -144,48 +154,45 @@ class Cotizacion(SintelTenantBaseModel):
         return f"{self.numero_cotizacion} - {self.cliente or 'Sin cliente'}"
 
     class Meta:
-        db_table = 'tenant_cotizaciones_documento'
+        db_table = "tenant_cotizaciones_documento"
         constraints = [
             models.UniqueConstraint(
-                fields=['empresa', 'configuracion', 'numero_cotizacion'],
-                name='unique_numero_cotizacion_por_perfil'
+                fields=["empresa", "configuracion", "numero_cotizacion"],
+                name="unique_numero_cotizacion_por_perfil",
             )
         ]
+
 
 class CotizacionItem(SintelTenantBaseModel):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
 
     class TipoItem(models.TextChoices):
-        PRODUCTO = 'PRODUCTO', _('Equipo')
-        MATERIAL = 'MATERIAL', _('Material')
-        SERVICIO = 'SERVICIO', _('Servicio')
+        PRODUCTO = "PRODUCTO", _("Equipo")
+        MATERIAL = "MATERIAL", _("Material")
+        SERVICIO = "SERVICIO", _("Servicio")
 
-    cotizacion = models.ForeignKey(Cotizacion, related_name='items', on_delete=models.CASCADE)
+    cotizacion = models.ForeignKey(Cotizacion, related_name="items", on_delete=models.CASCADE)
     tipo_item = models.CharField(max_length=20, choices=TipoItem.choices)
-    
+
     producto = models.ForeignKey(Producto, on_delete=models.SET_NULL, null=True, blank=True)
     servicio = models.ForeignKey(Servicio, on_delete=models.SET_NULL, null=True, blank=True)
-    
-    descripcion = models.TextField(
-        blank=True,
-        null=True,
-        default=""
-    )
+
+    descripcion = models.TextField(blank=True, null=True, default="")
     marca = models.CharField(max_length=100, blank=True)
     referencia = models.CharField(max_length=100, blank=True)
-    unidad = models.CharField(max_length=20, default='UND')
-    
+    unidad = models.CharField(max_length=20, default="UND")
+
     cantidad = models.DecimalField(max_digits=12, decimal_places=2, default=1)
     costo_unitario = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     porcentaje_utilidad = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    
+
     precio_unitario_venta = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     subtotal_linea = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     orden = models.PositiveIntegerField(default=0)
 
     class Meta:
-        db_table = 'tenant_cotizaciones_item'
-        ordering = ['orden']
+        db_table = "tenant_cotizaciones_item"
+        ordering = ["orden"]
 
 
 class CotizacionEstadoConfig(SintelTenantBaseModel):
@@ -211,6 +218,7 @@ class CotizacionEstadoConfig(SintelTenantBaseModel):
     dentro de un perfil de numeracion crearia ambiguedad real si 2 perfiles
     activos configuraran colores/labels distintos para el mismo estado.
     """
+
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
     codigo = models.CharField(max_length=20, choices=Cotizacion.Estado.choices)
     label = models.CharField(max_length=50, blank=True)
@@ -220,11 +228,12 @@ class CotizacionEstadoConfig(SintelTenantBaseModel):
     activo = models.BooleanField(default=True)
 
     class Meta:
-        db_table = 'tenant_cotizaciones_estado_config'
-        ordering = ['orden']
+        db_table = "tenant_cotizaciones_estado_config"
+        ordering = ["orden"]
         constraints = [
             models.UniqueConstraint(
-                fields=['empresa', 'codigo'], name='uniq_cot_estado_config_por_empresa',
+                fields=["empresa", "codigo"],
+                name="uniq_cot_estado_config_por_empresa",
             ),
         ]
 
@@ -247,22 +256,28 @@ class CotizacionHistorialEstado(SintelTenantBaseModel):
     Layer (solo `crear_entrada`), y no hay ninguna migracion ni endpoint que
     permita alterar una fila ya escrita.
     """
+
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, editable=False)
     cotizacion = models.ForeignKey(
-        Cotizacion, related_name='historial_estados', on_delete=models.CASCADE,
+        Cotizacion,
+        related_name="historial_estados",
+        on_delete=models.CASCADE,
     )
     estado_anterior = models.CharField(max_length=20, blank=True, default="")
     estado_nuevo = models.CharField(max_length=20)
     usuario = models.ForeignKey(
-        'perfil.TenantProfile', on_delete=models.SET_NULL, null=True, blank=True,
+        "perfil.TenantProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
     motivo = models.TextField(blank=True, default="")
 
     class Meta:
-        db_table = 'tenant_cotizaciones_historial_estado'
-        ordering = ['-created_at']
+        db_table = "tenant_cotizaciones_historial_estado"
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['empresa', 'cotizacion', '-created_at']),
+            models.Index(fields=["empresa", "cotizacion", "-created_at"]),
         ]
 
     def __str__(self):

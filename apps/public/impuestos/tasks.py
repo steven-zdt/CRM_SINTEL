@@ -50,7 +50,14 @@ def _validar_url_ssrf(url: str) -> None:
         raise ValueError(f"No se pudo resolver el host: {hostname}") from exc
     for _family, _type, _proto, _canon, sockaddr in resolved:
         ip = ipaddress.ip_address(sockaddr[0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
             raise ValueError(f"URL resuelve a una IP no permitida ({ip})")
 
 
@@ -129,7 +136,10 @@ def descargar_fuente(self, documento_id: int):
             _validar_url_ssrf(doc.url_origen)
         except ValueError as exc:
             _log(
-                doc, "descarga", "ERROR", f"URL rechazada por politica SSRF: {exc}",
+                doc,
+                "descarga",
+                "ERROR",
+                f"URL rechazada por politica SSRF: {exc}",
                 payload={"policy": "ssrf-deny", "url": doc.url_origen},
             )
             doc.estado = "ERROR"

@@ -6,11 +6,11 @@ externa) siempre marca EXTERNO; crear_factura_desde_venta() (unico otro
 punto de creacion) siempre marca INTERNO/SINTEL; el campo es inmutable
 via el endpoint de edicion limitada (XML_IMMUTABLE_FIELDS).
 """
+
 from decimal import Decimal
 
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from apps.tenant.clientes.models import Cliente
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura
 from apps.tenant.facturas.services.business_service import FacturaBusinessService
@@ -21,7 +21,9 @@ class FacturaOrigenTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Hub Origen", nit="900000905", direccion="Calle Hub",
+            razon_social="Empresa Hub Origen",
+            nit="900000905",
+            direccion="Calle Hub",
         )
 
     def test_guardar_desde_dto_marca_externo(self):
@@ -72,14 +74,27 @@ class FacturaOrigenTests(SintelTenantTestCase):
 
     def test_origen_es_inmutable_via_edicion_limitada(self):
         factura = Factura.objects.create(
-            empresa=self.empresa, numero="FE-HUB-IMMUT-1", prefijo="FE", consecutivo=1, tipo="FE",
-            naturaleza=Factura.Naturaleza.VENTA, estado=Factura.Estado.BORRADOR, fecha_emision="2026-06-01",
-            emisor_nit=self.empresa.nit, emisor_razon_social="X", receptor_nit="800000000", receptor_razon_social="Y",
-            subtotal=Decimal("1"), impuestos=Decimal("0"), total=Decimal("1"),
+            empresa=self.empresa,
+            numero="FE-HUB-IMMUT-1",
+            prefijo="FE",
+            consecutivo=1,
+            tipo="FE",
+            naturaleza=Factura.Naturaleza.VENTA,
+            estado=Factura.Estado.BORRADOR,
+            fecha_emision="2026-06-01",
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social="X",
+            receptor_nit="800000000",
+            receptor_razon_social="Y",
+            subtotal=Decimal("1"),
+            impuestos=Decimal("0"),
+            total=Decimal("1"),
         )
         self.assertEqual(factura.origen, Factura.Origen.EXTERNO)  # default del campo
 
         with self.assertRaises(DRFValidationError):
             FacturaBusinessService.actualizar_factura_limitado(
-                factura, {"origen": Factura.Origen.INTERNO}, empresa_id=self.empresa.id,
+                factura,
+                {"origen": Factura.Origen.INTERNO},
+                empresa_id=self.empresa.id,
             )

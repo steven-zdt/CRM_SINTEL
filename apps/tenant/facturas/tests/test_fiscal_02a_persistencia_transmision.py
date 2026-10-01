@@ -9,12 +9,15 @@ real (ACEPTADO/RECHAZADO/AMBIGUO), reconciliar() de un AMBIGUO via
 get_status(), e historial de reintentos (multiples filas, no una sola
 sobreescrita).
 """
+
 from decimal import Decimal
 
 from apps.tenant.core.dian import MockTransportAdapter
 from apps.tenant.empresa.models import Empresa
 from apps.tenant.facturas.models import Factura, FacturaAnexos, TransmisionFactura
-from apps.tenant.facturas.services.electronic_invoice_service import ElectronicInvoiceApplicationService
+from apps.tenant.facturas.services.electronic_invoice_service import (
+    ElectronicInvoiceApplicationService,
+)
 from tests.tenant.base_test import SintelTenantTestCase
 
 
@@ -22,16 +25,28 @@ class TransmisionFacturaPersistenciaTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Fiscal-02A", nit="900000904", direccion="Calle Fiscal-02A",
+            razon_social="Empresa Fiscal-02A",
+            nit="900000904",
+            direccion="Calle Fiscal-02A",
         )
 
     def _factura(self, estado=Factura.Estado.BORRADOR):
         factura = Factura.objects.create(
-            empresa=self.empresa, numero="FE-F02A-1", prefijo="FE", consecutivo=1, tipo="FE",
-            naturaleza=Factura.Naturaleza.VENTA, estado=estado, fecha_emision="2026-06-20",
-            emisor_nit="900000904", emisor_razon_social="Empresa Fiscal-02A",
-            receptor_nit="800000001", receptor_razon_social="Cliente F02A",
-            subtotal=Decimal("100000.00"), impuestos=Decimal("19000.00"), total=Decimal("119000.00"),
+            empresa=self.empresa,
+            numero="FE-F02A-1",
+            prefijo="FE",
+            consecutivo=1,
+            tipo="FE",
+            naturaleza=Factura.Naturaleza.VENTA,
+            estado=estado,
+            fecha_emision="2026-06-20",
+            emisor_nit="900000904",
+            emisor_razon_social="Empresa Fiscal-02A",
+            receptor_nit="800000001",
+            receptor_razon_social="Cliente F02A",
+            subtotal=Decimal("100000.00"),
+            impuestos=Decimal("19000.00"),
+            total=Decimal("119000.00"),
             cufe="cufe-f02a-test",
         )
         FacturaAnexos.objects.create(factura=factura, ubl_xml="<Invoice>contenido</Invoice>")
@@ -41,7 +56,8 @@ class TransmisionFacturaPersistenciaTests(SintelTenantTestCase):
         factura = self._factura()
 
         resultado = ElectronicInvoiceApplicationService.transmitir(
-            factura, transport=MockTransportAdapter(scenario="TEST_ACCEPTED"),
+            factura,
+            transport=MockTransportAdapter(scenario="TEST_ACCEPTED"),
         )
 
         transmision = resultado["transmision"]
@@ -56,7 +72,8 @@ class TransmisionFacturaPersistenciaTests(SintelTenantTestCase):
         factura = self._factura()
 
         resultado = ElectronicInvoiceApplicationService.transmitir(
-            factura, transport=MockTransportAdapter(scenario="TEST_REJECTED"),
+            factura,
+            transport=MockTransportAdapter(scenario="TEST_REJECTED"),
         )
 
         transmision = resultado["transmision"]
@@ -69,7 +86,8 @@ class TransmisionFacturaPersistenciaTests(SintelTenantTestCase):
         factura = self._factura()
 
         resultado = ElectronicInvoiceApplicationService.transmitir(
-            factura, transport=MockTransportAdapter(scenario="TEST_TIMEOUT"),
+            factura,
+            transport=MockTransportAdapter(scenario="TEST_TIMEOUT"),
         )
 
         transmision = resultado["transmision"]
@@ -92,7 +110,9 @@ class TransmisionFacturaPersistenciaTests(SintelTenantTestCase):
         # Simula el estado real tras un timeout: Factura en ENVIADA, con una
         # transmision AMBIGUA ya registrada (lo que transmitir() habria dejado).
         TransmisionFactura.objects.create(
-            empresa=self.empresa, factura=factura, environment=TransmisionFactura.Environment.TEST,
+            empresa=self.empresa,
+            factura=factura,
+            environment=TransmisionFactura.Environment.TEST,
             status=TransmisionFactura.Status.AMBIGUO,
         )
         factura.estado = Factura.Estado.ENVIADA
@@ -110,19 +130,31 @@ class TransmisionFacturaPersistenciaTests(SintelTenantTestCase):
         factura = self._factura()
 
         with self.assertRaises(ValueError):
-            ElectronicInvoiceApplicationService.reconciliar(factura, transport=MockTransportAdapter())
+            ElectronicInvoiceApplicationService.reconciliar(
+                factura, transport=MockTransportAdapter()
+            )
 
     def test_reintento_legitimo_genera_una_segunda_fila_no_sobreescribe_la_primera(self):
         factura = self._factura()
 
-        ElectronicInvoiceApplicationService.transmitir(factura, transport=MockTransportAdapter(scenario="TEST_REJECTED"))
+        ElectronicInvoiceApplicationService.transmitir(
+            factura, transport=MockTransportAdapter(scenario="TEST_REJECTED")
+        )
         factura.refresh_from_db()
-        self.assertEqual(factura.estado, Factura.Estado.RECHAZADA)  # habilita reintentar (TRANSICIONES_VALIDAS)
+        self.assertEqual(
+            factura.estado, Factura.Estado.RECHAZADA
+        )  # habilita reintentar (TRANSICIONES_VALIDAS)
 
-        ElectronicInvoiceApplicationService.transmitir(factura, transport=MockTransportAdapter(scenario="TEST_ACCEPTED"))
+        ElectronicInvoiceApplicationService.transmitir(
+            factura, transport=MockTransportAdapter(scenario="TEST_ACCEPTED")
+        )
 
         self.assertEqual(TransmisionFactura.objects.filter(factura=factura).count(), 2)
         estados = list(
-            TransmisionFactura.objects.filter(factura=factura).order_by("submitted_at").values_list("status", flat=True)
+            TransmisionFactura.objects.filter(factura=factura)
+            .order_by("submitted_at")
+            .values_list("status", flat=True)
         )
-        self.assertEqual(estados, [TransmisionFactura.Status.RECHAZADO, TransmisionFactura.Status.ACEPTADO])
+        self.assertEqual(
+            estados, [TransmisionFactura.Status.RECHAZADO, TransmisionFactura.Status.ACEPTADO]
+        )

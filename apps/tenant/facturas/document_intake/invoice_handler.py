@@ -12,6 +12,7 @@ Cubre factura (invoice), nota credito (creditnote) y nota debito (debitnote)
 porque FacturaBusinessService.guardar_desde_dto() ya distingue internamente
 entre ellas via is_credit_note -- un solo handler, no tres.
 """
+
 from __future__ import annotations
 
 from apps.services.document_intake.contracts import (
@@ -72,7 +73,11 @@ class InvoiceHandler:
                 )
             dto = parsed["dto"]
 
-        content_bytes = document.content if isinstance(document.content, bytes) else document.content.encode("utf-8")
+        content_bytes = (
+            document.content
+            if isinstance(document.content, bytes)
+            else document.content.encode("utf-8")
+        )
         xml_text = content_bytes.decode("utf-8")
 
         try:

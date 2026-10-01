@@ -5,6 +5,7 @@ test_multitenant_isolation_tabla_html.py y en F21). Empresa es un singleton
 por schema (ver F21_TEST_MATRIX.md), asi que "Empresa A / Empresa B" solo
 puede modelarse como 2 tenants reales, no 2 filas de Empresa en un schema.
 """
+
 from datetime import date
 from decimal import Decimal
 
@@ -24,24 +25,38 @@ def _preparar_tenant(empresa, cantidad, costo_unitario):
     # created_at es timezone.now() real, el periodo debe cubrir la fecha real.
     hoy = timezone.localdate()
     PeriodoContable.objects.create(
-        empresa=empresa, periodo=hoy.strftime('%Y-%m'),
-        fecha_inicio=date(hoy.year, 1, 1), fecha_fin=date(hoy.year, 12, 31), estado="ABIERTO",
+        empresa=empresa,
+        periodo=hoy.strftime("%Y-%m"),
+        fecha_inicio=date(hoy.year, 1, 1),
+        fecha_fin=date(hoy.year, 12, 31),
+        estado="ABIERTO",
     )
     ReglaContable.objects.create(
-        empresa=empresa, tipo_transaccion="AJUSTE_INVENTARIO", concepto="INVENTARIO_PRODUCTO",
-        cuenta_codigo="143505", activo=True,
+        empresa=empresa,
+        tipo_transaccion="AJUSTE_INVENTARIO",
+        concepto="INVENTARIO_PRODUCTO",
+        cuenta_codigo="143505",
+        activo=True,
     )
     ReglaContable.objects.create(
-        empresa=empresa, tipo_transaccion="AJUSTE_INVENTARIO", concepto="INGRESO_AJUSTE_INVENTARIO",
-        cuenta_codigo="425050", activo=True,
+        empresa=empresa,
+        tipo_transaccion="AJUSTE_INVENTARIO",
+        concepto="INGRESO_AJUSTE_INVENTARIO",
+        cuenta_codigo="425050",
+        activo=True,
     )
     producto = Producto.objects.create(
-        empresa=empresa, codigo="PROD-MT-F22", nombre="Producto Multitenant F22", stock_actual=Decimal("0"),
+        empresa=empresa,
+        codigo="PROD-MT-F22",
+        nombre="Producto Multitenant F22",
+        stock_actual=Decimal("0"),
     )
     movimiento = KardexService.registrar_movimiento(
-        empresa_id=empresa.id, producto_id=producto.id,
+        empresa_id=empresa.id,
+        producto_id=producto.id,
         tipo=MovimientoInventario.TipoMovimiento.ENTRADA_AJUSTE,
-        cantidad=Decimal(cantidad), costo_unitario=Decimal(costo_unitario),
+        cantidad=Decimal(cantidad),
+        costo_unitario=Decimal(costo_unitario),
     )
     return producto, movimiento
 
@@ -69,7 +84,7 @@ def test_extractor_de_un_tenant_no_extrae_movimientos_de_otro_tenant(tenant1, te
         assert ids_extraidos1 == {mov1.id}
 
         resultado1 = extractor1.contabilizar_pendientes()
-        assert resultado1['contabilizados'] == 1
+        assert resultado1["contabilizados"] == 1
         assert AsientoContable.objects.filter(empresa_id=empresa1_id).count() == 1
 
     with schema_context(tenant2.schema_name):

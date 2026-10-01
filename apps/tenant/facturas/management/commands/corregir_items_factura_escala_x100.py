@@ -40,6 +40,7 @@ Uso:
     python manage.py corregir_items_factura_escala_x100
     python manage.py corregir_items_factura_escala_x100 --schema=admin --apply
 """
+
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand
@@ -66,14 +67,22 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         schema_name = options.get("schema")
         apply_changes = options.get("apply")
-        schemas = [schema_name] if schema_name else list(
-            get_tenant_model().objects.values_list("schema_name", flat=True)
+        schemas = (
+            [schema_name]
+            if schema_name
+            else list(get_tenant_model().objects.values_list("schema_name", flat=True))
         )
 
         modo = "APLICANDO CAMBIOS" if apply_changes else "DRY RUN (solo reporte)"
         self.stdout.write(self.style.WARNING(f"Modo: {modo}"))
 
-        total = {"revisadas": 0, "sospechosas": 0, "corregidas": 0, "sin_xml": 0, "no_reconciliable": 0}
+        total = {
+            "revisadas": 0,
+            "sospechosas": 0,
+            "corregidas": 0,
+            "sin_xml": 0,
+            "no_reconciliable": 0,
+        }
 
         for schema in schemas:
             try:
@@ -90,7 +99,13 @@ class Command(BaseCommand):
             self.stdout.write(f"  {k}: {v}")
 
     def _corregir_schema(self, schema, apply_changes):
-        stats = {"revisadas": 0, "sospechosas": 0, "corregidas": 0, "sin_xml": 0, "no_reconciliable": 0}
+        stats = {
+            "revisadas": 0,
+            "sospechosas": 0,
+            "corregidas": 0,
+            "sin_xml": 0,
+            "no_reconciliable": 0,
+        }
 
         facturas = Factura.objects.filter(
             naturaleza__in=[Factura.Naturaleza.VENTA, Factura.Naturaleza.COMPRA],
@@ -114,51 +129,63 @@ class Command(BaseCommand):
             xml_content = getattr(anexos, "ubl_xml", None) if anexos else None
             if not xml_content:
                 stats["sin_xml"] += 1
-                self.stdout.write(self.style.WARNING(
-                    f"[{schema}] Factura {factura.numero} (id={factura.id}): sospechosa "
-                    f"(ratio={ratio:.2f}) pero sin XML guardado -- no se puede reconciliar."
-                ))
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"[{schema}] Factura {factura.numero} (id={factura.id}): sospechosa "
+                        f"(ratio={ratio:.2f}) pero sin XML guardado -- no se puede reconciliar."
+                    )
+                )
                 continue
 
             try:
                 dto = parse_to_dto(xml_content.encode("utf-8"), filename=f"{factura.numero}.xml")
             except Exception as exc:
                 stats["no_reconciliable"] += 1
-                self.stdout.write(self.style.ERROR(
-                    f"[{schema}] Factura {factura.numero} (id={factura.id}): error re-parseando XML: {exc}"
-                ))
+                self.stdout.write(
+                    self.style.ERROR(
+                        f"[{schema}] Factura {factura.numero} (id={factura.id}): error re-parseando XML: {exc}"
+                    )
+                )
                 continue
 
             items_dto = dto.get("items", [])
-            suma_reparseada = sum((Decimal(str(it.get("subtotal", 0))) for it in items_dto), Decimal("0"))
+            suma_reparseada = sum(
+                (Decimal(str(it.get("subtotal", 0))) for it in items_dto), Decimal("0")
+            )
             if abs(suma_reparseada - factura.subtotal) > TOLERANCIA:
                 stats["no_reconciliable"] += 1
-                self.stdout.write(self.style.ERROR(
-                    f"[{schema}] Factura {factura.numero} (id={factura.id}): el re-parseo "
-                    f"({suma_reparseada}) tampoco cuadra con Factura.subtotal ({factura.subtotal}) "
-                    f"-- no se corrige automaticamente."
-                ))
+                self.stdout.write(
+                    self.style.ERROR(
+                        f"[{schema}] Factura {factura.numero} (id={factura.id}): el re-parseo "
+                        f"({suma_reparseada}) tampoco cuadra con Factura.subtotal ({factura.subtotal}) "
+                        f"-- no se corrige automaticamente."
+                    )
+                )
                 continue
 
             if len(items_dto) != len(items):
                 stats["no_reconciliable"] += 1
-                self.stdout.write(self.style.ERROR(
-                    f"[{schema}] Factura {factura.numero} (id={factura.id}): numero de items "
-                    f"distinto (BD={len(items)} vs XML={len(items_dto)}) -- no se corrige "
-                    f"automaticamente, requiere revision manual."
-                ))
+                self.stdout.write(
+                    self.style.ERROR(
+                        f"[{schema}] Factura {factura.numero} (id={factura.id}): numero de items "
+                        f"distinto (BD={len(items)} vs XML={len(items_dto)}) -- no se corrige "
+                        f"automaticamente, requiere revision manual."
+                    )
+                )
                 continue
 
-            self.stdout.write(self.style.SUCCESS(
-                f"[{schema}] Factura {factura.numero} (id={factura.id}): CORREGIBLE "
-                f"(ratio={ratio:.2f}, {len(items)} item(s))."
-            ))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"[{schema}] Factura {factura.numero} (id={factura.id}): CORREGIBLE "
+                    f"(ratio={ratio:.2f}, {len(items)} item(s))."
+                )
+            )
             if not apply_changes:
                 stats["corregidas"] += 1
                 continue
 
             with transaction.atomic():
-                for item_db, item_dto in zip(items, items_dto):
+                for item_db, item_dto in zip(items, items_dto, strict=False):
                     cantidad = Decimal(str(item_dto["cantidad"]))
                     valor_unitario = Decimal(str(item_dto["valor_unitario"]))
                     porcentaje_iva = Decimal(str(item_dto["porcentaje_iva"]))

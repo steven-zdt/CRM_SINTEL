@@ -1,8 +1,260 @@
 # AUDITORIA DE FLUJO DE TRABAJO - MODULO DE COMPRAS
 
-**Version auditada:** v3.10.5 → corregida 2026-06-18 → sincronizacion CxP 2026-08-26 → Fase 2 remediación 2026-09-12
+**Version auditada:** v3.10.5 → corregida 2026-06-18 → sincronizacion CxP 2026-08-26 → Fase 2 remediación 2026-09-12 → Requisiciones de Compra 2026-09-25 → FASE C (Requisicion obligatoria en OrdenCompra) 2026-09-26 → N:N OrdenCompra<->Requisicion + motor de aprobaciones (Fases 1-4) 2026-09-26 → Fase 5: enganche real enviar/aprobar/rechazar 2026-09-26 → Fase 6: ApprovalTraceService 2026-09-26 → Fase 7: API del Centro de Aprobaciones 2026-09-26 → **Fases 8-13: Dashboard completo + Nueva OC multi-select + 2 bugs reales corregidos en crear_orden_compra() 2026-09-26 (PLAN_CENTRO_APROBACIONES_DASHBOARD_COMPRAS.md COMPLETO)**
 **Auditor:** Claude Code. Fase 2 remediación 2026-09-12: Claude Sonnet 5 (Anthropic).
 **Estado actual:** 6 bugs criticos/altos corregidos — 3 items de deuda tecnica pendientes. **4 hallazgos ALTO nuevos encontrados y corregidos 2026-09-12** (CO-1..CO-4, ver sección abajo) — **verificado: `pytest apps/tenant/compras/tests/` completo → 43 passed (suite preexistente, sin regresión) + 6 tests nuevos → 6 passed.**
+
+---
+
+## 2026-10-01 — PLAN_OPTIMIZACION_COMPRAS_Y_BASE_NUEVA_REQUISICION_TAREA_1
+
+Plan auditado contra `main`, pero esta rama (`feat/onboarding-cookie`) ya traia sin commitear
+el submodulo `requisiciones/`, el motor de aprobaciones (`apps/tenant/approvals/`) y el control
+presupuestal (`budget_control_service.py`) -- ninguno contemplado por el plan original. Fase 0
+(baseline) confirmo que varias fases ya estaban resueltas por ese trabajo previo; solo se tocaron
+las que seguian pendientes contra el codigo real. **Sin pytest en esta sesion (regla explicita del
+plan) -- queda para la fase manual del usuario.**
+
+- **Fase 1 (numeración) y Fase 2 (selectors):** YA RESUELTAS, sin cambios. `PlantillaOrdenCompra`
+  ya tiene `tipo_documento` (ORDEN_COMPRA/REQUISICION) y `RequisicionCompraBusinessService` ya
+  reutiliza el mismo motor (`_dsv_y_asignar_plantilla`, `select_for_update()` + `F()+1`) -- no existe
+  un segundo motor de numeracion. Selectors de ambos modulos ya usan `LIST_FIELDS`/`DETAIL_FIELDS`
+  + `select_related`/`prefetch_related` completos.
+- **Fase 3 (KPIs):** `OrdenCompraKpisView.get_context_data()` (`views.py`) paso de 4 queries
+  independientes a un unico `aggregate()` con `Count`/`Sum` condicionados (`filter=Q(...)`).
+- **Fase 4 (búsqueda bajo demanda):** `#proveedor`/`#proyecto` en
+  `offcanvas_crear_compras.html`/`offcanvas_editar_compras.html` pasaron de `<select>` con el
+  catalogo completo precargado a un buscador real (`compras.utils.js::initBuscadorAsync`, 3+
+  caracteres, debounce 300ms, `?search=` contra `/api/v1/proveedores/`/`/api/v1/proyectos/`, que ya
+  soportaban el parametro). **Hallazgo real:** el `<select>` anterior no descargaba "todo el
+  catalogo" como asumia el plan -- al no pasar `?search=`, el backend paginaba 20 resultados por
+  defecto (`StandardResultsSetPagination`), asi que el combo silenciosamente solo dejaba elegir
+  entre los primeros 20 proveedores/proyectos de la empresa. El fix de Fase 4 corrige ese bug real,
+  no solo optimiza.
+- **Fase 5 (HTTP único):** `compras.utils.js` (proveedores/proyectos/cotizaciones) y
+  `requisiciones_list.js::fetchJson` migrados de `fetch()+getHeaders()` a
+  `Sintel.Core.Http.request()` (mismo motor que `compras.api.js::_fetch`). `getHeaders()` retirado
+  de `compras.api.js` tras confirmar cero consumidores restantes.
+- **Fase 6 (items sin borrado masivo):** `OrdenCompraCRUDService.actualizar_orden()` y
+  `RequisicionCompraCRUDService.actualizar_requisicion()` pasaron de `items.all().delete()` +
+  `bulk_create()` a sincronizacion diferencial por `uuid` (UPDATE de filas existentes, INSERT de
+  nuevas, DELETE solo de las removidas). `requisicion_item_uuid`/`cantidad_aprobada`/
+  `cantidad_ordenada`/`cantidad_cancelada` de un item existente ya NO se pierden al editar la
+  cabecera (antes se perdian silenciosamente en cada reemplazo total). `ItemOrdenCompraSerializer.
+  uuid`/`RequisicionCompraItemSerializer.uuid` pasaron de `read_only` a opcional en escritura para
+  que el frontend pueda identificar la fila; `compras_editor.js::recolectarDatos()` y
+  `requisiciones_editor.js::recolectarItems()`/`crearFilaItem()` ahora propagan ese uuid.
+- **Fase 7 (escrituras redundantes):** `crear_orden()`/`crear_requisicion()` calculan subtotal/IVA/
+  total de los items ANTES de instanciar la cabecera -- un solo `save()`, sin el segundo
+  `save(update_fields=[...])` posterior. Formula extraida a `_calcular_item()` (un helper por
+  modulo, mismo criterio que ya existia en requisiciones).
+- **Fase 9 (cálculo JS duplicado):** `actualizarFilaTotal()`/`actualizarTotales()` en
+  `compras_editor.js` ahora comparten `calcularItem()` -- antes repetian la misma formula inline.
+- **Fase 10 (preview de numeración):** texto cambiado de "Número a asignar" a "Próximo número
+  estimado" en `compras_editor.js::actualizarInfoPlantilla()` y
+  `requisiciones_editor.js::actualizarInfoPlantillaReq()` -- ninguno de los dos refleja una reserva
+  transaccional real (esa ocurre en `_dsv_y_asignar_plantilla()` al guardar).
+- **Fase 11 (templates duplicados):** el bloque `<style>` idéntico (~54 líneas, antes bajo dos IDs
+  distintos) entre `offcanvas_crear_compras.html`/`offcanvas_editar_compras.html` se extrajo a
+  `partials/formulario_estilos.html` (clase compartida `.offcanvas-compra-form`). El resto de
+  secciones del formulario (informacion general, items, totales) queda pendiente de una extraccion
+  similar en una fase futura -- no se tocaron en esta pasada por tener diferencias reales entre
+  crear/editar (ids server-rendered vs placeholders) que requieren mas cuidado.
+- **Fase 8 (full_clean en loop):** revisado, SIN CAMBIOS. `ItemOrdenCompra` no tiene un
+  `CheckConstraint` de BD equivalente a los `MinValueValidator` de `cantidad`/`valor_unitario` (a
+  diferencia de `RequisicionCompraItem`, que si los tiene) -- retirar `full_clean()` del loop
+  reduciria integridad real, no solo CPU. Se preserva.
+- **Fase 14 (código muerto), retirado con consumidores verificados en cero:** `getHeaders()`
+  (`compras.api.js`), `loadProveedoresSelect`/`loadProyectosSelect`/`loadCotizacionesSelect`
+  (`compras.utils.js`, sin otro consumidor tras la Fase 4), `OrdenCompraCRUDService.
+  _obtener_siguiente_consecutivo()` (`crud_service.py`, sin ningun consumidor en todo el modulo).
+  **Se mantiene intencionalmente** `OrdenCompraSelector.get_siguiente_consecutivo()`/
+  `RequisicionCompraSelector.get_siguiente_consecutivo()` (selector + mixin + endpoint
+  `siguiente-consecutivo/`): confirmado sin consumidor en el frontend real, pero tiene un test
+  dedicado (`test_requisicion_compra_selectors.py`) y retirarlo no aporta ninguna reduccion de
+  trabajo en runtime (nadie lo llama hoy) -- sin poder correr pytest en esta sesion, no se asumio
+  el riesgo de tocar ese test a ciegas.
+- **Fase 4 (extensión) / Fase 11 (extensión), mismo día, continuación a pedido del usuario:**
+  - El mismo bug real de Fase 4 (combo que solo mostraba los primeros 20 resultados por paginación
+    silenciosa) existía en TRES lugares más de `requisiciones/`, todos corregidos al mismo patrón
+    `?search=` bajo demanda (confirmado que `/api/v1/proyectos/`, `/api/v1/proveedores/` y
+    `/api/v1/cotizaciones/` ya soportan el parámetro vía `CotizacionServiceMixin.get_qs_list()`):
+    1. Buscador de Proyecto en `requisiciones_editor.js::renderResultadosProyecto` (precargaba
+       `fetchProyectos()` una vez y filtraba client-side).
+    2. `<select>` de Proveedor del panel "Generar Orden de Compra" (`offcanvas_detalle_requisicion.
+       html` / `requisiciones_list.js::poblarSelectProveedores`, retirada).
+    3. `<select>` de Cotización del panel "Vincular Cotización" (mismo archivo/template,
+       `poblarSelectCotizaciones`, retirada) -- el filtro de "ya vinculadas" se preserva aplicándose
+       sobre cada página de resultados de búsqueda (`_cotizacionVincYaVinculadas`), no sobre un
+       catálogo completo cacheado.
+
+    El widget de Cotizaciones de "Nueva Requisición" (modal 0..N, `renderResultadosCotizacion`) se
+    revisó y se dejó intacto a propósito: ya usa un endpoint dedicado pre-filtrado por el backend
+    (`cotizacionesDisponibles()`, excluye vinculadas) con un conjunto acotado, no el catálogo
+    completo -- no es el mismo patrón defectuoso.
+  - Fase 11 extendida: `offcanvas_crear_compras.html`/`offcanvas_editar_compras.html` ahora
+    comparten además `partials/buscador_proveedor_proyecto.html`, `partials/items_table_head.html`,
+    `partials/totales_observaciones.html` y `partials/acciones_footer.html` (antes solo el `<style>`
+    se había extraído). La sección "Información General" se dejó sin tocar a propósito: sus campos
+    son genuinamente distintos entre crear (Plantilla + preview) y editar (Consecutivo readonly),
+    forzar un partial ahí habría sido una abstracción prematura sin reducir duplicación real.
+  - Nota de diseño conocida, no resuelta: `initBuscadorAsync()` agrega un listener de `click` sobre
+    `document` cada vez que se inicializa un formulario/panel -- en una sesión larga con muchas
+    aperturas del mismo offcanvas (HTMX re-renderiza el DOM cada vez) esos listeners se acumulan
+    sin limpiarse (cada uno referencia un nodo ya desmontado, por lo que es inofensivo en
+    comportamiento, solo un crecimiento lento de memoria). Mismo tipo de tradeoff que ya existía en
+    otros bindings de esta base de código; no se resolvió en esta pasada por no formar parte del
+    alcance de Fase 4/5/11.
+
+- **Drift de documentación preexistente (no corregido en esta pasada):** las secciones 5.1/5.2 mas
+  abajo en este mismo archivo todavia describen un grid Tabulator -- ya reemplazado por DataTables
+  3.x (ver docstring de `OrdenCompraKpisView` en `views.py` y `docs/remediation/
+  DATATABLES_PILOT_VENTAS_STATUS.md`). Reescribir esas secciones es un trabajo aparte, fuera del
+  alcance quirúrgico de esta Tarea 1 -- se deja señalado para no repetir el hallazgo.
+
+---
+
+## 2026-09-28 — PLAN_VINCULAR_FACTURA_COMPRA_COMPRAS: cierre de brechas sobre `OrdenCompra.factura_asociada` (no reconstruido desde cero)
+
+Auditoria Fase 0 del plan encontro que el vinculo manual Factura(COMPRA)<->OrdenCompra (FACTURAS-UI-CRONO-01, ver mas abajo/`docs`) ya existia casi completo: modelo `factura_asociada` (OneToOne), `vincular_factura_existente()`, accion `POST .../vincular-factura/`, buscador reutilizando `GET /api/v1/facturas/buscar-para-movimiento/` (`naturaleza=COMPRA`), y el widget completo en `offcanvas_detalle_compras.html` + `compras_list.js`. `RequisicionFactura` (submodulo Requisiciones) es un vinculo de **trazabilidad/evidencia** distinto y ya documentado como tal -- no se toco, no compite con `factura_asociada` como SSoT operacional. Brechas reales encontradas y cerradas en esta sesion (mismo hallazgo tambien existe hoy en el equivalente de Ventas -- `Venta.factura_asociada` -- pero quedo fuera de alcance de este plan, que es especifico de Compras):
+
+1. **Sin validacion de proveedor** (Fase 10 del plan): `vincular_factura_existente()` ahora compara `Factura.emisor_nit` contra `OrdenCompra.proveedor.numero_documento` via `same_nit()` (SSoT ya existente en `facturas.services.business_service`) -- 422 `proveedor_incompatible` si no coincide.
+2. **Sin proteccion de concurrencia** (Fase 22): `select_for_update()` sobre la Orden en `vincular_factura_existente()` y `desvincular_factura_existente()`.
+3. **"Cambiar factura" roto**: el boton ya existia en el template/JS pero el backend siempre devolvia 409 `orden_ya_vinculada` al reintentar vincular sobre una Orden que ya tenia factura -- no existia forma de desvincular. Nuevo: `OrdenCompraCRUDService.desvincular_factura()`, `OrdenCompraBusinessService.desvincular_factura_existente()` (bloquea con 409 `vinculo_bloqueado_pagos` si la CxP de esa Factura ya tiene `valor_pagado>0`), `POST .../desvincular-factura/`, `Sintel.Compras.API.desvincularFactura()`. `compras_list.js`: el boton "Cambiar factura" ahora desvincula primero (con confirmacion) y solo abre el buscador si el backend lo permite.
+4. **Buscador no excluia facturas ya vinculadas** (Fase 9): `buscar-para-movimiento` gano un parametro opt-in `excluir_vinculadas=compra|venta` (no cambia el comportamiento por defecto de Inventario, su otro consumidor real) -- Compras lo pasa siempre.
+5. **CxP sin trazabilidad a la Factura real** (Fase 20): `CuentasPagar.factura_uuid` nunca se completaba al vincular una Factura despues de que la Orden ya hubiera generado su CxP al Aprobarse (o viceversa). Ahora `vincular_factura_existente()` completa el `factura_uuid` de la CxP existente (si estaba vacio, nunca crea una segunda), y `_sincronizar_cuenta_por_pagar()` (Aprobar) la incluye desde el nacimiento si la Factura ya estaba vinculada antes.
+6. **Diferencia de valor Factura vs Orden** (Fase 32): nueva `@property OrdenCompra.factura_diferencia`, badge informativo en el detalle (nunca bloquea ni corrige automaticamente).
+
+Deliberadamente fuera de alcance (evaluado y descartado en la Fase 0, no es una omision): endpoint de busqueda dedicado (Fase 24 -- el existente ya evita duplicar contrato, se reuso); vinculo en el momento de creacion de la Orden (Fase 28 -- sin evidencia de necesidad real, el flujo post-creacion ya cubre el caso); conciliacion de items Factura<->OC (Fase 33 -- sin mapping confiable por referencia/UUID/codigo, el plan mismo pide no inventar heuristica); permisos granulares ver/vincular/desvincular (Fase 35 -- no existe esa infraestructura en ningun otro modulo del proyecto, se reutilizan los permisos de rol ya existentes del ViewSet); auditoria formal usuario/fecha/accion (Fase 36 -- no existe infraestructura de AuditLog en el proyecto para este tipo de accion, mismo gap preexistente en Ventas); "Ver factura" (abrir el documento real, Fase 39) -- Ventas (el patron de referencia) tampoco lo tiene, se mantuvo paridad UX exacta con Ventas en vez de agregar una feature que ni la referencia tiene.
+
+Tests nuevos en `apps/tenant/compras/tests/test_vincular_factura_manual.py` (proveedor incompatible, desvincular exitoso, desvincular sin vinculo, desvincular bloqueado por pagos, sync de `factura_uuid` en CxP existente) -- **pytest NO ejecutado en esta sesion, queda para la fase manual del usuario** (decision explicita del plan, seccion 46/47).
+
+## 2026-09-25 — Submodulo Requisiciones de Compra (nuevo)
+
+Nuevo submodulo `apps.tenant.compras.requisiciones` (app Django propia, `app_label='tenant_compras_requisiciones'`, registrada en `TENANT_APPS`), UI integrada como tercera sub-pestaña de `workspace/#compras`. `OrdenCompra` gano `requisicion`/`es_excepcional`/`motivo_excepcion` (nullable, FASE A de una migracion por fases). Documentacion completa: `docs/compras/REQUISICIONES_ARCHITECTURE.md`, `_FLOW.md`, `_SSOT.md`, `_RELEASE_GATE.md`, `_PRE_TEST_AUDIT.md`, `REQUISITION_BASELINE.md`, `REQUISICIONES_DESIGN.md`. Verificado end-to-end en vivo contra el tenant `admin` (Playwright): crear -> enviar a aprobacion -> aprobar -> generar Orden de Compra -> ATENDIDA automatica, 0 errores. Datos de prueba limpiados tras verificar. **Fase 11 autorizada por el usuario 2026-09-25** ("si, por ahora ejecuta"); Fase 12 en curso: `apps/tenant/compras/requisiciones/tests/` 50 passed (suite nueva), `apps/tenant/compras/tests/` completo 84 passed (sin regresión en Ordenes/Plantillas/Recepciones), `apps/tenant/cotizaciones/tests/` 26/26 en los 2 archivos afectados tras corregir 2 bugs reales encontrados durante esta Fase (ver `docs/compras/REQUISICIONES_PRE_TEST_AUDIT.md` §5-BIS); regresión cruzada de `proveedores`/`clientes`/`proyectos`/`inventario`/`contabilidad` + `manage.py check`/`makemigrations --check --dry-run` pendientes de ejecutar — este modulo de Compras (Ordenes/Plantillas/Recepciones) NO se modifico en su logica, solo se le agrego la FK opcional y el nuevo tab de UI.
+
+## 2026-09-26 — FASE C: Requisicion pasa de opcional a OBLIGATORIA en OrdenCompra
+
+Pedido explicito del usuario. La logica del modulo Compras (Ordenes/Plantillas/Recepciones) SI se modifico esta vez, a diferencia de la mision de Requisiciones del dia anterior: `crear_orden_compra()` ahora exige `requisicion` o (`es_excepcional=True` + `motivo_excepcion`), 422 (`requisicion_requerida`) si ninguna de las dos esta presente. Hallazgo real: `OrdenCompraCreateUpdateSerializer` nunca habia declarado `requisicion`/`es_excepcional`/`motivo_excepcion` -- la API real jamas pudo asociar una Requisicion a una Orden creada desde "Nueva Orden de Compra" (solo el camino `crear_orden_desde_requisicion()`, que llama al Business Service en Python directo, lo lograba). **Superado el mismo dia -- ver entrada siguiente.**
+
+## 2026-09-26 — N:N OrdenCompra<->RequisicionCompra + motor de aprobaciones (Fases 1-4 de PLAN_CENTRO_APROBACIONES_DASHBOARD_COMPRAS.md)
+
+El FK unico + escape `es_excepcional` de la entrada anterior se retiraron el mismo dia: el usuario proveyo un plan nuevo y definitivo que exige N:N real ("no resolver esto con un FK unico") y elimina la excepcion ("no debe seguir funcionando para nuevas OC"). Cambios: modelo `OrdenCompraRequisicion` (junction, `monto_asignado` por fila) reemplaza el FK; `ItemOrdenCompra.requisicion_item_uuid` nuevo (trazabilidad por linea); `crear_orden_compra()` ahora recibe `requisiciones` (lista, >=1 sin excepcion posible) y reparte el monto proporcional via el nuevo `ProcurementBudgetControlService` (`apps/tenant/compras/services/budget_control_service.py`), que tambien valida que ninguna Requisicion exceda su saldo disponible (rollback completo si excede). Nueva app `apps/tenant/approvals/` (motor generico `SolicitudAprobacion`/`ApprovalBusinessService`, registry explicito, sin API/UI todavia -- Fases 1-4 son fundamento, el enganche real con Requisiciones y el Centro de Aprobaciones del Dashboard son Fase 5+, DEFERRED). 0 filas reales usaban el FK retirado (1 sola `OrdenCompra` real en el tenant `admin`) -- migracion sin backfill. Detalle completo: `docs/approvals/APPROVALS_DESIGN.md`, `docs/compras/REQUISICIONES_RELEASE_GATE.md` §"[2026-09-26] N:N + Aprobaciones". Tests actualizados (compras + core), sin ejecutar pytest en esta sesion.
+
+---
+
+## 2026-09-26 — Fase 5: enganche real enviar/aprobar/rechazar de Requisiciones con el motor de Aprobaciones
+
+Mismo dia, misma mision. `RequisicionCompraBusinessService.enviar_a_aprobacion()` ahora crea la `SolicitudAprobacion` real (misma transaccion que la transicion de estado) via `ApprovalBusinessService.crear_solicitud()`, con snapshot automatico (valor/numero/tipo/cotizacion/proyecto/cantidad de lineas). `aprobar_requisicion()`/`rechazar_requisicion()` cierran su propia solicitud `PENDIENTE` (si existe) como ultimo paso -- funciona igual sin importar si la dispara el endpoint directo de Requisiciones (camino real hoy, sin Centro de Aprobaciones todavia) o el futuro `ApprovalBusinessService.aprobar()`/`rechazar()` (que revalida el snapshot antes de delegar, y no duplica el cierre si el dominio ya lo hizo). Revalidacion de snapshot (#13 del plan): si el documento cambio desde el envio, bloquea la aprobacion con 409 en vez de aprobar "a ciegas". **Verificado end-to-end contra el tenant `admin` real** con datos desechables (creados y limpiados en la misma sesion): crear->enviar->aprobar directo (2 eventos de historial, sin duplicar); mismo flujo via `ApprovalBusinessService.aprobar()` (identico, sin duplicar); snapshot corrompido a proposito -> aprobacion bloqueada, requisicion permanece `PENDIENTE_APROBACION`. Detalle completo: `docs/approvals/APPROVALS_DESIGN.md` §8, `docs/compras/REQUISICIONES_RELEASE_GATE.md` §"[2026-09-26] Fase 5". 2 tests nuevos en `apps/tenant/approvals/tests/`, sin ejecutar pytest en esta sesion.
+
+---
+
+## 2026-09-26 — Fase 6: ApprovalTraceService (trazabilidad, solo lectura)
+
+Mismo dia, misma mision. `apps/tenant/approvals/services/trace_service.py::ApprovalTraceService.construir_trazabilidad()` construye el DTO `{request, origin, nodes, relations, timeline, financial_summary, alerts}` de una `SolicitudAprobacion` -- para Requisicion: nodos Requisicion/Cotizacion-origen/Proyecto/Ordenes-de-Compra-generadas (N:N de Fase 3), timeline mezclando `SolicitudAprobacionHistorial` + `RequisicionHistorialEstado` (ordenado por fecha), resumen financiero y alertas via `ProcurementBudgetControlService` (Fase 4, sin reimplementar el calculo). Solo lectura -- no escribe en ningun dominio. **Verificado end-to-end contra el tenant `admin` real** con datos desechables: DTO completo con 3 nodos, 2 relaciones, timeline correctamente ordenado, resumen financiero exacto, sin alertas (dentro de presupuesto). 5 tests nuevos en `apps/tenant/approvals/tests/test_approval_trace_service.py`. Detalle completo: `docs/approvals/APPROVALS_DESIGN.md` §9. Sin ejecutar pytest en esta sesion.
+
+## 2026-09-26 — Fase 7: API del Centro de Aprobaciones + disponibles-para-orden
+
+Mismo dia, misma mision. `apps/tenant/approvals/api/` (`SolicitudAprobacionViewSet`) montado en `/api/v1/dashboard/aprobaciones/` -- solo lectura + acciones `trazabilidad`/`aprobar`/`rechazar`, `create` bloqueado (405, la solicitud solo nace como side-effect de `enviar_a_aprobacion()`), permisos ADMIN-only. Segundo endpoint: `GET /api/v1/compras/requisiciones/disponibles-para-orden/` (nuevo `@action` en el `RequisicionCompraViewSet` ya existente), reutiliza `RequisicionCompraSelector.get_available_for_purchase()` + `ProcurementBudgetControlService.obtener_saldo_requisicion()`.
+
+**2 bugs reales encontrados y corregidos en la misma sesion, antes de dar la fase por cerrada:**
+1. `apps/tenant/approvals/services/__init__.py` no exportaba `SolicitudAprobacionServiceMixin` -- el import fallaba silenciosamente dentro del try/except de `config/api_urls.py` (patron de resiliencia del propio archivo) y la ruta nunca se registraba, sin ningun error visible salvo un `WARNING` en el log.
+2. `dashboard/aprobaciones/` quedaba capturado por el catch-all de `DashboardViewSet` (`dashboard-detail`) al registrarse despues de `dashboard/` en `config/api_urls.py` -- mismo mecanismo ya conocido y documentado para `compras/requisiciones/` vs `compras/`. Corregido registrando `dashboard/aprobaciones/` ANTES.
+
+Ambos detectados con `get_resolver('config.urls_tenant').resolve(path)` contra el path real -- no se asumio que la ruta funcionaba solo porque el archivo compilaba. **Verificado end-to-end contra el tenant `admin` real** (datos desechables, limpiados despues) via `APIRequestFactory` + `force_authenticate` (ejercita el ViewSet/serializers reales, no solo el Service Layer): LIST, trazabilidad, create bloqueado, aprobar (sin duplicar historial), disponibles-para-orden con saldo correcto. `manage.py check` limpio, `makemigrations --check --dry-run` sin cambios. Detalle completo: `docs/approvals/APPROVALS_DESIGN.md` §11. Sin ejecutar pytest en esta sesion.
+
+## 2026-09-26 — Fases 8-13: Dashboard completo, Nueva OC multi-select, 2 BUGS REALES en crear_orden_compra()
+
+Mismo dia, misma mision -- cierra `PLAN_CENTRO_APROBACIONES_DASHBOARD_COMPRAS.md` completo. Fase 8
+(banner/KPIs/bandeja del Centro de Aprobaciones en Dashboard) y Fase 9 (offcanvas de revision con
+ruta del proceso) no tocan `apps/tenant/compras/` -- viven en `apps/tenant/approvals/` +
+`apps/tenant/dashboard/`. Fase 10 SI toca compras: el formulario "Nueva Orden de Compra" reemplaza
+su `<select>` de Requisicion unica por un checklist real de seleccion multiple con saldo en vivo
+(`compras.utils.js::loadRequisicionesDisponiblesChecklist`, `compras.api.js::requisiciones.
+disponiblesParaOrden`), consumiendo el endpoint `disponibles-para-orden` de Fase 7 en vez de listar
+todas las Requisiciones y filtrar por estado en el cliente.
+
+**Fase 11 (verificacion de integracion) encontro 2 bugs reales en `OrdenCompraBusinessService.
+crear_orden_compra()` que NINGUNA prueba anterior de esta mision (Fases 3/4/7) habia detectado,
+porque ninguna habia llamado a este metodo con >= 2 Requisiciones reales de punta a punta:**
+
+1. **`AttributeError` real -- bloqueaba el 100% de las creaciones de OC reales:**
+   `if requisicion.estado not in RequisicionCompraSelector.ESTADOS_DISPONIBLES_PARA_COMPRA:`
+   referenciaba una constante de MODULO (`ESTADOS_DISPONIBLES_PARA_COMPRA`, definida fuera de la
+   clase en `requisiciones/services/selectors.py`) como si fuera un atributo de clase. Cualquier
+   llamada real a `crear_orden_compra()` con al menos 1 requisicion fallaba con `AttributeError`
+   envuelto como error 500 -- es decir, el acceptance criteria "toda OC nueva exige >= 1
+   Requisicion" (`#7`/`#8` del plan) estaba roto en produccion desde que se introdujo en Fase 3, sin
+   que ningun test previo de esta sesion lo hubiera ejercitado con datos reales de extremo a
+   extremo. Corregido: `from apps.tenant.compras.requisiciones.services.selectors import
+   ESTADOS_DISPONIBLES_PARA_COMPRA` (import directo del simbolo del modulo).
+2. **Hueco de concurrencia real, nunca cerrado (`#25` del plan):** un comentario en el codigo
+   afirmaba "select_for_update() implicito via `_obtener_entidad_por_id_o_uuid`" -- verificado que
+   es FALSO (ese helper es un `.filter().first()` sin lock). Corregido con un re-fetch explicito de
+   las Requisiciones ya resueltas usando `RequisicionCompra.objects.select_for_update().filter(
+   id__in=...)`, dentro de la misma `@transaction.atomic` que ya envolvia el metodo, ANTES de
+   calcular montos/validar saldo -- cierra el escenario de doble-consumo que `#25` describe
+   explicitamente.
+
+**Verificado tras ambos fixes, contra el tenant `admin` real (datos desechables, limpiados
+despues):** 2 Requisiciones APROBADAS ($40.000/$30.000) consolidadas en 1 sola Orden de Compra via
+`crear_orden_compra()` real -- `OrdenCompraRequisicion` con `monto_asignado` correcto por fila,
+`ItemOrdenCompra.requisicion_item_uuid` poblado en el 100% de las lineas (trazabilidad por linea,
+`#4` del plan), saldo de ambas Requisiciones en `$0.00`, saldo de la Cotizacion en `$30.000`
+(exacto). Sin residuo en el tenant real.
+
+**Fase 13 (autoauditoria):** revision sistematica (bypass de aprobacion/limites, concurrencia, fuga
+cross-tenant, duplicacion de logica, inconsistencias de estado, rutas duplicadas, Dashboard-como-
+SSoT) -- sin hallazgos adicionales a los 2 ya corregidos arriba. Detalle completo:
+`docs/approvals/APPROVALS_DESIGN.md` §12-16. `manage.py check`/`makemigrations --check --dry-run`
+limpios.
+
+## 2026-09-26/27 -- Pytest real ejecutado por el usuario: 4 bugs reales adicionales encontrados y corregidos
+
+El usuario corrio la suite real (`apps/tenant/compras/tests`, `apps/tenant/compras/requisiciones/
+tests`, `apps/tenant/approvals/tests`, `apps/tenant/dashboard/tests`, `apps/tenant/cotizaciones/
+tests`) por primera vez desde que arranco esta mision -- expuso 4 bugs reales que ninguna
+verificacion manual anterior (siempre con datos desechables ad-hoc) habia detectado:
+
+1. **`_hoy()` con zona horaria incorrecta** (`apps/tenant/compras/requisiciones/models.py`):
+   usaba `timezone.now().date()` (fecha calendario de UTC) en vez de `timezone.localdate()`. Con
+   `TIME_ZONE='America/Bogota'` (UTC-5), entre las 19:00 y las 23:59 hora local esto adelantaba
+   `fecha_solicitud` un dia completo, violando el check constraint
+   `requisicion_compra_fecha_necesidad_gte_solicitud` para cualquier Requisicion con
+   `fecha_necesidad=hoy`. Verificado en vivo: `date.today()`=26, `timezone.now().date()`=27,
+   `timezone.localdate()`=26, exactamente durante esa ventana horaria.
+2. **`crear_orden_compra()` no revertia la `OrdenCompra` ya insertada al rechazar por presupuesto**
+   (`apps/tenant/compras/services/business_service.py`): Django NO revierte automaticamente una
+   `transaction.atomic()` cuando la excepcion se captura DENTRO del mismo metodo decorado -- solo
+   revierte si la excepcion escapa del bloque. El `except ValidationError as e: return False, ...`
+   dejaba la `OrdenCompra` COMMITEADA huerfana pese a devolver `ok=False`. Corregido con
+   `transaction.set_rollback(True)` explicito en ambos handlers (`ValidationError` y `Exception`)
+   antes de retornar. Verificado: `OrdenCompra.objects.count()` volvio a dar 0 tras un rechazo por
+   presupuesto.
+3. **Related name obsoleto `ordenes_compra` en 4 lugares** tras el N:N de Fase 3 (el related_name
+   real es `ordenes_compra_vinculadas`, definido en `OrdenCompraRequisicion.requisicion`):
+   `RequisicionCompraCRUDService.eliminar_requisicion()` (rompia CUALQUIER intento de eliminar una
+   Requisicion BORRADOR con `AttributeError`), `RequisicionCompraDetailSerializer.
+   get_ordenes_compra_uuids()`, el `prefetch_related` de `RequisicionCompraSelector.get_detail()` y
+   de `render_offcanvas_detalle` en el ViewSet, y el template `offcanvas_detalle_requisicion.html`.
+   Todos corregidos a `ordenes_compra_vinculadas` (navegando `.orden_compra` donde corresponde).
+4. **Tests con supuestos obsoletos** (nunca actualizados tras cambios de fases anteriores de esta
+   misma mision, detectados solo al ejecutarlos): `test_orden_compra_requisicion_integracion.py`
+   (una Requisicion BORRADOR ya no puede ni vincularse a una OC nueva -- rechazo temprano, no en
+   la aprobacion posterior), `test_requisicion_compra_service.py` (2 asserts usaban el FK singular
+   retirado `OrdenCompra.requisicion`/`orden.requisicion_id`, migrados a la traversal N:N
+   `requisiciones_vinculadas__requisicion`), `test_approval_business_service.py` (un test de
+   "creacion fresca" invocaba antes `enviar_a_aprobacion()`, que desde Fase 5 ya crea la solicitud
+   como side-effect -- probaba idempotencia sin querer).
+
+**Resultado final verificado por el usuario** (todo ejecutado, nada simulado): `apps/tenant/
+compras/tests` 57 passed, `apps/tenant/compras/requisiciones/tests` 57 passed, `apps/tenant/
+approvals/tests` 17 passed, `apps/tenant/dashboard/tests` 36 passed, `apps/tenant/cotizaciones/
+tests` 70 passed. Los `SystemExit: 2`/`connection is closed` que aparecieron en la primera corrida
+completa de `compras/tests` (38 min) no se repitieron corriendo los mismos archivos en lotes mas
+pequenos ni en la corrida final completa (57 passed, sin errores) -- confirmado como contencion de
+recursos/conexiones Postgres por el volumen de schemas `TenantTestCase` creados en una sola corrida
+larga, no un defecto de codigo.
 
 ---
 

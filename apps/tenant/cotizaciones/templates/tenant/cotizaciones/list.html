@@ -4,35 +4,15 @@
 <div class="ui-module ui-cotizaciones" role="region" aria-label="Modulo de Cotizaciones">
 
   {# === KPIs === #}
-  {% comment %}
-  CROSSAPP-UI-01: 5 de 6 KPIs migrados a sintel_kpi_card (F33.9) -- markup
-  identico. `value_id` (extension del primitivo) porque este modulo aun no
-  migro su grilla a django-tables2+HTMX (Fase 5-BIS, sigue en Tabulator) y
-  cotizaciones.table.js actualiza cada valor via getElementById() al cargar
-  la tabla, no via context server-side. "Monto Total" NO se migro: usa un
-  font-size custom para el valor (moneda larga), mismo criterio que
-  proyectos/partials/tabla_proyectos.html.
-  {% endcomment %}
-  <div class="row g-3 mb-3" id="cotizaciones-kpis">
-    {% sintel_kpi_card icon="file-earmark-text" color="primary" value="-" label="Total" value_id="kpi-cot-total" %}
-    {% sintel_kpi_card icon="pencil-square" color="secondary" value="-" label="Borrador" value_id="kpi-cot-borrador" %}
-    {% sintel_kpi_card icon="send" color="info" value="-" label="Enviadas" value_id="kpi-cot-enviada" %}
-    {% sintel_kpi_card icon="check2-circle" color="success" value="-" label="Aceptadas" value_id="kpi-cot-aceptada" %}
-    {% sintel_kpi_card icon="clock-history" color="danger" value="-" label="Vencidas" value_id="kpi-cot-vencidas" %}
-    <div class="col-6 col-md-4 col-xl-2">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
-          <div class="rounded-circle bg-warning bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
-            <i class="bi bi-cash-stack text-warning"></i>
-          </div>
-          <div class="min-w-0">
-            <div id="kpi-cot-monto" class="fw-bold lh-1 mb-1" style="font-size:0.85rem;">-</div>
-            <div class="small text-muted text-truncate">Monto Total</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  {# Migrados a DataTables (ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md) -- #}
+  {# server-rendered via HTMX (kpis_cotizaciones.html, CotizacionKpisView). Antes se   #}
+  {# computaban client-side sobre TODAS las filas ya cargadas por Tabulator,           #}
+  {# incompatible con paginacion server-side.                                          #}
+  <div id="cotizaciones-kpis-panel"
+       hx-get="{% url 'cotizaciones_ui:ui_kpis_cotizacion' %}"
+       hx-trigger="load, cotizacion-updated from:body"
+       hx-target="this"
+       hx-swap="innerHTML"></div>
 
   {# === Toolbar === #}
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2" id="toolbar-cotizaciones">
@@ -65,22 +45,25 @@
   </div>
 
   {# === Filtros por Estado === #}
+  {# Hallazgo real (2026-09-25): estos valores seguian los nombres de     #}
+  {# estado ANTERIORES al rename de COTIZACIONES-02 (ACEPTADA->APROBADA, #}
+  {# CANCELADA->RECHAZADA) -- los chips "Aceptada"/"Cancelada" nunca      #}
+  {# filtraban nada real. Corregido a los valores reales de              #}
+  {# Cotizacion.Estado, agregando Archivada para completar el enum.      #}
   <div class="d-flex gap-2 flex-wrap mb-3" id="filtros-estado-cotizaciones">
     <button class="btn btn-sm btn-outline-dark active" data-estado="">
       <i class="bi bi-grid-3x3-gap me-1"></i>Todos
     </button>
     <button class="btn btn-sm btn-outline-secondary" data-estado="BORRADOR">Borrador</button>
     <button class="btn btn-sm btn-outline-info" data-estado="ENVIADA">Enviada</button>
-    <button class="btn btn-sm btn-outline-success" data-estado="ACEPTADA">Aceptada</button>
-    <button class="btn btn-sm btn-outline-danger" data-estado="CANCELADA">Cancelada</button>
+    <button class="btn btn-sm btn-outline-success" data-estado="APROBADA">Aprobada</button>
+    <button class="btn btn-sm btn-outline-danger" data-estado="RECHAZADA">Rechazada</button>
+    <button class="btn btn-sm btn-outline-dark" data-estado="ARCHIVADA">Archivada</button>
   </div>
 
   {# === Grid === #}
-  <div class="card shadow-sm border-0">
-    <div class="card-body p-0">
-      <div id="tabla-cotizaciones-principal" style="min-height:380px;" role="grid" aria-label="Tabla de cotizaciones"></div>
-    </div>
-  </div>
+  {# Tabla -- esqueleto estatico, poblado via ajax por cotizaciones.table.js #}
+  {% include 'tenant/cotizaciones/partials/tabla_cotizaciones.html' %}
 
   <div id="offcanvas-container" class="offcanvas offcanvas-end" tabindex="-1" aria-labelledby="offcanvas-cotizacion-label" style="width: 90%; max-width: 1200px;"></div>
 </div>

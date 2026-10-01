@@ -12,6 +12,7 @@ IVA, y sus retenciones ya se exponen en `tax.retenciones`
 (documento_origen_app='gastos'). Duplicarlas aqui violaria la misma Regla
 Absoluta de "una responsabilidad = una fuente de verdad".
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -35,12 +36,20 @@ _DATASET_ID = "gastos.resumen"
 _DIMENSIONS = (
     ReportField("fecha", "Fecha", FieldType.DATE, source="fecha"),
     ReportField("sede", "Sede", FieldType.STRING, source="sede__nombre"),
-    ReportField("categoria_contable", "Categoria contable", FieldType.STRING, source="categoria_contable"),
+    ReportField(
+        "categoria_contable", "Categoria contable", FieldType.STRING, source="categoria_contable"
+    ),
     ReportField("proveedor", "Proveedor", FieldType.STRING, source="proveedor__razon_social"),
 )
 
 _MEASURES = (
-    ReportMeasure("cantidad_documentos", "Cantidad de documentos", FieldType.INTEGER, Aggregation.COUNT, source="id"),
+    ReportMeasure(
+        "cantidad_documentos",
+        "Cantidad de documentos",
+        FieldType.INTEGER,
+        Aggregation.COUNT,
+        source="id",
+    ),
     ReportMeasure("subtotal", "Subtotal", FieldType.DECIMAL, Aggregation.SUM, source="subtotal"),
     ReportMeasure("total", "Total", FieldType.DECIMAL, Aggregation.SUM, source="total"),
 )
@@ -109,22 +118,29 @@ class GastosReportProvider:
         # compuesta. Ver docs/reporting/REPORTING_ARCHITECTURE.md §8.1 (bug
         # real encontrado en inventario.movimientos).
         def _build_annotations() -> dict:
-            return {f"m__{name}": _AGGREGATORS[name](_DATASET.get_measure(name).source) for name in measures}
+            return {
+                f"m__{name}": _AGGREGATORS[name](_DATASET.get_measure(name).source)
+                for name in measures
+            }
 
         values_qs = qs.values(*group_sources.values()).annotate(**_build_annotations())
 
         if request.order_by:
             order_field = request.order_by.lstrip("-")
             prefix = "-" if request.order_by.startswith("-") else ""
-            resolved = group_sources.get(order_field, order_field if order_field in measures else None)
+            resolved = group_sources.get(
+                order_field, order_field if order_field in measures else None
+            )
             if resolved:
                 values_qs = values_qs.order_by(f"{prefix}{resolved}")
         else:
-            values_qs = values_qs.order_by(*[f"-{s}" for s in group_sources.values()][:1] or ["-fecha"])
+            values_qs = values_qs.order_by(
+                *[f"-{s}" for s in group_sources.values()][:1] or ["-fecha"]
+            )
 
         count = values_qs.count()
         start = (request.page - 1) * request.page_size
-        page_rows = list(values_qs[start:start + request.page_size])
+        page_rows = list(values_qs[start : start + request.page_size])
 
         rows = []
         for raw in page_rows:
@@ -139,7 +155,7 @@ class GastosReportProvider:
 
         totals_qs = qs.aggregate(**_build_annotations())
         totals = {
-            name[len("m__"):]: (float(value) if isinstance(value, Decimal) else value)
+            name[len("m__") :]: (float(value) if isinstance(value, Decimal) else value)
             for name, value in totals_qs.items()
         }
 

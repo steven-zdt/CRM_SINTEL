@@ -13,6 +13,7 @@ Movimientos de ActivoFijo, y TRASLADO_SALIDA/TRASLADO_ENTRADA (transferencia
 interna entre sedes, sin impacto economico externo), quedan fuera de
 extraccion deliberadamente.
 """
+
 import logging
 from datetime import date
 from decimal import Decimal
@@ -52,28 +53,28 @@ _TIPOS_CONTABILIZABLES = {
 # S2) -- no se inventan conceptos nuevos.
 _LINEAS_POR_TIPO = {
     _TM.ENTRADA_COMPRA: (
-        ('INVENTARIO_PRODUCTO', 'DEBE'),
-        ('PASIVO_COMPRA_INVENTARIO', 'HABER'),
+        ("INVENTARIO_PRODUCTO", "DEBE"),
+        ("PASIVO_COMPRA_INVENTARIO", "HABER"),
     ),
     _TM.SALIDA_VENTA: (
-        ('COSTO_VENTA_PRODUCTO', 'DEBE'),
-        ('INVENTARIO_PRODUCTO', 'HABER'),
+        ("COSTO_VENTA_PRODUCTO", "DEBE"),
+        ("INVENTARIO_PRODUCTO", "HABER"),
     ),
     _TM.ENTRADA_AJUSTE: (
-        ('INVENTARIO_PRODUCTO', 'DEBE'),
-        ('INGRESO_AJUSTE_INVENTARIO', 'HABER'),
+        ("INVENTARIO_PRODUCTO", "DEBE"),
+        ("INGRESO_AJUSTE_INVENTARIO", "HABER"),
     ),
     _TM.SALIDA_BAJA: (
-        ('GASTO_DETERIORO_INVENTARIO', 'DEBE'),
-        ('INVENTARIO_PRODUCTO', 'HABER'),
+        ("GASTO_DETERIORO_INVENTARIO", "DEBE"),
+        ("INVENTARIO_PRODUCTO", "HABER"),
     ),
     _TM.SALIDA_CONSUMO: (
-        ('GASTO_CONSUMO_INTERNO', 'DEBE'),
-        ('INVENTARIO_PRODUCTO', 'HABER'),
+        ("GASTO_CONSUMO_INTERNO", "DEBE"),
+        ("INVENTARIO_PRODUCTO", "HABER"),
     ),
     _TM.ENTRADA_DEVOLUCION: (
-        ('INVENTARIO_PRODUCTO', 'DEBE'),
-        ('COSTO_VENTA_DEVOLUCION', 'HABER'),
+        ("INVENTARIO_PRODUCTO", "DEBE"),
+        ("COSTO_VENTA_DEVOLUCION", "HABER"),
     ),
 }
 
@@ -96,10 +97,10 @@ class ExtractorInventario(AbstractExtractor):
         ya_contabilizados = set(
             AsientoContable.objects.filter(
                 empresa_id=self.empresa_id,
-                documento_origen_app='inventario',
-                documento_origen_modelo='MovimientoInventario',
+                documento_origen_app="inventario",
+                documento_origen_modelo="MovimientoInventario",
                 documento_origen_reversado=False,
-            ).values_list('documento_origen_id', flat=True)
+            ).values_list("documento_origen_id", flat=True)
         )
 
         movimientos = (
@@ -109,21 +110,31 @@ class ExtractorInventario(AbstractExtractor):
                 tipo__in=_TIPOS_CONTABILIZABLES.keys(),
             )
             .exclude(id__in=ya_contabilizados)
-            .select_related('producto')
+            .select_related("producto")
             .only(
-                'id', 'empresa_id', 'tipo', 'cantidad', 'costo_unitario', 'created_at',
-                'documento_origen_id', 'documento_origen_app', 'documento_origen_modelo',
-                'origen_referencia', 'cliente_referencia',
-                'producto_id', 'producto__nombre', 'producto__codigo',
+                "id",
+                "empresa_id",
+                "tipo",
+                "cantidad",
+                "costo_unitario",
+                "created_at",
+                "documento_origen_id",
+                "documento_origen_app",
+                "documento_origen_modelo",
+                "origen_referencia",
+                "cliente_referencia",
+                "producto_id",
+                "producto__nombre",
+                "producto__codigo",
             )
-            .order_by('created_at', 'id')
+            .order_by("created_at", "id")
         )
 
         return [self._mapear_a_dto(mov) for mov in movimientos]
 
     def _mapear_a_dto(self, mov: MovimientoInventario) -> TransaccionEconomica:
         tipo_transaccion = _TIPOS_CONTABILIZABLES[mov.tipo]
-        monto = (mov.cantidad * mov.costo_unitario).quantize(Decimal('0.01'))
+        monto = (mov.cantidad * mov.costo_unitario).quantize(Decimal("0.01"))
         lineas = [
             LineaTransaccion(concepto=concepto, monto=monto, lado=lado)
             for concepto, lado in _LINEAS_POR_TIPO[mov.tipo]
@@ -139,12 +150,12 @@ class ExtractorInventario(AbstractExtractor):
             tercero=self._resolver_tercero(mov),
             lineas=lineas,
             documento_origen=DocumentoOrigen(
-                app_label='inventario',
-                modelo='MovimientoInventario',
+                app_label="inventario",
+                modelo="MovimientoInventario",
                 id=mov.id,
                 numero=f"MOV-{mov.id}",
             ),
-            observaciones=mov.origen_referencia or '',
+            observaciones=mov.origen_referencia or "",
         )
 
     def _resolver_tercero(self, mov: MovimientoInventario) -> TerceroSnapshot:
@@ -166,11 +177,11 @@ class ExtractorInventario(AbstractExtractor):
                     razon_social=proveedor.razon_social,
                 )
 
-        referencia = mov.cliente_referencia or mov.origen_referencia or 'N/A'
+        referencia = mov.cliente_referencia or mov.origen_referencia or "N/A"
         return TerceroSnapshot(
             tipo=TipoTercero.OTRO,
             id_origen=mov.producto_id or 0,
-            nit='',
+            nit="",
             razon_social=f"Movimiento de inventario: {referencia}",
         )
 
@@ -181,14 +192,15 @@ class ExtractorInventario(AbstractExtractor):
         empleados.models -- Contabilidad puede leer de cualquier app fuente
         en el modelo Pull). Import local para no acoplar a nivel de modulo.
         """
-        if mov.documento_origen_modelo != 'RecepcionCompraItem':
+        if mov.documento_origen_modelo != "RecepcionCompraItem":
             return None
         from apps.tenant.compras.models import RecepcionCompraItem
 
         item = (
-            RecepcionCompraItem.objects
-            .filter(id=mov.documento_origen_id, empresa_id=mov.empresa_id)
-            .select_related('recepcion__orden_compra__proveedor')
+            RecepcionCompraItem.objects.filter(
+                id=mov.documento_origen_id, empresa_id=mov.empresa_id
+            )
+            .select_related("recepcion__orden_compra__proveedor")
             .first()
         )
         if item is None:
@@ -205,8 +217,8 @@ class ExtractorInventario(AbstractExtractor):
                 tipo__in=_TIPOS_CONTABILIZABLES.keys(),
                 created_at__date__range=(fecha_inicio, fecha_fin),
             )
-            .select_related('producto')
-            .order_by('created_at', 'id')
+            .select_related("producto")
+            .order_by("created_at", "id")
         )
         ids = [m.id for m in movimientos]
 
@@ -214,42 +226,43 @@ class ExtractorInventario(AbstractExtractor):
             a.documento_origen_id: a
             for a in AsientoContable.objects.filter(
                 empresa_id=empresa_id,
-                documento_origen_app='inventario',
-                documento_origen_modelo='MovimientoInventario',
+                documento_origen_app="inventario",
+                documento_origen_modelo="MovimientoInventario",
                 documento_origen_id__in=ids,
-            ).prefetch_related('movimientos', 'movimientos__cuenta')
+            ).prefetch_related("movimientos", "movimientos__cuenta")
         }
 
         res = []
         for mov in movimientos:
             asiento = asientos.get(mov.id)
-            monto = (mov.cantidad * mov.costo_unitario).quantize(Decimal('0.01'))
+            monto = (mov.cantidad * mov.costo_unitario).quantize(Decimal("0.01"))
 
             dto = DocumentoEnriquecido(
-                app_label='inventario',
-                app_display='Inventario',
-                modelo='MovimientoInventario',
+                app_label="inventario",
+                app_display="Inventario",
+                modelo="MovimientoInventario",
                 documento_id=mov.id,
                 numero=f"MOV-{mov.id}",
                 fecha=mov.created_at.date(),
-                tipo_comprobante='CC',
-                tipo_comprobante_display='Comprobante de Contabilidad',
-                tercero_nit='',
-                tercero_nombre=mov.producto.nombre if mov.producto else '',
+                tipo_comprobante="CC",
+                tipo_comprobante_display="Comprobante de Contabilidad",
+                tercero_nit="",
+                tercero_nombre=mov.producto.nombre if mov.producto else "",
                 subtotal=monto,
-                impuestos=Decimal('0'),
+                impuestos=Decimal("0"),
                 total=monto,
                 cuentas_asignadas=[],
             )
 
             if asiento:
-                dto.estado_contable = 'CONTABILIZADO'
+                dto.estado_contable = "CONTABILIZADO"
                 dto.asiento_uuid = str(asiento.uuid)
                 dto.asiento_numero = asiento.numero
                 dto.movimientos = [
                     MovimientoResumen(
-                        cuenta_codigo=m.cuenta_codigo or (m.cuenta.codigo if m.cuenta else 'SIN_CUENTA'),
-                        cuenta_nombre=(m.cuenta.nombre if m.cuenta else (m.descripcion or '')),
+                        cuenta_codigo=m.cuenta_codigo
+                        or (m.cuenta.codigo if m.cuenta else "SIN_CUENTA"),
+                        cuenta_nombre=(m.cuenta.nombre if m.cuenta else (m.descripcion or "")),
                         debe=m.debe,
                         haber=m.haber,
                     )
@@ -258,7 +271,7 @@ class ExtractorInventario(AbstractExtractor):
                 # debe_total/haber_total son los campos que Contabilizador
                 # realmente puebla (ver contabilizador.py:_construir_asiento) --
                 # no total_debe/total_haber (legado, no poblados por este flujo).
-                dto.cuadra = (asiento.debe_total == asiento.haber_total)
+                dto.cuadra = asiento.debe_total == asiento.haber_total
 
             res.append(dto)
 

@@ -111,7 +111,7 @@
       // T-1/T-2: delega a la SSoT de formateo de moneda (dom-utils.js).
       const montoFmt = (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function')
         ? w.DOMUtils.formatCurrency(monto, { minimumFractionDigits: 2, maximumFractionDigits: 2, showSymbol: false })
-        : monto.toLocaleString('es-CO', { minimumFractionDigits: 2 });
+        : monto.toLocaleString('en-US', { minimumFractionDigits: 2 });
       const badgeCls = l.naturaleza === 'DEBE' ? 'bg-danger' : 'bg-success';
       return [
         '<tr>',

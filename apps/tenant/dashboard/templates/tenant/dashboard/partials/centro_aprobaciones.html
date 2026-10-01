@@ -1,0 +1,93 @@
+{# centro_aprobaciones.html -- Fase 8 de PLAN_CENTRO_APROBACIONES_DASHBOARD_ #}
+{# COMPRAS.md: Centro de Aprobaciones, seccion propia dentro del Dashboard   #}
+{# (#5 del plan). Esqueleto ESTATICO, poblado via centro_aprobaciones.js    #}
+{# contra /api/v1/dashboard/aprobaciones/{resumen,dt}/. Solo visible a      #}
+{# ADMIN (el backend ya lo exige; el frontend oculta la seccion si el       #}
+{# resumen responde 403, ver centro_aprobaciones.js).                      #}
+
+<style>
+.ca-banner {
+    border-radius: 14px;
+    padding: 1.1rem 1.4rem;
+    background: linear-gradient(135deg, rgba(13,110,253,.08), rgba(13,110,253,.02));
+    border: 1px solid rgba(13,110,253,.15);
+}
+.ca-banner h5 { margin: 0; font-weight: 700; }
+.ca-banner .ca-subtitulo { color: #6c757d; font-size: .92rem; }
+.ca-pill {
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .3rem .65rem; border-radius: 999px; font-size: .82rem; font-weight: 600;
+}
+.ca-pill-critica { background: rgba(220,53,69,.12); color: #b02a37; }
+.ca-pill-riesgo  { background: rgba(255,193,7,.18); color: #997404; }
+.ca-pill-normal  { background: rgba(25,135,84,.12); color: #146c43; }
+.ca-kpi-card { border: 1px solid #e9ecef; border-radius: 10px; padding: .65rem .9rem; background: #fff; }
+.ca-kpi-card .ca-kpi-val { font-size: 1.25rem; font-weight: 700; line-height: 1.1; }
+.ca-kpi-card .ca-kpi-lbl { font-size: .72rem; color: #6c757d; text-transform: uppercase; letter-spacing: .03em; }
+#tabla-centro-aprobaciones-filtros select { max-width: 180px; }
+</style>
+
+<section id="centro-aprobaciones-section" class="mt-4" hidden>
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="mb-0 fw-bold"><i class="bi bi-check2-square text-primary me-2"></i>Centro de Aprobaciones</h5>
+  </div>
+
+  {# ── Banner ─────────────────────────────────────────────────────── #}
+  <div class="ca-banner mb-3">
+    <h5 id="ca-banner-titulo">Cargando solicitudes pendientes...</h5>
+    <div class="ca-subtitulo mb-2" id="ca-banner-subtitulo">&nbsp;</div>
+    <div class="d-flex flex-wrap gap-2" id="ca-banner-pills"></div>
+  </div>
+
+  {# ── KPIs ───────────────────────────────────────────────────────── #}
+  <div class="row g-2 mb-3">
+    <div class="col-6 col-md-2"><div class="ca-kpi-card"><div class="ca-kpi-val" id="ca-kpi-pendientes">—</div><div class="ca-kpi-lbl">Pendientes</div></div></div>
+    <div class="col-6 col-md-2"><div class="ca-kpi-card"><div class="ca-kpi-val text-danger" id="ca-kpi-riesgo">—</div><div class="ca-kpi-lbl">Riesgo Presupuestal</div></div></div>
+    <div class="col-6 col-md-2"><div class="ca-kpi-card"><div class="ca-kpi-val text-success" id="ca-kpi-aprobadas-hoy">—</div><div class="ca-kpi-lbl">Aprobadas Hoy</div></div></div>
+    <div class="col-6 col-md-2"><div class="ca-kpi-card"><div class="ca-kpi-val text-secondary" id="ca-kpi-rechazadas">—</div><div class="ca-kpi-lbl">Rechazadas</div></div></div>
+    <div class="col-6 col-md-2"><div class="ca-kpi-card"><div class="ca-kpi-val" id="ca-kpi-valor-pendiente">—</div><div class="ca-kpi-lbl">Valor Pendiente</div></div></div>
+    <div class="col-6 col-md-2"><div class="ca-kpi-card"><div class="ca-kpi-val" id="ca-kpi-antiguedad">—</div><div class="ca-kpi-lbl">Antigüedad Prom.</div></div></div>
+  </div>
+
+  {# ── Filtros ────────────────────────────────────────────────────── #}
+  <div class="d-flex flex-wrap gap-2 mb-2" id="tabla-centro-aprobaciones-filtros">
+    <select class="form-select form-select-sm" id="ca-filtro-estado">
+      <option value="PENDIENTE" selected>Pendientes</option>
+      <option value="">Todos los estados</option>
+      <option value="APROBADA">Aprobadas</option>
+      <option value="RECHAZADA">Rechazadas</option>
+      <option value="CANCELADA">Canceladas</option>
+    </select>
+    <select class="form-select form-select-sm" id="ca-filtro-prioridad">
+      <option value="">Toda prioridad</option>
+      <option value="ALTA">🔴 Alta</option>
+      <option value="MEDIA">🟠 Media</option>
+      <option value="BAJA">🟢 Baja</option>
+    </select>
+  </div>
+
+  {# ── Bandeja (DataTables 3.x server-side) ──────────────────────────#}
+  <div class="w-100" style="max-width:100%; overflow-x:auto;">
+    <table id="tabla-centro-aprobaciones" class="table table-hover align-middle mb-0 w-100">
+      <thead>
+        <tr>
+          <th>Prioridad</th>
+          <th>Tipo</th>
+          <th>Documento</th>
+          <th>Solicitante</th>
+          <th>Proyecto</th>
+          <th>Origen</th>
+          <th>Valor</th>
+          <th>Riesgo</th>
+          <th>Tiempo Pendiente</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+{# ── Offcanvas de revision (Fase 9) ──────────────────────────────────#}
+{% include 'tenant/dashboard/partials/offcanvas_revisar_solicitud.html' %}

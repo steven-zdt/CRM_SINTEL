@@ -5,6 +5,7 @@ SSoT: AUDITORIA_FLUJO_PROVEEDORES.md
 Herencia: SintelTenantBaseModel (inyecta empresa, created_at, updated_at, save-guard)
 UUID Lookup Field: AGENTS.md SS14
 """
+
 import uuid
 
 from django.db import models
@@ -163,7 +164,6 @@ class Proveedor(SintelTenantBaseModel):
     )
     numero_cuenta = models.CharField(max_length=50, blank=True)
 
-
     # --- Estado ---
     activo = models.BooleanField(default=True)
     observaciones = models.TextField(blank=True)
@@ -189,7 +189,6 @@ class Proveedor(SintelTenantBaseModel):
 
 
 class CuentasPagar(SintelTenantBaseModel):
-
     """
     Cuentas por pagar a proveedores.
 
@@ -209,12 +208,15 @@ class CuentasPagar(SintelTenantBaseModel):
 
     ESTADO_PAGO = [
         ("SIN_PAGO", "Sin pago"),
-        ("PARCIAL",  "Pago parcial"),
-        ("PAGADA",   "Pagada"),
+        ("PARCIAL", "Pago parcial"),
+        ("PAGADA", "Pagada"),
     ]
 
     uuid = models.UUIDField(
-        default=uuid.uuid4, unique=True, db_index=True, editable=False,
+        default=uuid.uuid4,
+        unique=True,
+        db_index=True,
+        editable=False,
     )
 
     empresa = models.ForeignKey(
@@ -239,7 +241,9 @@ class CuentasPagar(SintelTenantBaseModel):
     )
     # Referencia blanda — sin FK directa a app facturas
     factura_uuid = models.UUIDField(
-        null=True, blank=True, db_index=True,
+        null=True,
+        blank=True,
+        db_index=True,
         help_text="UUID de la Factura COMPRA de origen (soft reference, sin FK).",
     )
     # Referencia blanda — sin FK directa a app compras. Poblado cuando la
@@ -247,7 +251,9 @@ class CuentasPagar(SintelTenantBaseModel):
     # tiene (o todavia no tiene) una Factura electronica asociada -- ver
     # OrdenCompraBusinessService._sincronizar_cuenta_por_pagar().
     orden_compra_uuid = models.UUIDField(
-        null=True, blank=True, db_index=True,
+        null=True,
+        blank=True,
+        db_index=True,
         help_text="UUID de la Orden de Compra de origen (soft reference, sin FK).",
     )
     fecha_emision = models.DateField(
@@ -260,30 +266,40 @@ class CuentasPagar(SintelTenantBaseModel):
 
     # --- Control financiero ---
     valor_total = models.DecimalField(
-        max_digits=18, decimal_places=2,
+        max_digits=18,
+        decimal_places=2,
         help_text="Valor total de la factura incluyendo impuestos y retenciones",
     )
     valor_pagado = models.DecimalField(
-        max_digits=18, decimal_places=2, default=0,
+        max_digits=18,
+        decimal_places=2,
+        default=0,
         help_text="Monto acumulado de abonos o pagos realizados",
     )
     saldo = models.DecimalField(
-        max_digits=18, decimal_places=2, default=0,
+        max_digits=18,
+        decimal_places=2,
+        default=0,
         editable=False,
         help_text="Saldo remanente = valor_total - valor_pagado (calculado automaticamente)",
     )
 
     estado_pago = models.CharField(
-        max_length=15, choices=ESTADO_PAGO, default="SIN_PAGO", db_index=True,
+        max_length=15,
+        choices=ESTADO_PAGO,
+        default="SIN_PAGO",
+        db_index=True,
     )
 
     # --- Trazabilidad del pago ---
     fecha_ultimo_pago = models.DateField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text="Fecha del ultimo abono registrado",
     )
     referencia_pago = models.CharField(
-        max_length=100, blank=True,
+        max_length=100,
+        blank=True,
         help_text="Numero de comprobante o referencia del ultimo pago",
     )
     observaciones = models.TextField(blank=True)

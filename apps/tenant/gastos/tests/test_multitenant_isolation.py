@@ -1,14 +1,16 @@
 import pytest
+from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context
 from rest_framework import status
-from apps.tenant.gastos.models import ResolucionDIAN, DocumentoSoporte
+
+from apps.public.tenants.models import TenantMembership
 from apps.tenant.empresa.models import Empresa
+from apps.tenant.gastos.models import DocumentoSoporte, ResolucionDIAN
 from apps.tenant.perfil.models import TenantProfile
 from apps.tenant.proveedores.models import Proveedor
-from apps.public.tenants.models import TenantMembership
-from django.contrib.auth import get_user_model
 
 User = get_user_model()
+
 
 @pytest.mark.django_db
 def test_multitenant_isolation_gastos(client, tenant1, tenant2):
@@ -20,25 +22,36 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
         emp1 = Empresa.objects.first()
         user1 = User.objects.create_user(username="user1", email="u1@t.com", password="password")
         TenantProfile.objects.create(user=user1, empresa=emp1, rol="ADMIN")
-        
+
         # Crear membresia en publico
-        with schema_context('public'):
+        with schema_context("public"):
             TenantMembership.objects.create(client=tenant1, user=user1, rol="ADMIN")
-        
+
         res1 = ResolucionDIAN.objects.create(
-            empresa=emp1, numero_resolucion="RES1", prefijo="G1",
-            rango_desde=1, rango_hasta=100,
-            fecha_resolucion="2026-01-01", fecha_fin="2027-01-01", vigente=True
+            empresa=emp1,
+            numero_resolucion="RES1",
+            prefijo="G1",
+            rango_desde=1,
+            rango_hasta=100,
+            fecha_resolucion="2026-01-01",
+            fecha_fin="2027-01-01",
+            vigente=True,
         )
-        
-        prov1 = Proveedor.objects.create(empresa=emp1, razon_social="Proveedor 1", numero_documento="999", tipo_documento="NIT")
-        
-        ds1 = DocumentoSoporte.objects.create(
-            empresa=emp1, resolucion_dian=res1, consecutivo=1,
-            fecha="2026-05-01", proveedor=prov1,
-            subtotal=1000, total=1000,
+
+        prov1 = Proveedor.objects.create(
+            empresa=emp1, razon_social="Proveedor 1", numero_documento="999", tipo_documento="NIT"
+        )
+
+        DocumentoSoporte.objects.create(
+            empresa=emp1,
+            resolucion_dian=res1,
+            consecutivo=1,
+            fecha="2026-05-01",
+            proveedor=prov1,
+            subtotal=1000,
+            total=1000,
             descripcion="Gasto T1",
-            categoria_contable="ARRENDAMIENTOS"
+            categoria_contable="ARRENDAMIENTOS",
         )
 
     # 2. Setup Tenant 2
@@ -46,43 +59,63 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
         emp2 = Empresa.objects.first()
         user2 = User.objects.create_user(username="user2", email="u2@t.com", password="password")
         TenantProfile.objects.create(user=user2, empresa=emp2, rol="ADMIN")
-        
+
         # Crear membresia en publico
-        with schema_context('public'):
+        with schema_context("public"):
             TenantMembership.objects.create(client=tenant2, user=user2, rol="ADMIN")
-        
+
         # Crear varias resoluciones dummy para asegurar que res2.id sea diferente a res1.id
         for i in range(5):
             ResolucionDIAN.objects.create(
-                empresa=emp2, numero_resolucion=f"DUMMY{i}", prefijo="DX",
-                rango_desde=1, rango_hasta=10,
-                fecha_resolucion="2026-01-01", fecha_fin="2027-01-01", vigente=False
+                empresa=emp2,
+                numero_resolucion=f"DUMMY{i}",
+                prefijo="DX",
+                rango_desde=1,
+                rango_hasta=10,
+                fecha_resolucion="2026-01-01",
+                fecha_fin="2027-01-01",
+                vigente=False,
             )
 
         res2 = ResolucionDIAN.objects.create(
-            empresa=emp2, numero_resolucion="RES2", prefijo="G2",
-            rango_desde=1, rango_hasta=100,
-            fecha_resolucion="2026-01-01", fecha_fin="2027-01-01", vigente=True
+            empresa=emp2,
+            numero_resolucion="RES2",
+            prefijo="G2",
+            rango_desde=1,
+            rango_hasta=100,
+            fecha_resolucion="2026-01-01",
+            fecha_fin="2027-01-01",
+            vigente=True,
         )
-        
-        prov2 = Proveedor.objects.create(empresa=emp2, razon_social="Proveedor 2", numero_documento="888", tipo_documento="NIT")
-        
+
+        prov2 = Proveedor.objects.create(
+            empresa=emp2, razon_social="Proveedor 2", numero_documento="888", tipo_documento="NIT"
+        )
+
         # Crear varios documentos en T2 para que g2.id sea mayor que cualquier ID en T1
         for i in range(5):
             DocumentoSoporte.objects.create(
-                empresa=emp2, resolucion_dian=res2, consecutivo=10+i,
-                fecha="2026-05-01", proveedor=prov2,
-                subtotal=100, total=100,
+                empresa=emp2,
+                resolucion_dian=res2,
+                consecutivo=10 + i,
+                fecha="2026-05-01",
+                proveedor=prov2,
+                subtotal=100,
+                total=100,
                 descripcion=f"Gasto T2-{i}",
-                categoria_contable="SERVICIOS_PUBLICOS"
+                categoria_contable="SERVICIOS_PUBLICOS",
             )
 
         g2 = DocumentoSoporte.objects.create(
-            empresa=emp2, resolucion_dian=res2, consecutivo=20,
-            fecha="2026-05-01", proveedor=prov2,
-            subtotal=2000, total=2000,
+            empresa=emp2,
+            resolucion_dian=res2,
+            consecutivo=20,
+            fecha="2026-05-01",
+            proveedor=prov2,
+            subtotal=2000,
+            total=2000,
             descripcion="Gasto T2",
-            categoria_contable="SERVICIOS_PUBLICOS"
+            categoria_contable="SERVICIOS_PUBLICOS",
         )
 
     # 3. Validar Aislamiento en Listado
@@ -94,14 +127,16 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
     resp = client.get("/api/v1/gastos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
-    results = data.get('results', [])
-    
-    ids = [item['descripcion'] for item in results]
+    results = data.get("results", [])
+
+    ids = [item["descripcion"] for item in results]
     assert "Gasto T1" in ids
     assert "Gasto T2" not in ids
-    
+
     # 4. Validar Prevencion de IDOR (Acceso Directo)
-    resp = client.get(f"/api/v1/gastos/{g2.uuid}/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
+    resp = client.get(
+        f"/api/v1/gastos/{g2.uuid}/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co"
+    )
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     # 5. Validar Aislamiento en Creacion (Prevencion de IDOR en FKs)
@@ -111,89 +146,168 @@ def test_multitenant_isolation_gastos(client, tenant1, tenant2):
         "documento_soporte": {
             "fecha": "2026-05-06",
             "subtotal": 500,
-            "proveedor": prov1.id, # Proveedor VALIDO para T1 pero...
-            "resolucion": res2.id  # Intento de usar resolucion de otro tenant
-        }
+            "proveedor": prov1.id,  # Proveedor VALIDO para T1 pero...
+            "resolucion": res2.id,  # Intento de usar resolucion de otro tenant
+        },
     }
     resp = client.post(
         "/api/v1/gastos/",
         data=payload,
         content_type="application/json",
-        HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co"
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co",
     )
     # Debe fallar porque res2 no pertenece a la empresa de user1
-    assert resp.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND)
+    assert resp.status_code in (
+        status.HTTP_400_BAD_REQUEST,
+        status.HTTP_403_FORBIDDEN,
+        status.HTTP_404_NOT_FOUND,
+    )
 
 
 @pytest.mark.django_db
 def test_multitenant_isolation_gastos_tabla_html(client, tenant1, tenant2):
     """
-    Aislamiento multi-tenant de las vistas HTML nuevas (django-tables2 + HTMX,
-    PLAN_UNICO_CORRECCIONES.md Fase 5-BIS) que reemplazan la grilla Tabulator.
-    Estas vistas no pasan por DRF (no son ViewSets) — usan SintelDSVMixin
-    directamente, asi que necesitan su propia verificacion, no basta con la
+    Aislamiento multi-tenant del listado de Gastos: KPIs de Documentos
+    Soporte (vista HTML, django-tables2 + HTMX para Resoluciones DIAN) +
+    grilla de Documentos Soporte (migrada a DataTables -- POST
+    /api/v1/gastos/dt/, ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md).
+    La vista de KPIs no pasa por DRF (no es un ViewSet) — usa SintelDSVMixin
+    directamente, asi que necesita su propia verificacion, no basta con la
     cobertura ya existente sobre /api/v1/gastos/.
     """
     with schema_context(tenant1.schema_name):
         emp1 = Empresa.objects.first()
         user1 = User.objects.create_user(username="user1b", email="u1b@t.com", password="password")
         TenantProfile.objects.create(user=user1, empresa=emp1, rol="ADMIN")
-        with schema_context('public'):
+        with schema_context("public"):
             TenantMembership.objects.create(client=tenant1, user=user1, rol="ADMIN")
 
         res1 = ResolucionDIAN.objects.create(
-            empresa=emp1, numero_resolucion="RES1B", prefijo="G1B",
-            rango_desde=1, rango_hasta=100,
-            fecha_resolucion="2026-01-01", fecha_fin="2027-01-01", vigente=True
+            empresa=emp1,
+            numero_resolucion="RES1B",
+            prefijo="G1B",
+            rango_desde=1,
+            rango_hasta=100,
+            fecha_resolucion="2026-01-01",
+            fecha_fin="2027-01-01",
+            vigente=True,
         )
-        prov1 = Proveedor.objects.create(empresa=emp1, razon_social="Proveedor Tenant Uno", numero_documento="111", tipo_documento="NIT")
+        prov1 = Proveedor.objects.create(
+            empresa=emp1,
+            razon_social="Proveedor Tenant Uno",
+            numero_documento="111",
+            tipo_documento="NIT",
+        )
         DocumentoSoporte.objects.create(
-            empresa=emp1, resolucion_dian=res1, consecutivo=1,
-            fecha="2026-05-01", proveedor=prov1,
-            subtotal=1000, total=1000,
+            empresa=emp1,
+            resolucion_dian=res1,
+            consecutivo=1,
+            fecha="2026-05-01",
+            proveedor=prov1,
+            subtotal=1000,
+            total=1000,
             descripcion="Gasto Tabla T1",
-            categoria_contable="ARRENDAMIENTOS"
+            categoria_contable="ARRENDAMIENTOS",
         )
 
     with schema_context(tenant2.schema_name):
         emp2 = Empresa.objects.first()
         user2 = User.objects.create_user(username="user2b", email="u2b@t.com", password="password")
         TenantProfile.objects.create(user=user2, empresa=emp2, rol="ADMIN")
-        with schema_context('public'):
+        with schema_context("public"):
             TenantMembership.objects.create(client=tenant2, user=user2, rol="ADMIN")
 
         res2 = ResolucionDIAN.objects.create(
-            empresa=emp2, numero_resolucion="RES2B", prefijo="G2B",
-            rango_desde=1, rango_hasta=100,
-            fecha_resolucion="2026-01-01", fecha_fin="2027-01-01", vigente=True
+            empresa=emp2,
+            numero_resolucion="RES2B",
+            prefijo="G2B",
+            rango_desde=1,
+            rango_hasta=100,
+            fecha_resolucion="2026-01-01",
+            fecha_fin="2027-01-01",
+            vigente=True,
         )
-        prov2 = Proveedor.objects.create(empresa=emp2, razon_social="Proveedor Tenant Dos", numero_documento="222", tipo_documento="NIT")
+        prov2 = Proveedor.objects.create(
+            empresa=emp2,
+            razon_social="Proveedor Tenant Dos",
+            numero_documento="222",
+            tipo_documento="NIT",
+        )
         DocumentoSoporte.objects.create(
-            empresa=emp2, resolucion_dian=res2, consecutivo=1,
-            fecha="2026-05-01", proveedor=prov2,
-            subtotal=2000, total=2000,
+            empresa=emp2,
+            resolucion_dian=res2,
+            consecutivo=1,
+            fecha="2026-05-01",
+            proveedor=prov2,
+            subtotal=2000,
+            total=2000,
             descripcion="Gasto Tabla T2",
-            categoria_contable="SERVICIOS_PUBLICOS"
+            categoria_contable="SERVICIOS_PUBLICOS",
         )
 
-    # Nivel 1: listado HTML no debe filtrar datos de otro tenant
+    # Nivel 1: grilla de Documentos Soporte (DataTables) no debe filtrar
+    # datos de otro tenant
     with schema_context(tenant1.schema_name):
         client.force_login(user1)
-    resp = client.get("/ui/gastos/tabla-documentos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
+    dt_payload = {
+        "draw": 1,
+        "start": 0,
+        "length": 10,
+        "search": {"value": ""},
+        "order": [],
+        "columns": [],
+    }
+    resp = client.post(
+        "/api/v1/gastos/dt/",
+        data=dt_payload,
+        content_type="application/json",
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co",
+    )
     assert resp.status_code == status.HTTP_200_OK
-    body = resp.content.decode()
-    assert "Proveedor Tenant Uno" in body
-    assert "Proveedor Tenant Dos" not in body
+    vendedores = [row["ds_vendedor"] for row in resp.json()["data"]]
+    assert "Proveedor Tenant Uno" in vendedores
+    assert "Proveedor Tenant Dos" not in vendedores
 
-    # Nivel 1 (Resoluciones): misma verificacion sobre la segunda tabla del piloto
-    resp = client.get("/ui/gastos/tabla-resoluciones/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
+    # Nivel 1 (KPIs de Documentos Soporte): la vista HTML no debe filtrar en
+    # silencio -- responde 200 con sesion valida.
+    resp = client.get(
+        "/ui/gastos/tabla-documentos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co"
+    )
     assert resp.status_code == status.HTTP_200_OK
-    body = resp.content.decode()
-    assert "RES1B" in body
-    assert "RES2B" not in body
 
-    # Sin sesion: debe redirigir a login (LoginRequiredMixin), no filtrar en silencio
+    # Nivel 1 (Resoluciones): migro a DataTables -- POST, no la vista HTML
+    # django-tables2 retirada.
+    resp = client.post(
+        "/api/v1/gastos/resoluciones/dt/",
+        data=dt_payload,
+        content_type="application/json",
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co",
+    )
+    assert resp.status_code == status.HTTP_200_OK
+    numeros_resolucion = [row["numero_resolucion"] for row in resp.json()["data"]]
+    assert "RES1B" in numeros_resolucion
+    assert "RES2B" not in numeros_resolucion
+
+    # Sin sesion: la vista HTML de KPIs debe redirigir a login (LoginRequiredMixin);
+    # los endpoints DataTables (DRF) deben rechazar con 401/403 -- ninguno filtra en silencio.
     from django.test import Client
+
     anon_client = Client()
-    resp = anon_client.get("/ui/gastos/tabla-documentos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
+    resp = anon_client.get(
+        "/ui/gastos/tabla-documentos/", HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co"
+    )
     assert resp.status_code in (status.HTTP_302_FOUND, status.HTTP_403_FORBIDDEN)
+    resp = anon_client.post(
+        "/api/v1/gastos/dt/",
+        data=dt_payload,
+        content_type="application/json",
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co",
+    )
+    assert resp.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+    resp = anon_client.post(
+        "/api/v1/gastos/resoluciones/dt/",
+        data=dt_payload,
+        content_type="application/json",
+        HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co",
+    )
+    assert resp.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)

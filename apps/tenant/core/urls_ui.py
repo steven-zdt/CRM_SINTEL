@@ -7,7 +7,7 @@ Se incluye en config/urls_tenant.py con path('', include('apps.tenant.core.urls_
 # WARNING: API-First: Estas rutas solo sirven HTML estructural.
 Los datos se cargan vía JavaScript desde las APIs JSON.
 
-# WARNING: REGLA DE NEGOCIO (v2.40): 
+# WARNING: REGLA DE NEGOCIO (v2.40):
 - Solo rutas UI (HTML/views), no APIs.
 - Las APIs se registran en config/api_urls.py bajo /api/v1/.
 - El workspace es la interfaz principal del tenant autenticado.
@@ -17,6 +17,7 @@ Los datos se cargan vía JavaScript desde las APIs JSON.
 - Cada módulo carga datos vía JavaScript desde /api/v1/{modulo}/.
 - Lazy loading con DOMUtils.onVisibleOnce para optimizar carga inicial.
 """
+
 from django.urls import path
 
 from apps.tenant.core import views_ui
@@ -25,7 +26,7 @@ from apps.tenant.core import views_ui
 # Workspace compositor
 # # WARNING: CRÍTICO: Se incluye en config/urls_tenant.py con path('', include(...))
 # La ruta 'workspace/' definida aquí genera la URL final: /workspace/
-app_name = 'core_ui'
+app_name = "core_ui"
 
 urlpatterns = [
     # Workspace compositor (vista principal del tenant autenticado)
@@ -34,5 +35,5 @@ urlpatterns = [
     # Los módulos cargan datos vía JavaScript desde /api/v1/{modulo}/
     # # WARNING: SEGURIDAD: LoginRequiredMixin garantiza autenticación
     # El middleware require_tenant_membership valida membresía en rutas privadas
-    path('workspace/', views_ui.WorkspaceView.as_view(), name='workspace'),
+    path("workspace/", views_ui.WorkspaceView.as_view(), name="workspace"),
 ]

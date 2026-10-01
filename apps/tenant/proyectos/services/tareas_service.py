@@ -10,31 +10,41 @@ Validaciones criticas:
 - Proyecto en fase CIERRE -> Tareas INMUTABLES (no create, update, delete)
 - DSV: empresa_id DEBE coincidir con proyecto.empresa_id
 """
-from decimal import Decimal
-from datetime import date
 
 from django.db import models, transaction
 from rest_framework.exceptions import ValidationError
 
-from apps.tenant.empresa.models import Empresa
-from ..models import Proyecto, TareaDiariaProyecto
-
+from ..models import TareaDiariaProyecto
 
 # ==============================================================================
 # SSoT: TAREA_FIELDS para Zero Waste (LIST/DETAIL)
 # ==============================================================================
 
 TAREA_FIELDS = [
-    'id', 'uuid', 'proyecto_id', 'empresa_id', 'fecha_inicio', 'fecha_fin',
-    'titulo', 'descripcion', 'estado', 'prioridad',
-    'asignado_a', 'notas_progreso', 'avance', 'bloqueos', 'incidencias',
-    'created_at', 'updated_at'
+    "id",
+    "uuid",
+    "proyecto_id",
+    "empresa_id",
+    "fecha_inicio",
+    "fecha_fin",
+    "titulo",
+    "descripcion",
+    "estado",
+    "prioridad",
+    "asignado_a",
+    "notas_progreso",
+    "avance",
+    "bloqueos",
+    "incidencias",
+    "created_at",
+    "updated_at",
 ]
 
 
 # ==============================================================================
 # CRUD SERVICE - Persistencia (v3.5.3)
 # ==============================================================================
+
 
 class TareasDiariasCRUDService:
     """
@@ -58,6 +68,7 @@ class TareasDiariasCRUDService:
 # ==============================================================================
 # BUSINESS SERVICE - Logica de Negocio (v3.5.3)
 # ==============================================================================
+
 
 class TareasDiariasBusinessService:
     """
@@ -98,7 +109,7 @@ class TareasDiariasBusinessService:
         Raises:
             ValidationError si proyecto esta en CIERRE
         """
-        if proyecto.fase_actual == 'CIERRE':
+        if proyecto.fase_actual == "CIERRE":
             raise ValidationError(
                 "No se pueden crear, modificar o eliminar tareas en fase Cierre. El proyecto esta cerrado."
             )
@@ -122,14 +133,14 @@ class TareasDiariasBusinessService:
         proyecto,
         fecha_inicio=None,
         fecha_fin=None,
-        titulo='',
-        descripcion='',
-        prioridad='NORMAL',
-        asignado_a='',
+        titulo="",
+        descripcion="",
+        prioridad="NORMAL",
+        asignado_a="",
         fecha=None,
         avance=None,
-        bloqueos='',
-        incidencias=''
+        bloqueos="",
+        incidencias="",
     ):
         """
         Crea una nueva TareaDiariaProyecto.
@@ -181,7 +192,7 @@ class TareasDiariasBusinessService:
             avance=avance,
             bloqueos=bloqueos,
             incidencias=incidencias,
-            estado='PENDIENTE'
+            estado="PENDIENTE",
         )
 
         # Persiste
@@ -237,19 +248,24 @@ class TareasDiariasBusinessService:
 
         # Campos permitidos
         permitidos = [
-            'fecha_inicio', 'fecha_fin', 'descripcion', 'prioridad', 'notas_progreso', 'asignado_a',
-            'avance', 'bloqueos', 'incidencias',
+            "fecha_inicio",
+            "fecha_fin",
+            "descripcion",
+            "prioridad",
+            "notas_progreso",
+            "asignado_a",
+            "avance",
+            "bloqueos",
+            "incidencias",
         ]
         for key, value in data.items():
             if key in permitidos:
                 setattr(tarea, key, value)
 
         # Si se modificaron fechas, validar nuevo rango
-        if 'fecha_inicio' in data or 'fecha_fin' in data:
+        if "fecha_inicio" in data or "fecha_fin" in data:
             TareasDiariasBusinessService._validar_fecha_en_rango(
-                tarea.proyecto,
-                tarea.fecha_inicio,
-                tarea.fecha_fin
+                tarea.proyecto, tarea.fecha_inicio, tarea.fecha_fin
             )
 
         TareasDiariasCRUDService.save_tarea(tarea)
@@ -278,6 +294,7 @@ class TareasDiariasBusinessService:
 # SELECTOR - Queries Optimizadas (Zero Waste) (v3.5.3)
 # ==============================================================================
 
+
 class TareasDiariasSelector:
     """
     Queries de lectura optimizadas con .only() para Zero Waste.
@@ -301,8 +318,7 @@ class TareasDiariasSelector:
             QuerySet filtered y optimizado
         """
         qs = TareaDiariaProyecto.objects.filter(
-            empresa_id=empresa_id,
-            proyecto__uuid=proyecto_uuid
+            empresa_id=empresa_id, proyecto__uuid=proyecto_uuid
         ).only(*TAREA_FIELDS)
 
         if fecha_inicio:
@@ -310,7 +326,7 @@ class TareasDiariasSelector:
         if fecha_fin:
             qs = qs.filter(fecha_inicio__lte=fecha_fin)
 
-        return qs.order_by('fecha_inicio', 'created_at')
+        return qs.order_by("fecha_inicio", "created_at")
 
     @staticmethod
     def qs_resumen_proyecto(empresa_id, proyecto_uuid):
@@ -320,17 +336,12 @@ class TareasDiariasSelector:
         Returns:
             dict con conteos por estado
         """
-        qs = TareaDiariaProyecto.objects.filter(
-            empresa_id=empresa_id,
-            proyecto__uuid=proyecto_uuid
-        )
+        qs = TareaDiariaProyecto.objects.filter(empresa_id=empresa_id, proyecto__uuid=proyecto_uuid)
 
-        resumen = qs.values('estado').annotate(
-            count=models.Count('id')
-        )
+        resumen = qs.values("estado").annotate(count=models.Count("id"))
 
         # Formato: {ESTADO: count}
-        return {item['estado']: item['count'] for item in resumen}
+        return {item["estado"]: item["count"] for item in resumen}
 
     @staticmethod
     def get_tarea(empresa_id, tarea_id):
@@ -345,9 +356,10 @@ class TareasDiariasSelector:
             TareaDiariaProyecto or None
         """
         try:
-            return TareaDiariaProyecto.objects.filter(
-                empresa_id=empresa_id,
-                id=tarea_id
-            ).only(*TAREA_FIELDS).first()
+            return (
+                TareaDiariaProyecto.objects.filter(empresa_id=empresa_id, id=tarea_id)
+                .only(*TAREA_FIELDS)
+                .first()
+            )
         except TareaDiariaProyecto.DoesNotExist:
             return None

@@ -3,43 +3,16 @@
 {# Fase 5-BIS: tabla server-rendered (django-tables2 + HTMX), reemplaza Tabulator #}
 {# ⚠️ Feature-Sliced Architecture: Template dedicado para listado #}
 <div id="ui-contabilidad-asiento" class="ui-module ui-contabilidad">
-  <!-- Toolbar -->
+  <!-- Toolbar -- sin buscador propio: DataTables trae su buscador nativo -->
   <div class="d-flex align-items-center gap-2 mb-3" id="toolbar-contabilidad-asiento">
-    <input id="search-asiento" class="form-control form-control-sm"
-           type="search" placeholder="Buscar por número o descripción..."
-           hx-get="{% url 'contabilidad:asiento-tabla' %}"
-           hx-trigger="keyup changed delay:400ms, search"
-           hx-target="#asientos-panel"
-           hx-include="#filter-estado-asiento, #filter-cuadratura-asiento"
-           name="q" />
-
-    <select id="filter-estado-asiento" class="form-select form-select-sm" style="width: auto;"
-            hx-get="{% url 'contabilidad:asiento-tabla' %}"
-            hx-trigger="change"
-            hx-target="#asientos-panel"
-            hx-include="#search-asiento, #filter-cuadratura-asiento"
-            name="estado">
+    <select id="filter-estado-asiento" class="form-select form-select-sm" style="width: auto;">
       <option value="">Todos los Estados</option>
       <option value="BORRADOR">Borrador</option>
       <option value="APROBADO">Aprobado</option>
       <option value="CERRADO">Cerrado</option>
     </select>
 
-    {# ⚠️ v2.60 Fase 2: Filtro de Cuadratura #}
-    <select id="filter-cuadratura-asiento" class="form-select form-select-sm" style="width: auto;"
-            hx-get="{% url 'contabilidad:asiento-tabla' %}"
-            hx-trigger="change"
-            hx-target="#asientos-panel"
-            hx-include="#search-asiento, #filter-estado-asiento"
-            name="cuadratura">
-      <option value="">Todas las Cuadraturas</option>
-      <option value="cuadrado">Cuadrados</option>
-      <option value="no_cuadrado">No Cuadrados</option>
-    </select>
-
-    <button id="btn-refrescar-asiento" class="btn btn-sm btn-outline-secondary"
-            hx-get="{% url 'contabilidad:asiento-tabla' %}"
-            hx-target="#asientos-panel">
+    <button id="btn-refrescar-asiento" class="btn btn-sm btn-outline-secondary">
       <i class="bi bi-arrow-clockwise"></i> Refrescar
     </button>
 
@@ -71,14 +44,8 @@
     <ul id="missing-fields-list-asiento" class="mb-0 mt-2"></ul>
   </div>
 
-  <!-- Tabla server-rendered (django-tables2 + HTMX) -->
-  <div id="asientos-panel"
-       hx-get="{% url 'contabilidad:asiento-tabla' %}"
-       hx-trigger="load, asiento-updated from:body"
-       hx-target="this"
-       hx-swap="innerHTML"
-       hx-boost="true">
-  </div>
+  <!-- Tabla -- esqueleto estatico, poblado via ajax por asiento_list.js -->
+  {% include 'tenant/contabilidad/partials/tabla_asientos.html' %}
 </div>
 
 {# Contenedor HTMX para Offcanvas — assets cargados por workspace extra_js #}

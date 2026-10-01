@@ -15,6 +15,7 @@ Estructura (FASE 1 + v2.40):
 - validators.py: Validación de integridad y campos obligatorios
 - validations/: Validadores específicos por app
 """
+
 # WARNING: v2.40: Auto-importar parsers de apps para registro automático
 try:
     # Importar registro de parsers (registra automáticamente todos los parsers de todas las apps)

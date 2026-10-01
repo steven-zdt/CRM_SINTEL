@@ -7,6 +7,7 @@ activa para el tenant actual antes de permitir el login.
 Sin esta validación, cualquier usuario global podría loguearse en cualquier tenant,
 violando el aislamiento multi-tenant.
 """
+
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 
@@ -14,71 +15,69 @@ from django.contrib.auth.forms import AuthenticationForm
 class TenantAuthenticationForm(AuthenticationForm):
     """
     Formulario de autenticación que valida membresía del tenant.
-    
+
     ⚠️ SEGURIDAD CRÍTICA: Este formulario previene el acceso cross-tenant
     validando que el usuario tenga una TenantMembership activa para el
     tenant actual antes de permitir el login.
-    
+
     Flujo de validación:
     1. Django valida credenciales (username/password) - método padre
     2. Si las credenciales son válidas, se llama a confirm_login_allowed()
     3. Este método valida que el usuario tenga membresía en el tenant actual
     4. Si no tiene membresía o está inactiva, lanza ValidationError
     """
-    
+
     def __init__(self, request=None, *args, **kwargs):
         """
         Inicializa el formulario con el request.
-        
+
         LoginView pasa automáticamente request=request al formulario,
         pero lo hacemos explícito para asegurar que esté disponible.
         """
-        super().__init__(request=request, *args, **kwargs)
+        super().__init__(*args, request=request, **kwargs)
         # El request se almacena en self.request por AuthenticationForm
-    
+
     def clean(self):
         """
         Valida las credenciales y la membresía del tenant.
-        
+
         ⚠️ UX CRÍTICA: Este método distingue entre:
         - "Contraseña incorrecta" (credenciales inválidas)
         - "Usuario no autorizado en este tenant" (credenciales válidas pero sin membresía)
-        
+
         Esto evita que el usuario crea que olvidó su clave cuando en realidad
         no tiene acceso a este tenant.
         """
         # Llamar al método padre primero (valida username/password)
         cleaned_data = super().clean()
-        
+
         # Si el formulario ya tiene errores (credenciales inválidas), no continuar
         if self.errors:
             return cleaned_data
-        
+
         # Obtener el usuario autenticado (si las credenciales son válidas)
-        username = cleaned_data.get('username')
-        password = cleaned_data.get('password')
-        
+        username = cleaned_data.get("username")
+        password = cleaned_data.get("password")
+
         if not username or not password:
             return cleaned_data
-        
+
         # Intentar autenticar usando el backend (que valida membresía)
         from django.contrib.auth import authenticate
-        user = authenticate(
-            request=self.request,
-            username=username,
-            password=password
-        )
-        
+
+        user = authenticate(request=self.request, username=username, password=password)
+
         # Si el backend retorna None, puede ser por dos razones:
         # 1. Credenciales inválidas (ya manejado por el método padre)
         # 2. Credenciales válidas pero sin membresía (necesitamos detectar esto)
-        
+
         if user is None:
             # Verificar si el usuario existe y el password es correcto
             # Esto nos permite distinguir entre "password incorrecto" y "sin membresía"
             from django.contrib.auth import get_user_model
+
             User = get_user_model()
-            
+
             try:
                 # Intentar obtener el usuario (puede ser username o email)
                 try:
@@ -88,17 +87,19 @@ class TenantAuthenticationForm(AuthenticationForm):
                         user_obj = User.objects.get(email=username)
                     except User.DoesNotExist:
                         user_obj = None
-                
+
                 # Si el usuario existe, verificar el password manualmente
                 if user_obj and user_obj.check_password(password):
                     # Credenciales válidas pero backend retornó None = Sin membresía
-                    tenant = getattr(self.request, 'tenant', None)
-                    tenant_name = getattr(tenant, 'nombre', 'esta empresa') if tenant else 'esta empresa'
-                    
+                    tenant = getattr(self.request, "tenant", None)
+                    tenant_name = (
+                        getattr(tenant, "nombre", "esta empresa") if tenant else "esta empresa"
+                    )
+
                     raise forms.ValidationError(
                         f"Tu cuenta existe, pero no tienes acceso a la empresa {tenant_name}. "
                         "Contacta a tu administrador.",
-                        code='no_membership'
+                        code="no_membership",
                     )
                 # Si el password no coincide, el error ya fue manejado por el método padre
             except forms.ValidationError:
@@ -107,43 +108,43 @@ class TenantAuthenticationForm(AuthenticationForm):
             except Exception:
                 # Si hay algún error al verificar, dejar que el método padre maneje el error genérico
                 pass
-        
+
         return cleaned_data
-    
+
     def confirm_login_allowed(self, user):
         """
         Valida que el usuario tenga membresía activa en el tenant actual.
-        
+
         ⚠️ SEGURIDAD: Este método se ejecuta DESPUÉS de validar credenciales
         pero ANTES de autenticar al usuario. Si falla, el login se rechaza.
-        
+
         Args:
             user: Usuario autenticado (credenciales válidas)
-        
+
         Raises:
             forms.ValidationError: Si el usuario no tiene membresía o está inactiva
-        
+
         Returns:
             None: Si la validación pasa, permite el login
         """
         # Llamar al método padre primero (valida usuario activo, etc.)
         super().confirm_login_allowed(user)
-        
+
         # Obtener el tenant actual desde el request
         # django-tenants inyecta 'tenant' en request mediante TenantMainMiddleware
-        tenant = getattr(self.request, 'tenant', None)
-        
+        tenant = getattr(self.request, "tenant", None)
+
         if not tenant:
             # Si no hay tenant en el request, algo está mal configurado
             # En este caso, permitimos el login (fallback para desarrollo)
             # En producción, esto no debería pasar
             return
-        
+
         # Si el tenant es 'public', permitir acceso (admin global)
         # El esquema 'public' es especial y no requiere membresía
-        if tenant.schema_name == 'public':
+        if tenant.schema_name == "public":
             return
-        
+
         # Verificar membresia via Core Membership Bridge (REGLA 2)
         from apps.tenant.core.services.membership import check_membership
 
@@ -151,26 +152,26 @@ class TenantAuthenticationForm(AuthenticationForm):
             membership = check_membership(user, tenant)
 
             if not membership:
-                tenant_name = getattr(tenant, 'nombre', 'esta empresa')
+                tenant_name = getattr(tenant, "nombre", "esta empresa")
                 raise forms.ValidationError(
                     f"Tu cuenta existe, pero no tienes acceso a la empresa {tenant_name}. "
                     "Contacta a tu administrador.",
-                    code='no_membership'
+                    code="no_membership",
                 )
 
             if not tenant.is_active:
                 raise forms.ValidationError(
                     "Esta empresa est\u00e1 suspendida. Por favor, contacta al administrador.",
-                    code='tenant_inactive'
+                    code="tenant_inactive",
                 )
 
         except forms.ValidationError:
             raise
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error("Error al validar membresia en TenantAuthenticationForm: %s", e)
             raise forms.ValidationError(
-                "Error al validar acceso. Por favor, intenta nuevamente.",
-                code='validation_error'
-            )
+                "Error al validar acceso. Por favor, intenta nuevamente.", code="validation_error"
+            ) from e

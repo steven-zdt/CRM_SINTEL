@@ -7,6 +7,7 @@ persistencia real (una Factura real en BD), reutilizando el mismo XML
 fixture ya usado para verificar FASE 1 de la migracion de tasks.py. No usa
 mocks de guardar_desde_dto -- solo verifica el contrato transversal nuevo.
 """
+
 import os
 
 from apps.services.document_intake import DocumentSource, ProcessingStatus, ReceivedDocument

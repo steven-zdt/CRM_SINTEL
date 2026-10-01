@@ -15,13 +15,14 @@ Restricciones:
   - Aislamiento tenant estricto via schema_context (AGENTS.md 4)
   - UUID como lookup field en todos los endpoints (AGENTS.md 14)
 """
+
 from decimal import Decimal
 
 import pytest
 from django_tenants.utils import schema_context
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def make_host(tenant):
     return f"{tenant.schema_name}.sintel.net.co"
@@ -59,11 +60,13 @@ DEVENGO_PAYLOAD_BASE = {
 # MODULO 1: EMPLEADOS - CRUD Completo Independiente
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 class TestEmpleadoCRUDSmoke:
     """
     Garantiza que el modulo Empleados tiene CRUD completo via /api/v1/empleados/
     """
+
     URL = "/api/v1/empleados/"
 
     def test_create_empleado(self, client, admin_user, tenant):
@@ -143,14 +146,18 @@ class TestEmpleadoCRUDSmoke:
         resp = client.delete(f"{self.URL}{uuid}/", HTTP_HOST=make_host(tenant))
         # 204 = eliminado OK, 400/409 = regla de negocio valida (ej: solo se
         # puede eliminar un empleado en estado RETIRADO, no ACTIVO)
-        assert resp.status_code in (200, 204, 400, 409), (
-            f"DELETE failed unexpectedly: {resp.status_code} {resp.content[:300]}"
-        )
+        assert resp.status_code in (
+            200,
+            204,
+            400,
+            409,
+        ), f"DELETE failed unexpectedly: {resp.status_code} {resp.content[:300]}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MODULO 2: CONTRATOS - CRUD Completo Independiente
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestContratoCRUDSmoke:
@@ -158,6 +165,7 @@ class TestContratoCRUDSmoke:
     Garantiza que el modulo Contratos tiene CRUD completo via /api/v1/empleados/contratos/
     El modulo es INDEPENDIENTE del tab Empleados desde v3.8.0.
     """
+
     URL_EMP = "/api/v1/empleados/"
     URL = "/api/v1/empleados/contratos/"
 
@@ -176,7 +184,9 @@ class TestContratoCRUDSmoke:
         """L: Listar contratos independientemente retorna 200."""
         client.force_login(admin_user)
         resp = client.get(self.URL, HTTP_HOST=make_host(tenant))
-        assert resp.status_code == 200, f"LIST contratos failed: {resp.status_code} {resp.content[:300]}"
+        assert (
+            resp.status_code == 200
+        ), f"LIST contratos failed: {resp.status_code} {resp.content[:300]}"
         data = resp.json()
         assert "results" in data or isinstance(data, list)
 
@@ -192,7 +202,9 @@ class TestContratoCRUDSmoke:
             content_type="application/json",
             HTTP_HOST=make_host(tenant),
         )
-        assert resp.status_code == 201, f"CREATE contrato failed: {resp.status_code} {resp.content[:400]}"
+        assert (
+            resp.status_code == 201
+        ), f"CREATE contrato failed: {resp.status_code} {resp.content[:400]}"
         data = resp.json()
         assert "uuid" in data
         assert data["estado"] == "ACTIVO"
@@ -229,7 +241,9 @@ class TestContratoCRUDSmoke:
             content_type="application/json",
             HTTP_HOST=make_host(tenant),
         )
-        assert resp.status_code == 200, f"UPDATE contrato failed: {resp.status_code} {resp.content[:300]}"
+        assert (
+            resp.status_code == 200
+        ), f"UPDATE contrato failed: {resp.status_code} {resp.content[:300]}"
         assert resp.json()["cargo"] == "Senior Smoke Tester"
 
     def test_cancelar_contrato(self, client, admin_user, tenant):
@@ -249,9 +263,10 @@ class TestContratoCRUDSmoke:
             HTTP_HOST=make_host(tenant),
         )
         # 200 = cancelado OK; 400 = regla de negocio (ya cancelado, etc.) ambos validos
-        assert resp.status_code in (200, 400), (
-            f"CANCELAR contrato failed: {resp.status_code} {resp.content[:300]}"
-        )
+        assert resp.status_code in (
+            200,
+            400,
+        ), f"CANCELAR contrato failed: {resp.status_code} {resp.content[:300]}"
 
     def test_no_duplicar_contrato_activo(self, client, admin_user, tenant):
         """Regla de negocio: un empleado no puede tener dos contratos ACTIVO a la vez."""
@@ -259,18 +274,24 @@ class TestContratoCRUDSmoke:
         emp = self._crear_empleado(client, admin_user, tenant)
         payload = {**CONTRATO_PAYLOAD_BASE, "empleado": emp["id"]}
 
-        r1 = client.post(self.URL, data=payload, content_type="application/json", HTTP_HOST=make_host(tenant))
+        r1 = client.post(
+            self.URL, data=payload, content_type="application/json", HTTP_HOST=make_host(tenant)
+        )
         assert r1.status_code == 201
 
-        r2 = client.post(self.URL, data=payload, content_type="application/json", HTTP_HOST=make_host(tenant))
-        assert r2.status_code in (400, 409), (
-            f"Debe rechazar segundo contrato ACTIVO: got {r2.status_code}"
+        r2 = client.post(
+            self.URL, data=payload, content_type="application/json", HTTP_HOST=make_host(tenant)
         )
+        assert r2.status_code in (
+            400,
+            409,
+        ), f"Debe rechazar segundo contrato ACTIVO: got {r2.status_code}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MODULO 3: NOMINAS (DEVENGOS) - CRUD Completo Independiente
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestNominaCRUDSmoke:
@@ -278,9 +299,10 @@ class TestNominaCRUDSmoke:
     Garantiza que el modulo Nominas tiene CRUD completo via /api/v1/empleados/devengos/
     El modulo es INDEPENDIENTE del tab Empleados desde v3.8.0.
     """
-    URL_EMP  = "/api/v1/empleados/"
+
+    URL_EMP = "/api/v1/empleados/"
     URL_CONT = "/api/v1/empleados/contratos/"
-    URL      = "/api/v1/empleados/devengos/"
+    URL = "/api/v1/empleados/devengos/"
 
     def _setup(self, client, admin_user, tenant):
         """Helper: crea empleado + contrato y retorna IDs."""
@@ -330,7 +352,9 @@ class TestNominaCRUDSmoke:
         """L: Listar devengos independientemente retorna 200."""
         client.force_login(admin_user)
         resp = client.get(self.URL, HTTP_HOST=make_host(tenant))
-        assert resp.status_code == 200, f"LIST nominas failed: {resp.status_code} {resp.content[:300]}"
+        assert (
+            resp.status_code == 200
+        ), f"LIST nominas failed: {resp.status_code} {resp.content[:300]}"
         data = resp.json()
         assert "results" in data or isinstance(data, list)
 
@@ -350,7 +374,9 @@ class TestNominaCRUDSmoke:
             content_type="application/json",
             HTTP_HOST=make_host(tenant),
         )
-        assert resp.status_code == 201, f"CREATE nomina failed: {resp.status_code} {resp.content[:500]}"
+        assert (
+            resp.status_code == 201
+        ), f"CREATE nomina failed: {resp.status_code} {resp.content[:500]}"
         data = resp.json()
         assert "uuid" in data
         # Verificar que el service layer calculo los campos
@@ -394,14 +420,15 @@ class TestNominaCRUDSmoke:
         if resp.status_code == 200:
             # Si permite PATCH, verificar que los campos calculados no cambiaron
             data = resp.json()
-            assert Decimal(data["neto_pagar"]) != Decimal("9999999.00"), (
-                "El service layer debe proteger los campos calculados"
-            )
+            assert Decimal(data["neto_pagar"]) != Decimal(
+                "9999999.00"
+            ), "El service layer debe proteger los campos calculados"
         else:
             # 400 o 405 = bloqueado correctamente
-            assert resp.status_code in (400, 405), (
-                f"PATCH devengo inesperado: {resp.status_code} {resp.content[:300]}"
-            )
+            assert resp.status_code in (
+                400,
+                405,
+            ), f"PATCH devengo inesperado: {resp.status_code} {resp.content[:300]}"
 
     def test_anular_nomina(self, client, admin_user, tenant):
         """D: Anular devengo via accion custom retorna 200."""
@@ -419,12 +446,14 @@ class TestNominaCRUDSmoke:
             content_type="application/json",
             HTTP_HOST=make_host(tenant),
         )
-        assert resp.status_code in (200, 400), (
-            f"ANULAR nomina failed: {resp.status_code} {resp.content[:300]}"
-        )
+        assert resp.status_code in (
+            200,
+            400,
+        ), f"ANULAR nomina failed: {resp.status_code} {resp.content[:300]}"
         if resp.status_code == 200:
             with schema_context(tenant.schema_name):
                 from apps.tenant.empleados.models import Devengo
+
                 dev = Devengo.objects.get(uuid=uuid)
                 assert dev.anulado is True, "El devengo debe quedar marcado como anulado"
 
@@ -434,18 +463,24 @@ class TestNominaCRUDSmoke:
         emp, cont = self._setup(client, admin_user, tenant)
         payload = {**DEVENGO_PAYLOAD_BASE, "empleado": emp["id"], "contrato": cont["id"]}
 
-        r1 = client.post(self.URL, data=payload, content_type="application/json", HTTP_HOST=make_host(tenant))
+        r1 = client.post(
+            self.URL, data=payload, content_type="application/json", HTTP_HOST=make_host(tenant)
+        )
         assert r1.status_code == 201
 
-        r2 = client.post(self.URL, data=payload, content_type="application/json", HTTP_HOST=make_host(tenant))
-        assert r2.status_code in (400, 409), (
-            f"Debe rechazar duplicado de periodo: got {r2.status_code} {r2.content[:300]}"
+        r2 = client.post(
+            self.URL, data=payload, content_type="application/json", HTTP_HOST=make_host(tenant)
         )
+        assert r2.status_code in (
+            400,
+            409,
+        ), f"Debe rechazar duplicado de periodo: got {r2.status_code} {r2.content[:300]}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CROSS-MODULE: Verificar endpoints de los 3 modulos son accesibles
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.django_db
 class TestEndpointsAccessibilitySmoke:
@@ -458,23 +493,23 @@ class TestEndpointsAccessibilitySmoke:
     def test_endpoint_empleados_accesible(self, client, admin_user, tenant):
         client.force_login(admin_user)
         resp = client.get("/api/v1/empleados/", HTTP_HOST=make_host(tenant))
-        assert resp.status_code == 200, (
-            f"Endpoint /api/v1/empleados/ no accesible: {resp.status_code}"
-        )
+        assert (
+            resp.status_code == 200
+        ), f"Endpoint /api/v1/empleados/ no accesible: {resp.status_code}"
 
     def test_endpoint_contratos_accesible(self, client, admin_user, tenant):
         client.force_login(admin_user)
         resp = client.get("/api/v1/empleados/contratos/", HTTP_HOST=make_host(tenant))
-        assert resp.status_code == 200, (
-            f"Endpoint /api/v1/empleados/contratos/ no accesible: {resp.status_code}"
-        )
+        assert (
+            resp.status_code == 200
+        ), f"Endpoint /api/v1/empleados/contratos/ no accesible: {resp.status_code}"
 
     def test_endpoint_devengos_accesible(self, client, admin_user, tenant):
         client.force_login(admin_user)
         resp = client.get("/api/v1/empleados/devengos/", HTTP_HOST=make_host(tenant))
-        assert resp.status_code == 200, (
-            f"Endpoint /api/v1/empleados/devengos/ no accesible: {resp.status_code}"
-        )
+        assert (
+            resp.status_code == 200
+        ), f"Endpoint /api/v1/empleados/devengos/ no accesible: {resp.status_code}"
 
     def test_ninguno_devuelve_500(self, client, admin_user, tenant):
         """Los 3 endpoints NO deben generar errores internos."""
@@ -486,9 +521,5 @@ class TestEndpointsAccessibilitySmoke:
             "/api/v1/empleados/devengos/",
         ]:
             resp = client.get(url, HTTP_HOST=host)
-            assert resp.status_code != 500, (
-                f"ERROR 500 en {url}: {resp.content[:500]}"
-            )
-            assert resp.status_code != 404, (
-                f"ERROR 404 en {url} - endpoint no registrado"
-            )
+            assert resp.status_code != 500, f"ERROR 500 en {url}: {resp.content[:500]}"
+            assert resp.status_code != 404, f"ERROR 404 en {url} - endpoint no registrado"

@@ -22,8 +22,8 @@ from decimal import Decimal
 from django.db import IntegrityError, transaction
 from django.utils.timezone import now as tz_now
 
-from ..models import AsientoContable, MovimientoContable, PeriodoContable, ImpuestoDocumento
-from .dtos import TransaccionEconomica, LineaTransaccion
+from ..models import AsientoContable, ImpuestoDocumento, MovimientoContable, PeriodoContable
+from .dtos import TransaccionEconomica
 from .excepciones import AsientoYaExisteError
 from .resolver import ResolverCuentas
 from .validadores import (
@@ -115,7 +115,7 @@ class Contabilizador:
                     MovimientoContable.objects.bulk_create(movimientos)
 
                 # 8. Persist taxes (ImpuestoDocumento)
-                impuestos_doc = getattr(asiento, 'impuestos_documento_por_guardar', [])
+                impuestos_doc = getattr(asiento, "impuestos_documento_por_guardar", [])
                 for imp_doc in impuestos_doc:
                     imp_doc.asiento = asiento
                 if impuestos_doc:
@@ -131,7 +131,7 @@ class Contabilizador:
             # rechaza el segundo INSERT. Se traduce a AsientoYaExisteError para que
             # el llamador (p. ej. BaseExtractor.contabilizar_pendientes) lo trate
             # igual que la ruta normal de idempotencia (conteo en "omitidos").
-            if 'uniq_asiento_documento_origen_no_reversado' in str(exc):
+            if "uniq_asiento_documento_origen_no_reversado" in str(exc):
                 raise AsientoYaExisteError(
                     f"Asiento contable ya existe para {transaccion.documento_origen.app_label}."
                     f"{transaccion.documento_origen.modelo}[{transaccion.documento_origen.id}] "
@@ -139,12 +139,7 @@ class Contabilizador:
                 ) from exc
             raise
 
-    def existe_asiento_para(
-        self,
-        app_label: str,
-        modelo: str,
-        id: int
-    ) -> bool:
+    def existe_asiento_para(self, app_label: str, modelo: str, id: int) -> bool:
         """
         Check if entry already exists for source document (idempotence check).
 
@@ -192,7 +187,7 @@ class Contabilizador:
                 numero=f"RVER-{fecha_reversal.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}",
                 descripcion=f"REVERSAL: {asiento_original.descripcion}",
                 periodo_contable=periodo,
-                estado='BORRADOR',
+                estado="BORRADOR",
                 documento_origen_app=asiento_original.documento_origen_app,
                 documento_origen_modelo=asiento_original.documento_origen_modelo,
                 documento_origen_id=asiento_original.documento_origen_id,
@@ -213,6 +208,7 @@ class Contabilizador:
             # Mirror taxes with inverted signs if present
             for imp_orig in asiento_original.impuestos_documento.all():
                 from ..models import ImpuestoDocumento
+
                 ImpuestoDocumento.objects.create(
                     empresa_id=self.empresa_id,
                     asiento=asiento_reversal,
@@ -250,9 +246,7 @@ class Contabilizador:
         ).first()
 
         if not periodo:
-            raise ValueError(
-                f"No existe periodo contable para {fecha} (empresa {self.empresa_id})"
-            )
+            raise ValueError(f"No existe periodo contable para {fecha} (empresa {self.empresa_id})")
 
         return periodo
 
@@ -298,7 +292,7 @@ class Contabilizador:
             numero=f"ASI-{transaccion.fecha.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}",
             descripcion=transaccion.descripcion,
             periodo_contable=periodo,
-            estado='BORRADOR',
+            estado="BORRADOR",
             documento_origen_app=transaccion.documento_origen.app_label,
             documento_origen_modelo=transaccion.documento_origen.modelo,
             documento_origen_id=transaccion.documento_origen.id,
@@ -307,21 +301,18 @@ class Contabilizador:
         )
 
         movimientos = []
-        debe_total = Decimal('0')
-        haber_total = Decimal('0')
+        debe_total = Decimal("0")
+        haber_total = Decimal("0")
 
         for linea in transaccion.lineas:
             # Resolve PUC account
             cuenta_codigo = self.resolver.resolver_cuenta(
-                linea.concepto,
-                transaccion.tipo.value,
-                linea.cuenta_hint,
-                lado=linea.lado
+                linea.concepto, transaccion.tipo.value, linea.cuenta_hint, lado=linea.lado
             )
 
             # Build movement for principal line using lado to determine DEBE/HABER
-            debe_principal = linea.monto if linea.lado == 'DEBE' else Decimal('0')
-            haber_principal = linea.monto if linea.lado == 'HABER' else Decimal('0')
+            debe_principal = linea.monto if linea.lado == "DEBE" else Decimal("0")
+            haber_principal = linea.monto if linea.lado == "HABER" else Decimal("0")
 
             movimiento_principal = MovimientoContable(
                 empresa_id=self.empresa_id,
@@ -343,13 +334,11 @@ class Contabilizador:
             # Build movements for each tax/deduction line using lado to determine DEBE/HABER
             for impuesto in linea.impuestos:
                 cuenta_impuesto = self.resolver.resolver_cuenta(
-                    impuesto.tipo,
-                    transaccion.tipo.value,
-                    lado=impuesto.lado
+                    impuesto.tipo, transaccion.tipo.value, lado=impuesto.lado
                 )
 
-                debe_impuesto = impuesto.valor if impuesto.lado == 'DEBE' else Decimal('0')
-                haber_impuesto = impuesto.valor if impuesto.lado == 'HABER' else Decimal('0')
+                debe_impuesto = impuesto.valor if impuesto.lado == "DEBE" else Decimal("0")
+                haber_impuesto = impuesto.valor if impuesto.lado == "HABER" else Decimal("0")
 
                 movimiento_impuesto = MovimientoContable(
                     empresa_id=self.empresa_id,
@@ -358,9 +347,7 @@ class Contabilizador:
                     descripcion=f"{impuesto.tipo} ({impuesto.porcentaje}%)",
                     debe=debe_impuesto,
                     haber=haber_impuesto,
-                    tercero_nit=(
-                        transaccion.tercero.nit if transaccion.tercero else None
-                    ),
+                    tercero_nit=(transaccion.tercero.nit if transaccion.tercero else None),
                     tercero_razon_social=(
                         transaccion.tercero.razon_social if transaccion.tercero else None
                     ),
@@ -381,9 +368,7 @@ class Contabilizador:
             if not cuenta_codigo:
                 try:
                     cuenta_codigo = self.resolver.resolver_cuenta(
-                        imp_dto.tipo_impuesto,
-                        transaccion.tipo.value,
-                        lado='HABER'
+                        imp_dto.tipo_impuesto, transaccion.tipo.value, lado="HABER"
                     )
                 except Exception:
                     cuenta_codigo = None

@@ -1,7 +1,11 @@
 """
 Django settings for sintel_project project.
 """
+
+import base64
 import os
+import re
+from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -14,14 +18,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 # WARNING: v2.30: SECRET_KEY debe ser >= 50 caracteres pseudoaleatorios
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-change-me-in-production")
 if len(SECRET_KEY) < 50:
     import warnings
+
     warnings.warn(
         f"WARNING: SECRET_KEY tiene solo {len(SECRET_KEY)} caracteres. "
         f"Se recomienda >= 50 caracteres para producción. "
         f"Genera uno con: python -c 'import secrets; print(secrets.token_urlsafe(50))'",
-        UserWarning
+        UserWarning,
+        stacklevel=2,
     )
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -31,12 +37,12 @@ if len(SECRET_KEY) < 50:
 # SintelDSVMixin.get_empresa_id en apps/tenant/api/mixins.py y DebugNoCSRFMiddleware en
 # apps/public/core/middleware.py) relajan sus verificaciones cuando DEBUG=True. Un despliegue
 # que omita DJANGO_DEBUG en el entorno debe caer siempre en el modo seguro, nunca en el permisivo.
-DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
+DEBUG = os.getenv("DJANGO_DEBUG", "False") == "True"
 
 
 # Application definition
 # WARNING: ESTRUCTURA CRÍTICA: Separación estricta entre SHARED_APPS y TENANT_APPS
-# 
+#
 # REGLAS DE ORO:
 # 1. SHARED_APPS: Apps que existen SOLO en el esquema 'public' (compartidas por todos los tenants)
 # 2. TENANT_APPS: Apps que viven en cada esquema de tenant (específicas de cada empresa)
@@ -53,22 +59,19 @@ DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
 SHARED_APPS = [
     # django-tenants DEBE ir PRIMERO (requisito obligatorio de django-tenants)
     "django_tenants",
-
     # AI-VECTOR-02: extensiones de PostgreSQL a nivel de base de datos
     # (empezando por `vector`/pgvector). App sin modelos, SOLO en SHARED_APPS
     # -- una extension es database-wide, no schema-scoped. Vive fuera de
     # apps/public/ a proposito (apps/public/ requiere RFC + needs-admin-approval).
     # Ver docs/ai/AI_VECTOR_POC_EXECUTION.md.
     "apps.db_extensions",
-
     # WARNING: APPS PÚBLICAS DEL PROYECTO (SOLO esquema public)
     # Estas apps JAMÁS deben estar en TENANT_APPS
-    "apps.public.core",     # Core público (middleware, Server Guard) (SOLO public)
-    "apps.public.tenants",   # Gestión de tenants y dominios (SOLO public)
+    "apps.public.core",  # Core público (middleware, Server Guard) (SOLO public)
+    "apps.public.tenants",  # Gestión de tenants y dominios (SOLO public)
     "apps.public.accounts",  # Usuarios globales (AUTH_USER_MODEL) (SOLO public)
-    "apps.public.impuestos", # Catálogo legal/DIAN (compartido) (SOLO public)
-    "apps.public.console",   # Consola de administración pública (interfaz web) (SOLO public)
-    
+    "apps.public.impuestos",  # Catálogo legal/DIAN (compartido) (SOLO public)
+    "apps.public.console",  # Consola de administración pública (interfaz web) (SOLO public)
     # DRF y herramientas API para esquema public (APIs públicas)
     # WARNING: NOTA: Estas apps también están en TENANT_APPS porque se necesitan en ambos esquemas
     # django-tenants permite que apps estén en ambas listas (se instalan en ambos esquemas)
@@ -79,14 +82,13 @@ SHARED_APPS = [
     "drf_spectacular",  # OpenAPI schema generation para APIs públicas
     "djangorestframework_mcp",  # MCP server: expone ViewSets como herramientas via /mcp/
     "corsheaders",  # CORS para subdominios dinámicos (sintel.net.co)
-    
     # Django contrib apps (necesarias para admin y funcionalidad base)
     "django.contrib.contenttypes",  # Requerido por admin y relaciones genéricas
-    "django.contrib.auth",          # Sistema de autenticación (usuarios globales)
-    "django.contrib.admin",         # Admin de Django (en public para gestión global)
-    "django.contrib.sessions",      # Sesiones compartidas (usuarios globales)
-    "django.contrib.messages",      # Sistema de mensajes
-    "django.contrib.staticfiles",   # Archivos estáticos
+    "django.contrib.auth",  # Sistema de autenticación (usuarios globales)
+    "django.contrib.admin",  # Admin de Django (en public para gestión global)
+    "django.contrib.sessions",  # Sesiones compartidas (usuarios globales)
+    "django.contrib.messages",  # Sistema de mensajes
+    "django.contrib.staticfiles",  # Archivos estáticos
 ]
 
 # ============================================================================
@@ -101,7 +103,6 @@ TENANT_APPS = [
     # cuando el mismo usuario navega entre el esquema public y un esquema de tenant.
     # Ver: https://django-tenants.readthedocs.io/en/latest/install.html
     "django.contrib.sessions",  # OK: SEGURIDAD: Sesiones aisladas por esquema tenant
-
     # DRF y herramientas API (disponibles en cada tenant para APIs privadas)
     # WARNING: NOTA: Estas apps también están en SHARED_APPS porque se necesitan en ambos esquemas
     # django-tenants permite que apps estén en ambas listas (se instalan en ambos esquemas)
@@ -110,27 +111,27 @@ TENANT_APPS = [
     "django_tables2",  # Tablas server-rendered + HTMX (piloto: apps.tenant.gastos, ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS)
     "drf_spectacular",  # OpenAPI schema generation para APIs privadas de cada tenant
     "djangorestframework_mcp",  # MCP server: expone ViewSets como herramientas via /mcp/
-
     # WARNING: APPS PRIVADAS: Aplicaciones de negocio por tenant
     # Estas apps SOLO existen en esquemas de tenant, NUNCA en public
-    "apps.tenant.core",         # Vistas core y manejadores de error (404, 403)
-    "apps.tenant.empresa",      # Datos de la empresa (por tenant)
-    "apps.tenant.facturas",     # Facturacion (por tenant)
-    "apps.tenant.contabilidad", # Contabilidad (por tenant)
-    "apps.tenant.inventario",   # Inventario (por tenant)
-    "apps.tenant.empleados",    # Empleados y nomina (por tenant)
-    "apps.tenant.gastos",       # Gastos operativos y de personal (por tenant)
-    "apps.tenant.cotizaciones", # Cotizaciones y presupuestos (por tenant) v2.40
+    "apps.tenant.core",  # Vistas core y manejadores de error (404, 403)
+    "apps.tenant.empresa",  # Datos de la empresa (por tenant)
+    "apps.tenant.facturas",  # Facturacion (por tenant)
+    "apps.tenant.contabilidad",  # Contabilidad (por tenant)
+    "apps.tenant.inventario",  # Inventario (por tenant)
+    "apps.tenant.empleados",  # Empleados y nomina (por tenant)
+    "apps.tenant.gastos",  # Gastos operativos y de personal (por tenant)
+    "apps.tenant.cotizaciones",  # Cotizaciones y presupuestos (por tenant) v2.40
     "apps.tenant.proveedores",  # Proveedores y compras (por tenant)
-    "apps.tenant.clientes",     # Clientes y ventas (por tenant)
-    "apps.tenant.proyectos",    # Proyectos (por tenant)
-    "apps.tenant.landing",      # Landing page para tenants (accesible anonimamente)
-    "apps.tenant.dashboard",    # Dashboard con control de roles
-    "apps.tenant.perfil",       # Perfil privado del colaborador (por tenant)
-    "apps.tenant.bancos",       # Gestion de estados bancarios y conciliacion (por tenant)
-    "apps.tenant.compras",      # Compras y ordenes de compra (por tenant)
-    "apps.tenant.ventas",       # Ordenes de Venta y facturacion directa (por tenant)
-
+    "apps.tenant.clientes",  # Clientes y ventas (por tenant)
+    "apps.tenant.proyectos",  # Proyectos (por tenant)
+    "apps.tenant.landing",  # Landing page para tenants (accesible anonimamente)
+    "apps.tenant.dashboard",  # Dashboard con control de roles
+    "apps.tenant.perfil",  # Perfil privado del colaborador (por tenant)
+    "apps.tenant.bancos",  # Gestion de estados bancarios y conciliacion (por tenant)
+    "apps.tenant.compras",  # Compras y ordenes de compra (por tenant)
+    "apps.tenant.compras.requisiciones",  # Requisiciones de compra (origen/justificacion, por tenant)
+    "apps.tenant.approvals",  # Motor generico de Solicitudes de Aprobacion (por tenant)
+    "apps.tenant.ventas",  # Ordenes de Venta y facturacion directa (por tenant)
     # AI-VECTOR-03: Vector Store tenant-scoped del AI Engine (POC pgvector).
     # App de DATOS -- la orquestacion vive en apps/services/ai/ (sin modelos).
     # SOLO en TENANT_APPS: una tabla vectorial por schema de tenant, nunca en
@@ -201,7 +202,7 @@ if _missing_tenant_apps:
 # WARNING: CONFIGURACIÓN CRÍTICA: Orden de middleware para django-tenants
 # WARNING: ESTÁNDAR: Puerto 80 (HTTP) - ForceNoPortMiddleware normaliza HTTP_HOST antes de TenantMainMiddleware
 # WARNING: v2.26: Orden optimizado para enrutamiento estable por hostname
-# 
+#
 # Orden crítico:
 # 1. SecurityMiddleware, WhiteNoise, CORS (infraestructura)
 # 2. SessionMiddleware (requerido antes de normalización de host)
@@ -217,67 +218,67 @@ MIDDLEWARE = [
     # de tenant. Sin ForceNoPortMiddleware, 'sintel.net.co:8000' no matchearia
     # ningun registro de Domain y causaria 404 en desarrollo.
     # Ver: documentacion/arquitectura_general.md seccion 1.5
-    'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # OK: WhiteNoise para servir staticfiles en produccion
-    'corsheaders.middleware.CorsMiddleware',  # OK: CORS: Debe ir ANTES de CommonMiddleware
-    'django.contrib.sessions.middleware.SessionMiddleware',  # OK: CRITICO: Debe ejecutarse antes de ForceNoPortMiddleware
-    'apps.public.core.middleware.ValidateALLOWED_HOSTSMiddleware',  # OK: SEGURIDAD: Valida Host header contra ALLOWED_HOSTS (ANTES de Django URL resolution)
-    'apps.public.core.middleware.ForceNoPortMiddleware',  # OK: ESTANDAR: Normaliza HTTP_HOST eliminando puerto (ANTES de TenantMainMiddleware)
-    'django_tenants.middleware.main.TenantMainMiddleware',  # OK: CRITICO: Identifica tenant usando HTTP_HOST normalizado y selecciona URLConf (ROOT_URLCONF o TENANT_URLCONF)
-    'apps.tenant.core.middleware.SintelExceptionMiddleware',  # OK: v2.40: Manejo centralizado de excepciones (DESPUES de TenantMainMiddleware para tener contexto del esquema)
-    'apps.public.tenants.middleware_urlconf.TenantSecurityAndURLConfMiddleware',  # OK: SEGURIDAD + URLConf: Protege ambito publico y establece request.urlconf (despues de TenantMainMiddleware)
-    'apps.public.tenants.middleware.TenantSecurityMiddleware',  # OK: SEGURIDAD: Bloquea tenants suspendidos (debe ir despues de TenantMainMiddleware)
-    'apps.public.core.middleware.CSRFTrustedOriginMiddleware',  # OK: DESARROLLO: Permite dominios arbitrarios en CSRF_TRUSTED_ORIGINS
-    'django.middleware.common.CommonMiddleware',
-    'apps.public.core.middleware.DebugNoCSRFMiddleware',  # OK: DESARROLLO: Desactiva CSRF en DEBUG mode
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',  # OK: CRITICO: Proporciona request.user (requerido para require_tenant_membership)
-    'apps.public.tenants.authz.require_tenant_membership',  # OK: SEGURIDAD: Valida membresia del tenant para usuarios autenticados (factory funcional)
-    'apps.public.tenants.middleware_admin_guard.block_public_routes_on_tenants',  # OK: GUARD-RAIL: Bloquea /admin/, /console/ y /api/public/ en cualquier esquema != public
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # OK: WhiteNoise para servir staticfiles en produccion
+    "corsheaders.middleware.CorsMiddleware",  # OK: CORS: Debe ir ANTES de CommonMiddleware
+    "django.contrib.sessions.middleware.SessionMiddleware",  # OK: CRITICO: Debe ejecutarse antes de ForceNoPortMiddleware
+    "apps.public.core.middleware.ValidateALLOWED_HOSTSMiddleware",  # OK: SEGURIDAD: Valida Host header contra ALLOWED_HOSTS (ANTES de Django URL resolution)
+    "apps.public.core.middleware.ForceNoPortMiddleware",  # OK: ESTANDAR: Normaliza HTTP_HOST eliminando puerto (ANTES de TenantMainMiddleware)
+    "django_tenants.middleware.main.TenantMainMiddleware",  # OK: CRITICO: Identifica tenant usando HTTP_HOST normalizado y selecciona URLConf (ROOT_URLCONF o TENANT_URLCONF)
+    "apps.tenant.core.middleware.SintelExceptionMiddleware",  # OK: v2.40: Manejo centralizado de excepciones (DESPUES de TenantMainMiddleware para tener contexto del esquema)
+    "apps.public.tenants.middleware_urlconf.TenantSecurityAndURLConfMiddleware",  # OK: SEGURIDAD + URLConf: Protege ambito publico y establece request.urlconf (despues de TenantMainMiddleware)
+    "apps.public.tenants.middleware.TenantSecurityMiddleware",  # OK: SEGURIDAD: Bloquea tenants suspendidos (debe ir despues de TenantMainMiddleware)
+    "apps.public.core.middleware.CSRFTrustedOriginMiddleware",  # OK: DESARROLLO: Permite dominios arbitrarios en CSRF_TRUSTED_ORIGINS
+    "django.middleware.common.CommonMiddleware",
+    "apps.public.core.middleware.DebugNoCSRFMiddleware",  # OK: DESARROLLO: Desactiva CSRF en DEBUG mode
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",  # OK: CRITICO: Proporciona request.user (requerido para require_tenant_membership)
+    "apps.public.tenants.authz.require_tenant_membership",  # OK: SEGURIDAD: Valida membresia del tenant para usuarios autenticados (factory funcional)
+    "apps.public.tenants.middleware_admin_guard.block_public_routes_on_tenants",  # OK: GUARD-RAIL: Bloquea /admin/, /console/ y /api/public/ en cualquier esquema != public
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 # WARNING: CONFIGURACIÓN CRÍTICA: URLs separadas para público y privado
 # django-tenants usa ROOT_URLCONF para el esquema 'public' y TENANT_URLCONF para tenants
-ROOT_URLCONF = 'config.urls_public'  # URLs para esquema público (sintel.net.co)
-TENANT_URLCONF = 'config.urls_tenant'  # URLs para tenants privados (cliente.sintel.net.co)
+ROOT_URLCONF = "config.urls_public"  # URLs para esquema público (sintel.net.co)
+TENANT_URLCONF = "config.urls_tenant"  # URLs para tenants privados (cliente.sintel.net.co)
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',  # OK: CRÍTICO: Requerido por django-tenants
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-                'apps.tenant.core.context_processors.contexto_organizacional',  # OK: ADR-003: sede_activa/sedes_disponibles para el header compartido
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",  # OK: CRÍTICO: Requerido por django-tenants
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+                "apps.tenant.core.context_processors.contexto_organizacional",  # OK: ADR-003: sede_activa/sedes_disponibles para el header compartido
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'config.wsgi.application'
+WSGI_APPLICATION = "config.wsgi.application"
 
 # Database
 # WARNING: CONFIGURACIÓN CRÍTICA: ENGINE debe ser django_tenants.postgresql_backend
 DATABASES = {
-    'default': {
-        'ENGINE': 'django_tenants.postgresql_backend',  # OK: CRÍTICO: Backend especial para multi-tenant
-        'NAME': os.getenv('DATABASE_NAME', 'sintel'),
-        'USER': os.getenv('DATABASE_USER', 'sintel'),
-        'PASSWORD': os.getenv('DATABASE_PASSWORD', 'sintel'),
-        'HOST': os.getenv('DATABASE_HOST', 'db'),
-        'PORT': os.getenv('DATABASE_PORT', '5432'),
+    "default": {
+        "ENGINE": "django_tenants.postgresql_backend",  # OK: CRÍTICO: Backend especial para multi-tenant
+        "NAME": os.getenv("DATABASE_NAME", "sintel"),
+        "USER": os.getenv("DATABASE_USER", "sintel"),
+        "PASSWORD": os.getenv("DATABASE_PASSWORD", "sintel"),
+        "HOST": os.getenv("DATABASE_HOST", "db"),
+        "PORT": os.getenv("DATABASE_PORT", "5432"),
     }
 }
 
 # WARNING: CONFIGURACIÓN CRÍTICA: DATABASE_ROUTERS debe ser una tupla con TenantSyncRouter
 DATABASE_ROUTERS = (
-    'django_tenants.routers.TenantSyncRouter',  # OK: CRÍTICO: Router para enrutar queries al esquema correcto
+    "django_tenants.routers.TenantSyncRouter",  # OK: CRÍTICO: Router para enrutar queries al esquema correcto
 )
 
 # Tenant Configuration
@@ -287,12 +288,12 @@ AUTH_USER_MODEL = "accounts.User"
 
 # WARNING: CONFIGURACIÓN DE SUBDOMINIOS (v2.17) - POLÍTICA ESTRICTA
 # Dominio base del SaaS para construcción automática de subdominios
-# 
+#
 # REGLA DE ORO:
 # - El dominio base se configura desde variable de entorno o usa 'sintel.net.co' por defecto
 # - En DEV: Puede ser 'sintel.localhost' (configurable desde .env)
 # - En PROD: 'sintel.net.co' (configurable desde .env)
-# 
+#
 # POLÍTICA ESTRICTA:
 # - El tenant PÚBLICO siempre responde en {TENANT_DOMAIN_BASE} (ej: sintel.net.co)
 # - Los tenants PRIVADOS siempre usan subdominios: {schema_name}.{TENANT_DOMAIN_BASE} (ej: cliente.sintel.net.co)
@@ -302,15 +303,15 @@ AUTH_USER_MODEL = "accounts.User"
 # sintel.net.co es el dominio principal y definitivo para el tenant público en TODOS los entornos
 # Para desarrollo local, añadir sintel.net.co a /etc/hosts (Linux/Mac) o hosts de Windows
 # Los tenants privados usan subdominios: {schema_name}.sintel.net.co
-_default_tenant_domain_base = 'sintel.net.co'  # WARNING: DOMINIO PRINCIPAL Y DEFINITIVO
-TENANT_DOMAIN_BASE = os.getenv('TENANT_DOMAIN_BASE', _default_tenant_domain_base)
+_default_tenant_domain_base = "sintel.net.co"  # WARNING: DOMINIO PRINCIPAL Y DEFINITIVO
+TENANT_DOMAIN_BASE = os.getenv("TENANT_DOMAIN_BASE", _default_tenant_domain_base)
 
 # Puerto de la aplicación (solo para referencia, NO se usa en dominios)
 # WARNING: ESTÁNDAR: Puerto 80 (HTTP) - Los dominios NO incluyen puerto explícito
 # En desarrollo: runserver puede usar 8000, pero los dominios son sin puerto
 # En producción: 80 (HTTP) o 443 (HTTPS) - puertos implícitos
-APP_PORT = os.getenv('APP_PORT', '8000')  # Solo para referencia, no se usa en construcción de URLs
-SITE_PROTOCOL = os.getenv('SITE_PROTOCOL', '')  # 'https' para forzar en todos los URL builders
+APP_PORT = os.getenv("APP_PORT", "8000")  # Solo para referencia, no se usa en construcción de URLs
+SITE_PROTOCOL = os.getenv("SITE_PROTOCOL", "")  # 'https' para forzar en todos los URL builders
 
 # NOTA AUDITORIA: TENANT_MODEL, TENANT_DOMAIN_MODEL y AUTH_USER_MODEL estaban declarados
 # dos veces (lineas 246-248 y aqui). Se eliminan los duplicados. SSoT = lineas 246-248.
@@ -319,62 +320,64 @@ SITE_PROTOCOL = os.getenv('SITE_PROTOCOL', '')  # 'https' para forzar en todos l
 # will serve the public URLConf instead of raising 404. This is useful for
 # development and test environments where the Domain table may not contain
 # an entry for 'localhost' or ephemeral hosts. Default: True in DEBUG.
-SHOW_PUBLIC_IF_NO_TENANT_FOUND = os.getenv('SHOW_PUBLIC_IF_NO_TENANT_FOUND', 'True' if DEBUG else 'False') == 'True'
+SHOW_PUBLIC_IF_NO_TENANT_FOUND = (
+    os.getenv("SHOW_PUBLIC_IF_NO_TENANT_FOUND", "True" if DEBUG else "False") == "True"
+)
 
 # WARNING: SEGURIDAD: Backends de autenticación tenant-aware
 # El orden es importante: TenantAwareBackend debe ir ANTES de ModelBackend
 # para que filtre primero y valide la membresía del tenant
 AUTHENTICATION_BACKENDS = [
-    'apps.public.tenants.auth_backend.TenantAwareBackend',  # OK: SEGURIDAD: Filtro tenant (debe ir primero)
-    'django.contrib.auth.backends.ModelBackend',  # Fallback estándar (opcional, pero recomendado para compatibilidad)
+    "apps.public.tenants.auth_backend.TenantAwareBackend",  # OK: SEGURIDAD: Filtro tenant (debe ir primero)
+    "django.contrib.auth.backends.ModelBackend",  # Fallback estándar (opcional, pero recomendado para compatibilidad)
 ]
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
 # Internationalization
-LANGUAGE_CODE = 'es-co'
-TIME_ZONE = os.getenv('TIME_ZONE', 'America/Bogota')
+LANGUAGE_CODE = "es-co"
+TIME_ZONE = os.getenv("TIME_ZONE", "America/Bogota")
 USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'  # Para producción (collectstatic)
+STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"  # Para producción (collectstatic)
 STATICFILES_DIRS = [
-    BASE_DIR / 'static',  # Directorio global de archivos estáticos (opcional)
+    BASE_DIR / "static",  # Directorio global de archivos estáticos (opcional)
 ]
 
 # Media files (Uploaded files: avatares, logos, etc.)
-MEDIA_URL = '/media/'  # URL base para archivos media
-MEDIA_ROOT = BASE_DIR / 'media'  # Directorio donde se almacenan los archivos subidos
+MEDIA_URL = "/media/"  # URL base para archivos media
+MEDIA_ROOT = BASE_DIR / "media"  # Directorio donde se almacenan los archivos subidos
 
 # Storage privado (fuera de MEDIA_ROOT): nginx sirve /media/ publicamente sin
 # autenticacion (ver nginx/nginx.conf, location /media/). Documentos sensibles
 # (ej. DocumentoProyecto) usan este directorio en vez de MEDIA_ROOT para que
 # nunca queden alcanzables por URL directa; solo se sirven via un endpoint
 # DRF autenticado que valida empresa_id antes de responder con el archivo.
-PRIVATE_MEDIA_ROOT = BASE_DIR / 'media_private'
+PRIVATE_MEDIA_ROOT = BASE_DIR / "media_private"
 
 # django-tables2: plantilla Bootstrap 5 por defecto para todas las tablas server-rendered
 # (reemplazo de Tabulator/DataTables — ver PLAN_UNICO_CORRECCIONES.md Fase 5-BIS)
 DJANGO_TABLES2_TEMPLATE = "django_tables2/bootstrap5.html"
 
 # Default primary key field type
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # WhiteNoise: servir staticfiles en producción
 # Referencia: https://whitenoise.readthedocs.io/
@@ -405,10 +408,10 @@ WHITENOISE_AUTOREFRESH = DEBUG  # Solo en desarrollo
 # Para producción, configurar estas opciones en un módulo de settings separado
 SECURE_SSL_REDIRECT = False  # Nginx hace la redireccion 80->443; Django no redirige
 SESSION_COOKIE_SECURE = not DEBUG  # True en produccion (HTTPS), False en desarrollo
-CSRF_COOKIE_SECURE = not DEBUG     # True en produccion (HTTPS), False en desarrollo
+CSRF_COOKIE_SECURE = not DEBUG  # True en produccion (HTTPS), False en desarrollo
 
 if not DEBUG:
-    SECURE_HSTS_SECONDS = 31536000       # 1 año
+    SECURE_HSTS_SECONDS = 31536000  # 1 año
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -417,18 +420,13 @@ if not DEBUG:
 # WARNING: WARNING: El navegador mostrará un warning si usas HTTP en lugar de HTTPS
 # Esto es normal en desarrollo y no afecta la funcionalidad
 # En producción, configurar HTTPS y agregar este header solo en HTTPS
-if DEBUG:
-    # En desarrollo, no configurar COOP (evita warnings innecesarios)
-    SECURE_CROSS_ORIGIN_OPENER_POLICY = None
-else:
-    # En producción con HTTPS, usar COOP restrictivo
-    SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin-allow-popups'
+# En desarrollo, no configurar COOP (evita warnings innecesarios); en
+# producción con HTTPS, usar COOP restrictivo.
+SECURE_CROSS_ORIGIN_OPENER_POLICY = None if DEBUG else "same-origin-allow-popups"
 
 # --- Configuración Dinámica de Dominios (SINTEL) ---
 # Permite tráfico desde cualquier subdominio de sintel.net.co
 # Configuración de seguridad para dominios dinámicos multi-tenant
-
-import re
 
 """
 Seguridad Host Header (prod) y soporte HTTPS detrás de proxy.
@@ -447,17 +445,22 @@ Seguridad Host Header (prod) y soporte HTTPS detrás de proxy.
 # WARNING: SEGURIDAD: En producción, usar lista explícita desde ENV (NO usar '*')
 # WARNING: v2.60: Siempre incluir sintel.net.co y dominios públicos para permitir acceso desde ambos dominios
 base_allowed_hosts = (
-    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,192.168.2.17,sintel.net.co,186.117.247.166,186.117.247.167").split(",")
+    os.getenv(
+        "ALLOWED_HOSTS",
+        "localhost,127.0.0.1,192.168.2.17,sintel.net.co,186.117.247.166,186.117.247.167",
+    ).split(",")
     if DEBUG
-    else os.getenv("ALLOWED_HOSTS", "sintel.net.co,.sintel.net.co,186.117.247.166,186.117.247.167").split(",")
+    else os.getenv(
+        "ALLOWED_HOSTS", "sintel.net.co,.sintel.net.co,186.117.247.166,186.117.247.167"
+    ).split(",")
 )
 
 # Limpiar espacios y filtrar vacíos
 ALLOWED_HOSTS = [h.strip() for h in base_allowed_hosts if h.strip()]
 
 # WARNING: v2.60: Asegurar que sintel.net.co siempre esté incluido (para acceso desde dominio público)
-if 'sintel.net.co' not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append('sintel.net.co')
+if "sintel.net.co" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append("sintel.net.co")
 
 # En desarrollo, agregar hosts adicionales si no están en ENV
 if DEBUG:
@@ -491,17 +494,21 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 
 # En desarrollo, también permitir HTTP
 if DEBUG:
-    CORS_ALLOWED_ORIGIN_REGEXES.extend([
-        rf"^http://.*\.{re.escape(TENANT_DOMAIN_BASE)}$",
-        r"^http://.*\.sintel\.net\.co(:\d+)?$",  # Cualquier subdominio de sintel.net.co en HTTP (con puerto opcional)
-        r"^http://sintel\.net\.co(:\d+)?$",  # Dominio sintel.net.co en HTTP (con puerto opcional)
-    ])
+    CORS_ALLOWED_ORIGIN_REGEXES.extend(
+        [
+            rf"^http://.*\.{re.escape(TENANT_DOMAIN_BASE)}$",
+            r"^http://.*\.sintel\.net\.co(:\d+)?$",  # Cualquier subdominio de sintel.net.co en HTTP (con puerto opcional)
+            r"^http://sintel\.net\.co(:\d+)?$",  # Dominio sintel.net.co en HTTP (con puerto opcional)
+        ]
+    )
     # También permitir localhost e IP local en desarrollo
-    CORS_ALLOWED_ORIGIN_REGEXES.extend([
-        r"^http://localhost(:\d+)?$",
-        r"^http://127\.0\.0\.1(:\d+)?$",
-        r"^https?://192\.168\.2\.17(:\d+)?$",  # IP local del servidor
-    ])
+    CORS_ALLOWED_ORIGIN_REGEXES.extend(
+        [
+            r"^http://localhost(:\d+)?$",
+            r"^http://127\.0\.0\.1(:\d+)?$",
+            r"^https?://192\.168\.2\.17(:\d+)?$",  # IP local del servidor
+        ]
+    )
 
 # WARNING: IMPORTANTE: Permitir credenciales (cookies) en CORS para autenticación por sesión
 CORS_ALLOW_CREDENTIALS = True
@@ -539,10 +546,10 @@ if DEBUG:
 else:
     # En producción, agregar orígenes HTTPS explícitos si no están en ENV
     _prod_csrf_origins = [
-        "https://sintel.net.co",         # Dominio público principal
-        "https://.sintel.com.co",        # Variante de dominio .com.co (distinta de sintel.net.co)
-        "https://186.117.247.166",    # IP pública del servidor (acceso directo por IP)
-        "https://186.117.247.167",    # IP pública del servidor (acceso directo por IP)
+        "https://sintel.net.co",  # Dominio público principal
+        "https://.sintel.com.co",  # Variante de dominio .com.co (distinta de sintel.net.co)
+        "https://186.117.247.166",  # IP pública del servidor (acceso directo por IP)
+        "https://186.117.247.167",  # IP pública del servidor (acceso directo por IP)
     ]
     for origin in _prod_csrf_origins:
         if origin not in CSRF_TRUSTED_ORIGINS:
@@ -556,14 +563,16 @@ else:
 CSRF_COOKIE_NAME = "csrftoken"  # Debe coincidir con getCookie("csrftoken") en workspace.html
 
 if DEBUG:
-    CSRF_COOKIE_DOMAIN = None  # En desarrollo, permitir cualquier dominio (incluye subdominios y puertos)
-    CSRF_COOKIE_SAMESITE = 'Lax'  # Permitir cookies en requests del mismo sitio
+    CSRF_COOKIE_DOMAIN = (
+        None  # En desarrollo, permitir cualquier dominio (incluye subdominios y puertos)
+    )
+    CSRF_COOKIE_SAMESITE = "Lax"  # Permitir cookies en requests del mismo sitio
     CSRF_COOKIE_HTTPONLY = False  # Permitir acceso desde JavaScript (necesario para leer desde JS)
     CSRF_COOKIE_SECURE = False  # No requiere HTTPS en desarrollo
     CSRF_USE_SESSIONS = False  # Usar cookies en lugar de sesiones para CSRF
 else:
     CSRF_COOKIE_DOMAIN = f".{TENANT_DOMAIN_BASE}"  # En producción, restringir a subdominios
-    CSRF_COOKIE_SAMESITE = 'Lax'
+    CSRF_COOKIE_SAMESITE = "Lax"
     CSRF_COOKIE_HTTPONLY = False
     CSRF_COOKIE_SECURE = True  # Requiere HTTPS en producción
     CSRF_USE_SESSIONS = False
@@ -577,18 +586,22 @@ else:
 # Esta configuración asegura que @login_required nunca redirija a /admin/login/ en tenants privados
 # En tenants privados: /login/ -> TenantLoginView
 # En esquema público: /login/ -> /admin/login/ (redirección en config/urls.py)
-LOGIN_URL = '/login/'  # OK: FORZADO: login del TENANT_URLCONF (no /admin/login/)
+LOGIN_URL = "/login/"  # OK: FORZADO: login del TENANT_URLCONF (no /admin/login/)
 # LOGIN_REDIRECT_URL se configura dinámicamente según el contexto (público vs tenant)
 # Para tenants privados, redirige al dashboard: /dashboard/ (resuelto en TENANT_URLCONF)
 # Para dominio público, redirige a '/console/'
-LOGIN_REDIRECT_URL = '/dashboard/'  # OK: URL por defecto para tenants (se resuelve en TENANT_URLCONF)
-LOGOUT_REDIRECT_URL = '/'  # OK: URL a la que redirigir después del logout (página principal del tenant - landing)
+LOGIN_REDIRECT_URL = (
+    "/dashboard/"  # OK: URL por defecto para tenants (se resuelve en TENANT_URLCONF)
+)
+LOGOUT_REDIRECT_URL = (
+    "/"  # OK: URL a la que redirigir después del logout (página principal del tenant - landing)
+)
 
 # Django REST Framework (API-First)
 # WARNING: IMPORTANTE: DRF está en TENANT_APPS, por lo que cada tenant tiene sus propias APIs
 # django-tenants maneja automáticamente el aislamiento por esquema
 # NO es necesario filtrar manualmente por tenant_id
-# 
+#
 # Referencias:
 # - ViewSets & Routers: https://www.django-rest-framework.org/api-guide/viewsets/
 # - Pagination: https://www.django-rest-framework.org/api-guide/pagination/
@@ -610,88 +623,78 @@ REST_FRAMEWORK = {
     # OpenAPI Schema (drf-spectacular)
     # DRF deprecó su generador integrado; drf-spectacular es la alternativa recomendada
     # Docs: https://drf-spectacular.readthedocs.io/
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     # Autenticación
     # WARNING: JWT GLOBAL: APIs REST usan JWT (Authorization: Bearer) por defecto
     # OK: DEV: SessionAuthentication añadido para workspace (cookies de sesión desde mismo host)
     # Los ViewSets específicos pueden sobrescribir con authentication_classes = [SessionAuthentication]
     # DRF prioriza authentication_classes del ViewSet sobre DEFAULT_AUTHENTICATION_CLASSES
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',  # OK: JWT para APIs externas
-        'rest_framework.authentication.SessionAuthentication',  # OK: DEV: Workspace usa cookies de sesión
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",  # OK: JWT para APIs externas
+        "rest_framework.authentication.SessionAuthentication",  # OK: DEV: Workspace usa cookies de sesión
         # TokenAuthentication removido - legacy, no se usa
     ],
-    
     # Permisos
     # Por defecto, todas las APIs requieren autenticación
     # Se puede sobrescribir por ViewSet con permission_classes
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
     ],
-    
     # Filtrado, búsqueda y ordenación
     # django-filter: https://django-filter.readthedocs.io/
     # DRF Filtering: https://www.django-rest-framework.org/api-guide/filtering/
-    'DEFAULT_FILTER_BACKENDS': [
-        'django_filters.rest_framework.DjangoFilterBackend',
-        'rest_framework.filters.SearchFilter',
-        'rest_framework.filters.OrderingFilter',
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
     ],
-    
     # Paginación global
     # Usa StandardResultsSetPagination (page_size=20, max_page_size=200)
     # Se puede sobrescribir por ViewSet con pagination_class
-    'DEFAULT_PAGINATION_CLASS': 'apps.config.api.pagination.StandardResultsSetPagination',
-    'PAGE_SIZE': 20,
-    
+    "DEFAULT_PAGINATION_CLASS": "apps.config.api.pagination.StandardResultsSetPagination",
+    "PAGE_SIZE": 20,
     # Throttling (rate limiting)
     # Limita el número de requests por usuario/anónimo
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle',
-        'apps.public.impuestos.api.ingesta.throttling.IngestaScopedThrottle',
-        'apps.public.tenants.throttling.OnboardingCreateThrottle',
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "apps.public.impuestos.api.ingesta.throttling.IngestaScopedThrottle",
+        "apps.public.tenants.throttling.OnboardingCreateThrottle",
     ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '500/day',   # 500 requests por día para usuarios anónimos (catálogos públicos)
-        'user': '2000/day',  # 2000 requests por día para usuarios autenticados
-        'impuestos_ingesta': '20/hour',  # 20 requests por hora para ingesta
-        'impuestos_search': '100/minute',  # 100 requests por minuto para búsqueda
-        'tenant_onboarding_create': '10/hour',  # Cada request exitoso crea un schema PostgreSQL real
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "500/day",  # 500 requests por día para usuarios anónimos (catálogos públicos)
+        "user": "2000/day",  # 2000 requests por día para usuarios autenticados
+        "impuestos_ingesta": "20/hour",  # 20 requests por hora para ingesta
+        "impuestos_search": "100/minute",  # 100 requests por minuto para búsqueda
+        "tenant_onboarding_create": "10/hour",  # Cada request exitoso crea un schema PostgreSQL real
     },
-    
     # Versionado de APIs
     # NamespaceVersioning permite versionar por namespace en URLs (/api/v1/, /api/v2/)
     # Docs: https://www.django-rest-framework.org/api-guide/versioning/#namespaceversioning
-    'DEFAULT_VERSIONING_CLASS': 'rest_framework.versioning.NamespaceVersioning',
-    
+    "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.NamespaceVersioning",
     # Formato de respuesta
     # Solo JSON: APIs solo devuelven JSON (sin BrowsableAPIRenderer)
     # UI dedicada: Toda presentación HTML pasa por templates en /console/...
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
         # NO incluir BrowsableAPIRenderer: APIs solo JSON, UI en templates dedicados
     ],
-    
     # Parsers (formato de entrada)
     # MultiPartParser: para subida de archivos en /ingesta (multipart/form-data)
     # FormParser: para formularios POST (application/x-www-form-urlencoded)
     # JSONParser: para JSON en /ingesta y otras APIs (application/json)
-    'DEFAULT_PARSER_CLASSES': [
-        'rest_framework.parsers.JSONParser',
-        'rest_framework.parsers.FormParser',  # Para form-urlencoded
-        'rest_framework.parsers.MultiPartParser',  # Para /ingesta multipart
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+        "rest_framework.parsers.FormParser",  # Para form-urlencoded
+        "rest_framework.parsers.MultiPartParser",  # Para /ingesta multipart
     ],
-    
     # Manejo de excepciones
     # Se puede personalizar con apps.config.api.exceptions.custom_exception_handler
-    'EXCEPTION_HANDLER': 'apps.config.api.exceptions.exception_handler',
-    
+    "EXCEPTION_HANDLER": "apps.config.api.exceptions.exception_handler",
     # Formato de fecha/hora
-    'DATETIME_FORMAT': '%Y-%m-%dT%H:%M:%S',
-    'DATE_FORMAT': '%Y-%m-%d',
-    'TIME_FORMAT': '%H:%M:%S',
+    "DATETIME_FORMAT": "%Y-%m-%dT%H:%M:%S",
+    "DATE_FORMAT": "%Y-%m-%d",
+    "TIME_FORMAT": "%H:%M:%S",
 }
 
 # ============================================================================
@@ -704,11 +707,11 @@ DJANGORESTFRAMEWORK_MCP = {
     # RETURN_200_FOR_ERRORS: requerido para compatibilidad con mcp-remote
     # mcp-remote no maneja correctamente HTTP 401/403 (asume OAuth en 401)
     # Con True, retorna HTTP 200 pero preserva el error en el body JSON-RPC
-    'RETURN_200_FOR_ERRORS': True,
+    "RETURN_200_FOR_ERRORS": True,
     # Preservar autenticacion JWT/Session de cada ViewSet (BaseTenantViewSet)
     # El agente debe enviar: Authorization: Bearer <jwt_token>
-    'BYPASS_VIEWSET_AUTHENTICATION': False,
-    'BYPASS_VIEWSET_PERMISSIONS': False,
+    "BYPASS_VIEWSET_AUTHENTICATION": False,
+    "BYPASS_VIEWSET_PERMISSIONS": False,
 }
 
 # ============================================================================
@@ -726,25 +729,21 @@ N8N_WEBHOOK_SECRET = os.getenv("N8N_WEBHOOK_SECRET", "")
 # drf-spectacular (OpenAPI Schema)
 # Docs: https://drf-spectacular.readthedocs.io/
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'SINTEL API',
-    'DESCRIPTION': 'API REST para sistema multi-tenant de gestión contable y facturación electrónica',
-    'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
-    'SCHEMA_PATH_PREFIX': '/api/v1/',
+    "TITLE": "SINTEL API",
+    "DESCRIPTION": "API REST para sistema multi-tenant de gestión contable y facturación electrónica",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "SCHEMA_PATH_PREFIX": "/api/v1/",
 }
 
 # JWT Configuration (djangorestframework-simplejwt)
 # Docs: https://django-rest-framework-simplejwt.readthedocs.io/
 # WARNING: v2.30: Hardening de seguridad JWT
-import base64
-import secrets
-from datetime import timedelta
-
 # WARNING: v2.30: Configuración de SIGNING_KEY fuerte (32+ bytes)
 # Opción 1: Usar JWT_SECRET_KEY desde variable de entorno (recomendado para producción)
 # Opción 2: Generar una clave fuerte automáticamente si no está configurada (solo DEV)
 # Opción 3: Migrar a RS256 (requiere generar par de llaves PRIVATE_KEY/PUBLIC_KEY)
-JWT_SECRET_KEY_ENV = os.getenv('JWT_SECRET_KEY', None)
+JWT_SECRET_KEY_ENV = os.getenv("JWT_SECRET_KEY", None)
 
 # Para RS256 (recomendado para producción), descomentar y configurar:
 # JWT_PRIVATE_KEY_ENV = os.getenv('JWT_PRIVATE_KEY', None)
@@ -755,24 +754,32 @@ if JWT_SECRET_KEY_ENV:
     # Validar que la clave tenga al menos 32 bytes (256 bits)
     try:
         # Si viene en base64, decodificar para verificar longitud
-        decoded_key = base64.b64decode(JWT_SECRET_KEY_ENV) if len(JWT_SECRET_KEY_ENV) > 44 else JWT_SECRET_KEY_ENV.encode()
+        decoded_key = (
+            base64.b64decode(JWT_SECRET_KEY_ENV)
+            if len(JWT_SECRET_KEY_ENV) > 44
+            else JWT_SECRET_KEY_ENV.encode()
+        )
         if len(decoded_key) < 32:
             import warnings
+
             warnings.warn(
                 f"WARNING: JWT_SECRET_KEY tiene solo {len(decoded_key)} bytes. "
                 f"Se requieren >= 32 bytes (256 bits) para HS256. "
                 f"Genera uno con: python -c 'import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())'",
-                UserWarning
+                UserWarning,
+                stacklevel=2,
             )
         jwt_signing_key = JWT_SECRET_KEY_ENV
     except Exception:
         # Si no es base64, usar directamente (debe ser string de al menos 32 caracteres)
         if len(JWT_SECRET_KEY_ENV) < 32:
             import warnings
+
             warnings.warn(
                 f"WARNING: JWT_SECRET_KEY tiene solo {len(JWT_SECRET_KEY_ENV)} caracteres. "
                 f"Se requieren >= 32 caracteres para HS256.",
-                UserWarning
+                UserWarning,
+                stacklevel=2,
             )
         jwt_signing_key = JWT_SECRET_KEY_ENV
 else:
@@ -782,32 +789,29 @@ else:
 SIMPLE_JWT = {
     # Duración de los tokens
     # WARNING: RECOMENDADO: Access tokens cortos (10-20 min), refresh tokens medios (7-30 días)
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),   # Token de acceso: 15 minutos (corto para seguridad)
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),       # Token de refresh: 7 días (medio)
-    
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        minutes=15
+    ),  # Token de acceso: 15 minutos (corto para seguridad)
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),  # Token de refresh: 7 días (medio)
     # Rotación de refresh tokens
-    'ROTATE_REFRESH_TOKENS': True,                     # Generar nuevo refresh token en cada refresh
-    'BLACKLIST_AFTER_ROTATION': True,                  # Invalidar refresh token anterior (requiere django-rest-framework-simplejwt[blacklist])
-    
+    "ROTATE_REFRESH_TOKENS": True,  # Generar nuevo refresh token en cada refresh
+    "BLACKLIST_AFTER_ROTATION": True,  # Invalidar refresh token anterior (requiere django-rest-framework-simplejwt[blacklist])
     # Algoritmo de firma
     # WARNING: v2.30: HS256 con clave fuerte (32+ bytes) o migrar a RS256 para producción
-    'ALGORITHM': 'HS256',                              # Algoritmo de firma (HS256 es el estándar)
-    'SIGNING_KEY': jwt_signing_key,                    # Clave secreta fuerte (32+ bytes)
-    
+    "ALGORITHM": "HS256",  # Algoritmo de firma (HS256 es el estándar)
+    "SIGNING_KEY": jwt_signing_key,  # Clave secreta fuerte (32+ bytes)
     # Headers y claims
-    'AUTH_HEADER_TYPES': ('Bearer',),                  # Tipo de header: Authorization: Bearer <token>
-    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',           # Nombre del header HTTP
-    'USER_ID_FIELD': 'id',                             # Campo del modelo User para el claim 'user_id'
-    'USER_ID_CLAIM': 'user_id',                        # Claim JWT que contiene el user_id
-    
+    "AUTH_HEADER_TYPES": ("Bearer",),  # Tipo de header: Authorization: Bearer <token>
+    "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",  # Nombre del header HTTP
+    "USER_ID_FIELD": "id",  # Campo del modelo User para el claim 'user_id'
+    "USER_ID_CLAIM": "user_id",  # Claim JWT que contiene el user_id
     # Configuración de tokens
-    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
-    'TOKEN_TYPE_CLAIM': 'token_type',
-    
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
+    "TOKEN_TYPE_CLAIM": "token_type",
     # Configuración de refresh
-    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
-    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
-    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
+    "SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp",
+    "SLIDING_TOKEN_LIFETIME": timedelta(minutes=5),
+    "SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(days=1),
 }
 
 # WARNING: NOTA: Para migrar a RS256 en producción, descomentar y configurar:
@@ -836,50 +840,55 @@ SIMPLE_JWT = {
 # En desarrollo: usar console backend para ver emails en consola
 # En producción: usar SMTP backend
 EMAIL_BACKEND = os.getenv(
-    'EMAIL_BACKEND',
-    'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend'
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend"
+    if DEBUG
+    else "django.core.mail.backends.smtp.EmailBackend",
 )
 
 # Configuración SMTP (solo se usa si EMAIL_BACKEND es smtp)
-EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False') == 'True'
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False") == "True"
 
 # Credenciales SMTP
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 
 # Email remitente por defecto
 # WARNING: IMPORTANTE: Si DEFAULT_FROM_EMAIL en .env es ${EMAIL_HOST_USER} o EMAIL_HOST_USER, usar el valor real
-_default_from_email_env = os.getenv('DEFAULT_FROM_EMAIL', '')
-if _default_from_email_env and _default_from_email_env not in ('${EMAIL_HOST_USER}', 'EMAIL_HOST_USER'):
+_default_from_email_env = os.getenv("DEFAULT_FROM_EMAIL", "")
+if _default_from_email_env and _default_from_email_env not in (
+    "${EMAIL_HOST_USER}",
+    "EMAIL_HOST_USER",
+):
     DEFAULT_FROM_EMAIL = _default_from_email_env
 else:
     # Usar EMAIL_HOST_USER si está disponible, sino usar un valor por defecto
-    DEFAULT_FROM_EMAIL = EMAIL_HOST_USER if EMAIL_HOST_USER else 'no-reply@sintel.local'
+    DEFAULT_FROM_EMAIL = EMAIL_HOST_USER if EMAIL_HOST_USER else "no-reply@sintel.local"
 
 # Email de contacto (opcional)
-CONTACT_EMAIL = os.getenv('CONTACT_EMAIL', DEFAULT_FROM_EMAIL)
+CONTACT_EMAIL = os.getenv("CONTACT_EMAIL", DEFAULT_FROM_EMAIL)
 
 # Email del servidor (para errores del sistema)
 # Si no se especifica, usar DEFAULT_FROM_EMAIL
-SERVER_EMAIL = os.getenv('SERVER_EMAIL', DEFAULT_FROM_EMAIL)
+SERVER_EMAIL = os.getenv("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
 
 # Timeout para conexiones SMTP (segundos)
-EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '20'))
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "20"))
 
 # Redis/Celery (configuración básica)
-REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
 # Celery Configuration
 # WARNING: IMPORTANTE: La cola puede ser compartida, pero el worker debe cambiar
 # connection.schema_name usando schema_context en las tareas
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos
@@ -898,21 +907,19 @@ CELERY_IMPORTS = (
 
 # WARNING: CONFIGURACIÓN CRÍTICA: Colas Prioritarias
 # Define cola por defecto
-CELERY_TASK_DEFAULT_QUEUE = 'default'
+CELERY_TASK_DEFAULT_QUEUE = "default"
 
 # Rutas explícitas de tareas a colas
 # IMPORTANTE: El orden importa. Las tareas críticas van a high_priority
 CELERY_TASK_ROUTES = {
     # Onboarding de tenants: cola de alta prioridad
-    'apps.public.tenants.tasks.onboard_tenant_task':              {'queue': 'high_priority'},
-    'apps.public.tenants.tasks.send_activation_email_task':       {'queue': 'high_priority'},
-    'apps.public.tenants.tasks.provision_tenant_certificates_task': {'queue': 'high_priority'},
-
+    "apps.public.tenants.tasks.onboard_tenant_task": {"queue": "high_priority"},
+    "apps.public.tenants.tasks.send_activation_email_task": {"queue": "high_priority"},
+    "apps.public.tenants.tasks.provision_tenant_certificates_task": {"queue": "high_priority"},
     # Ingesta de facturas desde correo: cola de alta prioridad (critica)
-    'apps.services.maildigester.tasks.fetch_and_process_billing_mail': {'queue': 'high_priority'},
-
+    "apps.services.maildigester.tasks.fetch_and_process_billing_mail": {"queue": "high_priority"},
     # Todas las demas tareas van a default
-    '*': {'queue': 'default'},
+    "*": {"queue": "default"},
 }
 
 # Integraciones Externas
@@ -920,59 +927,65 @@ CELERY_TASK_ROUTES = {
 # apps/services/integrations/dian_service.py, confirmado codigo muerto sin
 # consumidores reales (docs/fiscal/DIAN_TRANSPORT_AUDIT.md §2) -- se
 # conservan sin tocar por compatibilidad, no se usan en el pipeline real.
-DIAN_API_KEY = os.getenv('DIAN_API_KEY', '')
-DIAN_API_URL_TEST = os.getenv('DIAN_API_URL_TEST', 'https://api-test.dian.gov.co')
-DIAN_API_URL_PRODUCTION = os.getenv('DIAN_API_URL_PRODUCTION', 'https://api.dian.gov.co')
-DIAN_AMBIENTE = os.getenv('DIAN_AMBIENTE', 'pruebas')  # 'pruebas' o 'produccion'
+DIAN_API_KEY = os.getenv("DIAN_API_KEY", "")
+DIAN_API_URL_TEST = os.getenv("DIAN_API_URL_TEST", "https://api-test.dian.gov.co")
+DIAN_API_URL_PRODUCTION = os.getenv("DIAN_API_URL_PRODUCTION", "https://api.dian.gov.co")
+DIAN_AMBIENTE = os.getenv("DIAN_AMBIENTE", "pruebas")  # 'pruebas' o 'produccion'
 
 # DIAN -- pipeline REAL (CufeService/UBL21BuilderService/XadesSignerService/
 # DIANAdapter). Ninguna declarada con valor real hoy en ningun entorno --
 # antes vivian solo como getattr(settings, 'X', default) implicito y
 # undiscoverable; declaradas aqui explicitamente (FISCAL-05) para que
 # quede claro que TODAS estan pendientes de configuracion real.
-DIAN_CERT_P12 = os.getenv('DIAN_CERT_P12', '')            # ruta al .p12/.pfx -- XadesSignerService
-DIAN_CERT_PASSWORD = os.getenv('DIAN_CERT_PASSWORD', '')  # XadesSignerService
-DIAN_TIP_AMB = os.getenv('DIAN_TIP_AMB', '2')              # "2" pruebas | "1" produccion -- CufeService, DIANAdapter
-DIAN_PROVIDER_ID = os.getenv('DIAN_PROVIDER_ID', '800197268')       # NIT proveedor tecnologico -- _leer_config_dian()
-DIAN_SOFTWARE_ID = os.getenv('DIAN_SOFTWARE_ID', '')                # UUID software registrado DIAN
-DIAN_SOFTWARE_PIN = os.getenv('DIAN_SOFTWARE_PIN', '')              # PIN del software
-DIAN_CL_TECN = os.getenv('DIAN_CL_TECN', '')                        # Clave tecnica (64 hex) de la resolucion
-DIAN_AUTHORIZATION_ID = os.getenv('DIAN_AUTHORIZATION_ID', '800197268')  # NIT DIAN
-DIAN_CUSTOMIZATION_ID = os.getenv('DIAN_CUSTOMIZATION_ID', '10')
-DIAN_PROFILE_ID = os.getenv('DIAN_PROFILE_ID', 'DIAN 2.1')
+DIAN_CERT_P12 = os.getenv("DIAN_CERT_P12", "")  # ruta al .p12/.pfx -- XadesSignerService
+DIAN_CERT_PASSWORD = os.getenv("DIAN_CERT_PASSWORD", "")  # XadesSignerService
+DIAN_TIP_AMB = os.getenv(
+    "DIAN_TIP_AMB", "2"
+)  # "2" pruebas | "1" produccion -- CufeService, DIANAdapter
+DIAN_PROVIDER_ID = os.getenv(
+    "DIAN_PROVIDER_ID", "800197268"
+)  # NIT proveedor tecnologico -- _leer_config_dian()
+DIAN_SOFTWARE_ID = os.getenv("DIAN_SOFTWARE_ID", "")  # UUID software registrado DIAN
+DIAN_SOFTWARE_PIN = os.getenv("DIAN_SOFTWARE_PIN", "")  # PIN del software
+DIAN_CL_TECN = os.getenv("DIAN_CL_TECN", "")  # Clave tecnica (64 hex) de la resolucion
+DIAN_AUTHORIZATION_ID = os.getenv("DIAN_AUTHORIZATION_ID", "800197268")  # NIT DIAN
+DIAN_CUSTOMIZATION_ID = os.getenv("DIAN_CUSTOMIZATION_ID", "10")
+DIAN_PROFILE_ID = os.getenv("DIAN_PROFILE_ID", "DIAN 2.1")
 # DIANAdapter (FISCAL-05, NO VERIFICADO -- ver apps/tenant/core/dian/adapters.py)
-DIAN_WSDL_URL_HABILITACION = os.getenv('DIAN_WSDL_URL_HABILITACION', '')
-DIAN_WSDL_URL_PRODUCCION = os.getenv('DIAN_WSDL_URL_PRODUCCION', '')
+DIAN_WSDL_URL_HABILITACION = os.getenv("DIAN_WSDL_URL_HABILITACION", "")
+DIAN_WSDL_URL_PRODUCCION = os.getenv("DIAN_WSDL_URL_PRODUCCION", "")
 # FISCAL-02B: guarda de seguridad -- DEBE quedar False en produccion.
 # Solo si es True, el parametro ?_mock_scenario= de POST /facturas/{uuid}/
 # transmitir/ activa MockTransportAdapter (para validacion funcional via
 # API real en desarrollo/QA, sin riesgo de fingir una transmision DIAN
 # real ante un usuario real). Ver docs/fiscal/FISCAL_02B_VALIDACION_FUNCIONAL.md.
-FISCAL_ALLOW_MOCK_TRANSPORT = os.getenv('FISCAL_ALLOW_MOCK_TRANSPORT', 'False') == 'True'
+FISCAL_ALLOW_MOCK_TRANSPORT = os.getenv("FISCAL_ALLOW_MOCK_TRANSPORT", "False") == "True"
 
 # Auditoría y Logging
-AUDIT_LOG_DIR = os.getenv('AUDIT_LOG_DIR', 'logs/audit')
-AUDIT_LOG_MAX_BYTES = int(os.getenv('AUDIT_LOG_MAX_BYTES', 10 * 1024 * 1024))  # 10MB
-AUDIT_LOG_BACKUP_COUNT = int(os.getenv('AUDIT_LOG_BACKUP_COUNT', 5))
-AUDIT_LOG_LEVEL = os.getenv('AUDIT_LOG_LEVEL', 'INFO')  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+AUDIT_LOG_DIR = os.getenv("AUDIT_LOG_DIR", "logs/audit")
+AUDIT_LOG_MAX_BYTES = int(os.getenv("AUDIT_LOG_MAX_BYTES", 10 * 1024 * 1024))  # 10MB
+AUDIT_LOG_BACKUP_COUNT = int(os.getenv("AUDIT_LOG_BACKUP_COUNT", 5))
+AUDIT_LOG_LEVEL = os.getenv("AUDIT_LOG_LEVEL", "INFO")  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # ============================================================================
 # Configuración de Activación de Owners (v2.30)
 # ============================================================================
 # WARNING: SEGURIDAD: Permite resetear contraseña a unusable para reenvío de tokens
 # Solo habilitar en entornos de desarrollo o con flag explícito
-ALLOW_RESET_ACTIVATION = os.getenv('ALLOW_RESET_ACTIVATION', 'False') == 'True'
+ALLOW_RESET_ACTIVATION = os.getenv("ALLOW_RESET_ACTIVATION", "False") == "True"
 
 # WARNING: v2.30: Feature flag para migración API-first del dashboard
 # Cuando DASHBOARD_API_FIRST=True, las vistas legacy se desactivan y solo funcionan los endpoints API
-DASHBOARD_API_FIRST = os.getenv('DASHBOARD_API_FIRST', 'True') == 'True'
+DASHBOARD_API_FIRST = os.getenv("DASHBOARD_API_FIRST", "True") == "True"
 
 # TTL por defecto para tokens de activación (en minutos)
-OWNER_ACTIVATION_TOKEN_TTL_MINUTES = int(os.getenv('OWNER_ACTIVATION_TOKEN_TTL_MINUTES', '120'))  # 2 horas por defecto
+OWNER_ACTIVATION_TOKEN_TTL_MINUTES = int(
+    os.getenv("OWNER_ACTIVATION_TOKEN_TTL_MINUTES", "120")
+)  # 2 horas por defecto
 
 # Backups
-BACKUP_DIR = os.getenv('BACKUP_DIR', 'backups')
-BACKUP_RETENTION_DAYS = int(os.getenv('BACKUP_RETENTION_DAYS', 30))  # Días de retención de backups
+BACKUP_DIR = os.getenv("BACKUP_DIR", "backups")
+BACKUP_RETENTION_DAYS = int(os.getenv("BACKUP_RETENTION_DAYS", 30))  # Días de retención de backups
 
 # ============================================================================
 # Nomina — Salario Minimo Legal Mensual Vigente (SMLMV)
@@ -985,7 +998,7 @@ BACKUP_RETENTION_DAYS = int(os.getenv('BACKUP_RETENTION_DAYS', 30))  # Días de 
 # (NominaCalculationService.calcular_indemnizacion_despido). Valor por
 # defecto = SMLMV 2025 (COP 1.423.500) -- confirmar/actualizar via env var
 # antes de calcular indemnizaciones en un año distinto.
-SMLMV_VIGENTE = os.getenv('SMLMV_VIGENTE', '1423500')
+SMLMV_VIGENTE = os.getenv("SMLMV_VIGENTE", "1423500")
 
 # ============================================================================
 # Feature Flags - Pipeline Universal de Documentos (v2.40)
@@ -1001,7 +1014,9 @@ FEATURE_DOCUMENT_PIPELINE = os.getenv("FEATURE_DOCUMENT_PIPELINE", "true").lower
 # WARNING: v2.36: Feature flag adicional para endpoint universal de documentos
 # - FEATURE_UPLOAD_DOCUMENT_ENDPOINT=True: Activa endpoint universal /api/v1/core/documentos/upload/
 # - FEATURE_UPLOAD_DOCUMENT_ENDPOINT=False: Mantiene solo endpoints específicos por app
-FEATURE_UPLOAD_DOCUMENT_ENDPOINT = os.getenv("FEATURE_UPLOAD_DOCUMENT_ENDPOINT", "false").lower() == "true"
+FEATURE_UPLOAD_DOCUMENT_ENDPOINT = (
+    os.getenv("FEATURE_UPLOAD_DOCUMENT_ENDPOINT", "false").lower() == "true"
+)
 
 # ============================================================================
 # AI Engine feature flags (docs/ai/AI_ENGINE_ARCHITECTURE.md, Fase 63)
@@ -1028,6 +1043,41 @@ AI_RETRIEVAL_ENABLED = os.getenv("AI_RETRIEVAL_ENABLED", "false").lower() == "tr
 # un texto+modelo no "vence" semanticamente -- el TTL solo acota el
 # crecimiento de memoria en Redis frente a queries variadas del LLM.
 AI_EMBED_CACHE_TTL_S = int(os.getenv("AI_EMBED_CACHE_TTL_S", str(6 * 3600)))
+
+# ============================================================================
+# ADK feature flag (Fase 4, docs/adk/ADK_STATUS.md)
+# ============================================================================
+# WARNING: gatea apps/services/ai/adk/ (agente ADK, mismo proceso/entorno
+# que Django -- decision explicita del usuario, 2026-09-22: sin servicio
+# aparte). AI_ADK_ENABLED en False por defecto -- ADK no esta conectado a
+# ningun LLM todavia. Las tools de ADK llaman a AIEngine.run_tool()
+# directamente (Python, no HTTP) -- el enforcement real sigue siendo el
+# mismo de siempre (AI_ENABLED/AI_READ_ENABLED/etc., AUTO_APPROVED_KINDS),
+# este flag es solo para el propio agente/superficie ADK.
+AI_ADK_ENABLED = os.getenv("AI_ADK_ENABLED", "false").lower() == "true"
+# Vacio = root_agent se construye igual (Agent no exige un modelo real para
+# instanciarse), solo bloquea invocar una conversacion real -- ver
+# apps/services/ai/adk/agent.py. Formato LiteLLM, ej. "openai/qwen/qwen3.5-9b"
+# para un endpoint OpenAI-compatible (LM Studio) -- ver ADK_LLM_API_BASE.
+ADK_LLM_MODEL = os.getenv("ADK_LLM_MODEL", "")
+# Base URL de un endpoint OpenAI-compatible (LM Studio local, etc.). Vacio =
+# ADK_LLM_MODEL se interpreta como un modelo nativo de ADK (ej. Gemini), sin
+# pasar por LiteLlm. Con host.docker.internal (requiere el extra_hosts en
+# docker-compose.yaml, ver Fase 5 en docs/adk/ADK_STATUS.md -- el `dns:`
+# custom del proyecto reemplaza el resolver que normalmente provee ese
+# hostname automaticamente).
+ADK_LLM_API_BASE = os.getenv("ADK_LLM_API_BASE", "")
+# LM Studio no exige una key real, pero el cliente OpenAI subyacente (via
+# litellm) exige que el campo no este vacio.
+ADK_LLM_API_KEY = os.getenv("ADK_LLM_API_KEY", "not-needed")
+# Hallazgo real (2026-09-22, ver ADK_STATUS.md Fase 5): Qwen3.5 (modelo de
+# razonamiento) consume TODO el presupuesto de tokens en `reasoning_content`
+# antes de emitir `content` si el limite es bajo -- verificado en vivo:
+# max_tokens=300 -> content vacio (finish_reason=length); max_tokens=2000 ->
+# content real (~170 tokens de razonamiento + respuesta, ~94s en este
+# hardware). Default generoso a proposito, no 256/512 tipico de otros
+# providers.
+ADK_LLM_MAX_TOKENS = int(os.getenv("ADK_LLM_MAX_TOKENS", "4000"))
 
 # ============================================================================
 # Logging Configuration
@@ -1113,4 +1163,3 @@ LOGGING = {
         },
     },
 }
-

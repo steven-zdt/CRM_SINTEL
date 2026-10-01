@@ -44,6 +44,7 @@ vinculo/creacion: dos ejecuciones simultaneas no pueden vincular la misma
 factura a dos Ventas distintas (la segunda pierde la carrera con
 IntegrityError, capturado y contado como error, no crashea el comando).
 """
+
 from django.core.management.base import BaseCommand
 from django.db import IntegrityError, transaction
 from django_tenants.utils import get_tenant_model, schema_context
@@ -65,15 +66,20 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--schema", type=str, default=None,
+            "--schema",
+            type=str,
+            default=None,
             help="Schema especifico (opcional; si no se da, se procesan todos los tenants).",
         )
         parser.add_argument(
-            "--apply", action="store_true",
+            "--apply",
+            action="store_true",
             help="Ejecuta de verdad (escribe en BD). Sin este flag, solo reporta (DRY RUN).",
         )
         parser.add_argument(
-            "--limit-detalle", type=int, default=20,
+            "--limit-detalle",
+            type=int,
+            default=20,
             help="Maximo de facturas a listar por categoria en el detalle (default: 20).",
         )
 
@@ -82,8 +88,10 @@ class Command(BaseCommand):
         apply_changes = options.get("apply")
         limit_detalle = options.get("limit_detalle", 20)
 
-        schemas = [schema_name] if schema_name else list(
-            get_tenant_model().objects.values_list("schema_name", flat=True)
+        schemas = (
+            [schema_name]
+            if schema_name
+            else list(get_tenant_model().objects.values_list("schema_name", flat=True))
         )
 
         modo = "APLICANDO CAMBIOS" if apply_changes else "DRY RUN (solo reporte, nada se escribe)"
@@ -101,9 +109,11 @@ class Command(BaseCommand):
                 # apps tenant (empresa/facturas/ventas) -- se omiten con
                 # warning en vez de abortar la reconciliacion de los demas
                 # tenants reales.
-                self.stdout.write(self.style.WARNING(
-                    f"[{schema}] omitido -- no parece ser un tenant de negocio real: {exc}"
-                ))
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"[{schema}] omitido -- no parece ser un tenant de negocio real: {exc}"
+                    )
+                )
                 continue
             for k, v in stats.items():
                 total_global[k] = total_global.get(k, 0) + v
@@ -120,7 +130,9 @@ class Command(BaseCommand):
 
         stats = {
             "facturas_naturaleza_venta_total": 0,
-            "facturas_naturaleza_compra": Factura.objects.filter(naturaleza=Factura.Naturaleza.COMPRA).count(),
+            "facturas_naturaleza_compra": Factura.objects.filter(
+                naturaleza=Factura.Naturaleza.COMPRA
+            ).count(),
             "notas_credito": Factura.objects.filter(tipo=Factura.TipoFactura.NC).count(),
             "notas_debito": Factura.objects.filter(tipo=Factura.TipoFactura.ND).count(),
             "ya_vinculadas": 0,
@@ -133,10 +145,14 @@ class Command(BaseCommand):
         detalle_ambiguas = []
         detalle_errores = []
 
-        qs = Factura.objects.filter(
-            naturaleza=Factura.Naturaleza.VENTA,
-            tipo=Factura.TipoFactura.FE,
-        ).prefetch_related("items").order_by("id")
+        qs = (
+            Factura.objects.filter(
+                naturaleza=Factura.Naturaleza.VENTA,
+                tipo=Factura.TipoFactura.FE,
+            )
+            .prefetch_related("items")
+            .order_by("id")
+        )
         stats["facturas_naturaleza_venta_total"] = qs.count()
 
         for factura in qs.iterator(chunk_size=100):
@@ -144,13 +160,17 @@ class Command(BaseCommand):
                 stats["ya_vinculadas"] += 1
                 continue
 
-            candidatas = list(
-                Venta.objects.filter(
-                    empresa_id=factura.empresa_id,
-                    numero_factura=factura.numero,
-                    factura_asociada__isnull=True,
-                ).only("id", "uuid")
-            ) if factura.numero else []
+            candidatas = (
+                list(
+                    Venta.objects.filter(
+                        empresa_id=factura.empresa_id,
+                        numero_factura=factura.numero,
+                        factura_asociada__isnull=True,
+                    ).only("id", "uuid")
+                )
+                if factura.numero
+                else []
+            )
 
             if len(candidatas) > 1:
                 stats["ambiguas"] += 1
@@ -198,22 +218,30 @@ class Command(BaseCommand):
                 detalle_errores.append({"factura": factura.numero, "error": str(exc)})
             except IntegrityError as exc:
                 stats["errores"] += 1
-                detalle_errores.append({"factura": factura.numero, "error": f"race/integridad: {exc}"})
+                detalle_errores.append(
+                    {"factura": factura.numero, "error": f"race/integridad: {exc}"}
+                )
 
         self.stdout.write(self.style.SUCCESS(f"\n=== [{schema}] ==="))
         for k, v in stats.items():
             self.stdout.write(f"  {k}: {v}")
         if detalle_ambiguas:
-            self.stdout.write(self.style.WARNING(f"  Ambiguas (numero_factura con >1 Venta candidata):"))
+            self.stdout.write(
+                self.style.WARNING("  Ambiguas (numero_factura con >1 Venta candidata):")
+            )
             for numero in detalle_ambiguas[:limit_detalle]:
                 self.stdout.write(f"    - {numero}")
             if len(detalle_ambiguas) > limit_detalle:
-                self.stdout.write(f"    ... {len(detalle_ambiguas) - limit_detalle} adicionales omitidas")
+                self.stdout.write(
+                    f"    ... {len(detalle_ambiguas) - limit_detalle} adicionales omitidas"
+                )
         if detalle_errores:
-            self.stdout.write(self.style.ERROR(f"  Errores:"))
+            self.stdout.write(self.style.ERROR("  Errores:"))
             for err in detalle_errores[:limit_detalle]:
                 self.stdout.write(f"    - {err['factura']}: {err['error']}")
             if len(detalle_errores) > limit_detalle:
-                self.stdout.write(f"    ... {len(detalle_errores) - limit_detalle} adicionales omitidos")
+                self.stdout.write(
+                    f"    ... {len(detalle_errores) - limit_detalle} adicionales omitidos"
+                )
 
         return stats

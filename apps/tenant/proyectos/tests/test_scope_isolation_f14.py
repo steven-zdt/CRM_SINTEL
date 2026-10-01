@@ -5,6 +5,7 @@ para el contexto transversal. Este archivo cierra el gap para `proyectos`:
 (1) alcance=SEDE sin sedes asignadas -> frozenset(), ve solo sin-sede; (2)
 alcance=SEDE con DOS sedes asignadas -> ve proyectos de ambas.
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa, Sede
@@ -17,7 +18,9 @@ class ProyectoIsolationF14Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F14 Proyectos", nit="900000796", direccion="Calle 1",
+            razon_social="Empresa Test F14 Proyectos",
+            nit="900000796",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F14 Proy")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F14 Proy")
@@ -30,7 +33,10 @@ class ProyectoIsolationF14Tests(SintelTenantTestCase):
         p_a = self._crear("Proyecto F14 Sede A", sede=self.sede_a)
 
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
 
         resp = self.api_client.get("/api/v1/proyectos/")
@@ -47,7 +53,10 @@ class ProyectoIsolationF14Tests(SintelTenantTestCase):
         p_c = self._crear("Proyecto F14 Doble C", sede=sede_c)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a, self.sede_b])
 

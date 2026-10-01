@@ -1,4 +1,5 @@
 """Tests puros del registro de tools -- sin DB (Fase 50: 'tool tests' separados de 'integration tests')."""
+
 import pytest
 
 from apps.services.ai.tools.base import BaseTool, ToolKind, ToolResult, ToolRisk
@@ -71,4 +72,4 @@ def test_tool_metadata_no_expone_el_objeto_tool():
             "idempotent": True,
         }
     ]
-    assert all(isinstance(v, (str, bool)) for v in meta[0].values())
+    assert all(isinstance(v, str | bool) for v in meta[0].values())

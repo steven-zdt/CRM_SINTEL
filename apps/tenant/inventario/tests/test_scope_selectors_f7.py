@@ -4,6 +4,7 @@ Fase F7 (proyecto OSF), "Migrar Selectors a scope-aware" - MovimientoInventario,
 pero nunca se usaba para filtrar. NULL-safe: el 100% de los
 MovimientoInventario reales tiene sede=NULL hoy.
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa, Sede
@@ -16,17 +17,24 @@ class InventarioScopeSelectorsF7Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F7 Inventario", nit="900000779", direccion="Calle 1",
+            razon_social="Empresa Test F7 Inventario",
+            nit="900000779",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F7 Inv")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F7 Inv")
         self.producto = Producto.objects.create(
-            empresa=self.empresa, codigo="SKU-F7", nombre="Producto F7",
+            empresa=self.empresa,
+            codigo="SKU-F7",
+            nombre="Producto F7",
         )
 
     def _crear(self, sede=None):
         return MovimientoInventario.objects.create(
-            empresa=self.empresa, tipo="ENTRADA_AJUSTE", cantidad=1, sede=sede,
+            empresa=self.empresa,
+            tipo="ENTRADA_AJUSTE",
+            cantidad=1,
+            sede=sede,
             producto=self.producto,
         )
 
@@ -36,7 +44,10 @@ class InventarioScopeSelectorsF7Tests(SintelTenantTestCase):
         m_b = self._crear(sede=self.sede_b)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a])
 
@@ -55,7 +66,9 @@ class InventarioScopeSelectorsF7Tests(SintelTenantTestCase):
         self._crear(sede=self.sede_b)
         self._crear()
 
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         resp = self.api_client.get("/api/v1/inventario/movimientos/")
 

@@ -6,6 +6,7 @@ forma explicita (no via signals/AppConfig.ready() automatico) para mantener
 "CERO SIGNALS" y dependencias explicitas, siguiendo la convencion del
 proyecto.
 """
+
 from __future__ import annotations
 
 

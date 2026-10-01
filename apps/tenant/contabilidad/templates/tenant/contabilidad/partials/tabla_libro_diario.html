@@ -1,0 +1,28 @@
+{# tabla_libro_diario.html — DataTables 3.x + ColumnControl (docs/ux/TABLES_FORMS_RELEASE_GATE.md) #}
+{# Esqueleto ESTATICO: reemplaza el Tabulator client-side de                #}
+{# libro_diario_list.js. Poblado via ajax contra                           #}
+{# POST /api/v1/contabilidad/libro-diario/dt/ (LibroDiarioViewSet.dt() --  #}
+{# consulta AsientoContable directo, no los extractores cross-app de       #}
+{# list()). Indices de columna deben coincidir 1:1 con fields_map/         #}
+{# column_filters de esa accion. periodo_uuid/fecha_inicio/fecha_fin/      #}
+{# estado viajan como query string en la URL del ajax (parametros de       #}
+{# "reporte", no un filtro de columna) -- ver libro_diario_list.js.        #}
+
+<div class="w-100" style="max-width:100%; overflow-x:auto;">
+  <table id="tabla-libro-diario" class="table table-hover align-middle mb-0 w-100">
+    <thead>
+      <tr>
+        <th>Numero</th>
+        <th>Fecha</th>
+        <th>Descripcion</th>
+        <th>Estado</th>
+        <th>Movs.</th>
+        <th class="text-end">Debito</th>
+        <th class="text-end">Credito</th>
+        <th>Cuadratura</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>

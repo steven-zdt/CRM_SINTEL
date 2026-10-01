@@ -13,6 +13,7 @@ Reglas:
   - Este comando es el UNICO proceso autorizado para crear administradores del sistema
   - No crear admins via ensure_admin ni manualmente con is_staff=True en onboarding
 """
+
 from django.contrib.auth.management.commands.createsuperuser import (
     Command as BaseCreateSuperuserCommand,
 )
@@ -29,9 +30,9 @@ class Command(BaseCreateSuperuserCommand):
             dest="tenant_schema",
             default=None,
             help="schema_name del tenant privado al que asociar al superusuario (ej: <schema_name>). "
-                 "Consulta los disponibles con: python manage.py shell -c "
-                 "\"from apps.public.tenants.models import Client; "
-                 "[print(c.schema_name) for c in Client.objects.exclude(schema_name='public')]\"",
+            "Consulta los disponibles con: python manage.py shell -c "
+            '"from apps.public.tenants.models import Client; '
+            "[print(c.schema_name) for c in Client.objects.exclude(schema_name='public')]\"",
         )
 
     def handle(self, *args, **options) -> None:
@@ -40,17 +41,24 @@ class Command(BaseCreateSuperuserCommand):
 
         # 2. Obtener el usuario recién creado
         from django.contrib.auth import get_user_model
+
         User = get_user_model()
 
         username = options.get(self.UserModel.USERNAME_FIELD)
         if not username:
             # En modo interactivo el username puede estar en stdin — recuperar el último creado
-            user = User.objects.filter(is_superuser=True, is_staff=True).order_by("-date_joined").first()
+            user = (
+                User.objects.filter(is_superuser=True, is_staff=True)
+                .order_by("-date_joined")
+                .first()
+            )
         else:
             user = User.objects.filter(**{self.UserModel.USERNAME_FIELD: username}).first()
 
         if not user:
-            self.stdout.write(self.style.WARNING("No se pudo recuperar el usuario creado para asociar al tenant."))
+            self.stdout.write(
+                self.style.WARNING("No se pudo recuperar el usuario creado para asociar al tenant.")
+            )
             return
 
         # 3. Determinar el tenant a asociar
@@ -59,10 +67,12 @@ class Command(BaseCreateSuperuserCommand):
             tenant_schema = self._ask_tenant()
 
         if not tenant_schema:
-            self.stdout.write(self.style.WARNING(
-                f"Superusuario '{user.email}' creado sin asociacion a tenant. "
-                f"Usa: python manage.py createsuperuser --tenant <schema_name>"
-            ))
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Superusuario '{user.email}' creado sin asociacion a tenant. "
+                    f"Usa: python manage.py createsuperuser --tenant <schema_name>"
+                )
+            )
             return
 
         # 4. Crear TenantMembership
@@ -71,6 +81,7 @@ class Command(BaseCreateSuperuserCommand):
     def _ask_tenant(self) -> str | None:
         """Pregunta interactivamente qué tenant asociar."""
         from apps.public.tenants.models import Client
+
         tenants = list(
             Client.objects.exclude(schema_name="public")
             .filter(is_active=True)
@@ -78,7 +89,9 @@ class Command(BaseCreateSuperuserCommand):
             .order_by("schema_name")
         )
         if not tenants:
-            self.stdout.write(self.style.WARNING("No hay tenants privados activos. Omitiendo asociacion."))
+            self.stdout.write(
+                self.style.WARNING("No hay tenants privados activos. Omitiendo asociacion.")
+            )
             return None
 
         self.stdout.write("\nTenants privados disponibles:")
@@ -105,12 +118,12 @@ class Command(BaseCreateSuperuserCommand):
         try:
             tenant = Client.objects.get(schema_name=tenant_schema, is_active=True)
         except Client.DoesNotExist:
-            raise CommandError(f"Tenant '{tenant_schema}' no encontrado o inactivo.")
+            raise CommandError(f"Tenant '{tenant_schema}' no encontrado o inactivo.") from None
 
         # Quitar is_primary_admin anterior en ese tenant (si existe)
-        TenantMembership.objects.filter(
-            client=tenant, is_primary_admin=True
-        ).exclude(user=user).update(is_primary_admin=False)
+        TenantMembership.objects.filter(client=tenant, is_primary_admin=True).exclude(
+            user=user
+        ).update(is_primary_admin=False)
 
         membership, created = TenantMembership.objects.update_or_create(
             client=tenant,
@@ -123,7 +136,9 @@ class Command(BaseCreateSuperuserCommand):
         )
 
         action = "creada" if created else "actualizada"
-        self.stdout.write(self.style.SUCCESS(
-            f"TenantMembership {action}: {user.email} → {tenant.nombre} ({tenant_schema}) "
-            f"[Administrador Primario]"
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"TenantMembership {action}: {user.email} → {tenant.nombre} ({tenant_schema}) "
+                f"[Administrador Primario]"
+            )
+        )

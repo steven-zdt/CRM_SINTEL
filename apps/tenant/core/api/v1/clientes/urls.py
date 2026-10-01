@@ -17,7 +17,7 @@ from .viewsets import (
 router = DefaultRouter(trailing_slash=True)
 
 # Registrar ViewSets
-router.register(r'clientes', ClienteCoreViewSet, basename='core-cliente')
-router.register(r'contactos', ContactoClienteCoreViewSet, basename='core-contacto-cliente')
+router.register(r"clientes", ClienteCoreViewSet, basename="core-cliente")
+router.register(r"contactos", ContactoClienteCoreViewSet, basename="core-contacto-cliente")
 
 urlpatterns = router.urls

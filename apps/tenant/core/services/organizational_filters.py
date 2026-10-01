@@ -8,6 +8,7 @@ las consultas, evitando que cada modulo implemente su propia logica").
 
 Piloto: apps/tenant/compras/services/selectors.py's OrdenCompraSelector.
 """
+
 from django.db.models import Q, QuerySet
 
 

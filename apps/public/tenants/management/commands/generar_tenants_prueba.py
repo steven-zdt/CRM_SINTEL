@@ -421,7 +421,7 @@ class Command(BaseCommand):
                 )
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"ERROR: Error creando usuario admin base: {e}"))
-            raise CommandError(f"No se pudo crear usuario admin base: {e}")
+            raise CommandError(f"No se pudo crear usuario admin base: {e}") from e
 
         # Generar tenants
         for i in range(inicio, inicio + cantidad):
@@ -437,7 +437,7 @@ class Command(BaseCommand):
                 # Verificar si ya existe
                 from apps.public.tenants.models import Client
 
-                schema_name_esperado = (
+                (
                     nombre_empresa.lower()
                     .replace(" ", "-")
                     .replace(".", "")

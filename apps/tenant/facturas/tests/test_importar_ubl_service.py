@@ -3,6 +3,7 @@ Tests tenant-aware para importar_ubl (Service Layer).
 
 # WARNING: TENANT TESTS: Requieren base de datos y tenant (TenantTestCase).
 """
+
 from django_tenants.test.cases import TenantTestCase
 
 from apps.tenant.empresa.models import Empresa
@@ -85,7 +86,7 @@ XML_COMPRA = b"""<?xml version="1.0" encoding="UTF-8"?>
 
 class ImportarUblServiceTests(TenantTestCase):
     """Tests para importar_ubl con preview y persistencia."""
-    
+
     def setUp(self):
         super().setUp()
         # Crear empresa del tenant (SSoT)
@@ -94,9 +95,9 @@ class ImportarUblServiceTests(TenantTestCase):
             nit="901123299",
             dv="1",
             direccion="Calle 123",
-            telefono="1234567890"
+            telefono="1234567890",
         )
-    
+
     def test_422_sin_empresa(self):
         """
         Test: Retorna 422 si no hay Empresa configurada.
@@ -117,7 +118,7 @@ class ImportarUblServiceTests(TenantTestCase):
         self.assertEqual(code, 422)
         self.assertEqual(payload["error"], "empresa_no_configurada")
         self.assertIn("message", payload)
-    
+
     def test_200_con_empresa_y_venta(self):
         """
         Test: Preview de factura VENTA (emisor == empresa).

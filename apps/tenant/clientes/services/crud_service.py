@@ -1,11 +1,13 @@
 import logging
+
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from rest_framework.exceptions import ValidationError
+
 from ..models import Cliente, ContactoCliente
-from .selectors import DETAIL_FIELDS
 
 logger = logging.getLogger(__name__)
+
 
 class ClienteCRUDService:
     """Atomic database mutations for Cliente."""
@@ -18,7 +20,13 @@ class ClienteCRUDService:
             return Cliente.objects.create(empresa_id=empresa_id, **data)
         except IntegrityError as e:
             if "uniq_doc_cliente_empresa" in str(e):
-                raise ValidationError({"numero_documento": ["Ya existe un cliente con este documento en esta empresa."]})
+                raise ValidationError(
+                    {
+                        "numero_documento": [
+                            "Ya existe un cliente con este documento en esta empresa."
+                        ]
+                    }
+                ) from e
             raise e
 
     @staticmethod
@@ -32,7 +40,13 @@ class ClienteCRUDService:
             return cliente
         except IntegrityError as e:
             if "uniq_doc_cliente_empresa" in str(e):
-                raise ValidationError({"numero_documento": ["Ya existe otro cliente con este documento en esta empresa."]})
+                raise ValidationError(
+                    {
+                        "numero_documento": [
+                            "Ya existe otro cliente con este documento en esta empresa."
+                        ]
+                    }
+                ) from e
             raise e
 
     @staticmethod
@@ -40,14 +54,18 @@ class ClienteCRUDService:
     def delete_cliente(cliente: Cliente):
         """Deletes a client only if inactive."""
         if cliente.activo:
-            raise ValidationError({"detail": "No se puede eliminar un cliente activo. Inactívelo primero."})
+            raise ValidationError(
+                {"detail": "No se puede eliminar un cliente activo. Inactívelo primero."}
+            )
         try:
             cliente.delete()
         except ProtectedError as e:
-            modelos = ', '.join({obj.__class__.__name__ for obj in e.protected_objects})
-            raise ValidationError({
-                "detail": f"No se puede eliminar el cliente porque tiene registros vinculados: {modelos}."
-            })
+            modelos = ", ".join({obj.__class__.__name__ for obj in e.protected_objects})
+            raise ValidationError(
+                {
+                    "detail": f"No se puede eliminar el cliente porque tiene registros vinculados: {modelos}."
+                }
+            ) from e
 
 
 class ContactoCRUDService:
@@ -60,7 +78,9 @@ class ContactoCRUDService:
             return ContactoCliente.objects.create(empresa_id=empresa_id, **data)
         except IntegrityError as e:
             if "uniq_contacto_cliente_email" in str(e):
-                raise ValidationError({"email": ["Ya existe un contacto con este email para este cliente."]})
+                raise ValidationError(
+                    {"email": ["Ya existe un contacto con este email para este cliente."]}
+                ) from e
             raise e
 
     @staticmethod
@@ -73,7 +93,9 @@ class ContactoCRUDService:
             return contacto
         except IntegrityError as e:
             if "uniq_contacto_cliente_email" in str(e):
-                raise ValidationError({"email": ["Ya existe otro contacto con este email para este cliente."]})
+                raise ValidationError(
+                    {"email": ["Ya existe otro contacto con este email para este cliente."]}
+                ) from e
             raise e
 
     @staticmethod
@@ -89,11 +111,18 @@ class CarteraCRUDService:
     @transaction.atomic
     def create_cartera(empresa_id: int, data: dict):
         from ..models import Cartera
+
         try:
             return Cartera.objects.create(empresa_id=empresa_id, **data)
         except IntegrityError as e:
             if "uniq_cartera_factura_cliente" in str(e):
-                raise ValidationError({"numero_factura": ["Ya existe este numero de factura registrado para este cliente."]})
+                raise ValidationError(
+                    {
+                        "numero_factura": [
+                            "Ya existe este numero de factura registrado para este cliente."
+                        ]
+                    }
+                ) from e
             raise e
 
     @staticmethod
@@ -106,7 +135,13 @@ class CarteraCRUDService:
             return cartera
         except IntegrityError as e:
             if "uniq_cartera_factura_cliente" in str(e):
-                raise ValidationError({"numero_factura": ["Ya existe otro registro con este numero de factura para este cliente."]})
+                raise ValidationError(
+                    {
+                        "numero_factura": [
+                            "Ya existe otro registro con este numero de factura para este cliente."
+                        ]
+                    }
+                ) from e
             raise e
 
     @staticmethod
@@ -115,7 +150,9 @@ class CarteraCRUDService:
         try:
             cartera.delete()
         except ProtectedError as e:
-            modelos = ', '.join({obj.__class__.__name__ for obj in e.protected_objects})
-            raise ValidationError({
-                "detail": f"No se puede eliminar el registro de cartera porque tiene registros vinculados: {modelos}."
-            })
+            modelos = ", ".join({obj.__class__.__name__ for obj in e.protected_objects})
+            raise ValidationError(
+                {
+                    "detail": f"No se puede eliminar el registro de cartera porque tiene registros vinculados: {modelos}."
+                }
+            ) from e

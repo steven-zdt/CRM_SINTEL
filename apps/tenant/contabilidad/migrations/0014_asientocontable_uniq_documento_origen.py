@@ -6,21 +6,25 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('contabilidad', '0013_remove_lineaplantilla_unique_origen_valor'),
+        ("contabilidad", "0013_remove_lineaplantilla_unique_origen_valor"),
     ]
 
     operations = [
         migrations.AddConstraint(
-            model_name='asientocontable',
+            model_name="asientocontable",
             constraint=models.UniqueConstraint(
                 condition=models.Q(
-                    ('documento_origen_reversado', False),
-                    ('documento_origen_id__isnull', False),
+                    ("documento_origen_reversado", False),
+                    ("documento_origen_id__isnull", False),
                 ),
-                fields=('empresa', 'documento_origen_app', 'documento_origen_modelo', 'documento_origen_id'),
-                name='uniq_asiento_documento_origen_no_reversado',
+                fields=(
+                    "empresa",
+                    "documento_origen_app",
+                    "documento_origen_modelo",
+                    "documento_origen_id",
+                ),
+                name="uniq_asiento_documento_origen_no_reversado",
             ),
         ),
     ]

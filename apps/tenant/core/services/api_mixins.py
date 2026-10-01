@@ -4,6 +4,7 @@ API Mixins para Core - Inyección de servicios en ViewSets.
 WARNING: SINTEL v3.5: Arquitectura Service Layer Modular.
 Core es un UI Shell que orquesta otras apps.
 """
+
 from apps.tenant.core.services.selectors import CoreSelector
 
 

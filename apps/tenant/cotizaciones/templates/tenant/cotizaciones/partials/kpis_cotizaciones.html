@@ -1,0 +1,22 @@
+{% load sintel_ui %}
+{# kpis_cotizaciones.html — KPIs de Cotizaciones (extraidos al migrar a DataTables) #}
+<div class="row g-3 mb-3" id="cotizaciones-kpis">
+  {% sintel_kpi_card icon="file-earmark-text" color="primary" value=kpi_total label="Total" %}
+  {% sintel_kpi_card icon="pencil-square" color="secondary" value=kpi_borrador label="Borrador" %}
+  {% sintel_kpi_card icon="send" color="info" value=kpi_enviada label="Enviadas" %}
+  {% sintel_kpi_card icon="check2-circle" color="success" value=kpi_aceptada label="Aprobadas" %}
+  {% sintel_kpi_card icon="clock-history" color="danger" value=kpi_vencidas label="Vencidas" %}
+  <div class="col-6 col-md-4 col-xl-2">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body py-3 px-3 d-flex align-items-center gap-2">
+        <div class="rounded-circle bg-warning bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px;">
+          <i class="bi bi-cash-stack text-warning"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="fw-bold lh-1 mb-1" style="font-size:0.85rem;">${{ kpi_monto|floatformat:0 }}</div>
+          <div class="small text-muted text-truncate">Monto Total</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

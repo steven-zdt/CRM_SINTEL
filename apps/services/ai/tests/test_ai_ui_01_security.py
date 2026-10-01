@@ -26,11 +26,12 @@ Complementa (no duplica) los tests ya existentes:
   aunque el flag este activo -- la garantia estructural de
   apps/services/ai/engine/ai_engine.py, no solo documentada.
 """
+
 from unittest.mock import patch
 
 import pytest
-from django.db import connection
 from django.core.management import call_command
+from django.db import connection
 from django.test import override_settings
 from django_tenants.utils import schema_context
 from rest_framework import status
@@ -44,18 +45,44 @@ from apps.tenant.empresa.models import Empresa
 from apps.tenant.perfil.models import TenantProfile
 from tests.tenant.base_test import SintelTenantTestCase
 
-AI_READ_FLAGS_ON = {"AI_ENABLED": True, "AI_READ_ENABLED": True}
+# Hallazgo real (2026-09-25): .env de este entorno tiene AI_ADK_ENABLED=true
+# -- ver misma nota en test_ai06_form_assistant.py. Sin forzar
+# AI_ADK_ENABLED=False, apps.services.ai.orchestrator.ask() despacha al
+# agente ADK real (LM Studio/Ollama) en vez de form_assistant.ask(), la
+# funcion que _mock_llm_tool_decision mockea.
+AI_READ_FLAGS_ON = {"AI_ENABLED": True, "AI_READ_ENABLED": True, "AI_ADK_ENABLED": False}
 ASK_URL = "/api/v1/ai/ask/"
 
 
-def _mock_anthropic_tool_decision(tool_name, arguments):
+def _mock_llm_tool_decision(tool_name, arguments):
+    """Mockea resolve_active_llm() (el punto real de resolucion desde Fase
+    10 del plan LLM Provider Hub, ver test_ai06_form_assistant.py), no un
+    SDK de proveedor especifico -- hallazgo real 2026-09-25: mockear
+    anthropic.Anthropic directo dejo de interceptar nada cuando ask()
+    empezo a resolver el provider real via resolve_active_llm()."""
     import json
     from types import SimpleNamespace
 
     text = json.dumps({"tool": tool_name, "arguments": arguments})
-    fake_message = SimpleNamespace(content=[SimpleNamespace(type="text", text=text)])
-    fake_client = SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: fake_message))
-    return patch("anthropic.Anthropic", return_value=fake_client)
+    fake_response = SimpleNamespace(
+        text=text,
+        model="fake-model",
+        provider="fake",
+        input_tokens=0,
+        output_tokens=0,
+        tool_calls=[],
+    )
+    fake_resolution = SimpleNamespace(
+        provider=SimpleNamespace(complete=lambda *a, **kw: fake_response),
+        provider_name="fake",
+        model="fake-model",
+        capabilities=None,
+        model_config_id=None,
+    )
+    return patch(
+        "apps.services.ai.orchestrator.form_assistant.resolve_active_llm",
+        return_value=fake_resolution,
+    )
 
 
 class AIUI01SameSchemaScopeHttpTests(SintelTenantTestCase):
@@ -66,12 +93,18 @@ class AIUI01SameSchemaScopeHttpTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA AI-UI-01 S.A.S.", nit="900111001", direccion="Calle A",
+            razon_social="EMPRESA AI-UI-01 S.A.S.",
+            nit="900111001",
+            direccion="Calle A",
         )
         TenantProfile.objects.create(user=self.user, empresa=self.empresa)
         Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900333001", razon_social="Cliente Real De Mi Empresa", regimen_tributario="ORDINARIO",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900333001",
+            razon_social="Cliente Real De Mi Empresa",
+            regimen_tributario="ORDINARIO",
         )
 
     @override_settings(**AI_READ_FLAGS_ON)
@@ -83,7 +116,7 @@ class AIUI01SameSchemaScopeHttpTests(SintelTenantTestCase):
         generica (nunca un 500 con traceback, Fase 34) en vez de dejarlo
         colar como si fuera un scope valido."""
         decision_con_empresa_id_falso = {"search": "Cliente", "empresa_id": 999999}
-        with _mock_anthropic_tool_decision("buscar_cliente", decision_con_empresa_id_falso):
+        with _mock_llm_tool_decision("buscar_cliente", decision_con_empresa_id_falso):
             resp = self.api_client.post(ASK_URL, data={"message": "busca clientes"}, format="json")
 
         body = resp.json()
@@ -100,8 +133,10 @@ class AIUI01SameSchemaScopeHttpTests(SintelTenantTestCase):
         registro), no un detalle interno de infraestructura. Nota:
         `Empresa` (a diferencia de `Cliente`/`Cotizacion`/etc.) no declara
         campo `uuid` propio -- verificado leyendo el modelo, no asumido."""
-        with _mock_anthropic_tool_decision("buscar_cliente", {"search": "Cliente Real De Mi Empresa"}):
-            resp = self.api_client.post(ASK_URL, data={"message": "busca Cliente Real De Mi Empresa"}, format="json")
+        with _mock_llm_tool_decision("buscar_cliente", {"search": "Cliente Real De Mi Empresa"}):
+            resp = self.api_client.post(
+                ASK_URL, data={"message": "busca Cliente Real De Mi Empresa"}, format="json"
+            )
 
         body = resp.json()
         crudo = str(body)
@@ -117,18 +152,22 @@ def _crear_tenant_de_prueba(schema, empresa_nit, empresa_nombre):
     el estilo pytest-fixture de los tests de apps/tenant/*/tests/."""
     tenant_obj = TenantClient.objects.filter(schema_name=schema).first()
     if not tenant_obj:
-        with schema_context('public'):
-            tenant_obj = TenantClient.objects.create(schema_name=schema, nombre=f'Tenant {schema}')
-            Domain.objects.create(tenant=tenant_obj, domain=f'{schema}.sintel.net.co', is_primary=True)
+        with schema_context("public"):
+            tenant_obj = TenantClient.objects.create(schema_name=schema, nombre=f"Tenant {schema}")
+            Domain.objects.create(
+                tenant=tenant_obj, domain=f"{schema}.sintel.net.co", is_primary=True
+            )
 
     with connection.cursor() as cur:
-        cur.execute(f'CREATE SCHEMA IF NOT EXISTS {schema}')
-    call_command('migrate_schemas', '--tenant', '-s', schema, '--noinput', verbosity=0)
+        cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    call_command("migrate_schemas", "--tenant", "-s", schema, "--noinput", verbosity=0)
 
     with schema_context(schema):
         empresa = Empresa.objects.first()
         if not empresa:
-            empresa = Empresa.objects.create(nit=empresa_nit, razon_social=empresa_nombre, direccion="Calle X")
+            empresa = Empresa.objects.create(
+                nit=empresa_nit, razon_social=empresa_nombre, direccion="Calle X"
+            )
     return tenant_obj, empresa
 
 
@@ -142,33 +181,42 @@ def test_cross_schema_usuario_de_tenant1_no_recupera_clientes_de_tenant2():
 
     User = get_user_model()
 
-    tenant1, empresa1 = _crear_tenant_de_prueba('tenant1', '111', 'Tenant 1 SAS')
-    tenant2, empresa2 = _crear_tenant_de_prueba('tenant2', '222', 'Tenant 2 SAS')
+    tenant1, empresa1 = _crear_tenant_de_prueba("tenant1", "111", "Tenant 1 SAS")
+    tenant2, empresa2 = _crear_tenant_de_prueba("tenant2", "222", "Tenant 2 SAS")
 
     with schema_context(tenant1.schema_name):
         Cliente.objects.get_or_create(
-            empresa=empresa1, numero_documento="900444001", defaults={
-                "tipo_persona": "JURIDICA", "tipo_documento": "NIT",
-                "razon_social": "Cliente Solo De Tenant1", "regimen_tributario": "ORDINARIO",
+            empresa=empresa1,
+            numero_documento="900444001",
+            defaults={
+                "tipo_persona": "JURIDICA",
+                "tipo_documento": "NIT",
+                "razon_social": "Cliente Solo De Tenant1",
+                "regimen_tributario": "ORDINARIO",
             },
         )
     with schema_context(tenant2.schema_name):
         Cliente.objects.get_or_create(
-            empresa=empresa2, numero_documento="900444002", defaults={
-                "tipo_persona": "JURIDICA", "tipo_documento": "NIT",
-                "razon_social": "Cliente Solo De Tenant2", "regimen_tributario": "ORDINARIO",
+            empresa=empresa2,
+            numero_documento="900444002",
+            defaults={
+                "tipo_persona": "JURIDICA",
+                "tipo_documento": "NIT",
+                "razon_social": "Cliente Solo De Tenant2",
+                "regimen_tributario": "ORDINARIO",
             },
         )
 
     connection.set_schema_to_public()
     user, _ = User.objects.get_or_create(
-        email="ai-ui-01-cross-schema@sintel.local", defaults={"username": "ai_ui_01_cross_schema"},
+        email="ai-ui-01-cross-schema@sintel.local",
+        defaults={"username": "ai_ui_01_cross_schema"},
     )
     TenantMembership.objects.get_or_create(client=tenant1, user=user, defaults={"rol": "ADMIN"})
     with schema_context(tenant1.schema_name):
         TenantProfile.objects.get_or_create(user=user, empresa=empresa1, defaults={"rol": "ADMIN"})
 
-    client = APIClient(HTTP_HOST=f'{tenant1.schema_name}.sintel.net.co')
+    client = APIClient(HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")
     client.force_authenticate(user=user)
 
     # Mismo motivo que tests/tenant/base_test.py::SintelTenantTestCase.setUp():
@@ -180,9 +228,14 @@ def test_cross_schema_usuario_de_tenant1_no_recupera_clientes_de_tenant2():
     with override_settings(ROOT_URLCONF=dj_settings.TENANT_URLCONF):
         clear_url_caches()
         set_urlconf(dj_settings.TENANT_URLCONF)
-        with override_settings(**AI_READ_FLAGS_ON), patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}):
-            with _mock_anthropic_tool_decision("buscar_cliente", {"search": "Cliente Solo"}):
-                resp = client.post(ASK_URL, data={"message": "busca clientes 'Cliente Solo'"}, format="json")
+        with (
+            override_settings(**AI_READ_FLAGS_ON),
+            patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"}),
+            _mock_llm_tool_decision("buscar_cliente", {"search": "Cliente Solo"}),
+        ):
+            resp = client.post(
+                ASK_URL, data={"message": "busca clientes 'Cliente Solo'"}, format="json"
+            )
         clear_url_caches()
         set_urlconf(None)
 
@@ -219,29 +272,39 @@ class AIUI01WriteNeverAutoApprovedTests(SintelTenantTestCase):
         # falta de contexto, no por el bloqueo de WRITE que este test
         # quiere probar (hallazgo real de la primera corrida de este test).
         empresa = Empresa.objects.create(
-            razon_social="EMPRESA WRITE-BLOCK AI-UI-01 S.A.S.", nit="900111099", direccion="Calle W",
+            razon_social="EMPRESA WRITE-BLOCK AI-UI-01 S.A.S.",
+            nit="900111099",
+            direccion="Calle W",
         )
         TenantProfile.objects.create(user=self.user, empresa=empresa)
 
-    @override_settings(AI_ENABLED=True, AI_READ_ENABLED=True, AI_WRITE_ENABLED=True)
+    @override_settings(
+        AI_ENABLED=True, AI_READ_ENABLED=True, AI_WRITE_ENABLED=True, AI_ADK_ENABLED=False
+    )
     @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "fake-key-for-test"})
     def test_tool_write_registrada_sigue_bloqueada_con_flag_write_activo(self):
-        """Hallazgo real de la primera corrida de este test: sin mockear
-        ANTHROPIC_API_KEY, AnthropicProvider.complete() lanza RuntimeError
-        (comportamiento correcto, sin key no hay como llamar al LLM) --
-        form_assistant.py::ask() lo captura y devuelve INTERNAL_ERROR (500)
-        ANTES de llegar siquiera a AIEngine.run_tool()/AUTO_APPROVED_KINDS,
-        dando un falso 500 que no tiene nada que ver con el bloqueo de
-        WRITE que este test quiere probar. Mismo mock que los otros 3
-        tests de este archivo."""
+        """Hallazgo real de la primera corrida de este test: sin mockear el
+        resolver de LLM, el provider real (lo que sea que este activo,
+        AnthropicProvider sin key o el que resuelva resolve_active_llm())
+        falla y form_assistant.py::ask() lo captura devolviendo
+        INTERNAL_ERROR (500) ANTES de llegar siquiera a
+        AIEngine.run_tool()/AUTO_APPROVED_KINDS -- un falso 500 que no
+        tiene nada que ver con el bloqueo de WRITE que este test quiere
+        probar. Mismo mock que los otros 3 tests de este archivo (2026-09-25:
+        actualizado de mockear anthropic.Anthropic a mockear
+        resolve_active_llm(), ver docstring de _mock_llm_tool_decision)."""
         from apps.services.ai.tools.registry import _REGISTRY, register_tool
 
         tool = self._FakeWriteTool()
-        assert tool.name not in _REGISTRY, "nombre de tool fake choca con una real -- cambiar el nombre"
+        assert (
+            tool.name not in _REGISTRY
+        ), "nombre de tool fake choca con una real -- cambiar el nombre"
         register_tool(tool)
         try:
-            with _mock_anthropic_tool_decision(tool.name, {}):
-                resp = self.api_client.post(ASK_URL, data={"message": "escribe algo"}, format="json")
+            with _mock_llm_tool_decision(tool.name, {}):
+                resp = self.api_client.post(
+                    ASK_URL, data={"message": "escribe algo"}, format="json"
+                )
 
             assert resp.status_code == status.HTTP_403_FORBIDDEN
             body = resp.json()

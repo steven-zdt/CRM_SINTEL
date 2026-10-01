@@ -11,6 +11,7 @@ Prueba dos cosas, no una sola:
      mientras OrganizationalContext.resolve() para ese mismo request lanza
      OrganizationalContextError - swapear el queryset habria roto ese caso.
 """
+
 from apps.tenant.core.services.organizational_context import (
     OrganizationalContext,
     OrganizationalContextError,
@@ -27,14 +28,18 @@ class EmpresaOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9", nit="900000999", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9",
+            nit="900000999",
+            direccion="Calle 1",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Principal Fase9")
 
     def test_sede_viewset_exposes_get_organizational_context_with_a_real_profile(self):
         """Caso comun: el usuario tiene TenantProfile - la nueva capacidad
         resuelve un contexto correcto y coincide con context.filter(Sede)."""
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         resp = self.api_client.get("/api/v1/empresas/sedes/")
         self.assertEqual(resp.status_code, 200, resp.content)
@@ -53,6 +58,7 @@ class EmpresaOrganizationalContextAdoptionTests(SintelTenantTestCase):
         view = SedeViewSet()
         view.request = request
         from rest_framework_simplejwt.authentication import JWTAuthentication
+
         request.user, _ = JWTAuthentication().authenticate(request)
 
         context = view.get_organizational_context()
@@ -83,6 +89,7 @@ class EmpresaOrganizationalContextAdoptionTests(SintelTenantTestCase):
         request.user = self.user
         request.tenant = self.tenant
         from django.contrib.sessions.backends.db import SessionStore
+
         request.session = SessionStore()
 
         # Sin TenantProfile: resolve_tenant_empresa() SI resuelve (fallback singleton).

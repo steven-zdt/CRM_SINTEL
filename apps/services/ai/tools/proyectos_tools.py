@@ -3,6 +3,7 @@ Fase AI-03 (continuacion): dominio `proyectos`, envuelve
 `apps.tenant.proyectos.services.selectors.qs_list` ya existente. Mismo
 patron NULL-safe de sede que `cotizaciones_tools.py`/`gastos_tools.py`.
 """
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext
@@ -28,7 +29,9 @@ class ConsultarProyectoTool(BaseTool):
     confirmation_required = False
     idempotent = True
 
-    def run(self, context: AIContext, *, search: str = "", fase: str = "", limit: int = 10) -> ToolResult:
+    def run(
+        self, context: AIContext, *, search: str = "", fase: str = "", limit: int = 10
+    ) -> ToolResult:
         if limit < 1 or limit > 50:
             return ToolResult(status="VALIDATION_ERROR", message="limit debe estar entre 1 y 50.")
 
@@ -51,7 +54,9 @@ class ConsultarProyectoTool(BaseTool):
                 "estado_tarea": p.estado_tarea,
                 "cliente": p.cliente_nombre,
                 "responsable": p.responsable_actual_nombre,
-                "porcentaje_avance": str(p.porcentaje_avance) if p.porcentaje_avance is not None else None,
+                "porcentaje_avance": str(p.porcentaje_avance)
+                if p.porcentaje_avance is not None
+                else None,
                 "sede": p.sede.nombre if p.sede_id else None,
             }
             for p in qs

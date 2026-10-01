@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         (
             "tenant_clientes",
@@ -16,9 +15,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="cliente",
             name="cuenta_contable_uuid",
-            field=models.UUIDField(
-                blank=True, help_text="Cuenta PUC nivel 6 (Cartera)", null=True
-            ),
+            field=models.UUIDField(blank=True, help_text="Cuenta PUC nivel 6 (Cartera)", null=True),
         ),
         migrations.AlterField(
             model_name="cliente",

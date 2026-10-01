@@ -4,7 +4,11 @@ import pytest
 from django.db.utils import IntegrityError
 from django_tenants.utils import schema_context
 
-from apps.tenant.ai_knowledge.models import AIKnowledgeChunk, AIKnowledgeDocument, AIKnowledgeSettings
+from apps.tenant.ai_knowledge.models import (
+    AIKnowledgeChunk,
+    AIKnowledgeDocument,
+    AIKnowledgeSettings,
+)
 from apps.tenant.ai_knowledge.services import AIKnowledgeCRUDService
 from apps.tenant.empresa.models import Empresa
 
@@ -112,13 +116,9 @@ def test_vector_distance_query_funciona(tenant_a):
 def test_unique_constraint_documento_por_origen(tenant_a):
     with schema_context(tenant_a.schema_name):
         empresa = _empresa(tenant_a.schema_name)
-        AIKnowledgeDocument.objects.create(
-            empresa=empresa, source_type="x", source_id="1"
-        )
+        AIKnowledgeDocument.objects.create(empresa=empresa, source_type="x", source_id="1")
         with pytest.raises(IntegrityError):
-            AIKnowledgeDocument.objects.create(
-                empresa=empresa, source_type="x", source_id="1"
-            )
+            AIKnowledgeDocument.objects.create(empresa=empresa, source_type="x", source_id="1")
 
 
 def test_empresa_obligatoria(tenant_a):
@@ -129,6 +129,7 @@ def test_empresa_obligatoria(tenant_a):
 
 
 # --------------- AI-VECTOR-11: AIKnowledgeSettings (flag por tenant) ------- #
+
 
 def test_get_or_create_settings_crea_apagado_por_defecto(tenant_a):
     with schema_context(tenant_a.schema_name):

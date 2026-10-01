@@ -7,6 +7,7 @@ from apps.tenant.compras.models import (
     RecepcionCompra,
     RecepcionCompraItem,
 )
+from apps.tenant.compras.requisiciones.models import RequisicionCompra
 from apps.tenant.empresa.models import Area
 from apps.tenant.gastos.models import DocumentoSoporte
 from apps.tenant.proveedores.models import Proveedor
@@ -23,25 +24,25 @@ class UUIDOrPKRelatedField(serializers.PrimaryKeyRelatedField):
         queryset = super().get_queryset()
         if queryset is None:
             return queryset
-        root = getattr(self, 'root', None)
-        context = getattr(root, 'context', {}) if root else {}
-        empresa_id = context.get('empresa_id')
-        if empresa_id and hasattr(queryset.model, 'empresa_id'):
+        root = getattr(self, "root", None)
+        context = getattr(root, "context", {}) if root else {}
+        empresa_id = context.get("empresa_id")
+        if empresa_id and hasattr(queryset.model, "empresa_id"):
             return queryset.filter(empresa_id=empresa_id)
         return queryset
 
     def to_internal_value(self, data):
-        if data in (None, ''):
+        if data in (None, ""):
             if self.allow_null:
                 return None
-            self.fail('required')
+            self.fail("required")
         data_str = str(data)
         if not data_str.isdigit():
             queryset = self.get_queryset()
             try:
                 return queryset.get(uuid=data_str)
             except (TypeError, ValueError, queryset.model.DoesNotExist):
-                self.fail('does_not_exist', pk_value=data)
+                self.fail("does_not_exist", pk_value=data)
         return super().to_internal_value(data)
 
 
@@ -49,141 +50,174 @@ class PlantillaOrdenCompraSerializer(serializers.ModelSerializer):
     """
     Serializer para Plantilla de Orden de Compra.
     """
+
     class Meta:
         model = PlantillaOrdenCompra
         fields = (
-            'id',
-            'uuid',
-            'nombre',
-            'prefijo',
-            'rango_desde',
-            'rango_hasta',
-            'consecutivo_actual',
-            'vigente',
-            'created_at',
-            'updated_at',
+            "id",
+            "uuid",
+            "tipo_documento",
+            "nombre",
+            "prefijo",
+            "rango_desde",
+            "rango_hasta",
+            "consecutivo_actual",
+            "vigente",
+            "created_at",
+            "updated_at",
         )
-        read_only_fields = ('id', 'uuid', 'created_at', 'updated_at')
+        read_only_fields = ("id", "uuid", "created_at", "updated_at")
 
 
 class ItemOrdenCompraSerializer(serializers.ModelSerializer):
     """
     Serializer para el detalle de items de la Orden de Compra.
+
+    `uuid` es opcional en escritura (Fase 6, PLAN_OPTIMIZACION_COMPRAS...):
+    al editar una Orden, el frontend lo envia solo para filas que ya
+    existian, permitiendo a OrdenCompraCRUDService.actualizar_orden()
+    sincronizar por diferencia (UPDATE/INSERT/DELETE) en vez de reemplazar
+    toda la coleccion. Sigue sin ser escribible para crear un item con un
+    uuid elegido por el cliente: sin match en la Orden, simplemente se trata
+    como item nuevo e ignora el valor recibido (el modelo genera el suyo).
     """
+
+    uuid = serializers.UUIDField(required=False)
+
     class Meta:
         model = ItemOrdenCompra
         fields = (
-            'id',
-            'uuid',
-            'descripcion',
-            'item_inventario_uuid',
-            'cantidad',
-            'valor_unitario',
-            'porcentaje_iva',
-            'valor_iva',
-            'subtotal',
-            'total',
+            "id",
+            "uuid",
+            "descripcion",
+            "item_inventario_uuid",
+            "cantidad",
+            "valor_unitario",
+            "porcentaje_iva",
+            "valor_iva",
+            "subtotal",
+            "total",
         )
-        read_only_fields = ('id', 'uuid', 'valor_iva', 'subtotal', 'total')
+        read_only_fields = ("id", "valor_iva", "subtotal", "total")
 
 
 class OrdenCompraListSerializer(serializers.ModelSerializer):
     """
     Serializer aplanado para renderizado en grillas (Tabulator) y listado general.
     """
-    proveedor_nombre = serializers.CharField(source='proveedor.razon_social', read_only=True)
-    proveedor_nit = serializers.CharField(source='proveedor.numero_documento', read_only=True)
-    proyecto_nombre = serializers.CharField(source='proyecto.nombre', read_only=True, default='')
+
+    proveedor_nombre = serializers.CharField(source="proveedor.razon_social", read_only=True)
+    proveedor_nit = serializers.CharField(source="proveedor.numero_documento", read_only=True)
+    proyecto_nombre = serializers.CharField(source="proyecto.nombre", read_only=True, default="")
     documento_soporte_numero = serializers.SerializerMethodField()
-    plantilla_nombre = serializers.CharField(source='plantilla.nombre', read_only=True, default='')
+    plantilla_nombre = serializers.CharField(source="plantilla.nombre", read_only=True, default="")
     # [OSF Fase F5] antes invisible: un listado puede traer ordenes de
     # multiples sedes/areas a la vez (ver OrdenCompraSelector.get_list),
     # sin esto no habia forma de distinguir de donde era cada fila.
-    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, default='')
-    area_nombre = serializers.CharField(source='area.nombre', read_only=True, default='')
+    sede_nombre = serializers.CharField(source="sede.nombre", read_only=True, default="")
+    area_nombre = serializers.CharField(source="area.nombre", read_only=True, default="")
 
     def get_documento_soporte_numero(self, obj) -> str:
         if obj.documento_soporte:
-            return obj.documento_soporte.numero_documento_proveedor or ''
-        return ''
+            return obj.documento_soporte.numero_documento_proveedor or ""
+        return ""
 
     class Meta:
         model = OrdenCompra
         fields = (
-            'id',
-            'uuid',
-            'consecutivo',
-            'numero_documento',
-            'fecha',
-            'fecha_entrega',
-            'estado',
-            'subtotal',
-            'impuestos',
-            'total',
-            'proveedor_nombre',
-            'proveedor_nit',
-            'proyecto_nombre',
-            'documento_soporte_numero',
-            'plantilla_nombre',
-            'sede_nombre',
-            'area_nombre',
+            "id",
+            "uuid",
+            "consecutivo",
+            "numero_documento",
+            "fecha",
+            "fecha_entrega",
+            "estado",
+            "subtotal",
+            "impuestos",
+            "total",
+            "proveedor_nombre",
+            "proveedor_nit",
+            "proyecto_nombre",
+            "documento_soporte_numero",
+            "plantilla_nombre",
+            "sede_nombre",
+            "area_nombre",
         )
         read_only_fields = fields
+
+
+class OrdenCompraRequisicionSerializer(serializers.Serializer):
+    """Lectura de una fila del N:N OrdenCompra<->RequisicionCompra (ver
+    apps.tenant.compras.models.OrdenCompraRequisicion)."""
+
+    requisicion_uuid = serializers.CharField(source="requisicion.uuid", read_only=True)
+    requisicion_numero = serializers.CharField(
+        source="requisicion.numero_documento", read_only=True
+    )
+    monto_asignado = serializers.DecimalField(max_digits=15, decimal_places=2, read_only=True)
 
 
 class OrdenCompraDetailSerializer(serializers.ModelSerializer):
     """
     Serializer detallado que incluye la lista de items.
     """
+
     items = ItemOrdenCompraSerializer(many=True, read_only=True)
-    proveedor_nombre = serializers.CharField(source='proveedor.razon_social', read_only=True)
-    proveedor_nit = serializers.CharField(source='proveedor.numero_documento', read_only=True)
-    proyecto_nombre = serializers.CharField(source='proyecto.nombre', read_only=True, default='')
+    proveedor_nombre = serializers.CharField(source="proveedor.razon_social", read_only=True)
+    proveedor_nit = serializers.CharField(source="proveedor.numero_documento", read_only=True)
+    proyecto_nombre = serializers.CharField(source="proyecto.nombre", read_only=True, default="")
     documento_soporte_numero = serializers.SerializerMethodField()
-    plantilla_nombre = serializers.CharField(source='plantilla.nombre', read_only=True, default='')
-    plantilla_uuid = serializers.CharField(source='plantilla.uuid', read_only=True, default='')
+    plantilla_nombre = serializers.CharField(source="plantilla.nombre", read_only=True, default="")
+    plantilla_uuid = serializers.CharField(source="plantilla.uuid", read_only=True, default="")
     # [OSF Fase F5] ver nota en OrdenCompraListSerializer.
-    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, default='')
-    area_nombre = serializers.CharField(source='area.nombre', read_only=True, default='')
+    sede_nombre = serializers.CharField(source="sede.nombre", read_only=True, default="")
+    area_nombre = serializers.CharField(source="area.nombre", read_only=True, default="")
     # FACTURAS-UI-CRONO-01: vinculacion manual a una Factura ya persistida.
-    factura_uuid = serializers.CharField(source='factura_asociada.uuid', read_only=True, default=None)
-    factura_numero = serializers.CharField(source='factura_asociada.numero', read_only=True, default='')
+    factura_uuid = serializers.CharField(
+        source="factura_asociada.uuid", read_only=True, default=None
+    )
+    factura_numero = serializers.CharField(
+        source="factura_asociada.numero", read_only=True, default=""
+    )
+    # N:N (2026-09-26) -- ver nota en OrdenCompraCreateUpdateSerializer.
+    requisiciones_vinculadas = OrdenCompraRequisicionSerializer(many=True, read_only=True)
 
     def get_documento_soporte_numero(self, obj) -> str:
         if obj.documento_soporte:
-            return obj.documento_soporte.numero_documento_proveedor or ''
-        return ''
+            return obj.documento_soporte.numero_documento_proveedor or ""
+        return ""
 
     class Meta:
         model = OrdenCompra
         fields = (
-            'id',
-            'uuid',
-            'consecutivo',
-            'numero_documento',
-            'fecha',
-            'fecha_entrega',
-            'estado',
-            'subtotal',
-            'impuestos',
-            'total',
-            'observaciones',
-            'proveedor',
-            'proveedor_nombre',
-            'proveedor_nit',
-            'proyecto',
-            'proyecto_nombre',
-            'documento_soporte',
-            'documento_soporte_numero',
-            'plantilla_nombre',
-            'plantilla_uuid',
-            'sede_nombre',
-            'area_nombre',
-            'factura_uuid',
-            'factura_numero',
-            'items',
-            'created_at',
-            'updated_at',
+            "id",
+            "uuid",
+            "consecutivo",
+            "numero_documento",
+            "fecha",
+            "fecha_entrega",
+            "estado",
+            "subtotal",
+            "impuestos",
+            "total",
+            "observaciones",
+            "proveedor",
+            "proveedor_nombre",
+            "proveedor_nit",
+            "proyecto",
+            "proyecto_nombre",
+            "documento_soporte",
+            "documento_soporte_numero",
+            "plantilla_nombre",
+            "plantilla_uuid",
+            "sede_nombre",
+            "area_nombre",
+            "factura_uuid",
+            "factura_numero",
+            "requisiciones_vinculadas",
+            "items",
+            "created_at",
+            "updated_at",
         )
         read_only_fields = fields
 
@@ -192,10 +226,28 @@ class OrdenCompraCreateUpdateSerializer(serializers.ModelSerializer):
     """
     Serializer de escritura para la creacion y actualizacion de Ordenes de Compra.
     """
+
     plantilla = UUIDOrPKRelatedField(queryset=PlantillaOrdenCompra.objects.all(), required=True)
     proveedor = UUIDOrPKRelatedField(queryset=Proveedor.objects.all())
-    proyecto = UUIDOrPKRelatedField(queryset=Proyecto.objects.all(), required=False, allow_null=True)
-    documento_soporte = UUIDOrPKRelatedField(queryset=DocumentoSoporte.objects.all(), required=False, allow_null=True)
+    proyecto = UUIDOrPKRelatedField(
+        queryset=Proyecto.objects.all(), required=False, allow_null=True
+    )
+    documento_soporte = UUIDOrPKRelatedField(
+        queryset=DocumentoSoporte.objects.all(), required=False, allow_null=True
+    )
+    # N:N (PLAN_CENTRO_APROBACIONES_DASHBOARD_COMPRAS.md #3), reemplaza el FK
+    # unico + escape `es_excepcional` que existieron brevemente el
+    # 2026-09-26: toda Orden de Compra nueva DEBE llevar >= 1 Requisicion,
+    # sin excepcion posible ("no debe seguir funcionando para nuevas OC").
+    # `allow_empty=False` refuerza a nivel de serializer lo que
+    # OrdenCompraBusinessService.crear_orden_compra() ya valida (defensa en
+    # profundidad, nunca la unica linea de defensa).
+    requisiciones = UUIDOrPKRelatedField(
+        queryset=RequisicionCompra.objects.all(),
+        many=True,
+        required=True,
+        allow_empty=False,
+    )
     # [OSF Fase F5] Hallazgo real: este campo faltaba por completo aqui -
     # OrdenCompraBusinessService.crear_orden_compra() ya tenia logica DSV
     # completa para 'area' (opcional), pero como el serializer nunca lo
@@ -208,16 +260,17 @@ class OrdenCompraCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrdenCompra
         fields = (
-            'plantilla',
-            'proveedor',
-            'proyecto',
-            'area',
-            'documento_soporte',
-            'fecha',
-            'fecha_entrega',
-            'estado',
-            'observaciones',
-            'items',
+            "plantilla",
+            "proveedor",
+            "proyecto",
+            "area",
+            "documento_soporte",
+            "requisiciones",
+            "fecha",
+            "fecha_entrega",
+            "estado",
+            "observaciones",
+            "items",
         )
         # BUG (2026-09-12, hallazgo CO-3): 'estado' era escribible tanto en
         # create como en update sin pasar por TRANSICIONES_VALIDAS -- un
@@ -228,70 +281,88 @@ class OrdenCompraCreateUpdateSerializer(serializers.ModelSerializer):
         # default='BORRADOR' (models.py:206), asi que marcarlo read-only no
         # cambia el comportamiento de creacion normal. Los cambios de estado
         # deben ir exclusivamente por POST .../cambiar-estado/.
-        read_only_fields = ('estado',)
+        read_only_fields = ("estado",)
 
     def validate(self, attrs):
-        fecha = attrs.get('fecha')
-        fecha_entrega = attrs.get('fecha_entrega')
+        fecha = attrs.get("fecha")
+        fecha_entrega = attrs.get("fecha_entrega")
         if fecha and fecha_entrega and fecha_entrega < fecha:
             raise serializers.ValidationError(
-                {'fecha_entrega': 'La fecha de entrega no puede ser anterior a la fecha de emision.'}
+                {
+                    "fecha_entrega": "La fecha de entrega no puede ser anterior a la fecha de emision."
+                }
             )
         return attrs
 
     def validate_items(self, value):
         if not value:
-            raise serializers.ValidationError("Debe proporcionar al menos un item para la orden de compra.")
+            raise serializers.ValidationError(
+                "Debe proporcionar al menos un item para la orden de compra."
+            )
         return value
 
 
 class RecepcionCompraItemSerializer(serializers.ModelSerializer):
     """Linea de recepcion (F21) — referencia al ItemOrdenCompra que se esta recibiendo."""
+
     item_orden_compra = UUIDOrPKRelatedField(queryset=ItemOrdenCompra.objects.all())
 
     class Meta:
         model = RecepcionCompraItem
-        fields = ('id', 'uuid', 'item_orden_compra', 'cantidad_recibida', 'observaciones')
-        read_only_fields = ('id', 'uuid')
+        fields = ("id", "uuid", "item_orden_compra", "cantidad_recibida", "observaciones")
+        read_only_fields = ("id", "uuid")
 
 
 class RecepcionCompraListSerializer(serializers.ModelSerializer):
     """Serializer aplanado para listado de Recepciones de Compra (F21)."""
-    orden_compra_uuid = serializers.CharField(source='orden_compra.uuid', read_only=True)
-    orden_compra_numero = serializers.CharField(source='orden_compra.numero_documento', read_only=True, default='')
-    sede_nombre = serializers.CharField(source='sede.nombre', read_only=True, default='')
-    area_nombre = serializers.CharField(source='area.nombre', read_only=True, default='')
+
+    orden_compra_uuid = serializers.CharField(source="orden_compra.uuid", read_only=True)
+    orden_compra_numero = serializers.CharField(
+        source="orden_compra.numero_documento", read_only=True, default=""
+    )
+    sede_nombre = serializers.CharField(source="sede.nombre", read_only=True, default="")
+    area_nombre = serializers.CharField(source="area.nombre", read_only=True, default="")
     usuario_nombre = serializers.SerializerMethodField()
 
     def get_usuario_nombre(self, obj) -> str:
-        return str(obj.usuario) if obj.usuario_id else ''
+        return str(obj.usuario) if obj.usuario_id else ""
 
     class Meta:
         model = RecepcionCompra
         fields = (
-            'id', 'uuid', 'fecha', 'estado', 'observaciones',
-            'orden_compra_uuid', 'orden_compra_numero',
-            'sede_nombre', 'area_nombre', 'usuario_nombre', 'created_at',
+            "id",
+            "uuid",
+            "fecha",
+            "estado",
+            "observaciones",
+            "orden_compra_uuid",
+            "orden_compra_numero",
+            "sede_nombre",
+            "area_nombre",
+            "usuario_nombre",
+            "created_at",
         )
         read_only_fields = fields
 
 
 class RecepcionCompraDetailSerializer(RecepcionCompraListSerializer):
     """Serializer detallado que incluye las lineas de recepcion."""
+
     items = RecepcionCompraItemSerializer(many=True, read_only=True)
 
     class Meta(RecepcionCompraListSerializer.Meta):
-        fields = RecepcionCompraListSerializer.Meta.fields + ('items', 'updated_at')
+        fields = RecepcionCompraListSerializer.Meta.fields + ("items", "updated_at")
 
 
 class RecepcionCompraCreateSerializer(serializers.ModelSerializer):
     """Serializer de escritura para crear una Recepcion de Compra en BORRADOR."""
+
     orden_compra = UUIDOrPKRelatedField(queryset=OrdenCompra.objects.all())
     items = RecepcionCompraItemSerializer(many=True, required=True)
 
     class Meta:
         model = RecepcionCompra
-        fields = ('orden_compra', 'fecha', 'observaciones', 'items')
+        fields = ("orden_compra", "fecha", "observaciones", "items")
 
     def validate_items(self, value):
         if not value:

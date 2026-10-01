@@ -13,6 +13,7 @@ verificado en los 3 tenants antes del rename). BORRADOR->ENVIADA ya no es
 una transicion manual -- solo ocurre gated por PDF exitoso
 (generar_pdf_y_enviar, ver test_pdf_gating.py).
 """
+
 import datetime
 
 import pytest
@@ -29,17 +30,25 @@ def _crear_cotizacion(tenant, empresa, cliente):
     ConfiguracionCotizacion.objects.get_or_create(
         empresa=empresa,
         defaults={
-            'dias_validez': 15, 'nombre_configuracion': 'Perfil General', 'es_activo': True,
+            "dias_validez": 15,
+            "nombre_configuracion": "Perfil General",
+            "es_activo": True,
         },
     )
     payload = {
-        'cliente': cliente.id,
-        'fecha_emision': datetime.date(2026, 3, 30),
-        'items': [{
-            'tipo_item': 'PRODUCTO', 'descripcion': 'Item de prueba',
-            'cantidad': 1, 'costo_unitario': 100, 'porcentaje_utilidad': 10,
-            'unidad': 'UND', 'orden': 1,
-        }],
+        "cliente": cliente.id,
+        "fecha_emision": datetime.date(2026, 3, 30),
+        "items": [
+            {
+                "tipo_item": "PRODUCTO",
+                "descripcion": "Item de prueba",
+                "cantidad": 1,
+                "costo_unitario": 100,
+                "porcentaje_utilidad": 10,
+                "unidad": "UND",
+                "orden": 1,
+            }
+        ],
     }
     return CotizacionService.crear_preforma(empresa, payload)
 
@@ -195,7 +204,9 @@ def test_transicion_idempotente_mismo_estado_no_es_error(tenant, factory_empresa
 
         de_nuevo = CotizacionService.cambiar_estado(cotizacion, Cotizacion.Estado.APROBADA)
         assert de_nuevo.estado == Cotizacion.Estado.APROBADA
-        assert CotizacionHistorialEstado.objects.filter(cotizacion=cotizacion).count() == filas_antes
+        assert (
+            CotizacionHistorialEstado.objects.filter(cotizacion=cotizacion).count() == filas_antes
+        )
 
 
 @pytest.mark.django_db
@@ -230,6 +241,7 @@ def test_patch_generico_ya_no_puede_cambiar_estado(tenant, factory_empresa, fact
 # Historial (COTIZACIONES-02 Fase 03)
 # --------------------------------------------------------------------- #
 
+
 @pytest.mark.django_db
 def test_cada_transicion_real_escribe_historial(tenant, factory_empresa, factory_cliente):
     empresa = factory_empresa()
@@ -237,13 +249,16 @@ def test_cada_transicion_real_escribe_historial(tenant, factory_empresa, factory
     with schema_context(tenant.schema_name):
         cotizacion = _crear_cotizacion(tenant, empresa, cliente)
         _forzar_enviada(cotizacion)
-        CotizacionService.cambiar_estado(cotizacion, Cotizacion.Estado.APROBADA, motivo="cliente confirmo por correo")
+        CotizacionService.cambiar_estado(
+            cotizacion, Cotizacion.Estado.APROBADA, motivo="cliente confirmo por correo"
+        )
 
         filas = list(
             CotizacionHistorialEstado.objects.filter(cotizacion=cotizacion).order_by("created_at")
         )
         assert [f.estado_nuevo for f in filas] == [
-            Cotizacion.Estado.ENVIADA, Cotizacion.Estado.APROBADA,
+            Cotizacion.Estado.ENVIADA,
+            Cotizacion.Estado.APROBADA,
         ]
         assert filas[0].estado_anterior == Cotizacion.Estado.BORRADOR
         assert filas[1].estado_anterior == Cotizacion.Estado.ENVIADA
@@ -251,7 +266,9 @@ def test_cada_transicion_real_escribe_historial(tenant, factory_empresa, factory
 
 
 @pytest.mark.django_db
-def test_historial_es_append_only_no_se_puede_alterar_via_service_layer(tenant, factory_empresa, factory_cliente):
+def test_historial_es_append_only_no_se_puede_alterar_via_service_layer(
+    tenant, factory_empresa, factory_cliente
+):
     """No existe ningun metodo de update/delete en el Service Layer para
     CotizacionHistorialEstado -- confirmado por ausencia (CotizacionService
     no expone nada que edite una fila de historial ya escrita)."""
@@ -267,6 +284,7 @@ def test_historial_es_append_only_no_se_puede_alterar_via_service_layer(tenant, 
 # --------------------------------------------------------------------- #
 # Proteccion de datos por estado (COTIZACIONES-02 Fase 12)
 # --------------------------------------------------------------------- #
+
 
 @pytest.mark.django_db
 def test_no_se_puede_editar_cotizacion_fuera_de_borrador(tenant, factory_empresa, factory_cliente):

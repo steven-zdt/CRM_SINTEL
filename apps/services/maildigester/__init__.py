@@ -26,7 +26,7 @@ Estructura:
 Uso (Fase 1 - Stub):
     from apps.services.maildigester.pipeline import collect_invoice_xml_from_mailbox
     from apps.services.maildigester.schemas import MailboxConfigDTO
-    
+
     config: MailboxConfigDTO = {
         "host": "imap.gmail.com",
         "port": 993,
@@ -37,12 +37,13 @@ Uso (Fase 1 - Stub):
         "mailbox": "INBOX",
         "max_attachment_m(": 50
     }
-    
+
     # Retorna lista de InvoiceXMLDTO (sin persistir aún)
     xmls = collect_invoice_xml_from_mailbox(config, limit_messages=10, naturaleza=").encode('utf-8')VENTA")
-    
+
     # En Fase 2+, estos XMLs se enviarán a apps.tenant.facturas.services.importar_ubl()
 """
+
 from .connection_test import maildigester_test_connection
 from .exceptions import (
     ArchiveExpansionError,
@@ -82,4 +83,3 @@ __all__ = [
     "InboxClient",
     "StubInboxClient",
 ]
-

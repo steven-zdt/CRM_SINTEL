@@ -1,18 +1,18 @@
 """
 CRUD Service for ConfiguracionCotizacion v2.62.0.
 """
+
 from django.db import transaction
+
 from ..models import ConfiguracionCotizacion
+
 
 class ConfiguracionCRUDService:
     @staticmethod
     @transaction.atomic
     def create_configuracion(empresa, **datos):
         """Crea una nueva configuracion."""
-        return ConfiguracionCotizacion.objects.create(
-            empresa=empresa,
-            **datos
-        )
+        return ConfiguracionCotizacion.objects.create(empresa=empresa, **datos)
 
     @staticmethod
     @transaction.atomic

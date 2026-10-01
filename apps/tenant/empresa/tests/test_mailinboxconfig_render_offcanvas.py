@@ -10,6 +10,7 @@ CUALQUIER llamada real: la pantalla de creacion/edicion de buzon nunca
 funciono, bloqueando el primer paso de todo el flujo de Mail Hub (sin
 poder crear un MailInboxConfig, no hay nada que sincronizar).
 """
+
 import pytest
 from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context
@@ -24,8 +25,10 @@ User = get_user_model()
 @pytest.fixture
 def _admin_empresa(tenant):
     with schema_context(tenant.schema_name):
-        empresa = Empresa.objects.only('id').first()
-        admin_user = User.objects.create(username="admin_offcanvas", email="admin_offcanvas@example.com")
+        empresa = Empresa.objects.only("id").first()
+        admin_user = User.objects.create(
+            username="admin_offcanvas", email="admin_offcanvas@example.com"
+        )
         TenantProfile.objects.create(user=admin_user, empresa=empresa, rol="ADMIN")
 
     TenantMembership.objects.create(client=tenant, user=admin_user, is_active=True, rol="ADMIN")
@@ -55,9 +58,13 @@ def test_render_offcanvas_modo_edicion_con_id_real_no_crashea(client, tenant, _a
     admin_user, empresa = _admin_empresa
     with schema_context(tenant.schema_name):
         cfg = MailInboxConfig.objects.create(
-            empresa=empresa, nombre="Buzon Test Offcanvas",
-            email_address="test@example.com", provider="custom",
-            imap_host="mail.example.com", imap_port=993, is_active=True,
+            empresa=empresa,
+            nombre="Buzon Test Offcanvas",
+            email_address="test@example.com",
+            provider="custom",
+            imap_host="mail.example.com",
+            imap_port=993,
+            is_active=True,
         )
         client.force_login(admin_user)
 

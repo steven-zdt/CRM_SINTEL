@@ -12,6 +12,9 @@ Rutas públicas disponibles:
 - sintel.net.co/api/admin/v1/ -> APIs REST de administración (requiere staff)
 - sintel.net.co/api/token/ -> Autenticación JWT
 """
+
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import logout as auth_logout
 from django.http import JsonResponse
@@ -32,7 +35,7 @@ from config.well_known import chrome_devtools
 def admin_logout_view(request):
     """
     Logout seguro accesible por GET para el admin.
-    
+
     El logout por defecto de Django admin requiere POST (para protección CSRF),
     lo que provoca un 405 si se accede directamente por GET a /admin/logout/.
     """
@@ -43,86 +46,84 @@ def admin_logout_view(request):
 def health_view(request):
     """
     Endpoint de health check para Docker/Kubernetes.
-    
+
     Retorna 200 OK si la aplicación está funcionando correctamente.
     """
     from django.db import connection
+
     try:
         # Verificar conexión a BD
         connection.ensure_connection()
-        db_status = 'ok'
+        db_status = "ok"
     except Exception:
-        db_status = 'error'
-    
-    return JsonResponse({
-        'status': 'ok' if db_status == 'ok' else 'degraded',
-        'database': db_status,
-        'version': '1.0',
-    }, status=200 if db_status == 'ok' else 503)
+        db_status = "error"
+
+    return JsonResponse(
+        {
+            "status": "ok" if db_status == "ok" else "degraded",
+            "database": db_status,
+            "version": "1.0",
+        },
+        status=200 if db_status == "ok" else 503,
+    )
 
 
 urlpatterns = [
-    
     # Health check (para Docker/Kubernetes)
-    path('health', health_view, name='health'),
-    
+    path("health", health_view, name="health"),
     # Ruta raíz: Redirección inteligente según estado del usuario
-    path('', PublicIndexView.as_view(), name='public_index'),
-    
+    path("", PublicIndexView.as_view(), name="public_index"),
     # Override de logout de admin para permitir GET en /admin/logout/
     # (debe ir ANTES de path('admin/', ...))
-    path('admin/logout/', admin_logout_view, name='admin-logout-safe'),
-    
+    path("admin/logout/", admin_logout_view, name="admin-logout-safe"),
     # .well-known routes (deben ir antes de otras rutas)
-    path('.well-known/appspecific/com.chrome.devtools.json', chrome_devtools, name='chrome-devtools'),
-    
+    path(
+        ".well-known/appspecific/com.chrome.devtools.json", chrome_devtools, name="chrome-devtools"
+    ),
     # Login/Logout: redirigir al admin login
-    path('login/', lambda request: redirect('admin:login'), name='login'),
-    path('logout/', lambda request: redirect('admin:logout'), name='logout'),
-    
+    path("login/", lambda request: redirect("admin:login"), name="login"),
+    path("logout/", lambda request: redirect("admin:logout"), name="logout"),
     # Admin de Django (gestión global)
-    path('admin/', admin.site.urls),
-    
+    path("admin/", admin.site.urls),
     # Autenticación JWT (disponible en todos los esquemas)
     # Endpoints: /api/token/ (login), /api/token/refresh/ (refresh), /api/token/verify/ (verify)
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', SafeTokenRefreshView.as_view(), name='token_refresh'),
-    path('api/token/verify/', LoggedTokenVerifyView.as_view(), name='token_verify'),
-    
+    path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/token/refresh/", SafeTokenRefreshView.as_view(), name="token_refresh"),
+    path("api/token/verify/", LoggedTokenVerifyView.as_view(), name="token_verify"),
     # APIs REST públicas (solo en esquema public)
     # Fuente de verdad de la API de tenants: apps.public.tenants.api (VIEWSETS)
     # config.public_api_urls ya incluye apps.public.tenants.api.urls, no duplicar
-    path('api/public/v1/', include('config.public_api_urls')),
-    
+    path("api/public/v1/", include("config.public_api_urls")),
     # Tenants públicos (landing, activación)
-    path('', include('apps.public.tenants.urls')),
-    
+    path("", include("apps.public.tenants.urls")),
     # APIs REST de administración (solo en esquema public, requiere staff)
     # API-First: Endpoints DataTables (POST + CSRF) para la consola
-    path('api/admin/v1/console/', include('apps.public.console.api.urls', namespace='console_api')),
+    path("api/admin/v1/console/", include("apps.public.console.api.urls", namespace="console_api")),
     # API-First: CRUD de usuarios globales (SSOT en apps.public.accounts.api)
-    path('api/admin/v1/accounts/', include('apps.public.accounts.api.urls')),
-    
+    path("api/admin/v1/accounts/", include("apps.public.accounts.api.urls")),
     # Consola de administración pública (solo en esquema public, requiere staff)
-    path('console/', include('apps.public.console.urls')),
-    path('console/impuestos/', include('apps.public.impuestos.dashboard.urls_dashboard')),
-    
+    path("console/", include("apps.public.console.urls")),
+    path("console/impuestos/", include("apps.public.impuestos.dashboard.urls_dashboard")),
     # OpenAPI Schema y Documentación (drf-spectacular)
     # Docs: https://drf-spectacular.readthedocs.io/
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
-    
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     # MCP server: expone ViewSets anotados como herramientas MCP
-    path('mcp/', include('djangorestframework_mcp.urls')),
+    path("mcp/", include("djangorestframework_mcp.urls")),
 ]
 
 # Add a deterministic explicit users create endpoint at the top-level so
 # tests/middleware swaps cannot hide it. This is a minimal, safe fallback.
 try:
     from apps.public.accounts.api.public_viewsets import PublicUserViewSet as _PublicUserViewSet
+
     urlpatterns += [
-        path('api/public/v1/users/', _PublicUserViewSet.as_view({'post': 'create'}), name='public-user-create-root'),
+        path(
+            "api/public/v1/users/",
+            _PublicUserViewSet.as_view({"post": "create"}),
+            name="public-user-create-root",
+        ),
     ]
 except Exception:
     # If the view isn't importable during initial setup, skip explicit route.
@@ -130,8 +131,5 @@ except Exception:
 
 # WARNING: DESARROLLO: Servir archivos media (solo en DEBUG=True)
 # En producción, estos archivos deben servirse desde Nginx o el servidor web
-from django.conf import settings
-from django.conf.urls.static import static
-
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

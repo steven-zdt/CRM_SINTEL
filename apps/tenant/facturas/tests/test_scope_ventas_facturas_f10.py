@@ -10,6 +10,7 @@ en F5), no un campo de la Venta. Se transporta como dato plano dentro del
 DTO ya existente (`dto["sede_id"]`, mismo patron que `cliente_uuid`/
 `venta_uuid`) - nunca una FK directa Ventas->Facturas.
 """
+
 from apps.tenant.empresa.models import Empresa, Sede
 from apps.tenant.facturas.services.business_service import FacturaBusinessService
 from tests.tenant.base_test import SintelTenantTestCase
@@ -19,7 +20,9 @@ class VentaFacturaScopeF10Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F10", nit="900000784", direccion="Calle 1",
+            razon_social="Empresa Test F10",
+            nit="900000784",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F10")
 

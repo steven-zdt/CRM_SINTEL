@@ -30,7 +30,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        force = options["force"]
+        options["force"]
         fecha_vigencia = date.today()
 
         self.stdout.write(self.style.SUCCESS("🚀 Iniciando poblamiento del catálogo DIAN..."))

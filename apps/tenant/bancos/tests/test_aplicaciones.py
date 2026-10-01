@@ -1,6 +1,7 @@
 """Fase 5-7 y Fase 33-34 (mision Bancos v3.0): MovimientoBancarioAplicacion
 -- aplicar completo, parcial, multiple, no-sobreaplicar, quitar, tenant
 isolation."""
+
 from datetime import date
 from decimal import Decimal
 
@@ -30,30 +31,51 @@ class AplicacionesTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Aplicaciones", nit="900000903", direccion="Calle 1",
+            razon_social="Empresa Aplicaciones",
+            nit="900000903",
+            direccion="Calle 1",
         )
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
         self.cuenta = CuentaBancaria.objects.create(
-            empresa=self.empresa, nombre="Cuenta Apl", banco="Banco Test",
-            tipo="AHORROS", numero="APL-1",
+            empresa=self.empresa,
+            nombre="Cuenta Apl",
+            banco="Banco Test",
+            tipo="AHORROS",
+            numero="APL-1",
         )
         self.extracto = ExtractoBancario.objects.create(
-            empresa=self.empresa, cuenta=self.cuenta, mes=1, anio=2026,
-            saldo_inicial=Decimal("0"), saldo_final=Decimal("0"),
+            empresa=self.empresa,
+            cuenta=self.cuenta,
+            mes=1,
+            anio=2026,
+            saldo_inicial=Decimal("0"),
+            saldo_final=Decimal("0"),
         )
         self.tx = TransaccionBancaria.objects.create(
-            empresa=self.empresa, extracto=self.extracto, fecha=date(2026, 1, 10),
-            descripcion="Pago combinado", valor=Decimal("1000000.00"), saldo=Decimal("1000000.00"),
+            empresa=self.empresa,
+            extracto=self.extracto,
+            fecha=date(2026, 1, 10),
+            descripcion="Pago combinado",
+            valor=Decimal("1000000.00"),
+            saldo=Decimal("1000000.00"),
         )
 
     def _url(self, suffix=""):
         return f"/api/v1/bancos/transacciones/{self.tx.uuid}/aplicaciones/{suffix}"
 
     def test_aplicar_monto_completo_marca_conciliado(self):
-        resp = self.api_client.post(self._url(), {
-            "tipo_referencia": "GASTO", "monto_aplicado": "1000000.00",
-            "fecha_aplicacion": "2026-01-10", "notas": "pago unico",
-        }, format="json")
+        resp = self.api_client.post(
+            self._url(),
+            {
+                "tipo_referencia": "GASTO",
+                "monto_aplicado": "1000000.00",
+                "fecha_aplicacion": "2026-01-10",
+                "notas": "pago unico",
+            },
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content)
 
         self.tx.refresh_from_db()
@@ -64,47 +86,75 @@ class AplicacionesTests(SintelTenantTestCase):
         self.assertEqual(len(lista.data["results"]), 1)
 
     def test_aplicar_monto_parcial_no_marca_conciliado(self):
-        resp = self.api_client.post(self._url(), {
-            "tipo_referencia": "GASTO", "monto_aplicado": "300000.00",
-            "fecha_aplicacion": "2026-01-10",
-        }, format="json")
+        resp = self.api_client.post(
+            self._url(),
+            {
+                "tipo_referencia": "GASTO",
+                "monto_aplicado": "300000.00",
+                "fecha_aplicacion": "2026-01-10",
+            },
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content)
         self.tx.refresh_from_db()
         self.assertFalse(self.tx.conciliado)
 
     def test_multiples_aplicaciones_suman_hasta_completar(self):
         for monto in ("400000.00", "600000.00"):
-            resp = self.api_client.post(self._url(), {
-                "tipo_referencia": "OTRO_EGRESO", "monto_aplicado": monto,
-                "fecha_aplicacion": "2026-01-10",
-            }, format="json")
+            resp = self.api_client.post(
+                self._url(),
+                {
+                    "tipo_referencia": "OTRO_EGRESO",
+                    "monto_aplicado": monto,
+                    "fecha_aplicacion": "2026-01-10",
+                },
+                format="json",
+            )
             self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content)
 
         self.tx.refresh_from_db()
         self.assertTrue(self.tx.conciliado)
-        self.assertEqual(MovimientoBancarioAplicacion.objects.filter(transaccion=self.tx).count(), 2)
+        self.assertEqual(
+            MovimientoBancarioAplicacion.objects.filter(transaccion=self.tx).count(), 2
+        )
 
     def test_no_permite_sobreaplicar(self):
-        self.api_client.post(self._url(), {
-            "tipo_referencia": "GASTO", "monto_aplicado": "700000.00",
-            "fecha_aplicacion": "2026-01-10",
-        }, format="json")
-        resp = self.api_client.post(self._url(), {
-            "tipo_referencia": "GASTO", "monto_aplicado": "400000.00",
-            "fecha_aplicacion": "2026-01-10",
-        }, format="json")
+        self.api_client.post(
+            self._url(),
+            {
+                "tipo_referencia": "GASTO",
+                "monto_aplicado": "700000.00",
+                "fecha_aplicacion": "2026-01-10",
+            },
+            format="json",
+        )
+        resp = self.api_client.post(
+            self._url(),
+            {
+                "tipo_referencia": "GASTO",
+                "monto_aplicado": "400000.00",
+                "fecha_aplicacion": "2026-01-10",
+            },
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, resp.content)
         self.assertEqual(
-            MovimientoBancarioAplicacion.objects.filter(transaccion=self.tx)
-            .aggregate(total=Sum("monto_aplicado"))["total"],
+            MovimientoBancarioAplicacion.objects.filter(transaccion=self.tx).aggregate(
+                total=Sum("monto_aplicado")
+            )["total"],
             Decimal("700000.00"),
         )
 
     def test_quitar_aplicacion(self):
-        resp = self.api_client.post(self._url(), {
-            "tipo_referencia": "GASTO", "monto_aplicado": "1000000.00",
-            "fecha_aplicacion": "2026-01-10",
-        }, format="json")
+        resp = self.api_client.post(
+            self._url(),
+            {
+                "tipo_referencia": "GASTO",
+                "monto_aplicado": "1000000.00",
+                "fecha_aplicacion": "2026-01-10",
+            },
+            format="json",
+        )
         aplicacion_uuid = resp.data["uuid"]
 
         resp_del = self.api_client.delete(f"/api/v1/bancos/aplicaciones/{aplicacion_uuid}/")
@@ -114,29 +164,46 @@ class AplicacionesTests(SintelTenantTestCase):
     def test_referencia_sin_resolver_no_bloquea_clasificacion_manual(self):
         """Fase 30: permitir tipo_referencia=OTRO con referencia_uuid=None
         para clasificar/probar sin exigir que el documento exista."""
-        resp = self.api_client.post(self._url(), {
-            "tipo_referencia": "OTRO", "monto_aplicado": "500000.00",
-            "fecha_aplicacion": "2026-01-10", "notas": "sin clasificar aun",
-        }, format="json")
+        resp = self.api_client.post(
+            self._url(),
+            {
+                "tipo_referencia": "OTRO",
+                "monto_aplicado": "500000.00",
+                "fecha_aplicacion": "2026-01-10",
+                "notas": "sin clasificar aun",
+            },
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content)
         self.assertIsNone(resp.data["referencia_uuid"])
 
     def test_editar_monto_de_una_aplicacion_respeta_el_guard(self):
-        resp = self.api_client.post(self._url(), {
-            "tipo_referencia": "GASTO", "monto_aplicado": "300000.00",
-            "fecha_aplicacion": "2026-01-10",
-        }, format="json")
+        resp = self.api_client.post(
+            self._url(),
+            {
+                "tipo_referencia": "GASTO",
+                "monto_aplicado": "300000.00",
+                "fecha_aplicacion": "2026-01-10",
+            },
+            format="json",
+        )
         aplicacion_uuid = resp.data["uuid"]
 
         resp_ok = self.api_client.patch(
-            f"/api/v1/bancos/aplicaciones/{aplicacion_uuid}/", {"monto_aplicado": "900000.00"}, format="json"
+            f"/api/v1/bancos/aplicaciones/{aplicacion_uuid}/",
+            {"monto_aplicado": "900000.00"},
+            format="json",
         )
         self.assertEqual(resp_ok.status_code, status.HTTP_200_OK, resp_ok.content)
 
         resp_excede = self.api_client.patch(
-            f"/api/v1/bancos/aplicaciones/{aplicacion_uuid}/", {"monto_aplicado": "1500000.00"}, format="json"
+            f"/api/v1/bancos/aplicaciones/{aplicacion_uuid}/",
+            {"monto_aplicado": "1500000.00"},
+            format="json",
         )
-        self.assertEqual(resp_excede.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, resp_excede.content)
+        self.assertEqual(
+            resp_excede.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, resp_excede.content
+        )
 
 
 def _crear_admin_con_membresia(tenant, username, email):
@@ -162,19 +229,34 @@ def test_no_cross_tenant_application(tenant1, tenant2):
     with schema_context(tenant2.schema_name):
         empresa2 = Empresa.objects.first()
         cuenta2 = CuentaBancaria.objects.create(
-            empresa=empresa2, nombre="Cuenta T2", banco="Banco Test", tipo="AHORROS", numero="T2-1",
+            empresa=empresa2,
+            nombre="Cuenta T2",
+            banco="Banco Test",
+            tipo="AHORROS",
+            numero="T2-1",
         )
         extracto2 = ExtractoBancario.objects.create(
-            empresa=empresa2, cuenta=cuenta2, mes=1, anio=2026,
-            saldo_inicial=Decimal("0"), saldo_final=Decimal("0"),
+            empresa=empresa2,
+            cuenta=cuenta2,
+            mes=1,
+            anio=2026,
+            saldo_inicial=Decimal("0"),
+            saldo_final=Decimal("0"),
         )
         tx2 = TransaccionBancaria.objects.create(
-            empresa=empresa2, extracto=extracto2, fecha=date(2026, 1, 5),
-            descripcion="TX secreta tenant2", valor=Decimal("999000.00"), saldo=Decimal("999000.00"),
+            empresa=empresa2,
+            extracto=extracto2,
+            fecha=date(2026, 1, 5),
+            descripcion="TX secreta tenant2",
+            valor=Decimal("999000.00"),
+            saldo=Decimal("999000.00"),
         )
         aplicacion2 = MovimientoBancarioAplicacion.objects.create(
-            empresa=empresa2, transaccion=tx2, tipo_referencia="GASTO",
-            monto_aplicado=Decimal("999000.00"), fecha_aplicacion=date(2026, 1, 5),
+            empresa=empresa2,
+            transaccion=tx2,
+            tipo_referencia="GASTO",
+            monto_aplicado=Decimal("999000.00"),
+            fecha_aplicacion=date(2026, 1, 5),
             notas="SECRETO TENANT2",
         )
 

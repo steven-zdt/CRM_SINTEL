@@ -1,5 +1,8 @@
 {% load static %}
 
+{# DataTables 3.x (solo grilla "Clientes" -- Contactos/Historial siguen con Tabulator) #}
+{% include 'tenant/clientes/assets_clientes_datatables.html' %}
+<script src="{% static 'core/js/common/datatables.factory.js' %}"></script>
 
 {# BLOQUE 1: API Wrappers - DEBE cargarse PRIMERO (requerido por features) #}
 <script src="{% static 'clientes/js/clientes.api.js' %}"></script>

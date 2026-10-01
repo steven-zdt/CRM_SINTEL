@@ -8,6 +8,7 @@ business_service.py:251). Una cotizacion explicitamente exenta de IVA
 
 Ver docs/remediation/AUDIT_BASELINE_20260912.md hallazgo Q-1.
 """
+
 import datetime
 from decimal import Decimal
 
@@ -23,17 +24,23 @@ def _crear_cotizacion_iva_cero(empresa, cliente):
 
     ConfiguracionCotizacion.objects.get_or_create(
         empresa=empresa,
-        defaults={'dias_validez': 15, 'nombre_configuracion': 'Perfil General', 'es_activo': True},
+        defaults={"dias_validez": 15, "nombre_configuracion": "Perfil General", "es_activo": True},
     )
     payload = {
-        'cliente': cliente.id,
-        'fecha_emision': datetime.date(2026, 3, 30),
-        'iva_porcentaje': 0,
-        'items': [{
-            'tipo_item': 'PRODUCTO', 'descripcion': 'Item exento de IVA',
-            'cantidad': 1, 'costo_unitario': 1000000, 'porcentaje_utilidad': 0,
-            'unidad': 'UND', 'orden': 1,
-        }],
+        "cliente": cliente.id,
+        "fecha_emision": datetime.date(2026, 3, 30),
+        "iva_porcentaje": 0,
+        "items": [
+            {
+                "tipo_item": "PRODUCTO",
+                "descripcion": "Item exento de IVA",
+                "cantidad": 1,
+                "costo_unitario": 1000000,
+                "porcentaje_utilidad": 0,
+                "unidad": "UND",
+                "orden": 1,
+            }
+        ],
     }
     return CotizacionService.crear_preforma(empresa, payload)
 
@@ -48,8 +55,8 @@ def test_pdf_no_aplica_19_por_ciento_cuando_iva_es_cero(tenant, factory_empresa,
 
         contexto = CotizacionPDFExportService.preparar_contexto(cotizacion, empresa)
 
-        assert contexto['iva_porcentaje'] == Decimal("0")
-        assert contexto['iva_valor'] == Decimal("0")
+        assert contexto["iva_porcentaje"] == Decimal("0")
+        assert contexto["iva_valor"] == Decimal("0")
         # Sin AIU en este caso: total del PDF debe ser exactamente el
         # subtotal, no subtotal*1.19.
-        assert contexto['total_neto'] == contexto['subtotal_items']
+        assert contexto["total_neto"] == contexto["subtotal_items"]

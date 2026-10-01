@@ -23,6 +23,7 @@ def _hoy():
 
 class TimeStampedModel(SintelTenantBaseModel):
     """Modelo base abstracto para auditoría de tiempos."""
+
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -45,21 +46,21 @@ class CategoriaItem(TimeStampedModel):
         Empresa,
         on_delete=models.PROTECT,
         related_name="categorias_inventario",
-        help_text="Empresa propietaria de esta categoría."
+        help_text="Empresa propietaria de esta categoría.",
     )
 
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     nombre = models.CharField(max_length=100, db_index=True)
     descripcion = models.TextField(blank=True, null=True)
     aplicacion = models.CharField(
-        max_length=16, 
-        choices=Aplicacion.choices, 
+        max_length=16,
+        choices=Aplicacion.choices,
         default=Aplicacion.TODO,
-        help_text="Define si esta categoría agrupa productos, servicios o activos."
+        help_text="Define si esta categoría agrupa productos, servicios o activos.",
     )
-    imagen = models.ImageField(upload_to='inventario/categorias/', null=True, blank=True)
+    imagen = models.ImageField(upload_to="inventario/categorias/", null=True, blank=True)
     activo = models.BooleanField(default=True)
-    
+
     # Mapeo Contable Base (Heredado por los items si no tienen uno propio)
 
     class Meta:
@@ -69,9 +70,7 @@ class CategoriaItem(TimeStampedModel):
         indexes = [models.Index(fields=["empresa", "nombre"])]
         constraints = [
             models.UniqueConstraint(
-                Lower('nombre'),
-                'empresa',
-                name='unique_categoria_nombre_per_empresa'
+                Lower("nombre"), "empresa", name="unique_categoria_nombre_per_empresa"
             )
         ]
 
@@ -90,27 +89,25 @@ class ActivoFijo(TimeStampedModel):
         VENDIDO = "VENDIDO", _("Vendido")
 
     # VINCULACIÓN EMPRESA (SSoT)
-    empresa = models.ForeignKey(
-        Empresa,
-        on_delete=models.PROTECT,
-        related_name="activos_fijos"
-    )
-    
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT, related_name="activos_fijos")
+
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     categoria = models.ForeignKey(
         CategoriaItem,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        limit_choices_to={'aplicacion__in': [CategoriaItem.Aplicacion.ACTIVO, CategoriaItem.Aplicacion.TODO]},
-        related_name="activos"
+        limit_choices_to={
+            "aplicacion__in": [CategoriaItem.Aplicacion.ACTIVO, CategoriaItem.Aplicacion.TODO]
+        },
+        related_name="activos",
     )
     codigo = models.CharField(max_length=64, help_text="Placa, Serial o Identificador unico.")
     nombre = models.CharField(max_length=200, db_index=True)
     marca = models.CharField(max_length=100, blank=True, null=True)
     modelo = models.CharField(max_length=100, blank=True, null=True)
     descripcion = models.TextField(blank=True, null=True)
-    imagen = models.ImageField(upload_to='inventario/activos/', null=True, blank=True)
+    imagen = models.ImageField(upload_to="inventario/activos/", null=True, blank=True)
     ubicacion = models.CharField(max_length=100, blank=True, null=True)
     responsable = models.CharField(max_length=100, blank=True, null=True)
     fecha_adquisicion = models.DateField(null=True, blank=True)
@@ -121,15 +118,10 @@ class ActivoFijo(TimeStampedModel):
         ordering = ["nombre"]
         verbose_name = "Activo Fijo"
         verbose_name_plural = "Activos Fijos"
-        indexes = [
-            models.Index(fields=["codigo"]),
-            models.Index(fields=["empresa"])
-        ]
+        indexes = [models.Index(fields=["codigo"]), models.Index(fields=["empresa"])]
         constraints = [
             models.UniqueConstraint(
-                Lower('codigo'),
-                'empresa',
-                name='unique_activo_codigo_per_empresa'
+                Lower("codigo"), "empresa", name="unique_activo_codigo_per_empresa"
             )
         ]
 
@@ -146,7 +138,7 @@ class Producto(TimeStampedModel):
         Empresa,
         on_delete=models.PROTECT,
         related_name="productos_venta",
-        help_text="Empresa propietaria del producto."
+        help_text="Empresa propietaria del producto.",
     )
 
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
@@ -158,21 +150,23 @@ class Producto(TimeStampedModel):
         related_name="productos",
         null=True,
         blank=True,
-        limit_choices_to={'aplicacion__in': [CategoriaItem.Aplicacion.PRODUCTO, CategoriaItem.Aplicacion.TODO]},
-        help_text="Categoria del producto. Puede quedar sin categoria si se elimina la categoria asociada."
+        limit_choices_to={
+            "aplicacion__in": [CategoriaItem.Aplicacion.PRODUCTO, CategoriaItem.Aplicacion.TODO]
+        },
+        help_text="Categoria del producto. Puede quedar sin categoria si se elimina la categoria asociada.",
     )
     descripcion = models.TextField(blank=True, null=True)
     unidad = models.CharField(max_length=16, default="UND")
-    imagen = models.ImageField(upload_to='inventario/productos/', null=True, blank=True)
-    
+    imagen = models.ImageField(upload_to="inventario/productos/", null=True, blank=True)
+
     # Precios
     precio_venta = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     costo_promedio = models.DecimalField(max_digits=14, decimal_places=2, default=0)
-    
+
     # Stock
     stock_actual = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     stock_minimo = models.DecimalField(max_digits=14, decimal_places=3, default=0)
-    
+
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -185,9 +179,7 @@ class Producto(TimeStampedModel):
         ]
         constraints = [
             models.UniqueConstraint(
-                Lower('codigo'),
-                'empresa',
-                name='unique_producto_codigo_per_empresa'
+                Lower("codigo"), "empresa", name="unique_producto_codigo_per_empresa"
             )
         ]
 
@@ -204,7 +196,7 @@ class Servicio(TimeStampedModel):
         Empresa,
         on_delete=models.PROTECT,
         related_name="servicios_venta",
-        help_text="Empresa que presta el servicio."
+        help_text="Empresa que presta el servicio.",
     )
 
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
@@ -216,11 +208,13 @@ class Servicio(TimeStampedModel):
         related_name="servicios",
         null=True,
         blank=True,
-        limit_choices_to={'aplicacion__in': [CategoriaItem.Aplicacion.SERVICIO, CategoriaItem.Aplicacion.TODO]},
-        help_text="Categoria del servicio. Puede quedar sin categoria si se elimina la categoria asociada."
+        limit_choices_to={
+            "aplicacion__in": [CategoriaItem.Aplicacion.SERVICIO, CategoriaItem.Aplicacion.TODO]
+        },
+        help_text="Categoria del servicio. Puede quedar sin categoria si se elimina la categoria asociada.",
     )
     descripcion = models.TextField(blank=True, null=True)
-    imagen = models.ImageField(upload_to='inventario/servicios/', null=True, blank=True)
+    imagen = models.ImageField(upload_to="inventario/servicios/", null=True, blank=True)
     precio_venta = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     activo = models.BooleanField(default=True)
 
@@ -231,9 +225,7 @@ class Servicio(TimeStampedModel):
         indexes = [models.Index(fields=["empresa", "nombre"])]
         constraints = [
             models.UniqueConstraint(
-                Lower('codigo'),
-                'empresa',
-                name='unique_servicio_codigo_per_empresa'
+                Lower("codigo"), "empresa", name="unique_servicio_codigo_per_empresa"
             )
         ]
 
@@ -270,17 +262,17 @@ class MovimientoInventario(TimeStampedModel):
         Empresa,
         on_delete=models.PROTECT,
         related_name="movimientos_inventario",
-        help_text="Empresa a la que pertenece el movimiento."
+        help_text="Empresa a la que pertenece el movimiento.",
     )
 
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
     producto = models.ForeignKey(
-        Producto, 
-        on_delete=models.CASCADE, 
+        Producto,
+        on_delete=models.CASCADE,
         related_name="movimientos",
         null=True,
         blank=True,
-        help_text="Producto del movimiento. Si se elimina el producto, se eliminan todos sus movimientos."
+        help_text="Producto del movimiento. Si se elimina el producto, se eliminan todos sus movimientos.",
     )
     activo_fijo = models.ForeignKey(
         ActivoFijo,
@@ -288,7 +280,7 @@ class MovimientoInventario(TimeStampedModel):
         related_name="movimientos",
         null=True,
         blank=True,
-        help_text="Activo fijo del movimiento."
+        help_text="Activo fijo del movimiento.",
     )
     tipo = models.CharField(max_length=30, choices=TipoMovimiento.choices)
     cantidad = models.DecimalField(max_digits=14, decimal_places=3)
@@ -296,12 +288,16 @@ class MovimientoInventario(TimeStampedModel):
 
     # VINCULACIÓN FACTURA (v3.9.2+) — Soft Reference (no FK)
     factura_uuid = models.UUIDField(
-        null=True, blank=True, db_index=True,
-        help_text="UUID de la factura asociada. Referencia soft, sin FK."
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="UUID de la factura asociada. Referencia soft, sin FK.",
     )
     factura_numero = models.CharField(
-        max_length=50, null=True, blank=True,
-        help_text="Snapshot del número de factura al momento del movimiento."
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="Snapshot del número de factura al momento del movimiento.",
     )
 
     # TRAZABILIDAD EXTERNA
@@ -311,14 +307,16 @@ class MovimientoInventario(TimeStampedModel):
 
     # Sede — vinculacion para indicadores y KPIs por sede (DT-SEDE-05)
     sede = models.ForeignKey(
-        'empresa.Sede',
+        "empresa.Sede",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='movimientos_inventario',
-        verbose_name=_('Sede'),
-        help_text=_('Sede de la empresa donde ocurre el movimiento de inventario. '
-                    'Opcional — si no se asigna aplica a toda la empresa.'),
+        related_name="movimientos_inventario",
+        verbose_name=_("Sede"),
+        help_text=_(
+            "Sede de la empresa donde ocurre el movimiento de inventario. "
+            "Opcional — si no se asigna aplica a toda la empresa."
+        ),
         db_index=True,
     )
 
@@ -328,15 +326,20 @@ class MovimientoInventario(TimeStampedModel):
     # entradas por compra; app='inventario', modelo='TrasladoInventario' para
     # traslados entre sedes.
     documento_origen_app = models.CharField(
-        max_length=30, null=True, blank=True,
+        max_length=30,
+        null=True,
+        blank=True,
         help_text="App que origino el movimiento: compras, inventario.",
     )
     documento_origen_modelo = models.CharField(
-        max_length=50, null=True, blank=True,
+        max_length=50,
+        null=True,
+        blank=True,
         help_text="Modelo que origino el movimiento: RecepcionCompraItem, TrasladoInventario.",
     )
     documento_origen_id = models.PositiveIntegerField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         help_text="PK en la app de origen.",
     )
 
@@ -356,10 +359,10 @@ class MovimientoInventario(TimeStampedModel):
         constraints = [
             models.CheckConstraint(
                 check=(
-                    models.Q(producto__isnull=False, activo_fijo__isnull=True) |
-                    models.Q(producto__isnull=True, activo_fijo__isnull=False)
+                    models.Q(producto__isnull=False, activo_fijo__isnull=True)
+                    | models.Q(producto__isnull=True, activo_fijo__isnull=False)
                 ),
-                name="exactly_one_product_or_asset"
+                name="exactly_one_product_or_asset",
             ),
             # Idempotencia: un mismo documento origen no puede generar dos
             # movimientos del mismo tipo. Incluye 'tipo' (a diferencia del
@@ -368,8 +371,11 @@ class MovimientoInventario(TimeStampedModel):
             # (TRASLADO_SALIDA + TRASLADO_ENTRADA).
             models.UniqueConstraint(
                 fields=[
-                    "empresa", "documento_origen_app", "documento_origen_modelo",
-                    "documento_origen_id", "tipo",
+                    "empresa",
+                    "documento_origen_app",
+                    "documento_origen_modelo",
+                    "documento_origen_id",
+                    "tipo",
                 ],
                 condition=models.Q(documento_origen_id__isnull=False),
                 name="uniq_movimiento_documento_origen_tipo",
@@ -377,7 +383,11 @@ class MovimientoInventario(TimeStampedModel):
         ]
 
     def __str__(self):
-        item_code = self.producto.codigo if self.producto else (self.activo_fijo.codigo if self.activo_fijo else "N/A")
+        item_code = (
+            self.producto.codigo
+            if self.producto
+            else (self.activo_fijo.codigo if self.activo_fijo else "N/A")
+        )
         return f"{self.tipo} | {item_code}"
 
 
@@ -424,35 +434,57 @@ class TrasladoInventario(TimeStampedModel):
     cantidad = models.DecimalField(max_digits=14, decimal_places=3)
 
     sede_origen = models.ForeignKey(
-        'empresa.Sede', on_delete=models.PROTECT, related_name='traslados_salida',
-        verbose_name=_('Sede Origen'),
+        "empresa.Sede",
+        on_delete=models.PROTECT,
+        related_name="traslados_salida",
+        verbose_name=_("Sede Origen"),
     )
     sede_destino = models.ForeignKey(
-        'empresa.Sede', on_delete=models.PROTECT, related_name='traslados_entrada',
-        verbose_name=_('Sede Destino'),
+        "empresa.Sede",
+        on_delete=models.PROTECT,
+        related_name="traslados_entrada",
+        verbose_name=_("Sede Destino"),
     )
     area_origen = models.ForeignKey(
-        'empresa.Area', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='traslados_salida', verbose_name=_('Area Origen'),
+        "empresa.Area",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="traslados_salida",
+        verbose_name=_("Area Origen"),
     )
     area_destino = models.ForeignKey(
-        'empresa.Area', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='traslados_entrada', verbose_name=_('Area Destino'),
+        "empresa.Area",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="traslados_entrada",
+        verbose_name=_("Area Destino"),
     )
 
-    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.BORRADOR, db_index=True)
+    estado = models.CharField(
+        max_length=20, choices=Estado.choices, default=Estado.BORRADOR, db_index=True
+    )
     motivo = models.TextField(blank=True)
 
     usuario_solicita = models.ForeignKey(
-        'perfil.TenantProfile', on_delete=models.PROTECT, related_name='traslados_solicitados',
+        "perfil.TenantProfile",
+        on_delete=models.PROTECT,
+        related_name="traslados_solicitados",
     )
     usuario_aprueba = models.ForeignKey(
-        'perfil.TenantProfile', on_delete=models.PROTECT, null=True, blank=True,
-        related_name='traslados_aprobados',
+        "perfil.TenantProfile",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="traslados_aprobados",
     )
     usuario_recibe = models.ForeignKey(
-        'perfil.TenantProfile', on_delete=models.PROTECT, null=True, blank=True,
-        related_name='traslados_recibidos',
+        "perfil.TenantProfile",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="traslados_recibidos",
     )
 
     fecha_solicitud = models.DateTimeField(null=True, blank=True)
@@ -472,7 +504,7 @@ class TrasladoInventario(TimeStampedModel):
         ]
         constraints = [
             models.CheckConstraint(
-                check=~models.Q(sede_origen=models.F('sede_destino')),
+                check=~models.Q(sede_origen=models.F("sede_destino")),
                 name="traslado_sede_origen_distinta_destino",
             ),
             models.CheckConstraint(
@@ -494,7 +526,7 @@ class HistorialServicio(TimeStampedModel):
         Empresa,
         on_delete=models.PROTECT,
         related_name="historial_servicios",
-        help_text="Empresa que registra la transacción."
+        help_text="Empresa que registra la transacción.",
     )
 
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
@@ -502,12 +534,12 @@ class HistorialServicio(TimeStampedModel):
         Servicio,
         on_delete=models.CASCADE,
         related_name="historial_ventas",
-        help_text="Servicio del historial. Si se elimina el servicio, se eliminan todos sus historiales."
+        help_text="Servicio del historial. Si se elimina el servicio, se eliminan todos sus historiales.",
     )
     fecha_registro = models.DateField(default=_hoy)
     cantidad = models.DecimalField(max_digits=10, decimal_places=2, default=1)
     valor_cobrado = models.DecimalField(max_digits=14, decimal_places=2, default=0)
-    
+
     # TRAZABILIDAD EXTERNA
     origen_referencia = models.CharField(max_length=100, blank=True, null=True)
     cliente_referencia = models.CharField(max_length=200, blank=True, null=True)
@@ -515,12 +547,13 @@ class HistorialServicio(TimeStampedModel):
 
     # VINCULACION PROYECTO (Soft Reference - patron factura_uuid/numero)
     proyecto_uuid = models.UUIDField(
-        null=True, blank=True, db_index=True,
-        help_text="UUID snapshot del proyecto vinculado (Soft Reference)."
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="UUID snapshot del proyecto vinculado (Soft Reference).",
     )
     proyecto_nombre = models.CharField(
-        max_length=255, null=True, blank=True,
-        help_text="Nombre snapshot del proyecto vinculado."
+        max_length=255, null=True, blank=True, help_text="Nombre snapshot del proyecto vinculado."
     )
 
     class Meta:

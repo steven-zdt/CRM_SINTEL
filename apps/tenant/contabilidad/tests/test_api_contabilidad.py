@@ -6,253 +6,249 @@ Verifica:
 - POST /api/v1/asientos-contables/{id}/aprobar/
 - Paginación y filtros
 """
+
 from decimal import Decimal
 
 from rest_framework import status
 
 from apps.config.tests.base_tenant import TenantAPITestCase
-from apps.tenant.empresa.models import Empresa
 from apps.tenant.contabilidad.models import (
     AsientoContable,
     CuentaContable,
     MovimientoContable,
 )
+from apps.tenant.empresa.models import Empresa
 
 
 class CuentaContableViewSetTests(TenantAPITestCase):
     """Tests para CuentaContableViewSet."""
-    
+
     def setUp(self):
         """Configuración inicial."""
         super().setUp()
         self.empresa = Empresa.objects.first()
         if not self.empresa:
             self.empresa = Empresa.objects.create(
-                razon_social='Empresa Test',
-                nit='123456789',
-                dv='0',
-                direccion='Calle Test'
+                razon_social="Empresa Test", nit="123456789", dv="0", direccion="Calle Test"
             )
-        
+
         self.cuenta = CuentaContable.objects.create(
             empresa=self.empresa,
-            codigo='110505',
-            nombre='Caja',
-            tipo='ACTIVO',
+            codigo="110505",
+            nombre="Caja",
+            tipo="ACTIVO",
             activa=True,
         )
-    
+
     def test_list_cuentas(self):
         """Test: GET /api/v1/cuentas-contables/ devuelve lista paginada."""
-        response = self.tget('/api/v1/contabilidad/cuentas-contables/')
+        response = self.tget("/api/v1/contabilidad/cuentas-contables/")
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
         self.assertPaginationFormat(data)
-    
+
     def test_create_cuenta(self):
         """Test: POST /api/v1/cuentas-contables/ crea nueva cuenta."""
         data = {
-            'codigo': '110510',
-            'nombre': 'Bancos',
-            'tipo': 'ACTIVO',
-            'activa': True,
+            "codigo": "110510",
+            "nombre": "Bancos",
+            "tipo": "ACTIVO",
+            "activa": True,
         }
-        response = self.tpost('/api/v1/contabilidad/cuentas-contables/', data)
+        response = self.tpost("/api/v1/contabilidad/cuentas-contables/", data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         response_data = response.json()
-        self.assertEqual(response_data['codigo'], '110510')
+        self.assertEqual(response_data["codigo"], "110510")
 
 
 class AsientoContableViewSetTests(TenantAPITestCase):
     """Tests para AsientoContableViewSet."""
-    
+
     def setUp(self):
         """Configuración inicial."""
         super().setUp()
         self.empresa = Empresa.objects.first()
         if not self.empresa:
             self.empresa = Empresa.objects.create(
-                razon_social='Empresa Test',
-                nit='123456789',
-                dv='0',
-                direccion='Calle Test'
+                razon_social="Empresa Test", nit="123456789", dv="0", direccion="Calle Test"
             )
-        
+
         self.cuenta_debe = CuentaContable.objects.create(
             empresa=self.empresa,
-            codigo='110505',
-            nombre='Caja',
-            tipo='ACTIVO',
+            codigo="110505",
+            nombre="Caja",
+            tipo="ACTIVO",
             activa=True,
         )
-        
+
         self.cuenta_haber = CuentaContable.objects.create(
             empresa=self.empresa,
-            codigo='240805',
-            nombre='Ingresos',
-            tipo='INGRESO',
+            codigo="240805",
+            nombre="Ingresos",
+            tipo="INGRESO",
             activa=True,
         )
-        
+
         self.asiento = AsientoContable.objects.create(
             empresa=self.empresa,
-            numero='AS-001',
-            fecha='2024-01-15',
-            descripcion='Asiento de prueba',
-            estado='BORRADOR',
+            numero="AS-001",
+            fecha="2024-01-15",
+            descripcion="Asiento de prueba",
+            estado="BORRADOR",
         )
-        
+
         # Crear movimientos balanceados
         MovimientoContable.objects.create(
             empresa=self.empresa,
             asiento=self.asiento,
             cuenta=self.cuenta_debe,
-            debe=Decimal('100000.00'),
-            haber=Decimal('0.00'),
-            descripcion='Debe',
+            debe=Decimal("100000.00"),
+            haber=Decimal("0.00"),
+            descripcion="Debe",
             orden=1,
         )
-        
+
         MovimientoContable.objects.create(
             empresa=self.empresa,
             asiento=self.asiento,
             cuenta=self.cuenta_haber,
-            debe=Decimal('0.00'),
-            haber=Decimal('100000.00'),
-            descripcion='Haber',
+            debe=Decimal("0.00"),
+            haber=Decimal("100000.00"),
+            descripcion="Haber",
             orden=2,
         )
-        
+
         # Recalcular totales
         self.asiento.refresh_from_db()
-    
+
     def test_list_asientos(self):
         """Test: GET /api/v1/asientos-contables/ devuelve lista paginada."""
-        response = self.tget('/api/v1/contabilidad/asientos-contables/')
+        response = self.tget("/api/v1/contabilidad/asientos-contables/")
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
         self.assertPaginationFormat(data)
-    
+
     def test_create_asiento(self):
         """Test: POST /api/v1/asientos-contables/ crea nuevo asiento."""
         data = {
-            'numero': 'AS-002',
-            'fecha': '2024-01-16',
-            'descripcion': 'Nuevo asiento',
-            'estado': 'BORRADOR',
+            "numero": "AS-002",
+            "fecha": "2024-01-16",
+            "descripcion": "Nuevo asiento",
+            "estado": "BORRADOR",
         }
-        response = self.tpost('/api/v1/contabilidad/asientos-contables/', data)
+        response = self.tpost("/api/v1/contabilidad/asientos-contables/", data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         response_data = response.json()
-        self.assertEqual(response_data['numero'], 'AS-002')
-    
+        self.assertEqual(response_data["numero"], "AS-002")
+
     def test_aprobar_action(self):
         """Test: POST /api/v1/asientos-contables/{id}/aprobar/ aprueba asiento balanceado."""
-        response = self.tpost(f'/api/v1/contabilidad/asientos-contables/{self.asiento.id}/aprobar/', {})
+        response = self.tpost(
+            f"/api/v1/contabilidad/asientos-contables/{self.asiento.id}/aprobar/", {}
+        )
         self.assertJSONResponse(response, status.HTTP_200_OK)
         response_data = response.json()
-        self.assertEqual(response_data['estado'], 'APROBADO')
-        
+        self.assertEqual(response_data["estado"], "APROBADO")
+
         # Verificar en BD
         self.asiento.refresh_from_db()
-        self.assertEqual(self.asiento.estado, 'APROBADO')
-    
+        self.assertEqual(self.asiento.estado, "APROBADO")
+
     def test_aprobar_desbalanceado(self):
         """Test: No se puede aprobar asiento desbalanceado."""
         # Crear asiento desbalanceado
         asiento_desbalanceado = AsientoContable.objects.create(
             empresa=self.empresa,
-            numero='AS-003',
-            fecha='2024-01-17',
-            descripcion='Asiento desbalanceado',
-            estado='BORRADOR',
+            numero="AS-003",
+            fecha="2024-01-17",
+            descripcion="Asiento desbalanceado",
+            estado="BORRADOR",
         )
-        
+
         MovimientoContable.objects.create(
             empresa=self.empresa,
             asiento=asiento_desbalanceado,
             cuenta=self.cuenta_debe,
-            debe=Decimal('100000.00'),
-            haber=Decimal('0.00'),
-            descripcion='Solo debe',
+            debe=Decimal("100000.00"),
+            haber=Decimal("0.00"),
+            descripcion="Solo debe",
             orden=1,
         )
-        
+
         # Intentar aprobar
-        response = self.tpost(f'/api/v1/contabilidad/asientos-contables/{asiento_desbalanceado.id}/aprobar/', {})
+        response = self.tpost(
+            f"/api/v1/contabilidad/asientos-contables/{asiento_desbalanceado.id}/aprobar/", {}
+        )
         self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
-    
+
     def test_filter_by_estado(self):
         """Test: Filtrar por estado."""
-        response = self.tget('/api/v1/contabilidad/asientos-contables/?estado=BORRADOR')
+        response = self.tget("/api/v1/contabilidad/asientos-contables/?estado=BORRADOR")
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
-        for result in data['results']:
-            self.assertEqual(result['estado'], 'BORRADOR')
+        for result in data["results"]:
+            self.assertEqual(result["estado"], "BORRADOR")
 
 
 class MovimientoContableViewSetTests(TenantAPITestCase):
     """Tests para MovimientoContableViewSet."""
-    
+
     def setUp(self):
         """Configuración inicial."""
         super().setUp()
         self.empresa = Empresa.objects.first()
         if not self.empresa:
             self.empresa = Empresa.objects.create(
-                razon_social='Empresa Test',
-                nit='123456789',
-                dv='0',
-                direccion='Calle Test'
+                razon_social="Empresa Test", nit="123456789", dv="0", direccion="Calle Test"
             )
-        
+
         self.cuenta = CuentaContable.objects.create(
             empresa=self.empresa,
-            codigo='110505',
-            nombre='Caja',
-            tipo='ACTIVO',
+            codigo="110505",
+            nombre="Caja",
+            tipo="ACTIVO",
             activa=True,
         )
-        
+
         self.asiento = AsientoContable.objects.create(
             empresa=self.empresa,
-            numero='AS-001',
-            fecha='2024-01-15',
-            descripcion='Asiento de prueba',
-            estado='BORRADOR',
+            numero="AS-001",
+            fecha="2024-01-15",
+            descripcion="Asiento de prueba",
+            estado="BORRADOR",
         )
-        
+
         self.movimiento = MovimientoContable.objects.create(
             empresa=self.empresa,
             asiento=self.asiento,
             cuenta=self.cuenta,
-            debe=Decimal('100000.00'),
-            haber=Decimal('0.00'),
-            descripcion='Movimiento test',
+            debe=Decimal("100000.00"),
+            haber=Decimal("0.00"),
+            descripcion="Movimiento test",
             orden=1,
         )
-    
+
     def test_list_movimientos(self):
         """Test: GET /api/v1/movimientos-contables/ devuelve lista paginada."""
-        response = self.tget('/api/v1/contabilidad/movimientos-contables/')
+        response = self.tget("/api/v1/contabilidad/movimientos-contables/")
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
         self.assertPaginationFormat(data)
-    
+
     def test_create_movimiento(self):
         """Test: POST /api/v1/movimientos-contables/ crea nuevo movimiento."""
         data = {
-            'asiento': self.asiento.id,
-            'cuenta': self.cuenta.id,
-            'debe': '50000.00',
-            'haber': '0.00',
-            'descripcion': 'Nuevo movimiento',
-            'orden': 2,
+            "asiento": self.asiento.id,
+            "cuenta": self.cuenta.id,
+            "debe": "50000.00",
+            "haber": "0.00",
+            "descripcion": "Nuevo movimiento",
+            "orden": 2,
         }
-        response = self.tpost('/api/v1/contabilidad/movimientos-contables/', data)
+        response = self.tpost("/api/v1/contabilidad/movimientos-contables/", data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         response_data = response.json()
-        self.assertEqual(response_data['descripcion'], 'Nuevo movimiento')
+        self.assertEqual(response_data["descripcion"], "Nuevo movimiento")
 
 
 class LibroDiarioViewSetTests(TenantAPITestCase):
@@ -264,62 +260,61 @@ class LibroDiarioViewSetTests(TenantAPITestCase):
         self.empresa = Empresa.objects.first()
         if not self.empresa:
             self.empresa = Empresa.objects.create(
-                razon_social='Empresa Test',
-                nit='123456789',
-                dv='0',
-                direccion='Calle Test'
+                razon_social="Empresa Test", nit="123456789", dv="0", direccion="Calle Test"
             )
 
     def test_libro_diario_with_period_parameter(self):
         """Test: GET /api/v1/contabilidad/libro-diario/?periodo=2026-05"""
-        response = self.tget('/api/v1/contabilidad/libro-diario/?periodo=2026-05')
+        response = self.tget("/api/v1/contabilidad/libro-diario/?periodo=2026-05")
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
 
         # Validar estructura de respuesta
-        self.assertIn('periodo', data)
-        self.assertIn('fecha_inicio', data)
-        self.assertIn('fecha_fin', data)
-        self.assertIn('documentos', data)
-        self.assertIn('resumen', data)
+        self.assertIn("periodo", data)
+        self.assertIn("fecha_inicio", data)
+        self.assertIn("fecha_fin", data)
+        self.assertIn("documentos", data)
+        self.assertIn("resumen", data)
 
         # Validar periodo
-        self.assertEqual(data['periodo'], '2026-05')
+        self.assertEqual(data["periodo"], "2026-05")
 
         # Validar resumen
-        resumen = data['resumen']
-        self.assertIn('total_documentos', resumen)
-        self.assertIn('contabilizados', resumen)
-        self.assertIn('pendientes', resumen)
-        self.assertIn('total_debe', resumen)
-        self.assertIn('total_haber', resumen)
-        self.assertIn('cuadra', resumen)
-        self.assertIn('por_tipo_comprobante', resumen)
+        resumen = data["resumen"]
+        self.assertIn("total_documentos", resumen)
+        self.assertIn("contabilizados", resumen)
+        self.assertIn("pendientes", resumen)
+        self.assertIn("total_debe", resumen)
+        self.assertIn("total_haber", resumen)
+        self.assertIn("cuadra", resumen)
+        self.assertIn("por_tipo_comprobante", resumen)
 
         # Validar documentos (lista vacía si no hay docs en el período)
-        self.assertIsInstance(data['documentos'], list)
+        self.assertIsInstance(data["documentos"], list)
 
     def test_libro_diario_with_date_range(self):
         """Test: GET /api/v1/contabilidad/libro-diario/?fecha_inicio=2026-05-01&fecha_fin=2026-05-31"""
-        response = self.tget('/api/v1/contabilidad/libro-diario/?fecha_inicio=2026-05-01&fecha_fin=2026-05-31')
+        response = self.tget(
+            "/api/v1/contabilidad/libro-diario/?fecha_inicio=2026-05-01&fecha_fin=2026-05-31"
+        )
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
 
         # Validar estructura
-        self.assertIn('documentos', data)
-        self.assertIn('resumen', data)
+        self.assertIn("documentos", data)
+        self.assertIn("resumen", data)
 
         # Validar fechas
-        self.assertEqual(data['fecha_inicio'], '2026-05-01')
-        self.assertEqual(data['fecha_fin'], '2026-05-31')
+        self.assertEqual(data["fecha_inicio"], "2026-05-01")
+        self.assertEqual(data["fecha_fin"], "2026-05-31")
 
     def test_libro_diario_default_current_month(self):
         """Test: GET /api/v1/contabilidad/libro-diario/ usa mes actual por defecto"""
-        response = self.tget('/api/v1/contabilidad/libro-diario/')
+        response = self.tget("/api/v1/contabilidad/libro-diario/")
         self.assertJSONResponse(response, status.HTTP_200_OK)
         data = response.json()
 
         # Validar que devuelve estructura completa
-        self.assertIn('periodo', data)
-        self.assertIn('documentos', data)
-        self.assertIn('resumen', data)
+        self.assertIn("periodo", data)
+        self.assertIn("documentos", data)
+        self.assertIn("resumen", data)

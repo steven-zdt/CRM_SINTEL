@@ -18,6 +18,7 @@ Prioridad de matching (orden de la mision, Fase 8):
 No asume que un monto igual es automaticamente la factura correcta -- el
 score combina multiples señales, nunca una sola.
 """
+
 import re
 import unicodedata
 from decimal import Decimal
@@ -29,7 +30,9 @@ _MAX_CANDIDATOS = 8
 
 def _normalizar(texto: str) -> str:
     texto = (texto or "").strip().lower()
-    return "".join(c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn")
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn"
+    )
 
 
 def _score_monto(monto_tx: Decimal, monto_doc: Decimal) -> tuple:
@@ -100,13 +103,19 @@ class BankTransactionMatchingService:
             candidatos += BankTransactionMatchingService._sugerir_facturas(
                 transaccion, descripcion_norm, naturaleza="VENTA"
             )
-            candidatos += BankTransactionMatchingService._sugerir_clientes(transaccion, descripcion_norm)
+            candidatos += BankTransactionMatchingService._sugerir_clientes(
+                transaccion, descripcion_norm
+            )
         else:
             candidatos += BankTransactionMatchingService._sugerir_facturas(
                 transaccion, descripcion_norm, naturaleza="COMPRA"
             )
-            candidatos += BankTransactionMatchingService._sugerir_proveedores(transaccion, descripcion_norm)
-            candidatos += BankTransactionMatchingService._sugerir_gastos(transaccion, descripcion_norm)
+            candidatos += BankTransactionMatchingService._sugerir_proveedores(
+                transaccion, descripcion_norm
+            )
+            candidatos += BankTransactionMatchingService._sugerir_gastos(
+                transaccion, descripcion_norm
+            )
 
         candidatos.sort(key=lambda c: c["score"], reverse=True)
         return candidatos[:_MAX_CANDIDATOS]
@@ -118,8 +127,19 @@ class BankTransactionMatchingService:
         monto_tx = abs(transaccion.valor)
         qs = (
             Factura.objects.filter(empresa_id=transaccion.empresa_id, naturaleza=naturaleza)
-            .only("id", "uuid", "numero", "prefijo", "naturaleza", "total", "fecha_emision",
-                  "receptor_nit", "receptor_razon_social", "emisor_nit", "emisor_razon_social")
+            .only(
+                "id",
+                "uuid",
+                "numero",
+                "prefijo",
+                "naturaleza",
+                "total",
+                "fecha_emision",
+                "receptor_nit",
+                "receptor_razon_social",
+                "emisor_nit",
+                "emisor_razon_social",
+            )
             .order_by("-fecha_emision")[:200]
         )
         candidatos = []
@@ -134,7 +154,11 @@ class BankTransactionMatchingService:
             if score_monto == 0:
                 continue  # sin coincidencia minima de monto, no vale la pena sugerir
 
-            fecha_doc = factura.fecha_emision.date() if hasattr(factura.fecha_emision, "date") else factura.fecha_emision
+            fecha_doc = (
+                factura.fecha_emision.date()
+                if hasattr(factura.fecha_emision, "date")
+                else factura.fecha_emision
+            )
             score_fecha, razon_fecha = _score_fecha(transaccion.fecha, fecha_doc)
             score_texto, razones_texto = _score_texto(
                 descripcion_norm, nit, nombre, factura.numero, transaccion.dcto
@@ -142,24 +166,25 @@ class BankTransactionMatchingService:
 
             score = min(score_monto + score_fecha + score_texto, Decimal("0.99"))
             razones = [r for r in ([razon_monto, razon_fecha] + razones_texto) if r]
-            candidatos.append({
-                "tipo": "FACTURA_VENTA" if naturaleza == "VENTA" else "FACTURA_COMPRA",
-                "uuid": str(factura.uuid),
-                "descripcion": f"{factura.prefijo or ''}{factura.numero} — {nombre or '—'}",
-                "monto": str(total),
-                "score": float(score.quantize(Decimal("0.0001"))),
-                "reason": razones,
-            })
+            candidatos.append(
+                {
+                    "tipo": "FACTURA_VENTA" if naturaleza == "VENTA" else "FACTURA_COMPRA",
+                    "uuid": str(factura.uuid),
+                    "descripcion": f"{factura.prefijo or ''}{factura.numero} — {nombre or '—'}",
+                    "monto": str(total),
+                    "score": float(score.quantize(Decimal("0.0001"))),
+                    "reason": razones,
+                }
+            )
         return candidatos
 
     @staticmethod
     def _sugerir_clientes(transaccion, descripcion_norm):
         from apps.tenant.clientes.models import Cliente
 
-        qs = (
-            Cliente.objects.filter(empresa_id=transaccion.empresa_id, activo=True)
-            .only("id", "uuid", "numero_documento", "razon_social", "nombre_comercial")[:300]
-        )
+        qs = Cliente.objects.filter(empresa_id=transaccion.empresa_id, activo=True).only(
+            "id", "uuid", "numero_documento", "razon_social", "nombre_comercial"
+        )[:300]
         candidatos = []
         for cliente in qs:
             score, razones = _score_texto(
@@ -167,49 +192,62 @@ class BankTransactionMatchingService:
             )
             if cliente.nombre_comercial:
                 palabras = [p for p in _normalizar(cliente.nombre_comercial).split() if len(p) > 3]
-                if palabras and any(p in descripcion_norm for p in palabras) and "nombre/razon social" not in " ".join(razones):
+                if (
+                    palabras
+                    and any(p in descripcion_norm for p in palabras)
+                    and "nombre/razon social" not in " ".join(razones)
+                ):
                     score += Decimal("0.25")
                     razones.append("nombre comercial detectado en la descripcion")
             if score == 0:
                 continue
-            candidatos.append({
-                "tipo": "CLIENTE",
-                "uuid": str(cliente.uuid),
-                "descripcion": cliente.nombre_comercial or cliente.razon_social,
-                "monto": None,
-                "score": float(min(score, Decimal("0.99")).quantize(Decimal("0.0001"))),
-                "reason": razones,
-            })
+            candidatos.append(
+                {
+                    "tipo": "CLIENTE",
+                    "uuid": str(cliente.uuid),
+                    "descripcion": cliente.nombre_comercial or cliente.razon_social,
+                    "monto": None,
+                    "score": float(min(score, Decimal("0.99")).quantize(Decimal("0.0001"))),
+                    "reason": razones,
+                }
+            )
         return candidatos
 
     @staticmethod
     def _sugerir_proveedores(transaccion, descripcion_norm):
         from apps.tenant.proveedores.models import Proveedor
 
-        qs = (
-            Proveedor.objects.filter(empresa_id=transaccion.empresa_id, activo=True)
-            .only("id", "uuid", "numero_documento", "razon_social", "nombre_comercial")[:300]
-        )
+        qs = Proveedor.objects.filter(empresa_id=transaccion.empresa_id, activo=True).only(
+            "id", "uuid", "numero_documento", "razon_social", "nombre_comercial"
+        )[:300]
         candidatos = []
         for proveedor in qs:
             score, razones = _score_texto(
                 descripcion_norm, proveedor.numero_documento, proveedor.razon_social, None, None
             )
             if proveedor.nombre_comercial:
-                palabras = [p for p in _normalizar(proveedor.nombre_comercial).split() if len(p) > 3]
-                if palabras and any(p in descripcion_norm for p in palabras) and "nombre/razon social" not in " ".join(razones):
+                palabras = [
+                    p for p in _normalizar(proveedor.nombre_comercial).split() if len(p) > 3
+                ]
+                if (
+                    palabras
+                    and any(p in descripcion_norm for p in palabras)
+                    and "nombre/razon social" not in " ".join(razones)
+                ):
                     score += Decimal("0.25")
                     razones.append("nombre comercial detectado en la descripcion")
             if score == 0:
                 continue
-            candidatos.append({
-                "tipo": "PROVEEDOR",
-                "uuid": str(proveedor.uuid),
-                "descripcion": proveedor.nombre_comercial or proveedor.razon_social,
-                "monto": None,
-                "score": float(min(score, Decimal("0.99")).quantize(Decimal("0.0001"))),
-                "reason": razones,
-            })
+            candidatos.append(
+                {
+                    "tipo": "PROVEEDOR",
+                    "uuid": str(proveedor.uuid),
+                    "descripcion": proveedor.nombre_comercial or proveedor.razon_social,
+                    "monto": None,
+                    "score": float(min(score, Decimal("0.99")).quantize(Decimal("0.0001"))),
+                    "reason": razones,
+                }
+            )
         return candidatos
 
     @staticmethod
@@ -226,8 +264,15 @@ class BankTransactionMatchingService:
         qs = (
             DocumentoSoporte.objects.filter(empresa_id=transaccion.empresa_id)
             .select_related("proveedor")
-            .only("id", "uuid", "subtotal", "fecha", "numero_documento_proveedor",
-                  "proveedor__razon_social", "proveedor__numero_documento")[:200]
+            .only(
+                "id",
+                "uuid",
+                "subtotal",
+                "fecha",
+                "numero_documento_proveedor",
+                "proveedor__razon_social",
+                "proveedor__numero_documento",
+            )[:200]
         )
         candidatos = []
         for doc in qs:
@@ -242,12 +287,14 @@ class BankTransactionMatchingService:
             )
             score = min(score_monto + score_fecha + score_texto, Decimal("0.99"))
             razones = [r for r in ([razon_monto, razon_fecha] + razones_texto) if r]
-            candidatos.append({
-                "tipo": "GASTO",
-                "uuid": str(doc.uuid),
-                "descripcion": f"Doc. soporte — {nombre or '—'}",
-                "monto": str(doc.subtotal),
-                "score": float(score.quantize(Decimal("0.0001"))),
-                "reason": razones,
-            })
+            candidatos.append(
+                {
+                    "tipo": "GASTO",
+                    "uuid": str(doc.uuid),
+                    "descripcion": f"Doc. soporte — {nombre or '—'}",
+                    "monto": str(doc.subtotal),
+                    "score": float(score.quantize(Decimal("0.0001"))),
+                    "reason": razones,
+                }
+            )
         return candidatos

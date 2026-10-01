@@ -3,6 +3,7 @@ Extractor de Proyectos para Dashboard v3.9.5 — datos reales.
 Pull Model: usa qs_list de proyectos. No importa models.py directamente.
 Modelo Proyecto usa: fase_actual y estado_tarea (no campo 'estado').
 """
+
 import logging
 
 from django.utils import timezone
@@ -13,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class ProyectosExtractor:
-
     @staticmethod
     def extraer_metricas(empresa_id: int) -> WidgetProyectosDTO:
         try:
@@ -23,18 +23,16 @@ class ProyectosExtractor:
             total_proyectos = qs.count()
 
             # Activos = estado_tarea no finalizado (FASES no tiene COMPLETADO ni CANCELADO)
-            proyectos_activos = qs.exclude(estado_tarea='COMPLETADO').count()
+            proyectos_activos = qs.exclude(estado_tarea="COMPLETADO").count()
 
             # Tareas en progreso/pendientes (campo estado_tarea en Proyecto)
-            tareas_pendientes = qs.filter(
-                estado_tarea__in=['PENDIENTE', 'EN_PROCESO']
-            ).count()
+            tareas_pendientes = qs.filter(estado_tarea__in=["PENDIENTE", "EN_PROCESO"]).count()
 
             # Proyectos con fecha fin estimada vencida y aún activos
             hoy = timezone.now().date()
             tareas_vencidas = qs.filter(
                 fecha_fin_estimada__lt=hoy,
-                estado_tarea__in=['PENDIENTE', 'EN_PROCESO'],
+                estado_tarea__in=["PENDIENTE", "EN_PROCESO"],
             ).count()
 
             return WidgetProyectosDTO(
@@ -45,5 +43,7 @@ class ProyectosExtractor:
             )
 
         except Exception:
-            logger.exception("ProyectosExtractor: fallo calculando metricas (empresa_id=%s)", empresa_id)
+            logger.exception(
+                "ProyectosExtractor: fallo calculando metricas (empresa_id=%s)", empresa_id
+            )
             return WidgetProyectosDTO(0, 0, 0, 0)

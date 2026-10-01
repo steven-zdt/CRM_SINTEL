@@ -73,6 +73,7 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
         obj = Venta.objects.filter(uuid=uuid_val, empresa_id=empresa_id).first()
         if not obj:
             from rest_framework.exceptions import NotFound
+
             raise NotFound("Venta no encontrada en su organizacion.")
         self.check_object_permissions(self.request, obj)
         return obj
@@ -80,9 +81,10 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
     @action(detail=False, methods=["post"], url_path="dt")
     def dt(self, request):
         """
-        Piloto DataTables 3.x + ColumnControl (docs/ux/TABLES_FORMS_RELEASE_GATE.md).
-        Reemplaza gradualmente a VentaTableView (django-tables2) para el listado
-        de Ventas. Ver apps/shared/datatable.py para el contrato server-side.
+        Piloto DataTables 3.x + ColumnControl -- gate visual cerrado, ver
+        docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md. Sirve el listado
+        completo de Ventas (django-tables2/VentaTable retirados). Ver
+        apps/shared/datatable.py para el contrato server-side.
         """
         empresa_id = self._get_empresa_id_seguro()
         if not empresa_id:
@@ -117,6 +119,7 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
                 0: ColumnFilter("cliente__razon_social", ColumnFilterType.ICONTAINS),
                 1: ColumnFilter("fecha_emision", ColumnFilterType.DATE_RANGE),
                 2: ColumnFilter("estado", ColumnFilterType.EXACT),
+                3: ColumnFilter("numero_factura", ColumnFilterType.ICONTAINS),
                 4: ColumnFilter("total_neto", ColumnFilterType.NUMBER_RANGE),
             },
         )
@@ -152,7 +155,9 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
         empresa_id = self._get_empresa_id_seguro()
         payload = request.data if isinstance(request.data, dict) else dict(request.data)
         ok, result, status_code = self.service_actualizar_venta(
-            str(venta.uuid), empresa_id, payload,
+            str(venta.uuid),
+            empresa_id,
+            payload,
         )
         if not ok:
             return Response(result, status=status_code)
@@ -184,9 +189,13 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
             )
         venta = self.get_object()
         payload = request.data if isinstance(request.data, dict) else dict(request.data)
-        payload["cliente"] = str(venta.cliente.uuid) if not payload.get("cliente") else payload["cliente"]
+        payload["cliente"] = (
+            str(venta.cliente.uuid) if not payload.get("cliente") else payload["cliente"]
+        )
         payload["fecha_emision"] = payload.get("fecha_emision") or str(venta.fecha_emision)
-        payload.setdefault("fecha_vencimiento", str(venta.fecha_vencimiento) if venta.fecha_vencimiento else None)
+        payload.setdefault(
+            "fecha_vencimiento", str(venta.fecha_vencimiento) if venta.fecha_vencimiento else None
+        )
         payload.setdefault("observaciones", venta.observaciones or "")
 
         if not payload.get("items"):
@@ -206,7 +215,9 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
         # vez de crear una hermana nueva; si ya estaba FACTURADA_DIAN, el
         # service devuelve status_code=200 (idempotente, no re-procesa).
         ok, result, status_code = self.service_procesar_y_facturar(
-            empresa, payload, venta_existente=venta,
+            empresa,
+            payload,
+            venta_existente=venta,
         )
         if not ok:
             return Response(result, status=status_code)
@@ -233,7 +244,9 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
         empresa_id = self._get_empresa_id_seguro()
         factura_uuid = request.data.get("factura_uuid")
         ok, result, status_code = self.service_vincular_factura_existente(
-            venta, factura_uuid, empresa_id,
+            venta,
+            factura_uuid,
+            empresa_id,
         )
         if not ok:
             return Response(result, status=status_code)
@@ -255,7 +268,9 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
             return Response(out.data, status=status.HTTP_200_OK)
 
         ok, result, status_code = self.service_actualizar_gestion_pago(
-            venta, request.data, empresa_id,
+            venta,
+            request.data,
+            empresa_id,
         )
         if not ok:
             return Response(result, status=status_code)
@@ -328,7 +343,9 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
             {
                 "venta": venta,
                 "items_json": items_json,
-                "fecha_default": str(venta.fecha_emision) if venta else datetime.date.today().isoformat(),
+                "fecha_default": str(venta.fecha_emision)
+                if venta
+                else datetime.date.today().isoformat(),
             },
             template_name="tenant/ventas/offcanvas_crear_venta.html",
         )
@@ -380,7 +397,9 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
         modifica; queda de nuevo disponible como pendiente de sincronizar."""
         venta = self.get_object()
         empresa_id = self._get_empresa_id_seguro()
-        ok, result, status_code = self.service_eliminar_venta_sincronizada(str(venta.uuid), empresa_id)
+        ok, result, status_code = self.service_eliminar_venta_sincronizada(
+            str(venta.uuid), empresa_id
+        )
         if not ok:
             return Response(result, status=status_code)
         return Response(result, status=status.HTTP_200_OK)
@@ -406,7 +425,9 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
         return Response(resultado, status=status.HTTP_200_OK)
 
 
-class ResolucionFacturacionViewSet(OrganizationalContextMixin, ResolucionFacturacionServiceMixin, BaseTenantViewSet):
+class ResolucionFacturacionViewSet(
+    OrganizationalContextMixin, ResolucionFacturacionServiceMixin, BaseTenantViewSet
+):
     queryset = ResolucionFacturacion.objects.none()
     serializer_class = ResolucionFacturacionSerializer
     lookup_field = "uuid"
@@ -432,6 +453,7 @@ class ResolucionFacturacionViewSet(OrganizationalContextMixin, ResolucionFactura
         obj = ResolucionFacturacion.objects.filter(uuid=uuid_val, empresa_id=empresa_id).first()
         if not obj:
             from rest_framework.exceptions import NotFound
+
             raise NotFound("ResolucionFacturacion no encontrada en su organizacion.")
         self.check_object_permissions(self.request, obj)
         return obj
@@ -500,9 +522,18 @@ class ResolucionFacturacionViewSet(OrganizationalContextMixin, ResolucionFactura
         resoluciones = (
             ResolucionFacturacion.objects.filter(empresa_id=empresa_id)
             .only(
-                "id", "uuid", "numero_resolucion", "prefijo", "tipo",
-                "fecha_resolucion", "fecha_desde", "fecha_hasta",
-                "rango_desde", "rango_hasta", "consecutivo_actual", "vigente",
+                "id",
+                "uuid",
+                "numero_resolucion",
+                "prefijo",
+                "tipo",
+                "fecha_resolucion",
+                "fecha_desde",
+                "fecha_hasta",
+                "rango_desde",
+                "rango_hasta",
+                "consecutivo_actual",
+                "vigente",
             )
             .order_by("-vigente", "-fecha_resolucion")
         )

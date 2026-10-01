@@ -75,7 +75,7 @@
         if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
             return w.DOMUtils.formatCurrency(n, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         }
-        return n.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+        return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
     }
 
     function _esc(s) {

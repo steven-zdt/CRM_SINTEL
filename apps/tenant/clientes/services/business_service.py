@@ -1,12 +1,15 @@
 import logging
 import re
+
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
+
 from ..models import Cliente, ContactoCliente
-from .crud_service import ClienteCRUDService, ContactoCRUDService, CarteraCRUDService
-from .selectors import ClienteSelector, CarteraSelector
+from .crud_service import CarteraCRUDService, ClienteCRUDService, ContactoCRUDService
+from .selectors import CarteraSelector, ClienteSelector
 
 logger = logging.getLogger(__name__)
+
 
 class ClienteBusinessService:
     """Orchestration and Business logic for Clientes."""
@@ -41,9 +44,17 @@ class ClienteBusinessService:
         razon_social = str(receptor_razon_social or "").strip()
 
         if not numero_documento:
-            raise ValidationError({"receptor_nit": "La factura de venta requiere NIT de receptor para vincular cliente."})
+            raise ValidationError(
+                {
+                    "receptor_nit": "La factura de venta requiere NIT de receptor para vincular cliente."
+                }
+            )
         if not razon_social:
-            raise ValidationError({"receptor_razon_social": "La factura de venta requiere razon social de receptor para vincular cliente."})
+            raise ValidationError(
+                {
+                    "receptor_razon_social": "La factura de venta requiere razon social de receptor para vincular cliente."
+                }
+            )
 
         existing = ClienteSelector.get_cliente_by_documento(
             empresa_id=empresa_id,
@@ -91,8 +102,12 @@ class ClienteBusinessService:
 
     @transaction.atomic
     def registrar_cliente_completo(
-        self, empresa_id: int, data: dict, contactos_raw: list = None,
-        cliente_instance: Cliente = None, validar_representante: bool = False,
+        self,
+        empresa_id: int,
+        data: dict,
+        contactos_raw: list = None,
+        cliente_instance: Cliente = None,
+        validar_representante: bool = False,
     ) -> tuple:
         """
         Orchestrates creation or update of a client and their contacts.
@@ -110,7 +125,7 @@ class ClienteBusinessService:
         info de representante no viene en el XML de la factura).
         """
         data = self._sanitize_retenciones(data)
-        
+
         created = False
         if cliente_instance:
             cliente = self.crud.update_cliente(cliente_instance, data)
@@ -118,12 +133,10 @@ class ClienteBusinessService:
             # 1. Normalize and check uniqueness
             tipo_doc = data.get("tipo_documento")
             num_doc = data.get("numero_documento")
-            
+
             # Upsert logic (Idempotency)
             existing = Cliente.objects.filter(
-                empresa_id=empresa_id,
-                tipo_documento=tipo_doc,
-                numero_documento=num_doc
+                empresa_id=empresa_id, tipo_documento=tipo_doc, numero_documento=num_doc
             ).first()
 
             if existing:
@@ -156,19 +169,27 @@ class ClienteBusinessService:
         valido sin representante; JURIDICA exige al menos un
         ContactoCliente activo marcado es_representante_legal=True.
         """
-        if cliente.tipo_persona != 'JURIDICA':
+        if cliente.tipo_persona != "JURIDICA":
             return
-        tiene_representante = ContactoCliente.objects.filter(
-            cliente_id=cliente.id, empresa_id=empresa_id,
-            es_representante_legal=True, activo=True,
-        ).only('id').exists()
+        tiene_representante = (
+            ContactoCliente.objects.filter(
+                cliente_id=cliente.id,
+                empresa_id=empresa_id,
+                es_representante_legal=True,
+                activo=True,
+            )
+            .only("id")
+            .exists()
+        )
         if not tiene_representante:
-            raise ValidationError({
-                'representante_legal': (
-                    'Un cliente de tipo Persona Juridica debe tener al menos un '
-                    'contacto marcado como Representante Legal.'
-                )
-            })
+            raise ValidationError(
+                {
+                    "representante_legal": (
+                        "Un cliente de tipo Persona Juridica debe tener al menos un "
+                        "contacto marcado como Representante Legal."
+                    )
+                }
+            )
 
     def sincronizar_contactos(self, empresa_id: int, cliente_id: int, contactos_raw: list):
         """
@@ -181,21 +202,21 @@ class ClienteBusinessService:
         existing_ids = set(
             ContactoCliente.objects.filter(
                 cliente_id=cliente_id, empresa_id=empresa_id
-            ).values_list('id', flat=True)
+            ).values_list("id", flat=True)
         )
         submitted_ids = set()
 
         for c_data in contactos_raw:
             if not isinstance(c_data, dict):
                 continue
-            
+
             # Basic validation
-            nombre = str(c_data.get('nombre_completo', '')).strip()
-            email = str(c_data.get('email', '')).strip()
+            nombre = str(c_data.get("nombre_completo", "")).strip()
+            email = str(c_data.get("email", "")).strip()
             if not nombre or not email:
                 continue
 
-            c_id = c_data.get('id')
+            c_id = c_data.get("id")
             if c_id and int(c_id) in existing_ids:
                 # Update
                 contacto = ContactoCliente.objects.get(id=c_id, empresa_id=empresa_id)
@@ -205,7 +226,7 @@ class ClienteBusinessService:
             else:
                 # Create
                 payload = self._clean_payload(c_data)
-                payload['cliente_id'] = cliente_id
+                payload["cliente_id"] = cliente_id
                 new_c = self.contacto_crud.create_contacto(empresa_id, payload)
                 submitted_ids.add(new_c.id)
 
@@ -219,7 +240,7 @@ class ClienteBusinessService:
         Zero Trust: Limpia flags y porcentajes de retención si el cliente no es retenedor.
         """
         es_retenedor = payload.get("es_retenedor", False)
-        
+
         if not es_retenedor:
             payload["aplica_retefuente"] = False
             payload["retefuente_porcentaje"] = 0
@@ -235,16 +256,16 @@ class ClienteBusinessService:
                 payload["reteica_porcentaje"] = 0
             if not payload.get("aplica_reteiva", False):
                 payload["reteiva_porcentaje"] = 0
-                
+
         return payload
 
     def _clean_payload(self, data: dict) -> dict:
         """Removes metadata fields before DB save."""
         p = dict(data)
-        p.pop('id', None)
-        p.pop('empresa', None)
-        p.pop('empresa_id', None)
-        p.pop('cliente', None)
+        p.pop("id", None)
+        p.pop("empresa", None)
+        p.pop("empresa_id", None)
+        p.pop("cliente", None)
         return p
 
 
@@ -262,14 +283,16 @@ class CarteraBusinessService:
         Idempotent registration of a Cartera record from invoice synchronization.
         """
         from ..models import Cartera
-        
+
         cliente_id = data.get("cliente_id")
         cliente = Cliente.objects.filter(empresa_id=empresa_id, id=cliente_id).first()
         if not cliente:
-            raise ValidationError({"cliente": ["El cliente especificado no pertenece a esta empresa."]})
+            raise ValidationError(
+                {"cliente": ["El cliente especificado no pertenece a esta empresa."]}
+            )
 
         numero_factura = data.get("numero_factura")
-        
+
         cartera, created = Cartera.objects.get_or_create(
             empresa_id=empresa_id,
             cliente=cliente,
@@ -281,7 +304,7 @@ class CarteraBusinessService:
                 "valor_total": data.get("valor_total"),
                 "valor_pagado": data.get("valor_pagado", 0),
                 "observaciones": data.get("observaciones", ""),
-            }
+            },
         )
 
         if not created:
@@ -303,23 +326,36 @@ class CarteraBusinessService:
         """
         Atomic payment/abono registration on a Cartera record with locking.
         """
-        from ..models import Cartera
         from decimal import Decimal
+
+        from ..models import Cartera
 
         if monto is None or Decimal(str(monto)) <= Decimal("0"):
             raise ValidationError({"monto": ["El monto del abono debe ser mayor a cero."]})
 
         monto = Decimal(str(monto))
 
-        cartera = Cartera.objects.select_for_update().filter(empresa_id=empresa_id, uuid=cartera_uuid).first()
+        cartera = (
+            Cartera.objects.select_for_update()
+            .filter(empresa_id=empresa_id, uuid=cartera_uuid)
+            .first()
+        )
         if not cartera:
-            raise ValidationError({"detail": "La obligacion de cartera no existe o no pertenece a esta empresa."})
+            raise ValidationError(
+                {"detail": "La obligacion de cartera no existe o no pertenece a esta empresa."}
+            )
 
         if cartera.estado_pago == "PAGADA":
             raise ValidationError({"detail": "La obligacion ya esta pagada en su totalidad."})
 
         if monto > cartera.saldo:
-            raise ValidationError({"monto": [f"El abono ({monto}) no puede ser mayor al saldo pendiente ({cartera.saldo})."]})
+            raise ValidationError(
+                {
+                    "monto": [
+                        f"El abono ({monto}) no puede ser mayor al saldo pendiente ({cartera.saldo})."
+                    ]
+                }
+            )
 
         cartera.valor_pagado += monto
         cartera.save()
@@ -327,7 +363,9 @@ class CarteraBusinessService:
         return cartera, monto
 
     @staticmethod
-    def agregar_nota(empresa_id: int, cartera_uuid, texto: str, usuario=None, tipo: str = "SEGUIMIENTO"):
+    def agregar_nota(
+        empresa_id: int, cartera_uuid, texto: str, usuario=None, tipo: str = "SEGUIMIENTO"
+    ):
         """
         Registra una anotacion de seguimiento sobre una obligacion de
         Cartera (mision "Clientes + Cartera" seccion 29-30). Append-only --
@@ -340,17 +378,27 @@ class CarteraBusinessService:
         if not texto:
             raise ValidationError({"texto": ["El texto de la nota es requerido."]})
 
-        cartera = Cartera.objects.filter(empresa_id=empresa_id, uuid=cartera_uuid).only("id").first()
+        cartera = (
+            Cartera.objects.filter(empresa_id=empresa_id, uuid=cartera_uuid).only("id").first()
+        )
         if not cartera:
-            raise ValidationError({"detail": "La obligacion de cartera no existe o no pertenece a esta empresa."})
+            raise ValidationError(
+                {"detail": "La obligacion de cartera no existe o no pertenece a esta empresa."}
+            )
 
         return CarteraNota.objects.create(
-            empresa_id=empresa_id, cartera=cartera, usuario=usuario, tipo=tipo, texto=texto,
+            empresa_id=empresa_id,
+            cartera=cartera,
+            usuario=usuario,
+            tipo=tipo,
+            texto=texto,
         )
 
     @staticmethod
     @transaction.atomic
-    def registrar_abono_desde_conciliacion_bancaria(empresa_id: int, factura_uuid, monto, fecha=None):
+    def registrar_abono_desde_conciliacion_bancaria(
+        empresa_id: int, factura_uuid, monto, fecha=None
+    ):
         """
         DEUDA-C03 "Clientes + Cartera" (decision del usuario, 2026-09-11):
         Bancos es la unica fuente que dispara este metodo, al conciliar una
@@ -378,50 +426,73 @@ class CarteraBusinessService:
         hacia el caller.
         """
         from decimal import Decimal
+
         from django.utils import timezone as tz
-        from ..models import Cartera
+
         from apps.tenant.facturas.models import Factura
 
+        from ..models import Cartera
+
         try:
-            monto = Decimal(str(monto or '0'))
+            monto = Decimal(str(monto or "0"))
         except Exception:
             return None
-        if monto <= Decimal('0'):
+        if monto <= Decimal("0"):
             return None
 
-        factura = Factura.objects.filter(
-            uuid=factura_uuid, empresa_id=empresa_id, naturaleza='VENTA',
-        ).only(
-            'id', 'uuid', 'numero', 'total', 'payment_due_date', 'fecha_emision', 'cliente_uuid',
-        ).first()
+        factura = (
+            Factura.objects.filter(
+                uuid=factura_uuid,
+                empresa_id=empresa_id,
+                naturaleza="VENTA",
+            )
+            .only(
+                "id",
+                "uuid",
+                "numero",
+                "total",
+                "payment_due_date",
+                "fecha_emision",
+                "cliente_uuid",
+            )
+            .first()
+        )
         if not factura or not factura.cliente_uuid:
             return None
 
         cartera = Cartera.objects.filter(empresa_id=empresa_id, factura_uuid=factura.uuid).first()
         if not cartera:
-            cliente = Cliente.objects.filter(uuid=factura.cliente_uuid, empresa_id=empresa_id).only('id').first()
+            cliente = (
+                Cliente.objects.filter(uuid=factura.cliente_uuid, empresa_id=empresa_id)
+                .only("id")
+                .first()
+            )
             if not cliente:
                 return None
             hoy = fecha or tz.now().date()
             fecha_emision = factura.fecha_emision
-            if hasattr(fecha_emision, 'date'):
+            if hasattr(fecha_emision, "date"):
                 fecha_emision = fecha_emision.date()
             cartera = Cartera.objects.create(
-                empresa_id=empresa_id, cliente=cliente, numero_factura=factura.numero[:50],
+                empresa_id=empresa_id,
+                cliente=cliente,
+                numero_factura=factura.numero[:50],
                 factura_uuid=factura.uuid,
                 fecha_emision=fecha_emision or hoy,
                 fecha_vencimiento=factura.payment_due_date or hoy,
-                valor_total=factura.total or Decimal('0'),
+                valor_total=factura.total or Decimal("0"),
             )
 
-        if cartera.estado_pago == 'PAGADA':
+        if cartera.estado_pago == "PAGADA":
             return cartera
 
         monto_aplicable = min(monto, cartera.saldo)
-        if monto_aplicable <= Decimal('0'):
+        if monto_aplicable <= Decimal("0"):
             return cartera
 
         cartera, _ = CarteraBusinessService.registrar_abono(
-            empresa_id=empresa_id, cartera_uuid=cartera.uuid, monto=monto_aplicable,
+            empresa_id=empresa_id,
+            cartera_uuid=cartera.uuid,
+            monto=monto_aplicable,
         )
         return cartera

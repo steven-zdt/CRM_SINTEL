@@ -9,6 +9,7 @@ instalada en requirements.txt (reportlab/weasyprint ausentes) y agregar una
 es una decision de dependencia que corresponde confirmar, no asumir --
 ver docs/reporting/REPORTING_BASELINE.md §5.
 """
+
 from __future__ import annotations
 
 import csv

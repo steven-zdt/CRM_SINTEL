@@ -6,6 +6,7 @@ segundo modelo Proyecto ni un service paralelo. Antes de esta mision no
 existia ningun bridge Cotizacion->Proyecto en el codigo (confirmado con
 evidencia negativa).
 """
+
 import datetime
 from decimal import Decimal
 
@@ -23,12 +24,12 @@ def _crear_cotizacion_aprobada(empresa, cliente, items):
 
     ConfiguracionCotizacion.objects.get_or_create(
         empresa=empresa,
-        defaults={'dias_validez': 15, 'nombre_configuracion': 'Perfil General', 'es_activo': True},
+        defaults={"dias_validez": 15, "nombre_configuracion": "Perfil General", "es_activo": True},
     )
     payload = {
-        'cliente': cliente.id,
-        'fecha_emision': datetime.date(2026, 3, 30),
-        'items': items,
+        "cliente": cliente.id,
+        "fecha_emision": datetime.date(2026, 3, 30),
+        "items": items,
     }
     cotizacion = CotizacionService.crear_preforma(empresa, payload)
     CotizacionService.cambiar_estado(cotizacion, Cotizacion.Estado.ENVIADA)
@@ -36,19 +37,29 @@ def _crear_cotizacion_aprobada(empresa, cliente, items):
 
 
 _ITEM_SERVICIO = {
-    'tipo_item': 'SERVICIO', 'descripcion': 'Instalacion y configuracion',
-    'cantidad': 1, 'costo_unitario': 1000, 'porcentaje_utilidad': 30,
-    'unidad': 'UND', 'orden': 1,
+    "tipo_item": "SERVICIO",
+    "descripcion": "Instalacion y configuracion",
+    "cantidad": 1,
+    "costo_unitario": 1000,
+    "porcentaje_utilidad": 30,
+    "unidad": "UND",
+    "orden": 1,
 }
 _ITEM_PRODUCTO = {
-    'tipo_item': 'PRODUCTO', 'descripcion': 'Router',
-    'cantidad': 1, 'costo_unitario': 200, 'porcentaje_utilidad': 20,
-    'unidad': 'UND', 'orden': 2,
+    "tipo_item": "PRODUCTO",
+    "descripcion": "Router",
+    "cantidad": 1,
+    "costo_unitario": 200,
+    "porcentaje_utilidad": 20,
+    "unidad": "UND",
+    "orden": 2,
 }
 
 
 @pytest.mark.django_db
-def test_convertir_a_proyecto_crea_proyecto_con_valor_de_servicios(tenant, factory_empresa, factory_cliente):
+def test_convertir_a_proyecto_crea_proyecto_con_valor_de_servicios(
+    tenant, factory_empresa, factory_cliente
+):
     empresa = factory_empresa()
     cliente = factory_cliente(empresa=empresa)
     with schema_context(tenant.schema_name):
@@ -98,12 +109,20 @@ def test_convertir_a_proyecto_requiere_aprobada(tenant, factory_empresa, factory
 
         ConfiguracionCotizacion.objects.get_or_create(
             empresa=empresa,
-            defaults={'dias_validez': 15, 'nombre_configuracion': 'Perfil General', 'es_activo': True},
+            defaults={
+                "dias_validez": 15,
+                "nombre_configuracion": "Perfil General",
+                "es_activo": True,
+            },
         )
-        cotizacion = CotizacionService.crear_preforma(empresa, {
-            'cliente': cliente.id, 'fecha_emision': datetime.date(2026, 3, 30),
-            'items': [_ITEM_SERVICIO],
-        })
+        cotizacion = CotizacionService.crear_preforma(
+            empresa,
+            {
+                "cliente": cliente.id,
+                "fecha_emision": datetime.date(2026, 3, 30),
+                "items": [_ITEM_SERVICIO],
+            },
+        )
         assert cotizacion.estado == Cotizacion.Estado.BORRADOR
         with pytest.raises(ValidationError):
             CotizacionService.convertir_a_proyecto(cotizacion)

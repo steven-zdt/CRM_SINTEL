@@ -1,20 +1,21 @@
 from django.db import migrations
 
+
 def migrate_mail_configs(apps, schema_editor):
-    MailIngestionConfig = apps.get_model('facturas', 'MailIngestionConfig')
-    MailInboxConfig = apps.get_model('empresa', 'MailInboxConfig')
-    
+    MailIngestionConfig = apps.get_model("facturas", "MailIngestionConfig")
+    MailInboxConfig = apps.get_model("empresa", "MailInboxConfig")
+
     for old_config in MailIngestionConfig.objects.all():
         # Avoid duplicates based on username and host
         if not MailInboxConfig.objects.filter(
-            empresa=old_config.empresa,
-            imap_username=old_config.username,
-            imap_host=old_config.host
+            empresa=old_config.empresa, imap_username=old_config.username, imap_host=old_config.host
         ).exists():
             MailInboxConfig.objects.create(
                 empresa=old_config.empresa,
                 nombre=f"Migracion: {old_config.username}",
-                email_address=old_config.username if "@" in old_config.username else old_config.username,
+                email_address=old_config.username
+                if "@" in old_config.username
+                else old_config.username,
                 provider="custom",
                 # Legacy fields
                 host=old_config.host,
@@ -37,16 +38,18 @@ def migrate_mail_configs(apps, schema_editor):
                 imap_mark_as_seen=old_config.mark_as_seen,
                 imap_move_processed_to=old_config.move_processed_to,
                 imap_max_attachment_mb=old_config.max_attachment_mb,
-                is_active=old_config.is_active
+                is_active=old_config.is_active,
             )
+
 
 def rollback_mail_configs(apps, schema_editor):
     pass
 
+
 class Migration(migrations.Migration):
     dependencies = [
-        ('facturas', '0013_alter_factura_uuid'),
-        ('empresa', '0007_empresa_owner_email'),
+        ("facturas", "0013_alter_factura_uuid"),
+        ("empresa", "0007_empresa_owner_email"),
     ]
 
     operations = [

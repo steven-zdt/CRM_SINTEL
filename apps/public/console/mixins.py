@@ -36,8 +36,14 @@ class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
         """
         # Debug entry: show request.user state at dispatch start
         try:
-            print(f"DEBUG StaffRequiredMixin enter: user={request.user} authenticated={getattr(request.user, 'is_authenticated', None)}")
-            logger.debug("StaffRequiredMixin enter: user=%s authenticated=%s", request.user, getattr(request.user, 'is_authenticated', None))
+            print(
+                f"DEBUG StaffRequiredMixin enter: user={request.user} authenticated={getattr(request.user, 'is_authenticated', None)}"
+            )
+            logger.debug(
+                "StaffRequiredMixin enter: user=%s authenticated=%s",
+                request.user,
+                getattr(request.user, "is_authenticated", None),
+            )
         except Exception:
             pass
 
@@ -84,8 +90,14 @@ class StaffRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
 
                     User = get_user_model()
                     user_obj = User.objects.filter(pk=auth_user_id).first()
-                    logger.debug("StaffRequiredMixin: materialize user from session: auth_user_id=%s user_obj=%s", auth_user_id, bool(user_obj))
-                    print(f"DEBUG StaffRequiredMixin materialize: auth_user_id={auth_user_id} user_obj={bool(user_obj)}")
+                    logger.debug(
+                        "StaffRequiredMixin: materialize user from session: auth_user_id=%s user_obj=%s",
+                        auth_user_id,
+                        bool(user_obj),
+                    )
+                    print(
+                        f"DEBUG StaffRequiredMixin materialize: auth_user_id={auth_user_id} user_obj={bool(user_obj)}"
+                    )
                     if user_obj:
                         request.user = user_obj
                 except Exception:

@@ -14,6 +14,7 @@ middleware de Django en si (TenantMainMiddleware, etc.), que no es lo que
 esta fase necesita probar (eso ya se probo en Fase 3 con un round-trip HTTP
 completo).
 """
+
 from django.test import TestCase
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory
@@ -55,6 +56,7 @@ class _NoMinimumDeclaredView(APIView):
     """No hereda OrganizationalContextMixin ni declara
     minimum_organizational_level - OrganizationalPermission no debe
     restringir nada aqui (opt-in real)."""
+
     permission_classes = [IsTenantMember, OrganizationalPermission]
 
     def get(self, request, *args, **kwargs):
@@ -72,25 +74,39 @@ class ResolveOrganizationalPermissionLevelTests(TestCase):
         )
 
     def test_admin_empresa(self):
-        self.assertEqual(resolve_organizational_permission_level(rol="ADMIN", alcance="EMPRESA"), ADMIN_EMPRESA)
+        self.assertEqual(
+            resolve_organizational_permission_level(rol="ADMIN", alcance="EMPRESA"), ADMIN_EMPRESA
+        )
 
     def test_admin_sede(self):
-        self.assertEqual(resolve_organizational_permission_level(rol="ADMIN", alcance="SEDE"), ADMIN_SEDE)
+        self.assertEqual(
+            resolve_organizational_permission_level(rol="ADMIN", alcance="SEDE"), ADMIN_SEDE
+        )
 
     def test_jefe_area(self):
-        self.assertEqual(resolve_organizational_permission_level(rol="ADMIN", alcance="AREA"), JEFE_AREA)
+        self.assertEqual(
+            resolve_organizational_permission_level(rol="ADMIN", alcance="AREA"), JEFE_AREA
+        )
 
     def test_operador_regardless_of_alcance(self):
-        self.assertEqual(resolve_organizational_permission_level(rol="OPERADOR", alcance="EMPRESA"), OPERADOR)
-        self.assertEqual(resolve_organizational_permission_level(rol="OPERADOR", alcance="AREA"), OPERADOR)
+        self.assertEqual(
+            resolve_organizational_permission_level(rol="OPERADOR", alcance="EMPRESA"), OPERADOR
+        )
+        self.assertEqual(
+            resolve_organizational_permission_level(rol="OPERADOR", alcance="AREA"), OPERADOR
+        )
 
     def test_consulta(self):
-        self.assertEqual(resolve_organizational_permission_level(rol="VISOR", alcance="EMPRESA"), CONSULTA)
+        self.assertEqual(
+            resolve_organizational_permission_level(rol="VISOR", alcance="EMPRESA"), CONSULTA
+        )
 
     def test_level_meets_minimum_ordering(self):
-        self.assertTrue(level_meets_minimum(ADMIN_GLOBAL, ADMIN_SEDE))  # mas privilegiado que el minimo
-        self.assertTrue(level_meets_minimum(ADMIN_SEDE, ADMIN_SEDE))    # exactamente el minimo
-        self.assertFalse(level_meets_minimum(OPERADOR, ADMIN_SEDE))     # menos privilegiado
+        self.assertTrue(
+            level_meets_minimum(ADMIN_GLOBAL, ADMIN_SEDE)
+        )  # mas privilegiado que el minimo
+        self.assertTrue(level_meets_minimum(ADMIN_SEDE, ADMIN_SEDE))  # exactamente el minimo
+        self.assertFalse(level_meets_minimum(OPERADOR, ADMIN_SEDE))  # menos privilegiado
         self.assertFalse(level_meets_minimum("NIVEL_INVENTADO", ADMIN_SEDE))  # fail-closed
 
 
@@ -98,7 +114,9 @@ class OrganizationalPermissionIntegrationTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase4", nit="900000333", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase4",
+            nit="900000333",
+            direccion="Calle 1",
         )
         Sede.objects.create(empresa=self.empresa, nombre="Principal")
         # SintelTenantTestCase.setup_user() crea self.user como staff (el

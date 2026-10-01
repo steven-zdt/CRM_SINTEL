@@ -16,14 +16,12 @@ import logging
 import secrets
 from datetime import datetime, timedelta
 from typing import Any
-from urllib.parse import urlencode, unquote
+from urllib.parse import unquote, urlencode
 
 import redis
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import signing
-from django.core.mail import send_mail
-from django.template.loader import render_to_string
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -221,7 +219,9 @@ def validate_activation_code(code: str) -> dict[str, Any] | None:
     r = _get_redis_client()
     raw = r.get(key)
     if not raw:
-        logger.warning("validate_activation_code: codigo no encontrado o expirado code=%s", normalized)
+        logger.warning(
+            "validate_activation_code: codigo no encontrado o expirado code=%s", normalized
+        )
         return None
 
     try:
@@ -238,7 +238,11 @@ def validate_activation_code(code: str) -> dict[str, Any] | None:
 
     # Uso unico: eliminar antes de retornar
     r.delete(key)
-    logger.info("validate_activation_code: codigo valido user_id=%s tenant_id=%s", data["user_id"], data["tenant_id"])
+    logger.info(
+        "validate_activation_code: codigo valido user_id=%s tenant_id=%s",
+        data["user_id"],
+        data["tenant_id"],
+    )
     return data
 
 
@@ -247,6 +251,7 @@ def send_invitation_code_email(user, tenant, code: str) -> bool:
     Envia email de invitacion con codigo numerico de 6 digitos.
     """
     from apps.public.core.services.email_service import EmailService
+
     return EmailService.send_invitation_code_email(user, tenant, code)
 
 
@@ -256,6 +261,7 @@ def send_invitation_email(user, tenant, activation_url: str) -> bool:
     Deprecado: usar send_invitation_code_email() con codigo de 6 digitos.
     """
     from apps.public.core.services.email_service import EmailService
+
     return EmailService.send_invitation_email(user, tenant, activation_url)
 
 
@@ -281,6 +287,7 @@ def build_activation_url(domain: str, token: str) -> str:
         URL absoluta de activacion
     """
     import os
+
     from django.conf import settings
 
     # ACTIVATION_BASE_URL override (ej: https://192.168.2.15 para dev local)
@@ -292,8 +299,8 @@ def build_activation_url(domain: str, token: str) -> str:
         return url
 
     # Comportamiento por defecto: usar el subdominio del tenant
-    site_protocol = getattr(settings, 'SITE_PROTOCOL', '').strip().lower()
-    if site_protocol in ('https', 'http'):
+    site_protocol = getattr(settings, "SITE_PROTOCOL", "").strip().lower()
+    if site_protocol in ("https", "http"):
         protocol = site_protocol
     elif not settings.DEBUG and getattr(settings, "SECURE_SSL_REDIRECT", False):
         protocol = "https"
@@ -301,7 +308,7 @@ def build_activation_url(domain: str, token: str) -> str:
         protocol = "http"
 
     app_port = getattr(settings, "APP_PORT", None)
-    if protocol != 'https' and settings.DEBUG and app_port and str(app_port) not in ("80", "443"):
+    if protocol != "https" and settings.DEBUG and app_port and str(app_port) not in ("80", "443"):
         domain_with_port = f"{domain}:{app_port}"
     else:
         domain_with_port = domain

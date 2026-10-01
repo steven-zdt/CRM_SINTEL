@@ -9,23 +9,24 @@ Registrar en config/celery.py:
         **CELERY_BEAT_SCHEDULE,
     }
 """
+
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
-    'dashboard-crear-snapshots-diarios': {
-        'task': 'apps.tenant.dashboard.tasks.crear_snapshot_metricas_diarias',
-        'schedule': crontab(hour=2, minute=0),  # 2:00 AM every day
-        'options': {
-            'expires': 3600,  # Expires in 1 hour if not run
-        }
+    "dashboard-crear-snapshots-diarios": {
+        "task": "apps.tenant.dashboard.tasks.crear_snapshot_metricas_diarias",
+        "schedule": crontab(hour=2, minute=0),  # 2:00 AM every day
+        "options": {
+            "expires": 3600,  # Expires in 1 hour if not run
+        },
     },
-    'dashboard-limpiar-snapshots-antiguos': {
-        'task': 'apps.tenant.dashboard.tasks.limpiar_snapshots_antiguos',
-        'schedule': crontab(hour=3, minute=0, day_of_month=1),  # 3:00 AM on 1st of month
-        'options': {
-            'expires': 3600,
-            'kwargs': {'dias': 90}  # Keep 90 days of history
-        }
+    "dashboard-limpiar-snapshots-antiguos": {
+        "task": "apps.tenant.dashboard.tasks.limpiar_snapshots_antiguos",
+        "schedule": crontab(hour=3, minute=0, day_of_month=1),  # 3:00 AM on 1st of month
+        "options": {
+            "expires": 3600,
+            "kwargs": {"dias": 90},  # Keep 90 days of history
+        },
     },
 }
 

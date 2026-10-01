@@ -69,8 +69,8 @@
   {# Feedback #}
   <div id="feedback-libro-diario" class="alert d-none mb-2" role="alert" aria-live="polite"></div>
 
-  {# Tabla Tabulator #}
-  <div id="grid-libro-diario" style="max-width: 100%; overflow-x: auto;"></div>
+  {# Tabla -- esqueleto estatico, poblado via ajax por libro_diario_list.js #}
+  {% include 'tenant/contabilidad/partials/tabla_libro_diario.html' %}
 
   {# Nota normativa #}
   <div class="mt-2 text-muted small">

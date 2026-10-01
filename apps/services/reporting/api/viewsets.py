@@ -7,6 +7,7 @@ consultas, el mismo patron ya aceptado en esta app para
 LibroDiarioViewSet (apps/tenant/contabilidad/api/viewsets.py). Reutiliza
 autenticacion/permisos existentes en vez de inventar nuevos.
 """
+
 import logging
 
 from django.http import HttpResponse
@@ -46,7 +47,7 @@ def _parse_export_query_params(query_params) -> dict:
     prefix = "filters["
     for key in query_params:
         if key.startswith(prefix) and key.endswith("]"):
-            filters[key[len(prefix):-1]] = query_params[key]
+            filters[key[len(prefix) : -1]] = query_params[key]
 
     data = {"filters": filters}
     if query_params.get("dataset_id"):
@@ -73,20 +74,31 @@ def _dataset_to_dict(dataset) -> dict:
         "name": dataset.name,
         "description": dataset.description,
         "dimensions": [
-            {"name": d.name, "label": d.label, "type": d.field_type.value, "description": d.description}
+            {
+                "name": d.name,
+                "label": d.label,
+                "type": d.field_type.value,
+                "description": d.description,
+            }
             for d in dataset.dimensions
         ],
         "measures": [
             {
-                "name": m.name, "label": m.label, "type": m.field_type.value,
-                "aggregation": m.aggregation.value, "description": m.description,
+                "name": m.name,
+                "label": m.label,
+                "type": m.field_type.value,
+                "aggregation": m.aggregation.value,
+                "description": m.description,
             }
             for m in dataset.measures
         ],
         "filters": [
             {
-                "name": f.name, "label": f.label, "type": f.field_type.value,
-                "description": f.description, "required": f.required,
+                "name": f.name,
+                "label": f.label,
+                "type": f.field_type.value,
+                "description": f.description,
+                "required": f.required,
             }
             for f in dataset.filters
         ],
@@ -107,6 +119,7 @@ class ReportingViewSet(viewsets.ViewSet):
     (apps/services/reporting/scope.py -> OrganizationalScope.resolve()),
     no en la capa HTTP.
     """
+
     authentication_classes = [RelaxedJWTAuthentication, SessionAuthentication]
     permission_classes = [IsTenantMember]
     # WARNING: BUGFIX: el regex por defecto de DRF para `pk` ([^/.]+) excluye
@@ -122,7 +135,9 @@ class ReportingViewSet(viewsets.ViewSet):
     def retrieve(self, request, pk=None, *args, **kwargs):
         dataset = registry.get_dataset(pk)
         if dataset is None:
-            return Response({"detail": f"Dataset desconocido: {pk}"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": f"Dataset desconocido: {pk}"}, status=status.HTTP_404_NOT_FOUND
+            )
         return Response(_dataset_to_dict(dataset))
 
     @action(detail=False, methods=["post"], url_path="query")
@@ -152,7 +167,11 @@ class ReportingViewSet(viewsets.ViewSet):
     def export_report(self, request):
         # GET: descarga directa via <a href> (sin JS, sin CSRF -- solo
         # lectura). POST: cliente JS que ya tenga el ReportRequest armado.
-        payload = _parse_export_query_params(request.query_params) if request.method == "GET" else request.data
+        payload = (
+            _parse_export_query_params(request.query_params)
+            if request.method == "GET"
+            else request.data
+        )
         serializer = ReportExportRequestSerializer(data=payload)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -182,7 +201,9 @@ class ReportingViewSet(viewsets.ViewSet):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        response = HttpResponse(payload, content_type=_CONTENT_TYPES.get(fmt, "application/octet-stream"))
+        response = HttpResponse(
+            payload, content_type=_CONTENT_TYPES.get(fmt, "application/octet-stream")
+        )
         filename = f"{result.dataset_id}.{fmt}"
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response

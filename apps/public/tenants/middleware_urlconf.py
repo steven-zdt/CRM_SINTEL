@@ -13,6 +13,7 @@ REGLAS ESTRICTAS:
 4. Validación estricta de dominios para prevenir acceso no autorizado.
 """
 
+import contextlib
 import logging
 
 from django.conf import settings
@@ -119,7 +120,7 @@ class TenantSecurityAndURLConfMiddleware:
                 f"🚨 ERROR AL NORMALIZAR HOST: {str(e)} | "
                 f"Host raw: {request.get_host()} | Path: {request.path}"
             )
-            raise ValueError(f"Error al procesar host: {str(e)}")
+            raise ValueError(f"Error al procesar host: {str(e)}") from e
 
     def _get_client_ip(self, request):
         """Obtiene la IP del cliente para logging de seguridad."""
@@ -253,16 +254,14 @@ class TenantSecurityAndURLConfMiddleware:
             return HttpResponseForbidden("Invalid Host Header")
 
         # Debug tracing for test diagnosis
-        try:
+        with contextlib.suppress(Exception):
             logger.debug(
                 "TenantSecurityAndURLConfMiddleware: host=%s tenant=%s path=%s method=%s",
                 host,
-                getattr(tenant, 'schema_name', None),
+                getattr(tenant, "schema_name", None),
                 request.path,
                 request.method,
             )
-        except Exception:
-            pass
 
         # --- B. Lógica de Seguridad por Tipo de Esquema ---
 
@@ -283,7 +282,12 @@ class TenantSecurityAndURLConfMiddleware:
                 )
                 # Http404 se lanza después de que Django intente resolver las URLs
                 # Si lanzamos Http404 aquí, Django nunca intentará resolver las URLs
-                logger.debug("TenantSecurityAndURLConfMiddleware: blocked public access host=%s tenant=%s path=%s", host, tenant.schema_name, request.path)
+                logger.debug(
+                    "TenantSecurityAndURLConfMiddleware: blocked public access host=%s tenant=%s path=%s",
+                    host,
+                    tenant.schema_name,
+                    request.path,
+                )
                 return HttpResponseForbidden("Acceso no autorizado al esquema público.")
 
             # Acceso permitido: Asignar URLs públicas
@@ -306,7 +310,11 @@ class TenantSecurityAndURLConfMiddleware:
             logger.info(
                 f"OK: URLConf establecido: ROOT_URLCONF='{self.root_urlconf}' para tenant público '{tenant.schema_name}' | Path='{request.path}'"
             )
-            logger.debug("TenantSecurityAndURLConfMiddleware: set ROOT_URLCONF for public tenant=%s path=%s", tenant.schema_name, request.path)
+            logger.debug(
+                "TenantSecurityAndURLConfMiddleware: set ROOT_URLCONF for public tenant=%s path=%s",
+                tenant.schema_name,
+                request.path,
+            )
 
         # 2. ESQUEMA PRIVADO (Clientes / Tenants)
         else:

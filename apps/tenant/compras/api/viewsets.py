@@ -10,6 +10,7 @@ from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
+from apps.shared.datatable import ColumnFilter, ColumnFilterType, DataTableServer, DataTableSpec
 from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.api.mixins import SintelDSVMixin
 from apps.tenant.api.permissions import (
@@ -40,7 +41,9 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class OrdenCompraViewSet(
+    OrganizationalContextMixin, OrdenCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet
+):
     """
     ViewSet para la gestion de Ordenes de Compra.
 
@@ -56,10 +59,11 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
     .only()/select_related propios del selector - migrar seria un cambio de
     comportamiento real, no solo de mecanismo.
     """
+
     queryset = OrdenCompra.objects.none()
     serializer_class = OrdenCompraDetailSerializer
     service_class = OrdenCompraBusinessService
-    http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
 
     pagination_class = StandardResultsSetPagination
     parser_classes = [JSONParser, FormParser, MultiPartParser]
@@ -80,13 +84,50 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
 
     def get_queryset(self):
         """Usa el selector para obtener QuerySet optimizado."""
-        if not hasattr(self, 'action') or self.action is None:
+        if not hasattr(self, "action") or self.action is None:
             return OrdenCompra.objects.none()
 
         if self.action == "list":
             return self.get_qs_list()
 
         return self.get_qs_detail()
+
+    @action(detail=False, methods=["post"], url_path="dt")
+    def dt(self, request):
+        """
+        DataTables 3.x server-side (mismo patron ya validado en Ventas/
+        Bancos/Facturas/Clientes/Proveedores -- ver
+        docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Reemplaza
+        OrdenCompraTable/OrdenCompraTableView (django-tables2, retirados).
+        La gestion de plantillas tambien migro, ver
+        PlantillaOrdenCompraViewSet.dt() mas abajo. base_qs reutiliza
+        get_qs_list() (mismo alcance sede/area via OrganizationalScope que
+        ya usa "list").
+        """
+        base_qs = self.get_qs_list()
+
+        spec = DataTableSpec(
+            fields_map={
+                0: "consecutivo",
+                1: "fecha",
+                2: "fecha_entrega",
+                3: "proveedor__razon_social",
+                5: "sede__nombre",
+                6: "total",
+                7: "estado",
+            },
+            search_fields=["consecutivo", "proveedor__razon_social", "observaciones"],
+            base_qs=base_qs,
+            serializer=OrdenCompraListSerializer,
+            column_filters={
+                0: ColumnFilter("consecutivo", ColumnFilterType.ICONTAINS),
+                1: ColumnFilter("fecha", ColumnFilterType.DATE_RANGE),
+                3: ColumnFilter("proveedor__razon_social", ColumnFilterType.ICONTAINS),
+                6: ColumnFilter("total", ColumnFilterType.NUMBER_RANGE),
+                7: ColumnFilter("estado", ColumnFilterType.EXACT),
+            },
+        )
+        return DataTableServer(spec).handle(request)
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -98,9 +139,9 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
     def get_serializer_context(self):
         context = super().get_serializer_context()
         try:
-            context['empresa_id'] = self.get_empresa_id()
+            context["empresa_id"] = self.get_empresa_id()
         except Exception:
-            context['empresa_id'] = None
+            context["empresa_id"] = None
         return context
 
     def create(self, request, *args, **kwargs):
@@ -109,21 +150,28 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
             empresa = self._get_empresa()
             if not empresa:
                 return Response(
-                    {"error": "empresa_no_configurada", "message": "No se pudo determinar la empresa activa."},
-                    status=status.HTTP_403_FORBIDDEN
+                    {
+                        "error": "empresa_no_configurada",
+                        "message": "No se pudo determinar la empresa activa.",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
             # WARNING: [SEC-M6] Solo nombres de campo, no valores (datos de proveedor/monto).
-            _campos = list(request.data.keys()) if hasattr(request.data, 'keys') else type(request.data).__name__
+            _campos = (
+                list(request.data.keys())
+                if hasattr(request.data, "keys")
+                else type(request.data).__name__
+            )
             logger.info(f"[OrdenCompraViewSet:create] Campos recibidos: {_campos}")
 
             serializer = OrdenCompraCreateUpdateSerializer(
-                data=request.data, context={'empresa_id': empresa.id}
+                data=request.data, context={"empresa_id": empresa.id}
             )
             serializer.is_valid(raise_exception=True)
 
             validated_data = serializer.validated_data
-            items_data = validated_data.pop('items')
+            items_data = validated_data.pop("items")
 
             success, result, status_code = self.service_crear_orden_compra(
                 validated_data, items_data, empresa
@@ -145,7 +193,7 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
             logger.error(f"Error en OrdenCompraViewSet.create: {e}", exc_info=True)
             return Response(
                 {"error": "error_interno", "message": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
     def update(self, request, *args, **kwargs):
@@ -155,12 +203,12 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
             empresa_id = self.get_empresa_id()
 
             serializer = OrdenCompraCreateUpdateSerializer(
-                data=request.data, context={'empresa_id': empresa_id}, partial=True
+                data=request.data, context={"empresa_id": empresa_id}, partial=True
             )
             serializer.is_valid(raise_exception=True)
 
             validated_data = serializer.validated_data
-            items_data = validated_data.pop('items', None)
+            items_data = validated_data.pop("items", None)
 
             success, result, status_code = self.service_actualizar_orden_compra(
                 instance.uuid, validated_data, items_data
@@ -189,11 +237,11 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
     def cambiar_estado(self, request, uuid=None):
         """Cambia el estado de una Orden de Compra."""
         try:
-            nuevo_estado = request.data.get('estado')
+            nuevo_estado = request.data.get("estado")
             if not nuevo_estado:
                 return Response(
                     {"detail": "Debe especificar el nuevo estado."},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             success, result, status_code = self.service_cambiar_estado(uuid, nuevo_estado)
@@ -221,6 +269,54 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
         except Exception as e:
             return self.handle_service_error(e)
 
+    @action(detail=True, methods=["post"], url_path="desvincular-factura")
+    def desvincular_factura(self, request, uuid=None):
+        """PLAN_VINCULAR_FACTURA_COMPRA_COMPRAS: elimina el vinculo con la
+        Factura de compra asociada (nunca la Factura fiscal en si). Bloquea
+        si ya hay pagos aplicados sobre la Cuenta por Pagar de esa Factura."""
+        try:
+            success, result, status_code = self.service_desvincular_factura(uuid)
+            if not success:
+                return Response(result, status=status_code)
+
+            out_serializer = OrdenCompraDetailSerializer(result)
+            return Response(out_serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    @action(detail=True, methods=["post"], url_path="vincular-requisicion")
+    def vincular_requisicion(self, request, uuid=None):
+        """Vincula manualmente una Requisicion existente (con saldo
+        disponible) a esta Orden de Compra ya creada."""
+        try:
+            requisicion_uuid = request.data.get("requisicion_uuid")
+            success, result, status_code = self.service_vincular_requisicion(uuid, requisicion_uuid)
+            if not success:
+                return Response(result, status=status_code)
+
+            out_serializer = OrdenCompraDetailSerializer(result)
+            return Response(out_serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return self.handle_service_error(e)
+
+    @action(detail=True, methods=["post"], url_path="desvincular-requisicion")
+    def desvincular_requisicion(self, request, uuid=None):
+        """Elimina el vinculo con una Requisicion (nunca la Requisicion en
+        si). Bloqueado si la Orden ya no esta en Borrador/Pendiente, o si
+        seria la ultima requisicion vinculada."""
+        try:
+            requisicion_uuid = request.data.get("requisicion_uuid")
+            success, result, status_code = self.service_desvincular_requisicion(
+                uuid, requisicion_uuid
+            )
+            if not success:
+                return Response(result, status=status_code)
+
+            out_serializer = OrdenCompraDetailSerializer(result)
+            return Response(out_serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return self.handle_service_error(e)
+
     @action(detail=False, methods=["get"], url_path="siguiente-consecutivo")
     def siguiente_consecutivo(self, request):
         """Obtiene el siguiente consecutivo de la empresa."""
@@ -232,30 +328,47 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
 
     # --- Acciones de Renderizado (UI/HTMX) ---
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/crear",
+    )
     def render_offcanvas_crear(self, request):
         """Renderiza offcanvas para crear."""
         import datetime
 
+        from apps.tenant.compras.models import PlantillaOrdenCompra
         from apps.tenant.compras.services.selectors import PlantillaOrdenCompraSelector
+
         empresa = self._get_empresa()
         fecha_default = datetime.date.today().isoformat()
-        
-        # Consultamos las plantillas vigentes del tenant
-        plantillas = PlantillaOrdenCompraSelector.get_list(empresa_id=empresa.id, vigente_only=True)
+
+        # Consultamos las plantillas vigentes del tenant, solo las de tipo
+        # Orden de Compra (Fase A: una misma tabla ahora sirve ambos tipos).
+        plantillas = PlantillaOrdenCompraSelector.get_list(
+            empresa_id=empresa.id,
+            vigente_only=True,
+            tipo_documento=PlantillaOrdenCompra.TipoDocumento.ORDEN_COMPRA,
+        )
 
         context = {
-            'offcanvas_id': 'offcanvas-compra-crear',
-            'mode': 'create',
-            'plantillas': plantillas,
-            'fecha_default': fecha_default,
+            "offcanvas_id": "offcanvas-compra-crear",
+            "mode": "create",
+            "plantillas": plantillas,
+            "fecha_default": fecha_default,
         }
-        return Response(context, template_name='tenant/compras/offcanvas_crear_compras.html')
+        return Response(context, template_name="tenant/compras/offcanvas_crear_compras.html")
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/editar",
+    )
     def render_offcanvas_editar(self, request):
         """Renderiza offcanvas para editar."""
-        uuid_val = request.query_params.get('uuid') or request.query_params.get('id')
+        uuid_val = request.query_params.get("uuid") or request.query_params.get("id")
         empresa_id = self.get_empresa_id()
         if not uuid_val:
             return Response({"error": "ID requerido"}, status=status.HTTP_400_BAD_REQUEST)
@@ -269,16 +382,21 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
         self.check_object_permissions(request, instance)
 
         context = {
-            'instance': instance,
-            'offcanvas_id': 'offcanvas-compra-editar',
-            'mode': 'edit',
+            "instance": instance,
+            "offcanvas_id": "offcanvas-compra-editar",
+            "mode": "edit",
         }
-        return Response(context, template_name='tenant/compras/offcanvas_editar_compras.html')
+        return Response(context, template_name="tenant/compras/offcanvas_editar_compras.html")
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/detalle')
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/detalle",
+    )
     def render_offcanvas_detalle(self, request):
         """Renderiza offcanvas de detalle."""
-        uuid_val = request.query_params.get('uuid') or request.query_params.get('id')
+        uuid_val = request.query_params.get("uuid") or request.query_params.get("id")
         empresa_id = self.get_empresa_id()
         if not uuid_val:
             return Response({"error": "ID requerido"}, status=status.HTTP_400_BAD_REQUEST)
@@ -286,13 +404,19 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
         instance = get_object_or_404(OrdenCompra, uuid=uuid_val, empresa_id=empresa_id)
         # [FASE 7, consolidacion OCF/OSF] ver nota identica en render_offcanvas_editar().
         self.check_object_permissions(request, instance)
-        return Response({'instance': instance, 'offcanvas_id': 'offcanvas-compra-detalle'}, template_name='tenant/compras/offcanvas_detalle_compras.html')
+        return Response(
+            {"instance": instance, "offcanvas_id": "offcanvas-compra-detalle"},
+            template_name="tenant/compras/offcanvas_detalle_compras.html",
+        )
 
 
-class PlantillaOrdenCompraViewSet(OrganizationalContextMixin, PlantillaOrdenCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class PlantillaOrdenCompraViewSet(
+    OrganizationalContextMixin, PlantillaOrdenCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet
+):
     """
     ViewSet para la gestion de Plantillas de Orden de Compra.
     """
+
     queryset = PlantillaOrdenCompra.objects.none()
     serializer_class = PlantillaOrdenCompraSerializer
     lookup_field = "uuid"
@@ -308,10 +432,10 @@ class PlantillaOrdenCompraViewSet(OrganizationalContextMixin, PlantillaOrdenComp
         return [IsTenantMember(), IsTenantAdminOrReadOnly()]
 
     def get_queryset(self):
-        if not hasattr(self, 'action') or self.action is None:
+        if not hasattr(self, "action") or self.action is None:
             return PlantillaOrdenCompra.objects.none()
 
-        vigente_only = self.request.query_params.get('vigente') == 'true'
+        vigente_only = self.request.query_params.get("vigente") == "true"
         if self.action == "list":
             return self.get_qs_list(vigente_only=vigente_only)
 
@@ -321,10 +445,44 @@ class PlantillaOrdenCompraViewSet(OrganizationalContextMixin, PlantillaOrdenComp
     def get_serializer_context(self):
         context = super().get_serializer_context()
         try:
-            context['empresa_id'] = self.get_empresa_id()
+            context["empresa_id"] = self.get_empresa_id()
         except Exception:
-            context['empresa_id'] = None
+            context["empresa_id"] = None
         return context
+
+    @action(detail=False, methods=["post"], url_path="dt")
+    def dt(self, request):
+        """
+        DataTables 3.x server-side (mismo patron ya validado en Ventas/
+        Bancos/Facturas/Clientes/Proveedores/Compras -- ver
+        docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Reemplaza
+        PlantillaOrdenCompraTable/PlantillaOrdenCompraTableView
+        (django-tables2, retirados). base_qs reutiliza get_qs_list(
+        vigente_only=False) -- misma vista "TODAS las plantillas" (CO-1) que
+        ya usaba PlantillaOrdenCompraTableView, no la variante vigente_only=True
+        que usa el dropdown de "Nueva Orden".
+        """
+        base_qs = self.get_qs_list(vigente_only=False)
+
+        spec = DataTableSpec(
+            fields_map={
+                0: "nombre",
+                1: "tipo_documento",
+                2: "prefijo",
+                4: "consecutivo_actual",
+                5: "vigente",
+            },
+            search_fields=["nombre", "prefijo"],
+            base_qs=base_qs,
+            serializer=PlantillaOrdenCompraSerializer,
+            column_filters={
+                0: ColumnFilter("nombre", ColumnFilterType.ICONTAINS),
+                1: ColumnFilter("tipo_documento", ColumnFilterType.EXACT),
+                2: ColumnFilter("prefijo", ColumnFilterType.ICONTAINS),
+                5: ColumnFilter("vigente", ColumnFilterType.EXACT),
+            },
+        )
+        return DataTableServer(spec).handle(request)
 
     def get_object(self):
         uuid_val = self.kwargs.get(self.lookup_url_kwarg)
@@ -332,6 +490,7 @@ class PlantillaOrdenCompraViewSet(OrganizationalContextMixin, PlantillaOrdenComp
         obj = PlantillaOrdenCompra.objects.filter(uuid=uuid_val, empresa_id=empresa_id).first()
         if not obj:
             from rest_framework.exceptions import NotFound
+
             raise NotFound("Plantilla no encontrada en su organizacion.")
         self.check_object_permissions(self.request, obj)
         return obj
@@ -357,42 +516,57 @@ class PlantillaOrdenCompraViewSet(OrganizationalContextMixin, PlantillaOrdenComp
         out = self.get_serializer(plantilla)
         return Response(out.data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/crear')
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/crear",
+    )
     def render_offcanvas_crear(self, request):
         return Response(
-            {'offcanvas_id': 'offcanvas-plantilla-crear'},
-            template_name='tenant/compras/offcanvas_crear_plantilla.html'
+            {"offcanvas_id": "offcanvas-plantilla-crear"},
+            template_name="tenant/compras/offcanvas_crear_plantilla.html",
         )
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer], url_path='render-offcanvas/editar')
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/editar",
+    )
     def render_offcanvas_editar(self, request):
         """CO-1 (2026-09-12): reutiliza el mismo template de "Crear" en modo
         edicion (mismo patron ya usado en Ventas para V-2)."""
-        plantilla_uuid = request.query_params.get('uuid')
+        plantilla_uuid = request.query_params.get("uuid")
         try:
             empresa_id = self.get_empresa_id()
         except Exception:
             empresa_id = None
         plantilla = None
         if empresa_id and plantilla_uuid:
-            plantilla = PlantillaOrdenCompra.objects.filter(uuid=plantilla_uuid, empresa_id=empresa_id).first()
+            plantilla = PlantillaOrdenCompra.objects.filter(
+                uuid=plantilla_uuid, empresa_id=empresa_id
+            ).first()
         return Response(
-            {'offcanvas_id': 'offcanvas-plantilla-crear', 'plantilla': plantilla},
-            template_name='tenant/compras/offcanvas_crear_plantilla.html'
+            {"offcanvas_id": "offcanvas-plantilla-crear", "plantilla": plantilla},
+            template_name="tenant/compras/offcanvas_crear_plantilla.html",
         )
 
 
-class RecepcionCompraViewSet(OrganizationalContextMixin, RecepcionCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet):
+class RecepcionCompraViewSet(
+    OrganizationalContextMixin, RecepcionCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet
+):
     """
     ViewSet para Recepcion de Compras (F21): OrdenCompra -> RecepcionCompra ->
     MovimientoInventario. Solo API (sin renderizado de offcanvas HTMX -
     reduccion de alcance documentada en documentacion/F21_RECEPCION_INVENTARIO.md,
     consistente con la decision de no construir frontend nuevo en esta fase).
     """
+
     queryset = RecepcionCompra.objects.none()
     serializer_class = RecepcionCompraDetailSerializer
     service_class = RecepcionCompraBusinessService
-    http_method_names = ['get', 'post', 'head', 'options']
+    http_method_names = ["get", "post", "head", "options"]
 
     pagination_class = StandardResultsSetPagination
     parser_classes = [JSONParser, FormParser, MultiPartParser]
@@ -409,11 +583,11 @@ class RecepcionCompraViewSet(OrganizationalContextMixin, RecepcionCompraServiceM
         return [IsTenantMember(), IsTenantAdminOrReadOnly(), HasOrganizationalScope()]
 
     def get_queryset(self):
-        if not hasattr(self, 'action') or self.action is None:
+        if not hasattr(self, "action") or self.action is None:
             return RecepcionCompra.objects.none()
         if self.action == "list":
-            orden_uuid = self.request.query_params.get('orden_compra')
-            estado = self.request.query_params.get('estado')
+            orden_uuid = self.request.query_params.get("orden_compra")
+            estado = self.request.query_params.get("estado")
             return self.get_qs_list(orden_compra_uuid=orden_uuid, estado=estado)
         uuid_val = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
         return self.get_qs_detail(uuid_val)
@@ -428,9 +602,9 @@ class RecepcionCompraViewSet(OrganizationalContextMixin, RecepcionCompraServiceM
     def get_serializer_context(self):
         context = super().get_serializer_context()
         try:
-            context['empresa_id'] = self.get_empresa_id()
+            context["empresa_id"] = self.get_empresa_id()
         except Exception:
-            context['empresa_id'] = None
+            context["empresa_id"] = None
         return context
 
     def create(self, request, *args, **kwargs):
@@ -439,17 +613,20 @@ class RecepcionCompraViewSet(OrganizationalContextMixin, RecepcionCompraServiceM
             empresa = self._get_empresa()
             if not empresa:
                 return Response(
-                    {"error": "empresa_no_configurada", "message": "No se pudo determinar la empresa activa."},
-                    status=status.HTTP_403_FORBIDDEN
+                    {
+                        "error": "empresa_no_configurada",
+                        "message": "No se pudo determinar la empresa activa.",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
             serializer = RecepcionCompraCreateSerializer(
-                data=request.data, context={'empresa_id': empresa.id}
+                data=request.data, context={"empresa_id": empresa.id}
             )
             serializer.is_valid(raise_exception=True)
 
             validated_data = serializer.validated_data
-            items_data = validated_data.pop('items')
+            items_data = validated_data.pop("items")
 
             success, result, status_code = self.service_crear_recepcion(
                 validated_data, items_data, empresa

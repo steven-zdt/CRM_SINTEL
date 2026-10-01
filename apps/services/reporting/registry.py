@@ -6,6 +6,7 @@ Mismo patron que apps/services/document_intake/dispatcher.py: una sola
 instancia compartida a nivel de modulo, poblada lazily por cada dominio via
 su propio AppConfig.ready(). No conoce logica de negocio de ningun dominio.
 """
+
 from __future__ import annotations
 
 import logging

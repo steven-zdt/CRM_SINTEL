@@ -1,6 +1,7 @@
 """
 ViewSets para Cotizaciones v2.62.0 - SINTEL FSD
 """
+
 import logging
 
 from django.http import HttpResponse
@@ -10,22 +11,23 @@ from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
+from apps.shared.datatable import ColumnFilter, ColumnFilterType, DataTableServer, DataTableSpec
 from apps.tenant.api.base import BaseTenantViewSet
-from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.mixins import SintelDSVMixin
+from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.api.utils import resolve_tenant_empresa
 from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 
-from ..models import Cotizacion, Producto, Servicio, CotizacionItem
+from ..models import Cotizacion, CotizacionItem, Producto, Servicio
 from ..services import (
+    CotizacionItemServiceMixin,
+    CotizacionPDFExportService,
     CotizacionServiceMixin,
     ProductoServiceMixin,
     ServicioServiceMixin,
-    CotizacionItemServiceMixin,
-    CotizacionPDFExportService,
 )
-from ..services.selectors import CotizacionSelector
 from ..services.business_service import CotizacionService
+from ..services.selectors import CotizacionSelector
 from .serializers import (
     CotizacionItemSerializer,
     CotizacionListSerializer,
@@ -37,13 +39,15 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-class ProductoViewSet(OrganizationalContextMixin, SintelDSVMixin, ProductoServiceMixin, BaseTenantViewSet):
+class ProductoViewSet(
+    OrganizationalContextMixin, SintelDSVMixin, ProductoServiceMixin, BaseTenantViewSet
+):
     serializer_class = ProductoSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     queryset = Producto.objects.none()
 
     def get_queryset(self):
-        if self.action == 'list':
+        if self.action == "list":
             return self.get_qs_list()
         return self.get_qs_detail()
 
@@ -58,7 +62,7 @@ class ProductoViewSet(OrganizationalContextMixin, SintelDSVMixin, ProductoServic
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        partial = kwargs.get('partial', False)
+        partial = kwargs.get("partial", False)
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         try:
@@ -74,8 +78,12 @@ class ProductoViewSet(OrganizationalContextMixin, SintelDSVMixin, ProductoServic
         self.service_eliminar_producto(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer],
-            url_path='render-offcanvas/editar')
+    @action(
+        detail=True,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/editar",
+    )
     def render_offcanvas_editar(self, request, **kwargs):
         """El backend ya soportaba PATCH; el boton 'Editar' de la grilla era
         un stub (console.log, sin efecto) porque nunca existio esta vista ni
@@ -83,16 +91,21 @@ class ProductoViewSet(OrganizationalContextMixin, SintelDSVMixin, ProductoServic
         Cotizaciones, 2026-08-27. Reutiliza el mismo template de creacion
         (Regla Absoluta #1: no crear un segundo formulario)."""
         instance = self.get_object()
-        return Response({'instance': instance}, template_name='tenant/cotizaciones/offcanvas_crear_producto.html')
+        return Response(
+            {"instance": instance},
+            template_name="tenant/cotizaciones/offcanvas_crear_producto.html",
+        )
 
 
-class ServicioViewSet(OrganizationalContextMixin, SintelDSVMixin, ServicioServiceMixin, BaseTenantViewSet):
+class ServicioViewSet(
+    OrganizationalContextMixin, SintelDSVMixin, ServicioServiceMixin, BaseTenantViewSet
+):
     serializer_class = ServicioSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     queryset = Servicio.objects.none()
 
     def get_queryset(self):
-        if self.action == 'list':
+        if self.action == "list":
             return self.get_qs_list()
         return self.get_qs_detail()
 
@@ -104,7 +117,7 @@ class ServicioViewSet(OrganizationalContextMixin, SintelDSVMixin, ServicioServic
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        partial = kwargs.get('partial', False)
+        partial = kwargs.get("partial", False)
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         updated = self.service_actualizar_servicio(instance, serializer)
@@ -117,16 +130,25 @@ class ServicioViewSet(OrganizationalContextMixin, SintelDSVMixin, ServicioServic
         self.service_eliminar_servicio(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer],
-            url_path='render-offcanvas/editar')
+    @action(
+        detail=True,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/editar",
+    )
     def render_offcanvas_editar(self, request, **kwargs):
         """Ver ProductoViewSet.render_offcanvas_editar -- mismo hallazgo y
         mismo fix (boton 'Editar' era un stub sin vista de edicion)."""
         instance = self.get_object()
-        return Response({'instance': instance}, template_name='tenant/cotizaciones/offcanvas_crear_servicio.html')
+        return Response(
+            {"instance": instance},
+            template_name="tenant/cotizaciones/offcanvas_crear_servicio.html",
+        )
 
 
-class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionServiceMixin, BaseTenantViewSet):
+class CotizacionViewSet(
+    OrganizationalContextMixin, SintelDSVMixin, CotizacionServiceMixin, BaseTenantViewSet
+):
     """Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
     Hallazgo propio de esta app: get_queryset() usa la SSoT (SintelDSVMixin,
     igual que OrganizationalContext.resolve()) pero exportar_pdf()/
@@ -135,7 +157,7 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
     TenantProfile) - una inconsistencia interna real de esta ViewSet, no
     documentada hasta ahora. Ninguna de las dos rutas se migro."""
 
-    lookup_field = 'uuid'
+    lookup_field = "uuid"
     queryset = Cotizacion.objects.none()
     serializer_class = CotizacionSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
@@ -143,14 +165,55 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        if self.action == 'list':
+        if self.action == "list":
             return self.get_qs_list()
         return self.get_qs_detail()
 
     def get_serializer_class(self):
-        if self.action == 'list':
+        if self.action == "list":
             return CotizacionListSerializer
         return CotizacionSerializer
+
+    @action(detail=False, methods=["post"], url_path="dt")
+    def dt(self, request):
+        """
+        DataTables 3.x server-side (mismo patron ya validado en Ventas/
+        Bancos/Facturas/Clientes/Proveedores/Compras/Gastos/Empleados/
+        Proyectos/Inventario/Contabilidad -- ver
+        docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md, extendido aqui
+        a Cotizaciones). Reemplaza el Tabulator client-side de
+        cotizaciones.table.js (traia TODAS las cotizaciones en un solo GET
+        sin busqueda por columna server-side). Los KPIs (Total/Borrador/
+        Enviada/Aceptada/Vencidas/Monto) se extraen a CotizacionKpisView
+        (mismo patron ya usado en Ventas/Compras/Gastos/Proyectos/
+        Inventario) -- antes se computaban client-side sobre TODAS las
+        filas ya cargadas por Tabulator, incompatible con paginacion
+        server-side.
+        """
+        base_qs = self.get_qs_list()
+
+        spec = DataTableSpec(
+            fields_map={
+                0: "numero_cotizacion",
+                1: "cliente__razon_social",
+                2: "fecha_emision",
+                3: "fecha_vencimiento",
+                4: "estado",
+                5: "total_con_impuestos",
+            },
+            search_fields=["numero_cotizacion", "codigo_unico", "cliente__razon_social"],
+            base_qs=base_qs,
+            serializer=CotizacionListSerializer,
+            column_filters={
+                0: ColumnFilter("numero_cotizacion", ColumnFilterType.ICONTAINS),
+                1: ColumnFilter("cliente__razon_social", ColumnFilterType.ICONTAINS),
+                2: ColumnFilter("fecha_emision", ColumnFilterType.DATE_RANGE),
+                3: ColumnFilter("fecha_vencimiento", ColumnFilterType.DATE_RANGE),
+                4: ColumnFilter("estado", ColumnFilterType.EXACT),
+                5: ColumnFilter("total_con_impuestos", ColumnFilterType.NUMBER_RANGE),
+            },
+        )
+        return DataTableServer(spec).handle(request)
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -160,7 +223,7 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        partial = kwargs.get('partial', False)
+        partial = kwargs.get("partial", False)
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         updated = self.service_actualizar_cotizacion(instance, serializer)
@@ -176,7 +239,7 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         self.service_eliminar_cotizacion(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=['get'], url_path='exportar-pdf')
+    @action(detail=True, methods=["get"], url_path="exportar-pdf")
     def exportar_pdf(self, request, **kwargs):
         """Descarga el PDF sin importar el estado (nunca cambia el estado --
         mismo criterio que siempre tuvo este endpoint). Para la transicion
@@ -185,13 +248,15 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         empresa = resolve_tenant_empresa(request, self)
         pdf_content = CotizacionPDFExportService.generar_pdf_publico(instance, empresa, request)
         if not pdf_content:
-            return Response({"error": "Error generando PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        filename = f'Cotizacion_{instance.codigo_unico or instance.numero_cotizacion}.pdf'
-        response = HttpResponse(pdf_content, content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return Response(
+                {"error": "Error generando PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        filename = f"Cotizacion_{instance.codigo_unico or instance.numero_cotizacion}.pdf"
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
 
-    @action(detail=True, methods=['post'], url_path='generar-pdf')
+    @action(detail=True, methods=["post"], url_path="generar-pdf")
     def generar_pdf(self, request, **kwargs):
         """COTIZACIONES-02 Fase 04: BORRADOR -> genera PDF -> exito: ENVIADA
         / error: permanece BORRADOR. Si la cotizacion ya no esta en
@@ -202,43 +267,64 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         instance = self.get_object()
         empresa = resolve_tenant_empresa(request, self)
         usuario = getattr(request.user, "tenant_profile", None)
-        cotizacion, pdf_content = CotizacionService.generar_pdf_y_enviar(instance, empresa, usuario=usuario)
-        filename = f'Cotizacion_{cotizacion.codigo_unico or cotizacion.numero_cotizacion}.pdf'
-        response = HttpResponse(pdf_content, content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        response['X-Cotizacion-Estado'] = cotizacion.estado
+        cotizacion, pdf_content = CotizacionService.generar_pdf_y_enviar(
+            instance, empresa, usuario=usuario
+        )
+        filename = f"Cotizacion_{cotizacion.codigo_unico or cotizacion.numero_cotizacion}.pdf"
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        response["X-Cotizacion-Estado"] = cotizacion.estado
         return response
 
-    @action(detail=False, methods=['get'], renderer_classes=[TemplateHTMLRenderer],
-            url_path='render-offcanvas/crear')
+    @action(
+        detail=False,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/crear",
+    )
     def render_offcanvas_crear(self, request):
         empresa = resolve_tenant_empresa(request, self)
         context = {
-            'cotizacion': None,
-            'clientes': CotizacionSelector.get_clientes_activos(empresa.id) if empresa else [],
-            'configuraciones': CotizacionSelector.get_configuraciones_activas(empresa.id) if empresa else [],
+            "cotizacion": None,
+            "clientes": CotizacionSelector.get_clientes_activos(empresa.id) if empresa else [],
+            "configuraciones": CotizacionSelector.get_configuraciones_activas(empresa.id)
+            if empresa
+            else [],
         }
-        return Response(context, template_name='tenant/cotizaciones/editor_cotizacion.html')
+        return Response(context, template_name="tenant/cotizaciones/editor_cotizacion.html")
 
-    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer],
-            url_path='render-offcanvas/editar')
+    @action(
+        detail=True,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/editar",
+    )
     def render_offcanvas_editar(self, request, **kwargs):
         empresa = resolve_tenant_empresa(request, self)
         cotizacion = self.get_object()
         context = {
-            'cotizacion': cotizacion,
-            'clientes': CotizacionSelector.get_clientes_activos(empresa.id) if empresa else [],
-            'configuraciones': CotizacionSelector.get_configuraciones_activas(empresa.id) if empresa else [],
+            "cotizacion": cotizacion,
+            "clientes": CotizacionSelector.get_clientes_activos(empresa.id) if empresa else [],
+            "configuraciones": CotizacionSelector.get_configuraciones_activas(empresa.id)
+            if empresa
+            else [],
         }
-        return Response(context, template_name='tenant/cotizaciones/editor_cotizacion.html')
+        return Response(context, template_name="tenant/cotizaciones/editor_cotizacion.html")
 
-    @action(detail=True, methods=['get'], renderer_classes=[TemplateHTMLRenderer],
-            url_path='render-offcanvas/detalle')
+    @action(
+        detail=True,
+        methods=["get"],
+        renderer_classes=[TemplateHTMLRenderer],
+        url_path="render-offcanvas/detalle",
+    )
     def render_offcanvas_detalle(self, request, **kwargs):
         cotizacion = self.get_object()
-        return Response({'cotizacion': cotizacion}, template_name='tenant/cotizaciones/offcanvas_detalle_cotizacion.html')
+        return Response(
+            {"cotizacion": cotizacion},
+            template_name="tenant/cotizaciones/offcanvas_detalle_cotizacion.html",
+        )
 
-    @action(detail=True, methods=['post'], url_path='recalcular')
+    @action(detail=True, methods=["post"], url_path="recalcular")
     def recalcular(self, request, **kwargs):
         instance = self.get_object()
         CotizacionService.calcular_totales(instance.id, instance.empresa_id)
@@ -259,26 +345,28 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         instance = self.get_object()
         usuario = getattr(request.user, "tenant_profile", None)
         motivo = request.data.get("motivo", "") if hasattr(request, "data") else ""
-        cotizacion = CotizacionService.cambiar_estado(instance, nuevo_estado, usuario=usuario, motivo=motivo)
+        cotizacion = CotizacionService.cambiar_estado(
+            instance, nuevo_estado, usuario=usuario, motivo=motivo
+        )
         return Response(self.get_serializer(cotizacion).data)
 
-    @action(detail=True, methods=['post'], url_path='volver-a-borrador')
+    @action(detail=True, methods=["post"], url_path="volver-a-borrador")
     def volver_a_borrador(self, request, **kwargs):
         return self._cambiar_estado_action(Cotizacion.Estado.BORRADOR, request)
 
-    @action(detail=True, methods=['post'], url_path='aprobar')
+    @action(detail=True, methods=["post"], url_path="aprobar")
     def aprobar(self, request, **kwargs):
         return self._cambiar_estado_action(Cotizacion.Estado.APROBADA, request)
 
-    @action(detail=True, methods=['post'], url_path='rechazar')
+    @action(detail=True, methods=["post"], url_path="rechazar")
     def rechazar(self, request, **kwargs):
         return self._cambiar_estado_action(Cotizacion.Estado.RECHAZADA, request)
 
-    @action(detail=True, methods=['post'], url_path='archivar')
+    @action(detail=True, methods=["post"], url_path="archivar")
     def archivar(self, request, **kwargs):
         return self._cambiar_estado_action(Cotizacion.Estado.ARCHIVADA, request)
 
-    @action(detail=True, methods=['get'], url_path='historial')
+    @action(detail=True, methods=["get"], url_path="historial")
     def historial(self, request, **kwargs):
         """COTIZACIONES-02 Fase 03: lectura del historial append-only."""
         instance = self.get_object()
@@ -295,7 +383,7 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         ]
         return Response(payload)
 
-    @action(detail=True, methods=['post'], url_path='convertir-a-venta')
+    @action(detail=True, methods=["post"], url_path="convertir-a-venta")
     def convertir_a_venta(self, request, **kwargs):
         """Solo desde APROBADA (mandato §6). Idempotente (§14): un segundo
         POST devuelve la misma Venta ya creada, con 200 (no 201). Import
@@ -305,7 +393,8 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
 
         instance = self.get_object()
         ya_existia = Venta.objects.filter(
-            cotizacion_uuid=instance.uuid, empresa_id=instance.empresa_id,
+            cotizacion_uuid=instance.uuid,
+            empresa_id=instance.empresa_id,
         ).exists()
         venta = CotizacionService.convertir_a_venta(instance)
         payload = {
@@ -317,9 +406,11 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
             "total_neto": str(venta.total_neto),
             "cotizacion_uuid": str(venta.cotizacion_uuid),
         }
-        return Response(payload, status=status.HTTP_200_OK if ya_existia else status.HTTP_201_CREATED)
+        return Response(
+            payload, status=status.HTTP_200_OK if ya_existia else status.HTTP_201_CREATED
+        )
 
-    @action(detail=True, methods=['post'], url_path='facturar-venta')
+    @action(detail=True, methods=["post"], url_path="facturar-venta")
     def facturar_venta(self, request, **kwargs):
         """COTIZACIONES-02 Fase 07: Venta (ya creada via convertir-a-venta)
         -> Factura VENTA, reutilizando VentaBusinessService.
@@ -327,7 +418,9 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         un segundo POST devuelve la misma Venta/Factura, 200 en vez de 201."""
         instance = self.get_object()
         sede_id = request.data.get("sede_id") if hasattr(request, "data") else None
-        venta, status_code = CotizacionService.facturar_venta_de_cotizacion(instance, sede_id=sede_id)
+        venta, status_code = CotizacionService.facturar_venta_de_cotizacion(
+            instance, sede_id=sede_id
+        )
         payload = {
             "uuid": str(venta.uuid),
             "estado": venta.estado,
@@ -336,7 +429,7 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         }
         return Response(payload, status=status_code)
 
-    @action(detail=True, methods=['post'], url_path='convertir-a-proyecto')
+    @action(detail=True, methods=["post"], url_path="convertir-a-proyecto")
     def convertir_a_proyecto(self, request, **kwargs):
         """COTIZACIONES-02 Fase 11: items SERVICIO de una cotizacion APROBADA
         -> Proyecto (reutiliza orchestrate_create_proyecto ya existente).
@@ -353,13 +446,15 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         return Response(payload, status=status.HTTP_200_OK)
 
 
-class CotizacionItemViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionItemServiceMixin, BaseTenantViewSet):
+class CotizacionItemViewSet(
+    OrganizationalContextMixin, SintelDSVMixin, CotizacionItemServiceMixin, BaseTenantViewSet
+):
     serializer_class = CotizacionItemSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
     queryset = CotizacionItem.objects.none()
 
     def get_queryset(self):
-        if self.action == 'list':
+        if self.action == "list":
             return self.get_qs_list()
         return self.get_qs_detail()
 
@@ -371,7 +466,7 @@ class CotizacionItemViewSet(OrganizationalContextMixin, SintelDSVMixin, Cotizaci
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        partial = kwargs.get('partial', False)
+        partial = kwargs.get("partial", False)
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         updated = self.service_actualizar_item(instance, serializer)

@@ -9,6 +9,7 @@ MISMO request - es una prueba de paridad, no solo de que la clase nueva
 bug preexistente de force_login/schema_context ya documentado en
 documentacion/IMPLEMENTACION_ORGANIZATIONAL_CONTEXT.md (Fase 0, riesgo R-6).
 """
+
 from django.conf import settings
 from django.contrib.sessions.backends.db import SessionStore
 from django.test import RequestFactory
@@ -44,11 +45,16 @@ class OrganizationalContextParityTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF", nit="900000111", direccion="Calle 1",
+            razon_social="Empresa Test OCF",
+            nit="900000111",
+            direccion="Calle 1",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Principal")
         self.perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
             configuracion={"theme": "dark"},
         )
 

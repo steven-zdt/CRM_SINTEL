@@ -13,6 +13,7 @@ El comando es idempotente: si la identidad ya existe, solo rota sus
 tokens (revoca los anteriores via blacklist, emite un par nuevo) -- no
 crea un segundo usuario tecnico por tenant.
 """
+
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
@@ -38,14 +39,17 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--schema", required=True,
+            "--schema",
+            required=True,
             help="schema_name del tenant (ej: home) -- NUNCA 'public'.",
         )
 
     def handle(self, *args, **options):
         schema = options["schema"]
         if schema == "public":
-            raise CommandError("La identidad tecnica de n8n es por-tenant, nunca en el esquema public.")
+            raise CommandError(
+                "La identidad tecnica de n8n es por-tenant, nunca en el esquema public."
+            )
 
         tenant = TenantClient.objects.filter(schema_name=schema).first()
         if not tenant:
@@ -71,7 +75,8 @@ class Command(BaseCommand):
                 user.save(update_fields=["password"])
 
             membership, _ = TenantMembership.objects.get_or_create(
-                client=tenant, user=user,
+                client=tenant,
+                user=user,
                 defaults={"rol": "ADMIN", "is_primary_admin": False},
             )
             if not membership.is_active:
@@ -84,10 +89,14 @@ class Command(BaseCommand):
 
             empresa = Empresa.objects.first()
             if not empresa:
-                raise CommandError(f"Tenant '{schema}' no tiene ninguna Empresa -- no se puede crear el perfil.")
+                raise CommandError(
+                    f"Tenant '{schema}' no tiene ninguna Empresa -- no se puede crear el perfil."
+                )
 
             profile, _ = TenantProfile.objects.get_or_create(
-                user=user, empresa=empresa, defaults={"rol": "ADMIN"},
+                user=user,
+                empresa=empresa,
+                defaults={"rol": "ADMIN"},
             )
             if profile.rol != "ADMIN":
                 profile.rol = "ADMIN"
@@ -101,12 +110,14 @@ class Command(BaseCommand):
         refresh = RefreshToken.for_user(user)
         access = str(refresh.access_token)
 
-        self.stdout.write(self.style.SUCCESS(
-            f"\nIdentidad tecnica de n8n para tenant '{schema}': "
-            f"{'creada' if created else 'ya existia, tokens rotados'}."
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"\nIdentidad tecnica de n8n para tenant '{schema}': "
+                f"{'creada' if created else 'ya existia, tokens rotados'}."
+            )
+        )
         self.stdout.write(f"  email:  {email}")
-        self.stdout.write(f"  rol:    ADMIN (TenantMembership + TenantProfile)")
+        self.stdout.write("  rol:    ADMIN (TenantMembership + TenantProfile)")
         self.stdout.write(
             "\nCopiar a la credencial 'HTTP Header Auth' de n8n "
             "(header Authorization, valor 'Bearer <access_token>') y a "
@@ -114,12 +125,14 @@ class Command(BaseCommand):
         )
         self.stdout.write(f"  ACCESS_TOKEN (expira en 15 min):  {access}")
         self.stdout.write(f"  REFRESH_TOKEN (expira en 7 dias): {str(refresh)}")
-        self.stdout.write(self.style.WARNING(
-            "\nEl access token expira en 15 minutos. n8n debe usar el "
-            "refresh token contra POST /api/token/refresh/ (TokenRefreshView, "
-            "ya existente -- ver docs/n8n/N8N_SECURITY.md) para renovarlo "
-            "automaticamente. El refresh token mismo expira en 7 dias -- "
-            "programar un workflow N8N-SYSTEM que vuelva a correr este "
-            "comando y actualice las credenciales antes de esa fecha "
-            "(rotacion, Fase 13)."
-        ))
+        self.stdout.write(
+            self.style.WARNING(
+                "\nEl access token expira en 15 minutos. n8n debe usar el "
+                "refresh token contra POST /api/token/refresh/ (TokenRefreshView, "
+                "ya existente -- ver docs/n8n/N8N_SECURITY.md) para renovarlo "
+                "automaticamente. El refresh token mismo expira en 7 dias -- "
+                "programar un workflow N8N-SYSTEM que vuelva a correr este "
+                "comando y actualice las credenciales antes de esa fecha "
+                "(rotacion, Fase 13)."
+            )
+        )

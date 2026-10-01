@@ -9,6 +9,7 @@ docs/console/CONSOLE_TENANTS_FINAL_REPORT.md: creacion de 2 tenants QA
 reales, trial forzado a "ayer" sin ejecutar Celery -> bloqueo real
 confirmado por curl + verificacion directa de BD.
 """
+
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -26,7 +27,9 @@ from apps.public.tenants.services.lifecycle import (
 def _fake_client(*, on_trial=True, paid_until=None, is_active=True):
     """Objeto minimo que expone los mismos atributos que Client, sin BD."""
     return SimpleNamespace(
-        on_trial=on_trial, paid_until=paid_until, is_active=is_active,
+        on_trial=on_trial,
+        paid_until=paid_until,
+        is_active=is_active,
         schema_name="fake_schema_test",
     )
 
@@ -64,7 +67,9 @@ class TestComputeLifecycleStatus:
         """La fecha es determinante (Fase 16) -- si el trial vencio, el
         estado es EXPIRED sin importar que is_active todavia no se haya
         reconciliado a False."""
-        c = _fake_client(on_trial=True, paid_until=timezone.localdate() - timedelta(days=1), is_active=True)
+        c = _fake_client(
+            on_trial=True, paid_until=timezone.localdate() - timedelta(days=1), is_active=True
+        )
         assert compute_lifecycle_status(c) == LifecycleStatus.EXPIRED
 
     def test_suspendido_manualmente_distinto_de_expirado(self):
@@ -75,11 +80,15 @@ class TestComputeLifecycleStatus:
         assert compute_lifecycle_status(c) == LifecycleStatus.SUSPENDED_BY_ADMIN
 
     def test_active_trial(self):
-        c = _fake_client(on_trial=True, paid_until=timezone.localdate() + timedelta(days=5), is_active=True)
+        c = _fake_client(
+            on_trial=True, paid_until=timezone.localdate() + timedelta(days=5), is_active=True
+        )
         assert compute_lifecycle_status(c) == LifecycleStatus.ACTIVE_TRIAL
 
     def test_active_subscription_sin_trial_con_fecha(self):
-        c = _fake_client(on_trial=False, paid_until=timezone.localdate() + timedelta(days=30), is_active=True)
+        c = _fake_client(
+            on_trial=False, paid_until=timezone.localdate() + timedelta(days=30), is_active=True
+        )
         assert compute_lifecycle_status(c) == LifecycleStatus.ACTIVE_SUBSCRIPTION
 
     def test_no_expiration_sin_trial_sin_fecha(self):
@@ -102,7 +111,9 @@ class TestTrialDaysRemaining:
 
 class TestReconcileTenantLifecycle:
     def test_no_reconcilia_si_no_expirado(self):
-        c = _fake_client(on_trial=True, paid_until=timezone.localdate() + timedelta(days=1), is_active=True)
+        c = _fake_client(
+            on_trial=True, paid_until=timezone.localdate() + timedelta(days=1), is_active=True
+        )
         changed = reconcile_tenant_lifecycle(c, save=False)
         assert changed is False
         assert c.is_active is True
@@ -112,7 +123,9 @@ class TestReconcileTenantLifecycle:
         trial vencido, sin depender de Celery -- esta es la MISMA
         funcion que llama tanto el middleware (runtime) como la tarea
         periodica de Celery, nunca hay 2 implementaciones de la regla."""
-        c = _fake_client(on_trial=True, paid_until=timezone.localdate() - timedelta(days=1), is_active=True)
+        c = _fake_client(
+            on_trial=True, paid_until=timezone.localdate() - timedelta(days=1), is_active=True
+        )
         changed = reconcile_tenant_lifecycle(c, save=False)
         assert changed is True
         assert c.is_active is False
@@ -130,5 +143,7 @@ class TestReconcileTenantLifecycle:
     def test_idempotente_ya_reconciliado(self):
         """Un tenant ya reconciliado (is_active=False, trial vencido) no
         vuelve a marcarse como cambiado en llamadas subsecuentes."""
-        c = _fake_client(on_trial=True, paid_until=timezone.localdate() - timedelta(days=5), is_active=False)
+        c = _fake_client(
+            on_trial=True, paid_until=timezone.localdate() - timedelta(days=5), is_active=False
+        )
         assert reconcile_tenant_lifecycle(c, save=False) is False

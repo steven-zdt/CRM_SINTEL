@@ -1,18 +1,26 @@
 /**
  * pendiente_list.js — Documentos pendientes de contabilizar (On-Demand Manual)
  *
- * Dependencias: TabulatorFactory, DOMUtils, window.jwtAuth, htmx
+ * DataTables 3.x (mismo patron ya validado en Ventas/Bancos/Facturas/
+ * Clientes/Proveedores/Compras/Gastos/Empleados/Proyectos/Inventario/
+ * Contabilidad -- ver docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md),
+ * pero contra un endpoint MANUAL (POST /api/v1/contabilidad/pendientes/dt/,
+ * DocumentosPendientesViewSet.dt()) que NO pasa por
+ * Sintel.Core.DataTablesFactory para su logica server-side -- la fuente
+ * mezcla 4 modelos de 4 apps (Factura/DocumentoSoporte/Devengo/movimientos
+ * de Inventario) en una lista Python, no un QuerySet real. Reemplaza el
+ * Tabulator client-side anterior (traia TODOS los pendientes en un solo
+ * GET sin paginacion/busqueda server-side).
+ *
+ * Dependencias: DOMUtils, htmx
  */
 (function (w, d) {
   'use strict';
 
   const MOD = '[pendiente.list]';
-  const TABLE_SELECTOR = '#grid-pendientes';
-  const SEARCH_SELECTOR = '#search-pendiente';
-  const FILTER_TIPO_SELECTOR = '#filter-tipo-pendiente';
-  const API_URL = '/api/v1/contabilidad/pendientes/';
-  const TAB_ID = '#subtab-pendientes';
-  let table = null;
+  const TABLA_SELECTOR = '#tabla-pendientes';
+  const DT_URL = '/api/v1/contabilidad/pendientes/dt/';
+  let inicializada = false;
 
   const TIPO_BADGE = {
     FACTURA:    { cls: 'info',    label: 'Factura' },
@@ -21,6 +29,12 @@
     INVENTARIO: { cls: 'secondary', label: 'Inventario' },
   };
 
+  function escapeHtml(str) {
+    var div = d.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
   function fmtMoneda(val) {
     const n = parseFloat(val);
     if (isNaN(n)) return '—';
@@ -28,136 +42,77 @@
     if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
       return '$ ' + w.DOMUtils.formatCurrency(n, { minimumFractionDigits: 2, maximumFractionDigits: 2, showSymbol: false });
     }
-    return '$ ' + n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return '$ ' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  function getColumns() {
-    return [
-      {
-        title: 'Tipo',
-        field: 'tipo_doc',
-        width: 115,
-        formatter: function (cell) {
-          const v = cell.getValue();
-          const t = TIPO_BADGE[v] || { cls: 'secondary', label: v };
-          return `<span class="badge bg-${t.cls} text-dark">${t.label}</span>`;
-        },
-      },
-      {
-        title: 'Número',
-        field: 'numero',
-        headerFilter: 'input',
-        headerFilterPlaceholder: 'Filtrar...',
-        formatter: function (cell) {
-          return `<strong>${cell.getValue() || '—'}</strong>`;
-        },
-      },
-      { title: 'Fecha', field: 'fecha', width: 110, sorter: 'date' },
-      {
-        title: 'Tercero',
-        field: 'tercero_nombre',
-        headerFilter: 'input',
-        headerFilterPlaceholder: 'Filtrar...',
-        formatter: function (cell) {
-          const row = cell.getRow().getData();
-          return `<span title="${row.tercero_nit || ''}">${cell.getValue() || '—'}</span>`;
-        },
-      },
-      {
-        title: 'Subtotal',
-        field: 'subtotal',
-        hozAlign: 'right',
-        sorter: 'number',
-        formatter: function (cell) { return fmtMoneda(cell.getValue()); },
-      },
-      {
-        title: 'Impuestos',
-        field: 'impuestos',
-        hozAlign: 'right',
-        sorter: 'number',
-        formatter: function (cell) { return fmtMoneda(cell.getValue()); },
-      },
-      {
-        title: 'Total',
-        field: 'total',
-        hozAlign: 'right',
-        sorter: 'number',
-        formatter: function (cell) {
-          return `<strong class="text-success">${fmtMoneda(cell.getValue())}</strong>`;
-        },
-      },
-      {
-        title: 'Estado',
-        field: 'estado',
-        width: 110,
-        formatter: function (cell) {
-          const v = cell.getValue();
-          const cls = v === 'ACEPTADA' ? 'success' : v === 'ACTIVO' ? 'primary' : 'secondary';
-          return `<span class="badge bg-${cls}">${v}</span>`;
-        },
-      },
-      {
-        title: '',
-        formatter: function (cell) {
-          const row = cell.getRow().getData();
-          return `<button class="btn btn-sm btn-success btn-contabilizar"
-                    data-app="${row.app_label}"
-                    data-modelo="${row.modelo}"
-                    data-id="${row.documento_id}"
-                    title="Asignar cuentas y contabilizar">
-                    <i class="bi bi-journal-plus"></i> Contabilizar
-                  </button>`;
-        },
-        headerSort: false,
-        hozAlign: 'center',
-        width: 145,
-      },
-    ];
+  function renderTipo(value) {
+    var t = TIPO_BADGE[value] || { cls: 'secondary', label: value };
+    return '<span class="badge bg-' + t.cls + ' text-dark">' + escapeHtml(t.label) + '</span>';
   }
 
-  function initTable() {
-    if (!w.TabulatorFactory) {
-      console.error(MOD, 'TabulatorFactory no disponible');
-      return null;
-    }
-    const el = d.querySelector(TABLE_SELECTOR);
-    if (!el) {
-      console.error(MOD, 'Elemento no encontrado:', TABLE_SELECTOR);
-      return null;
-    }
+  function renderNumero(value) {
+    return '<strong>' + escapeHtml(value || '—') + '</strong>';
+  }
 
-    table = w.TabulatorFactory.create(
-      TABLE_SELECTOR,
-      API_URL,
-      getColumns(),
-      {
-        searchInputSelector: SEARCH_SELECTOR,
-        paginationSize: 15,
-      }
-    );
+  function renderTercero(data, type, row) {
+    return '<span title="' + escapeHtml(row.tercero_nit || '') + '">' + escapeHtml(row.tercero_nombre || '—') + '</span>';
+  }
 
-    table.on('dataLoaded', function (data) {
-      const badge = d.getElementById('badge-total-pendientes');
-      if (badge) {
-        const n = Array.isArray(data) ? data.length : 0;
-        badge.textContent = n > 0 ? `${n} pendiente(s)` : '';
-      }
+  function renderEstado(value) {
+    var cls = value === 'ACEPTADA' ? 'success' : value === 'ACTIVO' ? 'primary' : 'secondary';
+    return '<span class="badge bg-' + cls + '">' + escapeHtml(value || '') + '</span>';
+  }
+
+  function renderAcciones(data, type, row) {
+    return '<button class="btn btn-sm btn-success btn-contabilizar" ' +
+      'data-app="' + escapeHtml(row.app_label) + '" data-modelo="' + escapeHtml(row.modelo) + '" data-id="' + escapeHtml(row.documento_id) + '" ' +
+      'title="Asignar cuentas y contabilizar"><i class="bi bi-journal-plus"></i> Contabilizar</button>';
+  }
+
+  var COLUMNS = [
+    { data: 'tipo_doc', title: 'Tipo', render: function (v) { return renderTipo(v); } },
+    { data: 'numero', title: 'Número', render: function (v) { return renderNumero(v); } },
+    { data: 'fecha', title: 'Fecha' },
+    { data: null, title: 'Tercero', orderable: false, render: renderTercero },
+    { data: 'subtotal', title: 'Subtotal', className: 'text-end', render: function (v) { return fmtMoneda(v); } },
+    { data: 'impuestos', title: 'Impuestos', className: 'text-end', render: function (v) { return fmtMoneda(v); } },
+    { data: 'total', title: 'Total', className: 'text-end', render: function (v) { return '<strong class="text-success">' + fmtMoneda(v) + '</strong>'; } },
+    { data: 'estado', title: 'Estado', orderable: false, render: function (v) { return renderEstado(v); } },
+    { data: null, title: '', orderable: false, searchable: false, render: renderAcciones },
+  ];
+
+  function actualizarBadgeTotal(dt) {
+    const badge = d.getElementById('badge-total-pendientes');
+    if (!badge) return;
+    const info = dt.page.info();
+    const n = info.recordsDisplay || 0;
+    badge.textContent = n > 0 ? `${n} pendiente(s)` : '';
+  }
+
+  function initTabla() {
+    if (inicializada) return;
+    if (typeof DataTable === 'undefined' || !w.Sintel || !w.Sintel.Core || !w.Sintel.Core.DataTablesFactory) return;
+    w.Sintel.Core.DataTablesFactory.create(TABLA_SELECTOR, DT_URL, COLUMNS, {
+      pageLength: 15,
+      order: [],
+      onDraw: actualizarBadgeTotal,
     });
+    inicializada = true;
+  }
 
-    return table;
+  function reload() {
+    if (w.Sintel.Core && w.Sintel.Core.DataTablesFactory) {
+      w.Sintel.Core.DataTablesFactory.reload(TABLA_SELECTOR);
+    }
   }
 
   function attachListeners() {
-    // Filtro por tipo_doc (client-side via Tabulator filter API)
-    const filterEl = d.querySelector(FILTER_TIPO_SELECTOR);
+    // Filtro por tipo_doc (columna 0, server-side via ColumnFilter manual)
+    const filterEl = d.querySelector('#filter-tipo-pendiente');
     if (filterEl) {
       filterEl.addEventListener('change', function () {
-        if (!table) return;
-        if (this.value) {
-          table.setFilter('tipo_doc', '=', this.value);
-        } else {
-          // false = preservar header filters de columnas (numero, tercero_nombre)
-          table.clearFilter(false);
+        if (w.Sintel.Core && w.Sintel.Core.DataTablesFactory) {
+          w.Sintel.Core.DataTablesFactory.columnSearch(TABLA_SELECTOR, 0, this.value);
         }
       });
     }
@@ -165,13 +120,13 @@
     // Refrescar
     const btnRefresh = d.querySelector('#btn-refrescar-pendientes');
     if (btnRefresh) {
-      btnRefresh.addEventListener('click', function () {
-        if (table) table.replaceData();
-      });
+      btnRefresh.addEventListener('click', reload);
     }
 
-    // Accion Contabilizar (event delegation)
-    d.addEventListener('click', function (ev) {
+    // Accion Contabilizar (event delegation, sobre document.body -- la
+    // tabla se recrea via ajax.reload(), nunca via innerHTML swap)
+    d.body.addEventListener('click', function (ev) {
+      if (!ev.target.closest(TABLA_SELECTOR)) return;
       const btn = ev.target.closest('.btn-contabilizar');
       if (!btn) return;
       ev.preventDefault();
@@ -188,20 +143,12 @@
     });
 
     // Refresca tabla tras contabilizar exitoso
-    d.body.addEventListener('pendientes:refresh', function () {
-      if (table) table.replaceData();
-    });
+    d.body.addEventListener('pendientes:refresh', reload);
   }
 
   function init() {
-    if (!w.DOMUtils?.onVisibleOnce) {
-      console.error(MOD, 'DOMUtils.onVisibleOnce no disponible');
-      return;
-    }
-    w.DOMUtils.onVisibleOnce(TAB_ID, function () {
-      table = initTable();
-      attachListeners();
-    });
+    initTabla();
+    attachListeners();
   }
 
   if (d.readyState === 'loading') {
@@ -212,9 +159,6 @@
 
   w.PendienteList = Object.freeze({
     init,
-    reload: function () {
-      if (table) table.replaceData();
-      else init();
-    },
+    reload,
   });
 })(window, document);

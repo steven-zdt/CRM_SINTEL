@@ -19,6 +19,7 @@ BLOCKED BY DESIGN -- empleados y bancos":
 `CuentaBancaria` no tiene campo sede/area -- el unico filtro real es
 `empresa_id` (Zero Trust ya aplicado por el selector).
 """
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext

@@ -9,6 +9,7 @@ perfil primero, pero cae al singleton Empresa.objects.only('id').first()
 sin exigir TenantProfile, mientras OrganizationalContext.resolve() si lo
 exige.
 """
+
 from apps.tenant.core.services.organizational_context import (
     OrganizationalContext,
     OrganizationalContextError,
@@ -26,17 +27,25 @@ class FacturaOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9 Facturas", nit="900000992", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9 Facturas",
+            nit="900000992",
+            direccion="Calle 1",
         )
         self.factura = Factura.objects.create(
-            empresa=self.empresa, numero="FA-F9-TEST", consecutivo=1,
+            empresa=self.empresa,
+            numero="FA-F9-TEST",
+            consecutivo=1,
             fecha_emision="2026-06-01T00:00:00Z",
-            emisor_nit="900000992", emisor_razon_social="Empresa Test OCF Fase9 Facturas",
-            receptor_nit="123", receptor_razon_social="Cliente Fase9",
+            emisor_nit="900000992",
+            emisor_razon_social="Empresa Test OCF Fase9 Facturas",
+            receptor_nit="123",
+            receptor_razon_social="Cliente Fase9",
         )
 
     def test_facturaviewset_exposes_get_organizational_context_with_a_real_profile(self):
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         from rest_framework.test import APIRequestFactory
         from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -60,7 +69,9 @@ class FacturaOrganizationalContextAdoptionTests(SintelTenantTestCase):
         self.assertEqual(ids_context, ids_selector)
         self.assertIn(self.factura.id, ids_context)
 
-    def test_resolve_empresa_id_from_request_and_organizational_context_diverge_without_a_profile(self):
+    def test_resolve_empresa_id_from_request_and_organizational_context_diverge_without_a_profile(
+        self,
+    ):
         from django.contrib.sessions.backends.db import SessionStore
         from django.test import RequestFactory
 

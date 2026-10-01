@@ -14,6 +14,7 @@ modo edicion (render-offcanvas/editar).
 
 Ver docs/remediation/AUDIT_BASELINE_20260912.md hallazgo V-2.
 """
+
 from decimal import Decimal
 
 from apps.tenant.clientes.models import Cliente
@@ -27,26 +28,40 @@ class EditarVentaTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Editar Venta SAS", nit="900000962", direccion="Calle EV",
+            razon_social="Empresa Editar Venta SAS",
+            nit="900000962",
+            direccion="Calle EV",
         )
         # SintelTenantTestCase.setup_membership() solo crea TenantMembership
         # (esquema public); IsTenantAdminOrReadOnly exige TenantProfile.rol
         # (esquema tenant) para metodos de escritura (PATCH/PUT/POST/DELETE).
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="EV-CLI-1", razon_social="Cliente EV SAS",
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="EV-CLI-1",
+            razon_social="Cliente EV SAS",
             regimen_tributario="ORDINARIO",
         )
         self.venta = Venta.objects.create(
-            empresa=self.empresa, cliente=self.cliente, fecha_emision="2026-06-01",
-            numero_factura="EV-VENTA-1", observaciones="Observacion original",
-            subtotal=Decimal("100.00"), total_neto=Decimal("100.00"),
+            empresa=self.empresa,
+            cliente=self.cliente,
+            fecha_emision="2026-06-01",
+            numero_factura="EV-VENTA-1",
+            observaciones="Observacion original",
+            subtotal=Decimal("100.00"),
+            total_neto=Decimal("100.00"),
             estado=Venta.Estado.BORRADOR,
         )
         ItemVenta.objects.create(
-            venta=self.venta, empresa=self.empresa, descripcion="Item original",
-            cantidad=Decimal("1.0000"), precio_unitario=Decimal("100.00"),
+            venta=self.venta,
+            empresa=self.empresa,
+            descripcion="Item original",
+            cantidad=Decimal("1.0000"),
+            precio_unitario=Decimal("100.00"),
         )
 
     def test_patch_persiste_cambios_reales(self):
@@ -59,7 +74,12 @@ class EditarVentaTests(SintelTenantTestCase):
                 "observaciones": "Observacion editada",
                 "fecha_vencimiento": "2026-07-15",
                 "items": [
-                    {"descripcion": "Item editado", "cantidad": "2", "precio_unitario": "150.00", "porcentaje_iva": "19"},
+                    {
+                        "descripcion": "Item editado",
+                        "cantidad": "2",
+                        "precio_unitario": "150.00",
+                        "porcentaje_iva": "19",
+                    },
                 ],
             },
             format="json",
@@ -94,9 +114,7 @@ class EditarVentaTests(SintelTenantTestCase):
         self.assertEqual(self.venta.observaciones, "Observacion original")
 
     def test_render_offcanvas_editar_precarga_datos(self):
-        resp = self.client.get(
-            f"/api/v1/ventas/render-offcanvas/editar/?uuid={self.venta.uuid}"
-        )
+        resp = self.client.get(f"/api/v1/ventas/render-offcanvas/editar/?uuid={self.venta.uuid}")
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertNotIn(b"{#", resp.content)
         self.assertNotIn(b"{%", resp.content)

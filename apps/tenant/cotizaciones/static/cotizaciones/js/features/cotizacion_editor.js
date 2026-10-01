@@ -21,9 +21,9 @@
       if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
         return w.DOMUtils.formatCurrency(val || 0, { minimumFractionDigits: 0 });
       }
-      return new Intl.NumberFormat('es-CO', {
+      return new Intl.NumberFormat('en-US', {
         style: 'currency',
-        currency: 'COP',
+        currency: 'USD',
         minimumFractionDigits: 0
       }).format(val || 0);
     },

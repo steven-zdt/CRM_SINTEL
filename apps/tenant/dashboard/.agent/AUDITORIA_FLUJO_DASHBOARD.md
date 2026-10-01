@@ -69,3 +69,21 @@ Las tareas de evolución técnica se encuentran en [Arquitectura de Microtareas]
 > [!IMPORTANT]
 > El Dashboard no posee modelos propios; cualquier cambio en la estructura de datos de módulos externos (ej. Facturas) debe reflejarse en los Selectors de este módulo.
 
+---
+
+## 2026-09-26 — Centro de Aprobaciones (Fase 8/9 de PLAN_CENTRO_APROBACIONES_DASHBOARD_COMPRAS.md)
+
+Nueva sección visual dentro de `list_dashboard.html` (banner + KPIs + bandeja server-side
+DataTables 3.x + offcanvas de revisión con ruta del proceso/resumen financiero/historial).
+**El Dashboard sigue sin modelos ni Service Layer propios para esto** -- toda la lógica
+(`SolicitudAprobacionSelector`, `ApprovalBusinessService`, `ApprovalTraceService`) vive en
+`apps/tenant/approvals/` (dominio propio, ver `docs/approvals/APPROVALS_DESIGN.md`). El Dashboard
+solo aporta la plantilla (`partials/centro_aprobaciones.html`, `partials/offcanvas_revisar_
+solicitud.html`) y carga los assets de Approvals (`assets_dashboard.html`) -- consistente con
+`#37` del plan: "Dashboard = presentación/control", nunca dueño del dominio que presenta.
+Endpoints consumidos: `/api/v1/dashboard/aprobaciones/{resumen,dt,trazabilidad,aprobar,rechazar}/`
+(código real en `apps.tenant.approvals.api`, montado con ese path por convención de UI). Detalle
+completo, incluida la ruta visual como lista de nodos conectados (no un grafo canvas/SVG -- ninguna
+librería de grafos está en el stack aprobado, ver CLAUDE.md "Frontend"): `docs/approvals/
+APPROVALS_DESIGN.md` §12-13.
+

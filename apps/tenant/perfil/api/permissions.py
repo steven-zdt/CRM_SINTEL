@@ -22,9 +22,9 @@ from apps.tenant.core.services.membership import check_primary_admin
 
 # Acciones disponibles por rol (SSoT para serializers y guards de UI)
 ROLE_ACTIONS: dict[str, list[str]] = {
-    'ADMIN':    ['view', 'edit', 'delete', 'create_profile', 'assign_rol'],
-    'OPERADOR': ['view', 'edit'],
-    'VISOR':    ['view'],
+    "ADMIN": ["view", "edit", "delete", "create_profile", "assign_rol"],
+    "OPERADOR": ["view", "edit"],
+    "VISOR": ["view"],
 }
 
 
@@ -66,7 +66,7 @@ def get_permissions_context(perfil, user=None) -> dict:
     if not perfil:
         return {}
 
-    is_admin = perfil.rol == 'ADMIN'
+    is_admin = perfil.rol == "ADMIN"
     is_owner = False
 
     if is_admin and user is not None:
@@ -76,13 +76,13 @@ def get_permissions_context(perfil, user=None) -> dict:
             is_owner = False
 
     return {
-        'can_edit_users': is_admin,
-        'can_delete_users': is_admin,
-        'can_assign_roles': is_admin,
-        'can_create_profiles': is_admin,
-        'is_owner': is_owner,
-        'rol': perfil.rol,
-        'user_id': perfil.user_id,
+        "can_edit_users": is_admin,
+        "can_delete_users": is_admin,
+        "can_assign_roles": is_admin,
+        "can_create_profiles": is_admin,
+        "is_owner": is_owner,
+        "rol": perfil.rol,
+        "user_id": perfil.user_id,
     }
 
 

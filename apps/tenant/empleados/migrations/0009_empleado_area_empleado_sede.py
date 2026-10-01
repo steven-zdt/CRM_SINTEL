@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("empresa", "0009_sedes_areas_explicit_fk"),
         ("tenant_empleados", "0008_foto_empleado"),

@@ -27,6 +27,7 @@ NO declara soporte universal de todos los bancos colombianos (Fase 44) --
 es un parser generico best-effort para PDFs con texto extraible en
 layout de una columna de valor + una de saldo por fila.
 """
+
 import contextlib
 import datetime
 import hashlib
@@ -43,6 +44,7 @@ from apps.tenant.bancos.services.parsing.money import parse_money
 
 try:
     from pdfminer.high_level import extract_text as _pdf_extract_text
+
     HAS_PDFMINER = True
 except ImportError:  # pragma: no cover - pdfminer.six ya es dependencia obligatoria del proyecto
     HAS_PDFMINER = False
@@ -57,15 +59,23 @@ _DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y", "%Y
 # item o referencia dentro de la descripcion) NUNCA se interpreta como
 # monto -- una factura/extracto real siempre muestra centavos o miles.
 _MONEY_TOKEN_RE = re.compile(
-    r"\(?[+-]?\$?\s?\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\)?"
-    r"|"
-    r"\(?[+-]?\$?\s?\d+[.,]\d{2}\)?"
+    r"\(?[+-]?\$?\s?\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\)?" r"|" r"\(?[+-]?\$?\s?\d+[.,]\d{2}\)?"
 )
 
 # Lineas de ruido conocidas -- encabezados/resumen repetidos por pagina.
 _HEADER_KEYWORDS = (
-    "fecha", "descripcion", "descripción", "saldo", "pagina", "página",
-    "extracto", "resumen", "total", "cliente", "cuenta no", "nit",
+    "fecha",
+    "descripcion",
+    "descripción",
+    "saldo",
+    "pagina",
+    "página",
+    "extracto",
+    "resumen",
+    "total",
+    "cliente",
+    "cuenta no",
+    "nit",
 )
 
 
@@ -84,8 +94,10 @@ def _es_linea_encabezado(resto_linea: str) -> bool:
         return True
     # Una linea de encabezado tipica no tiene digitos de monto reales, solo
     # palabras clave de columna.
-    palabras = normalizado.split()
-    return any(kw in normalizado for kw in _HEADER_KEYWORDS) and not any(c.isdigit() for c in normalizado[:3])
+    normalizado.split()
+    return any(kw in normalizado for kw in _HEADER_KEYWORDS) and not any(
+        c.isdigit() for c in normalizado[:3]
+    )
 
 
 def parsear_texto_extracto(
@@ -98,10 +110,12 @@ def parsear_texto_extracto(
     casos de borde en tests -- el layout visual exacto que produce un motor
     de renderizado de PDF no es 100% determinista entre entornos)."""
     resultado = NormalizedBankStatement(
-        source_format=formato, source_file_name=nombre_archivo or "", source_file_hash=source_file_hash,
+        source_format=formato,
+        source_file_name=nombre_archivo or "",
+        source_file_hash=source_file_hash,
     )
 
-    lineas = [l for l in texto.splitlines() if l.strip()]
+    lineas = [linea_raw for linea_raw in texto.splitlines() if linea_raw.strip()]
     for fila_num, linea in enumerate(lineas, start=1):
         match_fecha = _DATE_RE.search(linea)
         if not match_fecha:
@@ -109,11 +123,13 @@ def parsear_texto_extracto(
 
         resultado.filas_leidas += 1
         fecha = _parse_fecha(match_fecha.group(1))
-        resto = linea[match_fecha.end():]
+        resto = linea[match_fecha.end() :]
 
         if fecha is None:
             resultado.filas_omitidas += 1
-            resultado.errores.append(f"Fila {fila_num}: fecha no reconocida ('{match_fecha.group(1)}').")
+            resultado.errores.append(
+                f"Fila {fila_num}: fecha no reconocida ('{match_fecha.group(1)}')."
+            )
             continue
 
         montos_texto = _MONEY_TOKEN_RE.findall(resto)
@@ -192,6 +208,8 @@ class PDFBankStatementImporter(BankStatementImporter):
             )
 
         return parsear_texto_extracto(
-            texto, formato=self.formato, nombre_archivo=nombre_archivo,
+            texto,
+            formato=self.formato,
+            nombre_archivo=nombre_archivo,
             source_file_hash=hashlib.sha256(contenido_bytes).hexdigest(),
         )

@@ -15,6 +15,7 @@ Verifica:
 - DELETE: DELETE /api/v1/bancos/cuentas/{uuid}/ (regla real: rechaza si tiene extractos asociados)
 - Negativos: campos requeridos vacios, UUID inexistente
 """
+
 from rest_framework import status
 
 from apps.tenant.bancos.models import CuentaBancaria, ExtractoBancario
@@ -27,10 +28,13 @@ class CuentaBancariaCrudWorkspaceTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test Bancos CRUD", nit="900555444", direccion="Calle 1",
+            razon_social="Empresa Test Bancos CRUD",
+            nit="900555444",
+            direccion="Calle 1",
         )
         TenantProfile.objects.get_or_create(
-            user=self.user, empresa=self.empresa,
+            user=self.user,
+            empresa=self.empresa,
             defaults={"rol": "ADMIN", "alcance": "EMPRESA", "cargo": "Tesorero"},
         )
 
@@ -49,7 +53,9 @@ class CuentaBancariaCrudWorkspaceTests(SintelTenantTestCase):
         initial_count = len(resp.json().get("results", resp.json()))
 
         # 2. CREATE
-        resp = self.api_client.post("/api/v1/bancos/cuentas/", data=self._payload_valido(), format="json")
+        resp = self.api_client.post(
+            "/api/v1/bancos/cuentas/", data=self._payload_valido(), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content)
         created = resp.json()
         self.assertEqual(created["nombre"], "Cuenta de prueba CRUD")
@@ -92,7 +98,9 @@ class CuentaBancariaCrudWorkspaceTests(SintelTenantTestCase):
         self.assertFalse(CuentaBancaria.objects.filter(uuid=cuenta_uuid).exists())
 
     def test_cuenta_bancaria_delete_con_extractos_asociados_es_rechazada(self):
-        resp = self.api_client.post("/api/v1/bancos/cuentas/", data=self._payload_valido(), format="json")
+        resp = self.api_client.post(
+            "/api/v1/bancos/cuentas/", data=self._payload_valido(), format="json"
+        )
         cuenta_uuid = resp.json()["uuid"]
         cuenta = CuentaBancaria.objects.get(uuid=cuenta_uuid)
         ExtractoBancario.objects.create(empresa=self.empresa, cuenta=cuenta, mes=1, anio=2026)
@@ -104,7 +112,11 @@ class CuentaBancariaCrudWorkspaceTests(SintelTenantTestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
 
         resp = self.api_client.delete(f"/api/v1/bancos/cuentas/{cuenta_uuid}/")
-        self.assertIn(resp.status_code, (status.HTTP_400_BAD_REQUEST, status.HTTP_422_UNPROCESSABLE_ENTITY), resp.content)
+        self.assertIn(
+            resp.status_code,
+            (status.HTTP_400_BAD_REQUEST, status.HTTP_422_UNPROCESSABLE_ENTITY),
+            resp.content,
+        )
         self.assertIn(b"extractos asociados", resp.content)
         self.assertTrue(CuentaBancaria.objects.filter(uuid=cuenta_uuid).exists())
 
@@ -121,7 +133,9 @@ class CuentaBancariaCrudWorkspaceTests(SintelTenantTestCase):
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND, resp.content)
 
     def test_b4_desactivar_activar_cuenta_bancaria(self):
-        resp = self.api_client.post("/api/v1/bancos/cuentas/", data=self._payload_valido(), format="json")
+        resp = self.api_client.post(
+            "/api/v1/bancos/cuentas/", data=self._payload_valido(), format="json"
+        )
         cuenta_uuid = resp.json()["uuid"]
         self.assertTrue(resp.json()["activo"])
 
@@ -141,7 +155,9 @@ class CuentaBancariaCrudWorkspaceTests(SintelTenantTestCase):
         self.assertTrue(cuenta_db.activo)
 
     def test_b4_eliminar_cuenta_activa_es_rechazada(self):
-        resp = self.api_client.post("/api/v1/bancos/cuentas/", data=self._payload_valido(), format="json")
+        resp = self.api_client.post(
+            "/api/v1/bancos/cuentas/", data=self._payload_valido(), format="json"
+        )
         cuenta_uuid = resp.json()["uuid"]
 
         resp = self.api_client.delete(f"/api/v1/bancos/cuentas/{cuenta_uuid}/")

@@ -7,6 +7,7 @@ ver esa nota para el detalle de por que alcance AREA se traduce como
 NULL hoy, correctamente restrictivo cuando existan registros con sede
 real).
 """
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext

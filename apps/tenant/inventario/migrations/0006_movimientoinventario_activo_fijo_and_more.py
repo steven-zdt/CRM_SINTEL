@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("empresa", "0007_empresa_owner_email"),
         ("tenant_inventario", "0005_uuid_lookup_and_tenant_code_constraints"),
@@ -66,12 +65,8 @@ class Migration(migrations.Migration):
             model_name="movimientoinventario",
             constraint=models.CheckConstraint(
                 check=models.Q(
-                    models.Q(
-                        ("activo_fijo__isnull", True), ("producto__isnull", False)
-                    ),
-                    models.Q(
-                        ("activo_fijo__isnull", False), ("producto__isnull", True)
-                    ),
+                    models.Q(("activo_fijo__isnull", True), ("producto__isnull", False)),
+                    models.Q(("activo_fijo__isnull", False), ("producto__isnull", True)),
                     _connector="OR",
                 ),
                 name="exactly_one_product_or_asset",

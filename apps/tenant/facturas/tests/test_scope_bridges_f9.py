@@ -16,6 +16,7 @@ Un perfil alcance=SEDE asignado solo a Sede A podia vincular su Factura a
 una Cotizacion de Sede B (misma empresa). Corregido propagando
 `OrganizationalScope.sede_ids` hasta `CotizacionBridge`.
 """
+
 from rest_framework import status
 
 from apps.tenant.cotizaciones.models import Cotizacion
@@ -29,27 +30,39 @@ class FacturaCotizacionBridgeScopeF9Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F9", nit="900000783", direccion="Calle 1",
+            razon_social="Empresa Test F9",
+            nit="900000783",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F9")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F9")
         self.factura = Factura.objects.create(
-            empresa=self.empresa, numero="FA-F9-1", consecutivo=1,
+            empresa=self.empresa,
+            numero="FA-F9-1",
+            consecutivo=1,
             fecha_emision="2026-06-01T00:00:00Z",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
-            receptor_nit="123", receptor_razon_social="Cliente F9",
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
+            receptor_nit="123",
+            receptor_razon_social="Cliente F9",
         )
 
     def _crear_cotizacion(self, numero, sede=None):
         return Cotizacion.objects.create(
-            empresa=self.empresa, numero_cotizacion=numero, fecha_vencimiento="2026-12-31", sede=sede,
+            empresa=self.empresa,
+            numero_cotizacion=numero,
+            fecha_vencimiento="2026-12-31",
+            sede=sede,
         )
 
     def test_alcance_sede_no_puede_vincular_cotizacion_de_otra_sede(self):
         cot_b = self._crear_cotizacion("COT-F9-B", sede=self.sede_b)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a])
 
@@ -68,7 +81,10 @@ class FacturaCotizacionBridgeScopeF9Tests(SintelTenantTestCase):
         cot_sin = self._crear_cotizacion("COT-F9-SIN")
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a])
 
@@ -88,7 +104,9 @@ class FacturaCotizacionBridgeScopeF9Tests(SintelTenantTestCase):
 
     def test_alcance_empresa_puede_vincular_cualquier_cotizacion(self):
         cot_b = self._crear_cotizacion("COT-F9-E-B", sede=self.sede_b)
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         resp = self.api_client.patch(
             f"/api/v1/facturas/{self.factura.uuid}/",

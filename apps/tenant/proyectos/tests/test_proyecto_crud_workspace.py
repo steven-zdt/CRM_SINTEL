@@ -16,6 +16,7 @@ Verifica:
 - DELETE: DELETE /api/v1/proyectos/{uuid}/
 - Negativos: campos requeridos vacios, UUID inexistente
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa
@@ -28,10 +29,13 @@ class ProyectoCrudWorkspaceTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test Proyectos CRUD", nit="900555555", direccion="Calle 1",
+            razon_social="Empresa Test Proyectos CRUD",
+            nit="900555555",
+            direccion="Calle 1",
         )
         TenantProfile.objects.get_or_create(
-            user=self.user, empresa=self.empresa,
+            user=self.user,
+            empresa=self.empresa,
             defaults={"rol": "ADMIN", "alcance": "EMPRESA", "cargo": "Gerente de Proyectos"},
         )
 
@@ -49,7 +53,9 @@ class ProyectoCrudWorkspaceTests(SintelTenantTestCase):
         initial_count = len(resp.json().get("results", resp.json()))
 
         # 2. CREATE
-        resp = self.api_client.post("/api/v1/proyectos/", data=self._payload_valido(), format="json")
+        resp = self.api_client.post(
+            "/api/v1/proyectos/", data=self._payload_valido(), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content)
         created = resp.json()
         self.assertEqual(created["nombre"], "Proyecto de prueba CRUD")

@@ -25,7 +25,6 @@ from django_tenants.test.cases import TenantTestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.public.accounts.models import User
 from apps.public.impuestos.models import TarifaIVA, TipoImpuesto
 from apps.public.tenants.models import Client as TenantClient
 from apps.public.tenants.models import Domain
@@ -274,7 +273,9 @@ class ConsoleAPIConsumptionTests(TenantTestCase):
         # ~80s/tenant con create(), este test tardaba varios minutos).
         TenantClient.objects.bulk_create(
             [
-                TenantClient(schema_name=f"empresa{i + 3}", nombre=f"Empresa {i + 3}", on_trial=True)
+                TenantClient(
+                    schema_name=f"empresa{i + 3}", nombre=f"Empresa {i + 3}", on_trial=True
+                )
                 for i in range(30)
             ]
         )
@@ -353,7 +354,7 @@ class ConsoleAPIConsumptionTests(TenantTestCase):
         connection.set_schema_to_public()
 
         # Crear usuario inactivo
-        inactive_user = User.objects.create_user(
+        User.objects.create_user(
             email="inactive@test.com", username="inactive", password="testpass123", is_active=False
         )
 

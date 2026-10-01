@@ -11,6 +11,7 @@ usa tenant_context() para limpiar TenantProfile en cada schema de forma ORM-safe
 Esto elimina la dependencia de nombres de tabla hardcodeados y mantiene
 la unidireccionalidad public → tenant via signal/receiver.
 """
+
 import logging
 
 from django.contrib.auth import get_user_model
@@ -73,6 +74,7 @@ def delete_user_service(
     # 3. Audit (best-effort, antes del DELETE para preservar trazabilidad)
     try:
         from apps.public.accounts.models import DeletionAudit
+
         audit = DeletionAudit.objects.create(
             target_user_id=user_id,
             deleted_by_id=deleted_by_id,
@@ -81,7 +83,9 @@ def delete_user_service(
         )
         logger.info(
             "delete_user_service: DeletionAudit id=%s target=%s by=%s",
-            audit.id, user_id, deleted_by_id,
+            audit.id,
+            user_id,
+            deleted_by_id,
         )
     except Exception as exc:
         logger.warning("delete_user_service: DeletionAudit failed: %s", exc)

@@ -6,6 +6,7 @@ Prefijo vacio deliberado en el router (mismo patron que
 `@action` `ask/` (`AIAssistantViewSet`), no hay `list`/`retrieve` de un
 recurso CRUD.
 """
+
 from rest_framework.routers import DefaultRouter
 
 from apps.services.ai.api.viewsets import AIAssistantViewSet

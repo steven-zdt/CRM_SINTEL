@@ -31,7 +31,7 @@ class SafeTokenRefreshView(TokenRefreshView):
         try:
             return super().post(request, *args, **kwargs)
         except (ObjectDoesNotExist, Exception) as exc:
-            if isinstance(exc, (TokenError, InvalidToken)):
+            if isinstance(exc, TokenError | InvalidToken):
                 raise
             # User eliminado o no encontrado — token ya no es valido
             if "DoesNotExist" in type(exc).__name__ or "User matching query" in str(exc):
@@ -40,7 +40,9 @@ class SafeTokenRefreshView(TokenRefreshView):
                     request.META.get("REMOTE_ADDR", "?"),
                 )
                 return Response(
-                    {"detail": "Token inválido: el usuario asociado ya no existe. Vuelve a iniciar sesión."},
+                    {
+                        "detail": "Token inválido: el usuario asociado ya no existe. Vuelve a iniciar sesión."
+                    },
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
             raise
@@ -83,18 +85,19 @@ class LoggedTokenVerifyView(TokenVerifyView):
             response = super().post(request, *args, **kwargs)
             if response.status_code == 200:
                 logger.debug("TokenVerify 200 - Token valido")
-                
+
                 # Evaluar coherencia y seguridad de la sesion
                 try:
-                    from rest_framework_simplejwt.tokens import UntypedToken
                     from django.contrib.auth import get_user_model
+                    from rest_framework_simplejwt.tokens import UntypedToken
+
                     from apps.public.core.services.session_security import SessionSecurityHelper
 
                     token_obj = UntypedToken(token)
                     user_id = token_obj.get("user_id")
                     User = get_user_model()
                     user = User.objects.filter(pk=user_id).first()
-                    
+
                     if user:
                         SessionSecurityHelper.evaluate_session_security(request, user)
                 except Exception as ex:

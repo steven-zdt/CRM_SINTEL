@@ -1,9 +1,12 @@
 import logging
 from decimal import Decimal
+
 from django.db.models import Sum
+
 from ..models import Cotizacion, CotizacionItem
 
 logger = logging.getLogger(__name__)
+
 
 class CotizacionCRUDService:
     @staticmethod

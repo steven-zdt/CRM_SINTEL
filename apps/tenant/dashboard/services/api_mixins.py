@@ -3,9 +3,10 @@ API Mixins para Dashboard - Inyección de servicios en ViewSets.
 
 WARNING: SINTEL v3.5: Arquitectura Service Layer Modular.
 """
-from apps.tenant.dashboard.services.selectors import DashboardSelector
+
 from apps.tenant.dashboard.services.business_service import DashboardBusinessService
 from apps.tenant.dashboard.services.crud_service import DashboardCRUDService
+from apps.tenant.dashboard.services.selectors import DashboardSelector
 
 
 class DashboardServiceMixin:
@@ -20,7 +21,7 @@ class DashboardServiceMixin:
     def service_get_user_role(self):
         """Obtiene rol del usuario actual."""
         user = self.request.user
-        tenant = getattr(self.request, 'tenant', None)
+        tenant = getattr(self.request, "tenant", None)
         return self.business_service_class.get_user_role(user, tenant)
 
     def service_get_redirect_url(self):

@@ -1,0 +1,11 @@
+{# acciones_footer.html - Fase 11 (PLAN_OPTIMIZACION_COMPRAS...) #}
+{# Compartido por offcanvas_crear_compras.html / offcanvas_editar_compras.html. #}
+{# Variables: `form_id` (string), `boton_texto` (string). #}
+<div class="offcanvas-footer">
+    <div class="d-flex justify-content-end gap-2">
+        <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cancelar</button>
+        <button type="submit" class="btn btn-primary btn-sm px-4" id="btn-guardar-compra" form="{{ form_id }}">
+            <i class="bi bi-save me-1"></i>{{ boton_texto }}
+        </button>
+    </div>
+</div>

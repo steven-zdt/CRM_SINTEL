@@ -9,6 +9,9 @@
 {# 3. features/*.js        - Features modulares (list, editor, etc)#}
 {# 4. facturas_main.js     - Orquestador principal                #}
 
+{% include 'tenant/facturas/partials/assets_facturas_datatables.html' %}
+<script src="{% static 'core/js/common/datatables.factory.js' %}"></script>
+
 <script src="{% static 'facturas/js/facturas.api.js' %}"></script>
 <script src="{% static 'facturas/js/facturas.components.js' %}"></script>
 <script src="{% static 'facturas/js/features/facturas_list.js' %}"></script>

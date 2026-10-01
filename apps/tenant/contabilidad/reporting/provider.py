@@ -16,6 +16,7 @@ Solo se adapta `balance_prueba` de los 3 reportes contables existentes.
 distinta (listas anidadas, no filas planas) -- quedan diferidos (ver
 docs/reporting/REPORTING_ARCHITECTURE.md, loop de expansion).
 """
+
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
@@ -47,10 +48,22 @@ _BALANCE_DIMENSIONS = (
 )
 
 _BALANCE_MEASURES = (
-    ReportMeasure("saldo_anterior", "Saldo anterior", FieldType.DECIMAL, Aggregation.SUM, source="saldo_anterior"),
-    ReportMeasure("debito", "Debito del periodo", FieldType.DECIMAL, Aggregation.SUM, source="debito"),
-    ReportMeasure("credito", "Credito del periodo", FieldType.DECIMAL, Aggregation.SUM, source="credito"),
-    ReportMeasure("nuevo_saldo", "Nuevo saldo", FieldType.DECIMAL, Aggregation.SUM, source="nuevo_saldo"),
+    ReportMeasure(
+        "saldo_anterior",
+        "Saldo anterior",
+        FieldType.DECIMAL,
+        Aggregation.SUM,
+        source="saldo_anterior",
+    ),
+    ReportMeasure(
+        "debito", "Debito del periodo", FieldType.DECIMAL, Aggregation.SUM, source="debito"
+    ),
+    ReportMeasure(
+        "credito", "Credito del periodo", FieldType.DECIMAL, Aggregation.SUM, source="credito"
+    ),
+    ReportMeasure(
+        "nuevo_saldo", "Nuevo saldo", FieldType.DECIMAL, Aggregation.SUM, source="nuevo_saldo"
+    ),
 )
 
 _BALANCE_DATASET = ReportDataset(
@@ -131,14 +144,25 @@ _RETENCIONES_DIMENSIONS = (
     # Documentado explicitamente, no presentado como "fecha del documento".
     ReportField("fecha", "Fecha de registro", FieldType.DATE, source="created_at__date"),
     ReportField("tipo", "Tipo de retencion", FieldType.STRING, source="tipo"),
-    ReportField("naturaleza", "Naturaleza (VENTA=sufrida, COMPRA=practicada)", FieldType.STRING, source="naturaleza"),
-    ReportField("documento_origen_app", "App origen", FieldType.STRING, source="documento_origen_app"),
+    ReportField(
+        "naturaleza",
+        "Naturaleza (VENTA=sufrida, COMPRA=practicada)",
+        FieldType.STRING,
+        source="naturaleza",
+    ),
+    ReportField(
+        "documento_origen_app", "App origen", FieldType.STRING, source="documento_origen_app"
+    ),
 )
 
 _RETENCIONES_MEASURES = (
-    ReportMeasure("cantidad", "Cantidad de retenciones", FieldType.INTEGER, Aggregation.COUNT, source="id"),
+    ReportMeasure(
+        "cantidad", "Cantidad de retenciones", FieldType.INTEGER, Aggregation.COUNT, source="id"
+    ),
     ReportMeasure("base", "Base", FieldType.DECIMAL, Aggregation.SUM, source="base"),
-    ReportMeasure("monto", "Monto neto (incluye reversas)", FieldType.DECIMAL, Aggregation.SUM, source="monto"),
+    ReportMeasure(
+        "monto", "Monto neto (incluye reversas)", FieldType.DECIMAL, Aggregation.SUM, source="monto"
+    ),
 )
 
 _RETENCIONES_DATASET = ReportDataset(
@@ -215,11 +239,13 @@ def _execute_retenciones(request: ReportRequest, scope) -> ReportResult:
         if resolved:
             values_qs = values_qs.order_by(f"{prefix}{resolved}")
     else:
-        values_qs = values_qs.order_by(*[f"-{s}" for s in group_sources.values()][:1] or ["-created_at__date"])
+        values_qs = values_qs.order_by(
+            *[f"-{s}" for s in group_sources.values()][:1] or ["-created_at__date"]
+        )
 
     count = values_qs.count()
     start = (request.page - 1) * request.page_size
-    page_rows = list(values_qs[start:start + request.page_size])
+    page_rows = list(values_qs[start : start + request.page_size])
 
     rows = []
     for raw in page_rows:
@@ -274,6 +300,8 @@ class ContabilidadReportProvider:
     def execute(self, request: ReportRequest, scope) -> ReportResult:
         entry = _DATASETS.get(request.dataset_id)
         if entry is None:
-            raise ReportValidationError(f"Dataset desconocido para ContabilidadReportProvider: {request.dataset_id}")
+            raise ReportValidationError(
+                f"Dataset desconocido para ContabilidadReportProvider: {request.dataset_id}"
+            )
         _, executor = entry
         return executor(request, scope)

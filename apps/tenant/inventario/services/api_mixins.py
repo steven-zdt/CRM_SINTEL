@@ -24,7 +24,10 @@ from apps.tenant.inventario.models import (
     MovimientoInventario,
     Producto,
     Servicio,
-    TrasladoInventario,
+)
+from apps.tenant.inventario.services.business_service import (
+    KardexService,
+    TrasladoInventarioService,
 )
 from apps.tenant.inventario.services.selectors import (
     ActivoFijoSelector,
@@ -32,12 +35,7 @@ from apps.tenant.inventario.services.selectors import (
     MovimientoInventarioSelector,
     ProductoSelector,
     ServicioSelector,
-    StockPorSedeSelector,
     TrasladoInventarioSelector,
-)
-from apps.tenant.inventario.services.business_service import (
-    KardexService,
-    TrasladoInventarioService,
 )
 
 
@@ -47,23 +45,35 @@ class CategoriaItemServiceMixin:
     def service_categoria_destroy(self, instance):
         """Elimina la categoria desvinculando items relacionados (set NULL)."""
         with transaction.atomic():
-            Producto.objects.filter(empresa_id=instance.empresa_id, categoria=instance).update(categoria=None)
-            Servicio.objects.filter(empresa_id=instance.empresa_id, categoria=instance).update(categoria=None)
-            ActivoFijo.objects.filter(empresa_id=instance.empresa_id, categoria=instance).update(categoria=None)
+            Producto.objects.filter(empresa_id=instance.empresa_id, categoria=instance).update(
+                categoria=None
+            )
+            Servicio.objects.filter(empresa_id=instance.empresa_id, categoria=instance).update(
+                categoria=None
+            )
+            ActivoFijo.objects.filter(empresa_id=instance.empresa_id, categoria=instance).update(
+                categoria=None
+            )
             instance.delete()
         return True
 
     def service_categoria_get_resumen(self, instance):
         """Retorna conteo de items asociados a la categoria."""
-        conteo_productos = Producto.objects.filter(
-            empresa_id=instance.empresa_id, categoria=instance
-        ).only('id').count()
-        conteo_servicios = Servicio.objects.filter(
-            empresa_id=instance.empresa_id, categoria=instance
-        ).only('id').count()
-        conteo_activos = ActivoFijo.objects.filter(
-            empresa_id=instance.empresa_id, categoria=instance
-        ).only('id').count()
+        conteo_productos = (
+            Producto.objects.filter(empresa_id=instance.empresa_id, categoria=instance)
+            .only("id")
+            .count()
+        )
+        conteo_servicios = (
+            Servicio.objects.filter(empresa_id=instance.empresa_id, categoria=instance)
+            .only("id")
+            .count()
+        )
+        conteo_activos = (
+            ActivoFijo.objects.filter(empresa_id=instance.empresa_id, categoria=instance)
+            .only("id")
+            .count()
+        )
         return {
             "id": instance.id,
             "nombre": instance.nombre,
@@ -78,11 +88,13 @@ class CategoriaItemServiceMixin:
         """Contexto para formulario de categoria (HTMX Offcanvas)."""
         categoria = None
         if id_instancia:
-            categoria = CategoriaItemSelector.get_detail(empresa_id=empresa.id, categoria_uuid=id_instancia)
+            categoria = CategoriaItemSelector.get_detail(
+                empresa_id=empresa.id, categoria_uuid=id_instancia
+            )
         return {
-            'categoria': categoria,
-            'empresa': empresa,
-            'aplicaciones': CategoriaItem.Aplicacion.choices,
+            "categoria": categoria,
+            "empresa": empresa,
+            "aplicaciones": CategoriaItem.Aplicacion.choices,
         }
 
 
@@ -102,54 +114,57 @@ class ProductoServiceMixin:
     def service_producto_get_stock(self, empresa, pk):
         """Retorna solo campos de stock (id, nombre, stock_actual)."""
         producto = (
-            Producto.objects
-            .filter(empresa=empresa, uuid=pk)
-            .only('id', 'uuid', 'nombre', 'stock_actual')
+            Producto.objects.filter(empresa=empresa, uuid=pk)
+            .only("id", "uuid", "nombre", "stock_actual")
             .first()
         )
         if not producto:
             from rest_framework.exceptions import NotFound
-            raise NotFound('Producto no encontrado')
+
+            raise NotFound("Producto no encontrado")
         return producto
 
     def service_producto_get_kardex(self, empresa, pk):
         """Obtiene producto y sus movimientos de Kardex optimizados."""
         producto = (
-            Producto.objects
-            .filter(empresa=empresa, uuid=pk)
-            .only('id', 'uuid', 'codigo', 'nombre', 'stock_actual')
+            Producto.objects.filter(empresa=empresa, uuid=pk)
+            .only("id", "uuid", "codigo", "nombre", "stock_actual")
             .first()
         )
         if not producto:
             from rest_framework.exceptions import NotFound
-            raise NotFound('Producto no encontrado')
+
+            raise NotFound("Producto no encontrado")
 
         movimientos = MovimientoInventarioSelector.get_kardex_for_producto(empresa.id, producto.id)
         return producto, movimientos
 
-    def service_producto_get_offcanvas_context(self, empresa, id_instancia=None, tipo_formulario='producto'):
+    def service_producto_get_offcanvas_context(
+        self, empresa, id_instancia=None, tipo_formulario="producto"
+    ):
         """Centraliza la carga de datos para formularios HTMX de productos."""
         producto = None
         if id_instancia:
-            producto = ProductoSelector.get_detail(empresa_id=empresa.id, producto_uuid=id_instancia)
+            producto = ProductoSelector.get_detail(
+                empresa_id=empresa.id, producto_uuid=id_instancia
+            )
 
         categorias = (
-            CategoriaItem.objects
-            .filter(empresa_id=empresa.id, activo=True)
-            .only('id', 'nombre', 'aplicacion')
-            .order_by('nombre')[:100]
+            CategoriaItem.objects.filter(empresa_id=empresa.id, activo=True)
+            .only("id", "nombre", "aplicacion")
+            .order_by("nombre")[:100]
         )
 
         tipos_movimiento = []
-        if tipo_formulario == 'ajuste':
+        if tipo_formulario == "ajuste":
             tipos_movimiento = MovimientoInventario.TipoMovimiento.choices
 
         return {
-            'producto': producto,
-            'categorias': categorias,
-            'tipo_formulario': tipo_formulario,
-            'empresa': empresa,
-            'tipos_movimiento': tipos_movimiento,
+            "producto": producto,
+            "categorias": categorias,
+            "tipo_formulario": tipo_formulario,
+            "empresa": empresa,
+            "tipos_movimiento": tipos_movimiento,
         }
 
 
@@ -170,27 +185,28 @@ class ServicioServiceMixin:
         """Centraliza la carga de datos para formularios HTMX de servicios."""
         servicio = None
         if id_instancia:
-            servicio = ServicioSelector.get_detail(empresa_id=empresa.id, servicio_uuid=id_instancia)
+            servicio = ServicioSelector.get_detail(
+                empresa_id=empresa.id, servicio_uuid=id_instancia
+            )
 
         categorias = (
-            CategoriaItem.objects
-            .filter(
+            CategoriaItem.objects.filter(
                 empresa_id=empresa.id,
                 activo=True,
-                aplicacion__in=[CategoriaItem.Aplicacion.SERVICIO, CategoriaItem.Aplicacion.TODO]
+                aplicacion__in=[CategoriaItem.Aplicacion.SERVICIO, CategoriaItem.Aplicacion.TODO],
             )
-            .only('id', 'nombre', 'aplicacion')
-            .order_by('nombre')[:100]
+            .only("id", "nombre", "aplicacion")
+            .order_by("nombre")[:100]
         )
         return {
-            'servicio': servicio,
-            'categorias': categorias,
-            'empresa': empresa,
+            "servicio": servicio,
+            "categorias": categorias,
+            "empresa": empresa,
         }
 
     def service_servicio_get_historial_context(self, empresa):
         """Contexto para el formulario de historial de servicio."""
-        return {'empresa': empresa}
+        return {"empresa": empresa}
 
 
 class ActivoFijoServiceMixin:
@@ -217,7 +233,7 @@ class ActivoFijoServiceMixin:
 
     def service_activo_list_all(self, empresa):
         """QuerySet optimizado para DataTables ajax directo."""
-        return ActivoFijoSelector.get_list(empresa_id=empresa.id).order_by('nombre')
+        return ActivoFijoSelector.get_list(empresa_id=empresa.id).order_by("nombre")
 
     def service_activo_get_offcanvas_context(self, empresa, id_instancia=None):
         """Contexto para formulario de activo fijo (HTMX Offcanvas)."""
@@ -226,19 +242,18 @@ class ActivoFijoServiceMixin:
             activo = ActivoFijoSelector.get_detail(empresa_id=empresa.id, activo_uuid=id_instancia)
 
         categorias = (
-            CategoriaItem.objects
-            .filter(
+            CategoriaItem.objects.filter(
                 empresa_id=empresa.id,
                 activo=True,
-                aplicacion__in=[CategoriaItem.Aplicacion.ACTIVO, CategoriaItem.Aplicacion.TODO]
+                aplicacion__in=[CategoriaItem.Aplicacion.ACTIVO, CategoriaItem.Aplicacion.TODO],
             )
-            .only('id', 'nombre', 'aplicacion')
-            .order_by('nombre')[:100]
+            .only("id", "nombre", "aplicacion")
+            .order_by("nombre")[:100]
         )
         return {
-            'activo': activo,
-            'categorias': categorias,
-            'empresa': empresa,
+            "activo": activo,
+            "categorias": categorias,
+            "empresa": empresa,
         }
 
 
@@ -248,29 +263,29 @@ class MovimientoServiceMixin:
     def service_movimiento_perform_create(self, serializer, empresa):
         """Guarda el movimiento y recalcula stock atomicamente (v3.8.1: soporta Activo Fijo)."""
         data = serializer.validated_data
-        producto = data.get('producto')
-        activo_fijo = data.get('activo_fijo')
+        producto = data.get("producto")
+        activo_fijo = data.get("activo_fijo")
 
         if producto:
             movimiento = KardexService.registrar_movimiento(
                 empresa_id=empresa.id,
                 producto_id=producto.id,
-                tipo=data['tipo'],
-                cantidad=data['cantidad'],
-                costo_unitario=data.get('costo_unitario') or Decimal('0'),
-                origen_referencia=data.get('origen_referencia'),
-                cliente_referencia=data.get('cliente_referencia'),
-                observaciones=data.get('observaciones'),
+                tipo=data["tipo"],
+                cantidad=data["cantidad"],
+                costo_unitario=data.get("costo_unitario") or Decimal("0"),
+                origen_referencia=data.get("origen_referencia"),
+                cliente_referencia=data.get("cliente_referencia"),
+                observaciones=data.get("observaciones"),
             )
         elif activo_fijo:
             movimiento = KardexService.registrar_movimiento_activo(
                 empresa_id=empresa.id,
                 activo_fijo_id=activo_fijo.id,
-                tipo=data['tipo'],
-                costo_unitario=data.get('costo_unitario') or Decimal('0'),
-                origen_referencia=data.get('origen_referencia'),
-                cliente_referencia=data.get('cliente_referencia'),
-                observaciones=data.get('observaciones'),
+                tipo=data["tipo"],
+                costo_unitario=data.get("costo_unitario") or Decimal("0"),
+                origen_referencia=data.get("origen_referencia"),
+                cliente_referencia=data.get("cliente_referencia"),
+                observaciones=data.get("observaciones"),
             )
         else:
             raise ValidationError("Debe especificar un Producto o un Activo Fijo.")
@@ -283,11 +298,11 @@ class MovimientoServiceMixin:
         return KardexService.actualizar_movimiento(
             movimiento=instance,
             empresa_id=empresa.id,
-            nueva_cantidad=validated_data.get('cantidad'),
-            nuevo_tipo=validated_data.get('tipo'),
-            nuevo_costo=validated_data.get('costo_unitario'),
-            nuevo_origen=validated_data.get('origen_referencia'),
-            nuevas_observaciones=validated_data.get('observaciones'),
+            nueva_cantidad=validated_data.get("cantidad"),
+            nuevo_tipo=validated_data.get("tipo"),
+            nuevo_costo=validated_data.get("costo_unitario"),
+            nuevo_origen=validated_data.get("origen_referencia"),
+            nuevas_observaciones=validated_data.get("observaciones"),
         )
 
     def service_movimiento_perform_destroy(self, instance, empresa):
@@ -308,6 +323,7 @@ class MovimientoServiceMixin:
                 OrganizationalScopeError,
             )
             from apps.tenant.inventario.services.selectors import MovimientoInventarioSelector
+
             try:
                 sede_ids = OrganizationalScope.resolve(self.request).sede_ids
             except OrganizationalScopeError:
@@ -321,9 +337,9 @@ class MovimientoServiceMixin:
             except MovimientoInventario.DoesNotExist:
                 movimiento = None
         return {
-            'movimiento': movimiento,
-            'tipos': MovimientoInventario.TipoMovimiento.choices,
-            'empresa': empresa,
+            "movimiento": movimiento,
+            "tipos": MovimientoInventario.TipoMovimiento.choices,
+            "empresa": empresa,
         }
 
 
@@ -335,6 +351,7 @@ class TrasladoInventarioServiceMixin:
             OrganizationalScope,
             OrganizationalScopeError,
         )
+
         try:
             sede_ids = OrganizationalScope.resolve(self.request).sede_ids
         except OrganizationalScopeError:
@@ -347,19 +364,21 @@ class TrasladoInventarioServiceMixin:
     def service_traslado_solicitar(self, empresa, usuario_id, data: dict):
         return TrasladoInventarioService.solicitar(
             empresa_id=empresa.id,
-            producto_id=data['producto'].id,
-            cantidad=data['cantidad'],
-            sede_origen_id=data['sede_origen'].id,
-            sede_destino_id=data['sede_destino'].id,
+            producto_id=data["producto"].id,
+            cantidad=data["cantidad"],
+            sede_origen_id=data["sede_origen"].id,
+            sede_destino_id=data["sede_destino"].id,
             usuario_id=usuario_id,
-            area_origen_id=data.get('area_origen').id if data.get('area_origen') else None,
-            area_destino_id=data.get('area_destino').id if data.get('area_destino') else None,
-            motivo=data.get('motivo', ''),
+            area_origen_id=data.get("area_origen").id if data.get("area_origen") else None,
+            area_destino_id=data.get("area_destino").id if data.get("area_destino") else None,
+            motivo=data.get("motivo", ""),
         )
 
     def service_traslado_aprobar(self, empresa, traslado_uuid, usuario_id):
         return TrasladoInventarioService.aprobar(
-            traslado_uuid=traslado_uuid, empresa_id=empresa.id, usuario_id=usuario_id,
+            traslado_uuid=traslado_uuid,
+            empresa_id=empresa.id,
+            usuario_id=usuario_id,
         )
 
     def service_traslado_enviar(self, empresa, traslado_uuid):
@@ -367,11 +386,15 @@ class TrasladoInventarioServiceMixin:
 
     def service_traslado_recibir(self, empresa, traslado_uuid, usuario_id):
         return TrasladoInventarioService.recibir(
-            traslado_uuid=traslado_uuid, empresa_id=empresa.id, usuario_id=usuario_id,
+            traslado_uuid=traslado_uuid,
+            empresa_id=empresa.id,
+            usuario_id=usuario_id,
         )
 
     def service_traslado_cancelar(self, empresa, traslado_uuid):
-        return TrasladoInventarioService.cancelar(traslado_uuid=traslado_uuid, empresa_id=empresa.id)
+        return TrasladoInventarioService.cancelar(
+            traslado_uuid=traslado_uuid, empresa_id=empresa.id
+        )
 
 
 class HistorialServiceMixin:
@@ -380,13 +403,21 @@ class HistorialServiceMixin:
     def service_historial_get_queryset(self, empresa):
         """QuerySet optimizado con select_related y campos explicitos."""
         return (
-            HistorialServicio.objects
-            .select_related('servicio')
+            HistorialServicio.objects.select_related("servicio")
             .filter(empresa=empresa)
             .only(
-                'id', 'uuid', 'fecha_registro', 'cantidad', 'valor_cobrado',
-                'origen_referencia', 'cliente_referencia', 'observaciones',
-                'servicio', 'servicio__uuid', 'servicio__codigo', 'servicio__nombre',
+                "id",
+                "uuid",
+                "fecha_registro",
+                "cantidad",
+                "valor_cobrado",
+                "origen_referencia",
+                "cliente_referencia",
+                "observaciones",
+                "servicio",
+                "servicio__uuid",
+                "servicio__codigo",
+                "servicio__nombre",
             )
-            .order_by('-fecha_registro')
+            .order_by("-fecha_registro")
         )

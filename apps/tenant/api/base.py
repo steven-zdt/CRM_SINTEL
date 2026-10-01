@@ -10,6 +10,7 @@ WARNING: v2.61.8: Dual-Auth Pattern (JWT + Session)
 - JWTAuthentication: Clientes API, Tabulator, integraciones externas
 - SessionAuthentication: Workspace navegador, HTMX, CSRF
 """
+
 from rest_framework import viewsets
 from rest_framework.authentication import SessionAuthentication
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -26,11 +27,13 @@ class RelaxedJWTAuthentication(JWTAuthentication):
     TokenError) en lugar del catch-all 'Exception' para no enmascarar
     errores de infraestructura en desarrollo.
     """
+
     def authenticate(self, request):
         try:
             return super().authenticate(request)
         except (InvalidToken, TokenError):
             from django.conf import settings
+
             if settings.DEBUG:
                 return None
             raise
@@ -45,6 +48,7 @@ class BaseTenantViewSet(viewsets.ModelViewSet):
     - RelaxedJWTAuthentication: Permite bypass en DEBUG para facilitar integracion.
     - SessionAuthentication: Workspace navegador, HTMX, CSRF.
     """
+
     lookup_field = "uuid"
     lookup_url_kwarg = "uuid"
     authentication_classes = [RelaxedJWTAuthentication, SessionAuthentication]

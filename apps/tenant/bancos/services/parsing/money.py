@@ -16,6 +16,7 @@ Soporta:
     "$ 1.400.000"    -> 1400000.00
     "(100,000.00)"   -> -100000.00   (parentesis contable = negativo)
 """
+
 import math
 from decimal import Decimal, InvalidOperation
 
@@ -98,10 +99,7 @@ def parse_money(valor) -> Decimal:
         # miles (formato colombiano sin centavos, ej. "1.400.000"). Con un
         # unico punto se asume separador decimal (coincide con el extracto
         # bancario real usado como fixture: "1.00", ".97").
-        if texto.count(".") > 1:
-            normalizado = texto.replace(".", "")
-        else:
-            normalizado = texto
+        normalizado = texto.replace(".", "") if texto.count(".") > 1 else texto
     else:
         normalizado = texto
 

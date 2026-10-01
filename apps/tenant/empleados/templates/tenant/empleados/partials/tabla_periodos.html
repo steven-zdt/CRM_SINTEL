@@ -1,5 +1,27 @@
-{% load django_tables2 %}
-{# Fragmento HTMX: tabla de Periodos de Nomina. Reemplaza #empleados-periodos-panel completo. #}
-<div class="w-100" style="max-width:100%; overflow-x:auto;">
-  {% render_table table %}
+{# tabla_periodos.html — DataTables 3.x + ColumnControl (docs/ux/TABLES_FORMS_RELEASE_GATE.md) #}
+{# Esqueleto ESTATICO: ya no se sirve via HTMX/django-tables2 -- se incluye  #}
+{# una sola vez en empleados_list.html y periodo_list.js puebla <tbody> via #}
+{# ajax contra POST /api/v1/empleados/periodos-nomina/dt/. Indices de       #}
+{# columna deben coincidir 1:1 con fields_map/column_filters de             #}
+{# PeriodoNominaViewSet.dt() (apps/tenant/empleados/api/viewsets.py).       #}
+{# La fila de filtros por columna NO va aqui como HTML estatico: DataTables#}
+{# reescribe el <thead> completo al iniciarse y la destruiria.             #}
+
+<div class="border rounded shadow-sm bg-white">
+  <div class="w-100" style="max-width:100%; overflow-x:auto;">
+    <table id="tabla-periodos-nomina" class="table table-hover align-middle mb-0 w-100">
+      <thead>
+        <tr>
+          <th>Período</th>
+          <th>Vigencia</th>
+          <th>Fecha de Pago</th>
+          <th>Empleados</th>
+          <th>Total Neto</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>

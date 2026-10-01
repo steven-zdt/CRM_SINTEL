@@ -1,7 +1,100 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.64.0
-**Ultima actualizacion:** 2026-09-08 (DOC-M51) — **4 misiones/fases
+**Version:** 3.72.0
+**Ultima actualizacion:** 2026-09-26 (DOC-M65) — **Fases 8-13: PLAN_CENTRO_
+APROBACIONES_DASHBOARD_COMPRAS.md COMPLETO.** Fase 8: banner + 6 KPIs +
+bandeja server-side (DataTables 3.x) del Centro de Aprobaciones en Dashboard,
+con prioridad/riesgo real calculado y congelado en el snapshot al enviar
+(nunca en JS). Fase 9: offcanvas de revision con ruta del proceso (lista de
+nodos conectados, decision documentada de no introducir una libreria de
+grafos fuera del stack aprobado), resumen financiero, historial. Fase 10:
+"Nueva Orden de Compra" reemplaza su `<select>` unico por un checklist real
+de seleccion multiple con saldo en vivo. Fase 11 (verificacion de
+integracion) encontro y corrigio **2 bugs reales en
+`OrdenCompraBusinessService.crear_orden_compra()`** que ninguna fase anterior
+habia detectado: (1) `AttributeError` real que bloqueaba el 100% de las
+creaciones de Orden de Compra (`RequisicionCompraSelector.
+ESTADOS_DISPONIBLES_PARA_COMPRA` referenciado como atributo de clase cuando
+es una constante de modulo); (2) hueco de concurrencia real (`#25` del plan)
+-- el codigo afirmaba tener `select_for_update()` implicito y no lo tenia,
+corregido con lock explicito sobre las Requisiciones antes de calcular
+saldos. Fase 13 (autoauditoria): revision sistematica sin hallazgos
+adicionales. Ver `docs/approvals/APPROVALS_DESIGN.md` §12-16,
+`docs/compras/REQUISICIONES_RELEASE_GATE.md`,
+`apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md`. Posterior a DOC-M64
+(2026-09-26).
+
+**Actualizacion previa:** 2026-09-26 (DOC-M64) — **Fase 7: API del Centro de
+Aprobaciones:** `SolicitudAprobacionViewSet` (solo lectura + acciones de
+workflow, nunca create/update/destroy directo) montado en
+`/api/v1/dashboard/aprobaciones/`, permisos ADMIN-only (`#29`); segundo
+endpoint `GET /api/v1/compras/requisiciones/disponibles-para-orden/` en el
+`RequisicionCompraViewSet` existente (uuid/numero/cotizacion/proyecto/
+valor_total/valor_comprometido/saldo/estado, `#32`). Bug real encontrado y
+corregido en vivo: `dashboard/` (catch-all de `DashboardViewSet`) capturaba
+`dashboard/aprobaciones/` antes de llegar al nuevo ViewSet -- resuelto
+registrando `dashboard/aprobaciones/` ANTES en `config/api_urls.py` (mismo
+patron ya documentado para `compras/requisiciones/` vs `compras/`).
+Verificado end-to-end contra el tenant `admin` real (datos desechables) via
+`APIRequestFactory` real (ViewSet + serializers, no solo Service Layer): LIST,
+trazabilidad, create bloqueado (405), aprobar (200, sin duplicar historial),
+disponibles-para-orden (saldo correcto). Ver
+`docs/approvals/APPROVALS_DESIGN.md` §11. Posterior a DOC-M63 (2026-09-26).
+
+**Actualizacion previa:** 2026-09-26 (DOC-M63) — **Fase 6:
+`ApprovalTraceService` (trazabilidad, solo lectura):** construye el DTO
+`{request, origin, nodes, relations, timeline, financial_summary, alerts}`
+de una `SolicitudAprobacion` -- nodos Requisicion/Cotizacion/Proyecto/
+Ordenes-de-Compra, timeline mezclando los 2 historiales append-only reales,
+resumen financiero y alertas via `ProcurementBudgetControlService` (Fase 4,
+sin reimplementar). Verificado end-to-end contra el tenant `admin` real con
+datos desechables. Ver `docs/approvals/APPROVALS_DESIGN.md` §9. Posterior a
+DOC-M62 (2026-09-26).
+
+**Actualizacion previa:** 2026-09-26 (DOC-M62) — **Fase 5: enganche real
+enviar/aprobar/rechazar de Requisiciones con el motor de Aprobaciones:**
+`enviar_a_aprobacion()` crea la `SolicitudAprobacion` real con snapshot
+automatico; `aprobar_requisicion()`/`rechazar_requisicion()` cierran su
+propia solicitud sin importar el camino (endpoint directo hoy, o el futuro
+`ApprovalBusinessService.aprobar()`/`rechazar()`, que ademas revalida el
+snapshot y bloquea con 409 si el documento cambio desde el envio, sin
+duplicar historial). Verificado end-to-end contra el tenant `admin` real con
+datos desechables. Ver `docs/approvals/APPROVALS_DESIGN.md` §8. Posterior a
+DOC-M61 (2026-09-26).
+
+**Actualizacion previa:** 2026-09-26 (DOC-M61) — **N:N OrdenCompra<->
+RequisicionCompra + motor generico de Solicitudes de Aprobacion (Fases 1-4
+de `PLAN_CENTRO_APROBACIONES_DASHBOARD_COMPRAS.md`):** nueva app
+`apps.tenant.approvals` (dominio propio, registry explicito, sin API/UI
+todavia); `OrdenCompraRequisicion` reemplaza el FK unico + escape
+`es_excepcional` de DOC-M60 (retirado el mismo dia, 0 filas reales lo
+usaban); `ProcurementBudgetControlService` (saldos Cotizacion->Requisicion->
+OC). Ver `docs/approvals/APPROVALS_DESIGN.md` y
+`docs/compras/REQUISICIONES_RELEASE_GATE.md` §"N:N + Aprobaciones".
+Posterior a DOC-M60 (2026-09-26).
+
+**Actualizacion previa:** 2026-09-26 (DOC-M60) — **FASE C activada
+(SUPERADA el mismo dia por DOC-M61):**
+`OrdenCompra.requisicion` paso brevemente de opcional a OBLIGATORIA al crear
+(salvo excepcion auditada `es_excepcional`+`motivo_excepcion`), pedido
+explicito del usuario. Hallazgo real: `OrdenCompraCreateUpdateSerializer`
+nunca habia declarado esos 3 campos -- la API real jamas pudo asociar una
+Requisicion a una Orden. Posterior a DOC-M59 (2026-09-26).
+
+**Actualizacion previa:** 2026-09-26 (DOC-M59) — **Fix sincronizacion
+Cotizacion<->Venta:** `FacturaVentaSyncService` (FST-375) no propagaba
+`Factura.cotizacion_uuid` hacia `Venta.cotizacion_uuid` -- 0/32 Cotizaciones
+reales del tenant `admin` tenian Venta vinculada pese a que sus 28 Facturas
+si tenian el origen correcto. Ver detalle en
+`apps/tenant/ventas/.agent/ARQUITECTURA_VENTAS.md` §"2026-09-26". Posterior
+a DOC-M58 (2026-09-25).
+
+**Actualizacion previa:** 2026-09-25 (DOC-M58) — **Requisiciones de Compra:**
+nuevo submodulo `apps.tenant.compras.requisiciones`, expediente de
+abastecimiento previo a `OrdenCompra`. Ver detalle mas abajo. Posterior a
+DOC-M57 (2026-09-15).
+
+**Actualizacion previa:** 2026-09-08 (DOC-M51) — **4 misiones/fases
 consecutivas en la misma sesion larga: AI-VECTOR-11A (cache de
 query-embeddings), PROVEEDORES-01 (auditoria integral), COTIZACIONES-01
 (maquina de estados + Cotizacion->Venta) y COTIZACIONES-02 (ciclo comercial
@@ -189,6 +282,64 @@ verificación visual en navegador real (sin acceso a browser interactivo).
 Detalle completo: `docs/proveedores/PROVEEDORES_FLOW.md` §8,
 `PROVEEDORES_AUDIT.md` (hallazgo H8), `PROVEEDORES_RELEASE_GATE.md`,
 `apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md` §12.
+
+**[DOC-M58, 2026-09-25] Requisiciones de Compra -- expediente de
+abastecimiento previo a la Orden de Compra:** nueva app Django propia
+`apps/tenant/compras/requisiciones/` (`app_label='tenant_compras_requisiciones'`,
+registrada en `TENANT_APPS`, submodulo de `compras` pero con Service Layer/
+migraciones/tests independientes), disparada por
+`PLAN_IMPLEMENTACION_REQUISICIONES_COMPRAS.md` (raiz del repo). Modelos:
+`RequisicionCompra` (`SedeAwareModel`, maquina de estados
+`BORRADOR->PENDIENTE_APROBACION->APROBADA->EN_PROCESO_COMPRA->
+PARCIALMENTE_ATENDIDA->ATENDIDA`, con ramas `RECHAZADA`/`CANCELADA`),
+`RequisicionCompraItem`, `RequisicionDocumento` (soportes, con distincion
+documento-interno-real vs adjunto-externo), `RequisicionCotizacion`/
+`RequisicionFactura` (vinculos), `RequisicionHistorialEstado`
+(append-only). `OrdenCompra` gano `requisicion` (FK nullable),
+`es_excepcional`/`motivo_excepcion` -- **FASE A de un rollout por fases**:
+la requisicion sigue siendo opcional al crear una Orden de Compra (bloqueo
+obligatorio es `FASE C`, deliberadamente diferido, ver DEFERRED abajo);
+cuando SI se vincula una, debe estar `APROBADA`. `crear_orden_desde_
+requisicion()` reutiliza `OrdenCompraBusinessService` sin duplicar DSV.
+**Decision explicita:** no se creo una entidad `CentroCosto` (no existe SSoT
+contable real) -- `Requisicion.proyecto` (FK directa 0..1) cubre el caso de
+agrupacion real pedido, `centro_costo_codigo` queda documentado como
+`DEFERRED`. Verificado end-to-end en vivo (Playwright, tenant `admin`):
+crear -> enviar a aprobacion -> aprobar -> generar Orden de Compra ->
+`ATENDIDA` automatica, 0 errores; datos de prueba limpiados. **Fase 11
+(autorizacion de tests) recibida del usuario 2026-09-25** ("si, por ahora
+ejecuta"); Fase 12 (testing) resultados a la fecha de este DOC-M:
+`apps/tenant/compras/requisiciones/tests/` 50 passed (suite nueva),
+`apps/tenant/compras/tests/` completo 84 passed (incluye los 50 + regresion,
+sin romper Ordenes/Plantillas/Recepciones existentes), `apps/tenant/
+cotizaciones/tests/` 68 passed/2 failed -> corregido -> 26/26 en los 2
+archivos afectados; regresion cruzada de `proveedores`/`clientes`/
+`proyectos`/`inventario`/`contabilidad` + `manage.py check`/
+`makemigrations --check --dry-run` **pendientes de ejecutar** (ver Fase 12
+en `docs/compras/REQUISICIONES_RELEASE_GATE.md`). **2 bugs reales
+encontrados y corregidos durante esta mision:** (1) `POST /api/v1/
+cotizaciones/{uuid}/generar-pdf/` devolvia 500 (`AssertionError: Header
+names/values must be of type str`) -- `CotizacionService.cambiar_estado()`
+asignaba el `TextChoices` enum crudo a `cotizacion.estado`, que luego se
+usaba tal cual en un header HTTP; fix: `str(nuevo_estado)` en el unico
+punto de entrada real + los otros 4 call-sites con el mismo riesgo,
+`apps/tenant/cotizaciones/services/business_service.py`. (2) 3 `conftest.py`
+(`cotizaciones`, `proveedores`, `clientes`) migraban una lista fija de apps
+tenant al crear el schema de test sin incluir la app nueva
+`tenant_compras_requisiciones` -- cualquier `DELETE` de una entidad
+referenciada por FK `PROTECT` desde Requisiciones fallaba con tabla
+inexistente (mismo patron ya documentado antes con `tenant_gastos`);
+corregido agregando la app a `required_apps` en los 3 archivos. **DEFERRED
+explicito** (no inventado, no marcado como completado):
+entidad `CentroCosto` real, backfill retroactivo de `OrdenCompra.
+requisicion` en ordenes historicas, `NOT NULL` en ese campo (FASE D),
+bloqueo de ordenes nuevas sin requisicion (FASE C), `RequisicionProyecto`
+como junction N:N (se uso FK directa 0..1), AI tool `buscar_requisiciones`,
+UI dedicada para vincular manualmente una Cotizacion/Factura arbitraria no
+derivada del Proyecto. Detalle completo: `docs/compras/
+REQUISITION_BASELINE.md`, `REQUISICIONES_DESIGN.md`, `_ARCHITECTURE.md`,
+`_FLOW.md`, `_SSOT.md`, `_RELEASE_GATE.md`, `_PRE_TEST_AUDIT.md`,
+`apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md` §"2026-09-25".
 
 ---
 
@@ -2311,7 +2462,9 @@ empresa.sintel.net.co →  tenant schema    →  urls_tenant.py
 | `apps/tenant/proyectos/` | `tenant_proyectos`¹ | Proyecto, AsignacionPersonal, PedidoProyecto, ItemPedido, ItemPresupuestoProyecto, TareaCorta, TareaDiariaProyecto | 20 | Gestion de proyectos, presupuesto, tareas cortas |
 | `apps/tenant/dashboard/` | `dashboard` | SnapshotMetricaDiaria | 3 | Dashboard ejecutivo, metricas consolidadas |
 | `apps/tenant/bancos/` | `bancos` | CuentaBancaria, ExtractoBancario, TransaccionBancaria | 5 | Estados de cuenta bancarios, conciliacion manual via UUID soft-references |
-| `apps/tenant/compras/` | `tenant_compras`¹ | PlantillaOrdenCompra, OrdenCompra (hereda `SedeAwareModel`, ver §3.2/ADR-003), ItemOrdenCompra, RecepcionCompra (F21, hereda `SedeAwareModel`), RecepcionCompraItem (F21) | 8 | Ordenes de compra a proveedores + Recepcion de Compras -> Inventario (F21, ver `documentacion/F21_RECEPCION_INVENTARIO.md`) |
+| `apps/tenant/compras/` | `tenant_compras`¹ | PlantillaOrdenCompra, OrdenCompra (hereda `SedeAwareModel`, ver §3.2/ADR-003), ItemOrdenCompra, RecepcionCompra (F21, hereda `SedeAwareModel`), RecepcionCompraItem (F21), **[DOC-M61]** OrdenCompraRequisicion (N:N con Requisicion) | 12 | Ordenes de compra a proveedores + Recepcion de Compras -> Inventario (F21, ver `documentacion/F21_RECEPCION_INVENTARIO.md`) |
+| `apps/tenant/compras/requisiciones/` | `tenant_compras_requisiciones` | **[DOC-M58]** RequisicionCompra (hereda `SedeAwareModel`), RequisicionCompraItem, RequisicionDocumento, RequisicionCotizacion, RequisicionFactura, RequisicionHistorialEstado (append-only) | 1 | Expediente de abastecimiento previo a la Orden de Compra (submodulo propio de `compras`, ver DOC-M58 arriba) |
+| `apps/tenant/approvals/` | `tenant_approvals` | **[DOC-M61]** SolicitudAprobacion, SolicitudAprobacionHistorial (append-only) | 1 | Motor generico de Solicitudes de Aprobacion (registry explicito, sin GenericForeignKey). **[DOC-M64]** API en `/api/v1/dashboard/aprobaciones/` (solo lectura + workflow, ADMIN-only). **[DOC-M65]** Centro de Aprobaciones completo en Dashboard (banner/KPIs/bandeja/offcanvas de revision) -- ver `docs/approvals/APPROVALS_DESIGN.md` |
 | `apps/tenant/ventas/` | `tenant_ventas`¹ | ResolucionFacturacion, Venta, ItemVenta | 3 | Ordenes de venta y su puente hacia `facturas` (agregada 2026-06-17, ver `.agent/ARQUITECTURA_VENTAS.md`) |
 | `apps/tenant/ai_knowledge/` | `tenant_ai_knowledge`¹ | AIKnowledgeDocument, AIKnowledgeChunk | 2 | **[DOC-M49, POC]** Vector Store tenant-scoped del AI Engine: texto de origen troceado + embeddings (pgvector `vector(768)`). Solo datos — orquestacion en `apps/services/ai/`. Ver §8.7 |
 
@@ -2334,8 +2487,8 @@ con lo que este documento afirmaba.
 
 **Nota (`ResolucionDIAN` duplicado):** `gastos` y `empleados` tienen cada una su propia clase `ResolucionDIAN` — son dos modelos distintos, no un bug de referencia cruzada (hallazgo confirmado durante la auditoria EKG 2026-08-07, ver `documentacion/INFORME_FINAL_EKG_GOBERNANZA_2026-08-07.md` §4.1).
 
-**Total tenant models: 73 concretos + 3 abstractos** (`SintelTenantBaseModel`, `SedeAwareModel`, `TimeStampedModel`) — **[DOC-M9]** +3 (F21); **[DOC-M14]** +1 (`ItemNotaCredito`); **[DOC-M49]** +2 (`AIKnowledgeDocument`, `AIKnowledgeChunk`).
-**Total migraciones: 195 (184 tenant + 11 public)** — **[DOC-M9]** +2 (F21); **[DOC-M14 a DOC-M16]** +3; **[DOC-M49]** +2 tenant (`tenant_ai_knowledge` `0001_initial` + `0002_pin_embedding_dimension_768`) y +1 public (`db_extensions.0001_vector_extension`). Todas aplicadas en los **3 tenants reales** (`home`, `admin`, `aipoc` — `aipoc` es el tenant de POC de §8.7), `makemigrations --check` limpio.
+**Total tenant models: 82 concretos + 3 abstractos** (`SintelTenantBaseModel`, `SedeAwareModel`, `TimeStampedModel`) — **[DOC-M9]** +3 (F21); **[DOC-M14]** +1 (`ItemNotaCredito`); **[DOC-M49]** +2 (`AIKnowledgeDocument`, `AIKnowledgeChunk`); **[DOC-M58]** +6 (`RequisicionCompra`, `RequisicionCompraItem`, `RequisicionDocumento`, `RequisicionCotizacion`, `RequisicionFactura`, `RequisicionHistorialEstado`); **[DOC-M61]** +3 (`OrdenCompraRequisicion`, `SolicitudAprobacion`, `SolicitudAprobacionHistorial`) — `OrdenCompra.requisicion`/`es_excepcional`/`motivo_excepcion` (DOC-M60, campos no modelos) se retiraron el mismo dia.
+**Total migraciones: 200 (189 tenant + 11 public)** — **[DOC-M9]** +2 (F21); **[DOC-M14 a DOC-M16]** +3; **[DOC-M49]** +2 tenant (`tenant_ai_knowledge` `0001_initial` + `0002_pin_embedding_dimension_768`) y +1 public (`db_extensions.0001_vector_extension`); **[DOC-M58]** +3 tenant (`tenant_compras_requisiciones.0001_requisiciones_compra` + `tenant_compras.0010`/`0011`, agregan `OrdenCompra.requisicion`/`es_excepcional`/`motivo_excepcion` nullable, FASE A); **[DOC-M61]** +2 tenant (`tenant_compras.0012_ordencomprarequisicion_and_more`, retira esos 3 campos y agrega el N:N; `tenant_approvals.0001_initial`). Todas aplicadas en los **3 tenants reales de este entorno** (`home`, `admin`, `adk_diag_test`), `makemigrations --check` limpio.
 
 ### 2.3. Apps de Infraestructura Tenant (sin modelos de negocio)
 
@@ -3100,6 +3253,7 @@ indice ANN, trigger de reindexado.
 | `/api/v1/cotizaciones/` | cotizaciones | Cotizacion, CotizacionItem |
 | `/api/v1/proyectos/` | proyectos | Proyecto, TareaCorta, AsignacionPersonal |
 | `/api/v1/compras/` | compras | OrdenCompra, ItemOrdenCompra, PlantillaOrdenCompra, RecepcionCompra (F21, `/compras/recepciones/`) |
+| `/api/v1/compras/requisiciones/` | compras (requisiciones) | **[DOC-M58]** RequisicionCompra + acciones de workflow (aprobar/rechazar/cancelar/crear-orden/vincular-cotizacion/vincular-factura). Registrada ANTES que `/api/v1/compras/` en `config/api_urls.py` -- si se invierte el orden, el catch-all de detalle de `OrdenCompraViewSet` captura `requisiciones` como UUID (bug real encontrado y corregido, ver `docs/compras/REQUISICIONES_ARCHITECTURE.md`). |
 | `/api/v1/ventas/` | ventas | Venta, ItemVenta, ResolucionFacturacion |
 | `/api/v1/impuestos/` (public) | impuestos | Catalogo DIAN |
 
@@ -3175,6 +3329,7 @@ indice ANN, trigger de reindexado.
 | `dashboard` | `apps/tenant/dashboard/` | `apps/tenant/dashboard/.agent/AUDITORIA_FLUJO_DASHBOARD.md` |
 | `bancos` | `apps/tenant/bancos/` | `apps/tenant/bancos/.agent/AUDITORIA_FLUJO_COMPLETO.md` |
 | `compras` | `apps/tenant/compras/` | `apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md` |
+| `compras/requisiciones` | `apps/tenant/compras/requisiciones/` | Submodulo, ver `apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md` §"2026-09-25" + `docs/compras/REQUISICIONES_*.md` |
 | `ventas` | `apps/tenant/ventas/` | `apps/tenant/ventas/.agent/ARQUITECTURA_VENTAS.md` |
 | `landing` | `apps/tenant/landing/` | `apps/tenant/landing/.agent/AUDITORIA_FLUJO_LANDING.md` |
 

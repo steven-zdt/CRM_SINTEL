@@ -3,6 +3,7 @@ BAN-11 (.agent/AUDITORIA_FLUJO_COMPLETO.md §10, patron DT-SEDE-01): campo
 `sede` FK opcional en ExtractoBancario para KPIs por sede -- mismo patron ya
 usado en gastos.DocumentoSoporte.sede.
 """
+
 import pytest
 from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context
@@ -23,14 +24,22 @@ class ExtractoBancarioSedeTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa BAN-11", nit="900000812", direccion="Calle 1",
+            razon_social="Empresa BAN-11",
+            nit="900000812",
+            direccion="Calle 1",
         )
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
         )
         self.cuenta = CuentaBancaria.objects.create(
-            empresa=self.empresa, nombre="Cuenta BAN-11", banco="Banco Test",
-            tipo="AHORROS", numero="BAN11-1",
+            empresa=self.empresa,
+            nombre="Cuenta BAN-11",
+            banco="Banco Test",
+            tipo="AHORROS",
+            numero="BAN11-1",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Sede BAN-11")
 
@@ -38,7 +47,9 @@ class ExtractoBancarioSedeTests(SintelTenantTestCase):
         resp = self.api_client.post(
             "/api/v1/bancos/extractos/",
             {
-                "cuenta": str(self.cuenta.uuid), "mes": 6, "anio": 2026,
+                "cuenta": str(self.cuenta.uuid),
+                "mes": 6,
+                "anio": 2026,
                 "sede": str(self.sede.uuid),
             },
             format="json",
@@ -91,8 +102,11 @@ def test_crear_extracto_con_sede_de_otro_tenant_es_rechazado(tenant1, tenant2):
     with schema_context(tenant1.schema_name):
         empresa1 = Empresa.objects.first()
         cuenta1 = CuentaBancaria.objects.create(
-            empresa=empresa1, nombre="Cuenta Tenant1", banco="Banco Test",
-            tipo="AHORROS", numero="T1-SEDE-1",
+            empresa=empresa1,
+            nombre="Cuenta Tenant1",
+            banco="Banco Test",
+            tipo="AHORROS",
+            numero="T1-SEDE-1",
         )
 
     client = APIClient(HTTP_HOST=f"{tenant1.schema_name}.sintel.net.co")

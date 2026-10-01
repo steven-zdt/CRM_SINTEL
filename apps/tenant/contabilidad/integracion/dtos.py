@@ -10,11 +10,11 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
 
 
 class TipoTransaccion(str, Enum):
     """Classification of economic events that generate journal entries."""
+
     VENTA_FACTURA = "VENTA_FACTURA"
     VENTA_NOTA_CREDITO = "VENTA_NOTA_CREDITO"
     VENTA_NOTA_DEBITO = "VENTA_NOTA_DEBITO"
@@ -36,6 +36,7 @@ class TipoTransaccion(str, Enum):
 
 class TipoTercero(str, Enum):
     """Classification of external parties involved in transactions."""
+
     CLIENTE = "CLIENTE"
     PROVEEDOR = "PROVEEDOR"
     EMPLEADO = "EMPLEADO"
@@ -48,30 +49,33 @@ class TerceroSnapshot:
     Snapshot of third-party data at transaction moment (no FK).
     Prevents corruption if third-party master data changes.
     """
+
     tipo: TipoTercero
-    id_origen: int                  # PK in origin app
-    nit: str                        # Tax ID
-    razon_social: str               # Legal name
+    id_origen: int  # PK in origin app
+    nit: str  # Tax ID
+    razon_social: str  # Legal name
 
 
 @dataclass(frozen=True)
 class ImpuestoLinea:
     """Tax applied to a transaction line."""
-    tipo: str                       # IVA_GENERADO, IVA_DESCONTABLE, RETEFUENTE, RETEICA, RETEIVA, ARL, PENSION, SALUD, etc.
-    base: Decimal                   # Taxable base
-    porcentaje: Decimal             # Rate (19.0, 4.0, etc.)
-    valor: Decimal                  # Calculated amount
-    lado: str = 'HABER'             # 'DEBE' or 'HABER' - which side of journal entry
+
+    tipo: str  # IVA_GENERADO, IVA_DESCONTABLE, RETEFUENTE, RETEICA, RETEIVA, ARL, PENSION, SALUD, etc.
+    base: Decimal  # Taxable base
+    porcentaje: Decimal  # Rate (19.0, 4.0, etc.)
+    valor: Decimal  # Calculated amount
+    lado: str = "HABER"  # 'DEBE' or 'HABER' - which side of journal entry
 
 
 @dataclass(frozen=True)
 class ImpuestoDTO:
     """Tax/retention at the document level or transaction level."""
+
     tipo_impuesto: str
     base_imponible: Decimal
     porcentaje: Decimal
     valor: Decimal
-    cuenta_codigo: Optional[str] = None
+    cuenta_codigo: str | None = None
 
 
 @dataclass(frozen=True)
@@ -80,23 +84,25 @@ class LineaTransaccion:
     Economic line item of transaction (invoice line, payroll deduction, etc.).
     Multiple lines aggregate to form complete journal entry.
     """
-    concepto: str                   # VENTA_PRODUCTO, AUXILIO_TRANSPORTE, PROVISION_CESANTIAS, etc.
-    monto: Decimal                  # Principal amount (before taxes)
-    lado: str = 'DEBE'              # 'DEBE' or 'HABER' - which side of journal entry
-    impuestos: list['ImpuestoLinea'] = field(default_factory=list)
-    centro_costo_id: Optional[int] = None  # Project/cost center for reporting
-    cuenta_hint: Optional[str] = None      # Override default PUC account (advanced)
-    subtotal: Decimal = Decimal('0.00')
-    total: Decimal = Decimal('0.00')
+
+    concepto: str  # VENTA_PRODUCTO, AUXILIO_TRANSPORTE, PROVISION_CESANTIAS, etc.
+    monto: Decimal  # Principal amount (before taxes)
+    lado: str = "DEBE"  # 'DEBE' or 'HABER' - which side of journal entry
+    impuestos: list["ImpuestoLinea"] = field(default_factory=list)
+    centro_costo_id: int | None = None  # Project/cost center for reporting
+    cuenta_hint: str | None = None  # Override default PUC account (advanced)
+    subtotal: Decimal = Decimal("0.00")
+    total: Decimal = Decimal("0.00")
 
 
 @dataclass(frozen=True)
 class DocumentoOrigen:
     """Traceability to source document for idempotence and audit."""
-    app_label: str                  # facturas, gastos, empleados
-    modelo: str                     # Factura, DocumentoSoporte, Devengo
-    id: int                         # PK in source app
-    numero: str                     # Human-readable document number
+
+    app_label: str  # facturas, gastos, empleados
+    modelo: str  # Factura, DocumentoSoporte, Devengo
+    id: int  # PK in source app
+    numero: str  # Human-readable document number
 
 
 @dataclass(frozen=True)
@@ -118,6 +124,7 @@ class TransaccionEconomica:
         ... )
         >>> asiento = Contabilizador(empresa_id=1).contabilizar(factura_dto)
     """
+
     tipo: TipoTransaccion
     fecha: date
     descripcion: str
@@ -125,16 +132,17 @@ class TransaccionEconomica:
     lineas: list[LineaTransaccion]
     documento_origen: DocumentoOrigen
     observaciones: str = ""
-    periodo_contable_id: Optional[int] = None  # If None, inferred from fecha
-    empresa_id: Optional[int] = None           # Injected by Contabilizador from context
-    subtotal: Decimal = Decimal('0.00')
+    periodo_contable_id: int | None = None  # If None, inferred from fecha
+    empresa_id: int | None = None  # Injected by Contabilizador from context
+    subtotal: Decimal = Decimal("0.00")
     impuestos: list[ImpuestoDTO] = field(default_factory=list)
-    total: Decimal = Decimal('0.00')
+    total: Decimal = Decimal("0.00")
 
 
 # ============================================================================
 # DTOs PARA FLUJO MANUAL (On-Demand UI)
 # ============================================================================
+
 
 @dataclass(frozen=True)
 class LineaManual:
@@ -142,13 +150,14 @@ class LineaManual:
     Linea de asiento con cuenta PUC explicita asignada por el usuario en la UI.
     No requiere resolucion de ReglaContable.
     """
-    cuenta_codigo: str          # Codigo PUC nivel 6 (ej: 130505)
-    debe: Decimal = Decimal('0')
-    haber: Decimal = Decimal('0')
-    descripcion: str = ''
-    tercero_nit: str = ''
-    tercero_razon_social: str = ''
-    centro_costo_id: Optional[int] = None
+
+    cuenta_codigo: str  # Codigo PUC nivel 6 (ej: 130505)
+    debe: Decimal = Decimal("0")
+    haber: Decimal = Decimal("0")
+    descripcion: str = ""
+    tercero_nit: str = ""
+    tercero_razon_social: str = ""
+    centro_costo_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -160,13 +169,14 @@ class ComprobanteManualDTO:
     la cuenta PUC por cada linea y genera el asiento directamente.
     No pasa por ReglaContable ni Contabilizador automatico.
     """
+
     empresa_id: int
     fecha: date
     descripcion: str
-    app_label: str              # 'facturas' | 'gastos'
-    modelo: str                 # 'Factura' | 'DocumentoSoporte'
-    documento_id: int           # PK en la app origen
-    documento_numero: str       # Numero legible (FV-001, DS-001, etc.)
-    tipo_comprobante_id: int    # ID del TipoComprobante (CC, RC, etc.)
-    periodo_uuid: str           # UUID del PeriodoContable seleccionado
-    lineas: list                # List[LineaManual]
+    app_label: str  # 'facturas' | 'gastos'
+    modelo: str  # 'Factura' | 'DocumentoSoporte'
+    documento_id: int  # PK en la app origen
+    documento_numero: str  # Numero legible (FV-001, DS-001, etc.)
+    tipo_comprobante_id: int  # ID del TipoComprobante (CC, RC, etc.)
+    periodo_uuid: str  # UUID del PeriodoContable seleccionado
+    lineas: list  # List[LineaManual]

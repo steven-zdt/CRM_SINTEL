@@ -11,7 +11,6 @@ Escenarios obligatorios del mandato:
 """
 
 import pytest
-from django.db import connection
 from django_tenants.utils import schema_context
 
 from apps.services.ai.context import AIContext
@@ -54,21 +53,29 @@ def test_cross_tenant_retrieval_no_leak(tenant_a, tenant_b, stub_provider):
 
     with schema_context(tenant_a.schema_name):
         emb.index_text(
-            empresa=_emp(tenant_a.schema_name), source_type="producto_descripcion",
-            source_id="A1", text="documento confidencial del tenant A sobre precios",
+            empresa=_emp(tenant_a.schema_name),
+            source_type="producto_descripcion",
+            source_id="A1",
+            text="documento confidencial del tenant A sobre precios",
         )
     with schema_context(tenant_b.schema_name):
         emb.index_text(
-            empresa=_emp(tenant_b.schema_name), source_type="producto_descripcion",
-            source_id="B1", text="documento confidencial del tenant B sobre precios",
+            empresa=_emp(tenant_b.schema_name),
+            source_type="producto_descripcion",
+            source_id="B1",
+            text="documento confidencial del tenant B sobre precios",
         )
 
     # Buscar desde A: solo ve A. Desde B: solo ve B.
     with schema_context(tenant_a.schema_name):
-        hits_a = ret.search(empresa=_emp(tenant_a.schema_name), query="documento confidencial precios", k=10)
+        hits_a = ret.search(
+            empresa=_emp(tenant_a.schema_name), query="documento confidencial precios", k=10
+        )
         assert hits_a and all(h.source_id == "A1" for h in hits_a)
     with schema_context(tenant_b.schema_name):
-        hits_b = ret.search(empresa=_emp(tenant_b.schema_name), query="documento confidencial precios", k=10)
+        hits_b = ret.search(
+            empresa=_emp(tenant_b.schema_name), query="documento confidencial precios", k=10
+        )
         assert hits_b and all(h.source_id == "B1" for h in hits_b)
 
 
@@ -76,8 +83,10 @@ def test_cross_tenant_orm_es_estructuralmente_ciego(tenant_a, tenant_b, stub_pro
     emb = EmbeddingService(provider=stub_provider)
     with schema_context(tenant_a.schema_name):
         emb.index_text(
-            empresa=_emp(tenant_a.schema_name), source_type="producto_descripcion",
-            source_id="ONLY_A", text="solo en A",
+            empresa=_emp(tenant_a.schema_name),
+            source_type="producto_descripcion",
+            source_id="ONLY_A",
+            text="solo en A",
         )
     # Desde el schema de B, el ORM no ve NADA de la tabla de A.
     with schema_context(tenant_b.schema_name):
@@ -94,8 +103,10 @@ def test_cross_tenant_empresa_id_falso_no_cruza_schema(tenant_a, tenant_b, stub_
         emp_a = _emp(tenant_a.schema_name)
         emp_a_id = emp_a.id
         emb.index_text(
-            empresa=emp_a, source_type="producto_descripcion",
-            source_id="XA", text="dato de A",
+            empresa=emp_a,
+            source_type="producto_descripcion",
+            source_id="XA",
+            text="dato de A",
         )
     with schema_context(tenant_b.schema_name):
         # search() acepta un id crudo -- aun asi la tabla vive en el schema de B.
@@ -111,14 +122,33 @@ def seeded_scoped(tenant_a, stub_provider):
     emb = EmbeddingService(provider=stub_provider)
     with schema_context(tenant_a.schema_name):
         emp = _emp(tenant_a.schema_name)
-        emb.index_text(empresa=emp, source_type="producto_descripcion", source_id="S1",
-                       text="politica de la sede 1", metadata={"sede_id": 1})
-        emb.index_text(empresa=emp, source_type="producto_descripcion", source_id="S2",
-                       text="politica de la sede 2", metadata={"sede_id": 2})
-        emb.index_text(empresa=emp, source_type="producto_descripcion", source_id="SN",
-                       text="politica general sin sede")
-        emb.index_text(empresa=emp, source_type="producto_descripcion", source_id="AR7",
-                       text="nota del area 7", metadata={"area_id": 7})
+        emb.index_text(
+            empresa=emp,
+            source_type="producto_descripcion",
+            source_id="S1",
+            text="politica de la sede 1",
+            metadata={"sede_id": 1},
+        )
+        emb.index_text(
+            empresa=emp,
+            source_type="producto_descripcion",
+            source_id="S2",
+            text="politica de la sede 2",
+            metadata={"sede_id": 2},
+        )
+        emb.index_text(
+            empresa=emp,
+            source_type="producto_descripcion",
+            source_id="SN",
+            text="politica general sin sede",
+        )
+        emb.index_text(
+            empresa=emp,
+            source_type="producto_descripcion",
+            source_id="AR7",
+            text="nota del area 7",
+            metadata={"area_id": 7},
+        )
     return tenant_a, emp.id
 
 
@@ -157,7 +187,9 @@ def test_alcance_area_solo_su_area_mas_los_sin_area(seeded_scoped, stub_provider
     with schema_context(tenant_a.schema_name):
         ctx = _ctx(emp_id, alcance="AREA", area_ids=(7,))
         got = {h.source_id for h in ret.search_for_context(ctx, "politica nota", k=20)}
-        assert "AR7" in got and "SN" in got and "S1" in got and "S2" in got  # sede no es el eje de AREA
+        assert (
+            "AR7" in got and "SN" in got and "S1" in got and "S2" in got
+        )  # sede no es el eje de AREA
 
         ctx_other = _ctx(emp_id, alcance="AREA", area_ids=(99,))
         got2 = {h.source_id for h in ret.search_for_context(ctx_other, "politica nota", k=20)}
@@ -187,8 +219,13 @@ def test_allowlist_no_referencia_ningun_campo_prohibido():
 @pytest.mark.parametrize(
     "forbidden_source_type",
     [
-        "empleado_salario", "empleado_eps", "empleado_afp", "contrato_salario_mensual",
-        "devengo_salario_base", "cuenta_bancaria_numero", "transaccion_notas_conciliacion",
+        "empleado_salario",
+        "empleado_eps",
+        "empleado_afp",
+        "contrato_salario_mensual",
+        "devengo_salario_base",
+        "cuenta_bancaria_numero",
+        "transaccion_notas_conciliacion",
         "extracto_saldo_final",
     ],
 )
@@ -214,7 +251,9 @@ def test_forbidden_field_no_se_indexa_ni_con_texto_realista(tenant_a, stub_provi
         before = AIKnowledgeChunk.objects.count()
         with pytest.raises(ValueError):
             emb.index_text(
-                empresa=emp, source_type="cuenta_bancaria_numero", source_id="42",
+                empresa=emp,
+                source_type="cuenta_bancaria_numero",
+                source_id="42",
                 text="Numero de cuenta 001-234567-89 saldo 12.400.000",
             )
         assert AIKnowledgeChunk.objects.count() == before  # forbidden_indexed = 0
@@ -225,8 +264,11 @@ def test_allowlist_escape_hatch_es_explicito(tenant_a, stub_provider):
     emb = EmbeddingService(provider=stub_provider)
     with schema_context(tenant_a.schema_name):
         r = emb.index_text(
-            empresa=_emp(tenant_a.schema_name), source_type="tipo_interno_test",
-            source_id="1", text="texto de prueba", allow_unlisted=True,
+            empresa=_emp(tenant_a.schema_name),
+            source_type="tipo_interno_test",
+            source_id="1",
+            text="texto de prueba",
+            allow_unlisted=True,
         )
         assert r.skipped is False and r.n_chunks >= 1
 
@@ -236,7 +278,9 @@ def test_sources_self_check_bloquea_allowlist_insegura():
     from apps.tenant.ai_knowledge.services import sources as s
 
     bad = s.IndexableSource(
-        source_type="x", model_label="bancos.CuentaBancaria", text_field="numero",
+        source_type="x",
+        model_label="bancos.CuentaBancaria",
+        text_field="numero",
         description="prohibido",
     )
     original = s.INDEXABLE_SOURCES

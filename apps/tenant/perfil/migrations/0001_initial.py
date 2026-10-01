@@ -6,33 +6,106 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('empresa', '0001_initial'),
+        ("empresa", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='TenantProfile',
+            name="TenantProfile",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('cargo', models.CharField(blank=True, help_text='Cargo del colaborador en esta empresa (ej: "Contador Senior", "Auxiliar Administrativo")', max_length=100, null=True, verbose_name='Cargo')),
-                ('departamento', models.CharField(blank=True, help_text='Departamento al que pertenece el colaborador (opcional)', max_length=100, null=True, verbose_name='Departamento')),
-                ('telefono_corporativo', models.CharField(blank=True, help_text='Teléfono corporativo del colaborador (diferente al teléfono personal del User global)', max_length=20, null=True, verbose_name='Teléfono Corporativo')),
-                ('avatar', models.ImageField(blank=True, help_text='Foto de perfil del colaborador (opcional)', null=True, upload_to='perfiles/avatars/', verbose_name='Avatar')),
-                ('configuracion', models.JSONField(blank=True, default=dict, help_text='Preferencias de UI y configuración personalizada del colaborador (JSON). Si es NULL, se normaliza a {} en la aplicación.', null=True, verbose_name='Configuración')),
-                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Fecha de Creación')),
-                ('updated_at', models.DateTimeField(auto_now=True, verbose_name='Fecha de Actualización')),
-                ('empresa', models.ForeignKey(help_text='Empresa a la que pertenece este perfil (multi-tenant isolation)', on_delete=django.db.models.deletion.CASCADE, related_name='perfiles_tenant', to='empresa.empresa', verbose_name='Empresa')),
-                ('user', models.OneToOneField(help_text='Usuario global al que pertenece este perfil (reside en esquema public)', on_delete=django.db.models.deletion.CASCADE, related_name='tenant_profile', to=settings.AUTH_USER_MODEL, verbose_name='Usuario')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "cargo",
+                    models.CharField(
+                        blank=True,
+                        help_text='Cargo del colaborador en esta empresa (ej: "Contador Senior", "Auxiliar Administrativo")',
+                        max_length=100,
+                        null=True,
+                        verbose_name="Cargo",
+                    ),
+                ),
+                (
+                    "departamento",
+                    models.CharField(
+                        blank=True,
+                        help_text="Departamento al que pertenece el colaborador (opcional)",
+                        max_length=100,
+                        null=True,
+                        verbose_name="Departamento",
+                    ),
+                ),
+                (
+                    "telefono_corporativo",
+                    models.CharField(
+                        blank=True,
+                        help_text="Teléfono corporativo del colaborador (diferente al teléfono personal del User global)",
+                        max_length=20,
+                        null=True,
+                        verbose_name="Teléfono Corporativo",
+                    ),
+                ),
+                (
+                    "avatar",
+                    models.ImageField(
+                        blank=True,
+                        help_text="Foto de perfil del colaborador (opcional)",
+                        null=True,
+                        upload_to="perfiles/avatars/",
+                        verbose_name="Avatar",
+                    ),
+                ),
+                (
+                    "configuracion",
+                    models.JSONField(
+                        blank=True,
+                        default=dict,
+                        help_text="Preferencias de UI y configuración personalizada del colaborador (JSON). Si es NULL, se normaliza a {} en la aplicación.",
+                        null=True,
+                        verbose_name="Configuración",
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación"),
+                ),
+                (
+                    "updated_at",
+                    models.DateTimeField(auto_now=True, verbose_name="Fecha de Actualización"),
+                ),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        help_text="Empresa a la que pertenece este perfil (multi-tenant isolation)",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="perfiles_tenant",
+                        to="empresa.empresa",
+                        verbose_name="Empresa",
+                    ),
+                ),
+                (
+                    "user",
+                    models.OneToOneField(
+                        help_text="Usuario global al que pertenece este perfil (reside en esquema public)",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="tenant_profile",
+                        to=settings.AUTH_USER_MODEL,
+                        verbose_name="Usuario",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Perfil del Colaborador',
-                'verbose_name_plural': 'Perfiles de Colaboradores',
-                'indexes': [models.Index(fields=['user'], name='perfil_tena_user_id_406b46_idx')],
+                "verbose_name": "Perfil del Colaborador",
+                "verbose_name_plural": "Perfiles de Colaboradores",
+                "indexes": [models.Index(fields=["user"], name="perfil_tena_user_id_406b46_idx")],
             },
         ),
     ]

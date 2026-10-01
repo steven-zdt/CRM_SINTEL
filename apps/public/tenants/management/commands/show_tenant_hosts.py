@@ -70,17 +70,13 @@ class Command(BaseCommand):
 
     def _print_plain(self, ip, domain_list, domains):
         self.stdout.write("")
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Entradas para agregar al archivo hosts (IP: {ip}):"
-            )
-        )
+        self.stdout.write(self.style.SUCCESS(f"Entradas para agregar al archivo hosts (IP: {ip}):"))
         self.stdout.write("")
         self.stdout.write("  Ruta Windows: C:\\Windows\\System32\\drivers\\etc\\hosts")
         self.stdout.write("  Ruta Linux/Mac: /etc/hosts")
         self.stdout.write("")
         self.stdout.write("  --- COPIAR ESTAS LINEAS ---")
-        for domain, schema in domains:
+        for domain, _schema in domains:
             self.stdout.write(f"  {ip:<16} {domain}")
         self.stdout.write("  --- FIN ---")
         self.stdout.write("")
@@ -96,9 +92,7 @@ class Command(BaseCommand):
 
     def _print_powershell(self, ip, domain_list):
         self.stdout.write("")
-        self.stdout.write(
-            self.style.SUCCESS("Script PowerShell (ejecutar como Administrador):")
-        )
+        self.stdout.write(self.style.SUCCESS("Script PowerShell (ejecutar como Administrador):"))
         self.stdout.write("")
         self.stdout.write('  $hostsPath = "C:\\Windows\\System32\\drivers\\etc\\hosts"')
         self.stdout.write("  $entries = @(")
@@ -112,14 +106,10 @@ class Command(BaseCommand):
         self.stdout.write(
             "      if (-not (Select-String -Path $hostsPath -Pattern ([regex]::Escape($hostname)) -Quiet)) {"
         )
-        self.stdout.write(
-            '          Add-Content -Path $hostsPath -Value $entry -Encoding UTF8'
-        )
+        self.stdout.write("          Add-Content -Path $hostsPath -Value $entry -Encoding UTF8")
         self.stdout.write('          Write-Host "Agregado: $entry" -ForegroundColor Green')
         self.stdout.write("      } else {")
-        self.stdout.write(
-            '          Write-Host "Ya existe: $hostname" -ForegroundColor Yellow'
-        )
+        self.stdout.write('          Write-Host "Ya existe: $hostname" -ForegroundColor Yellow')
         self.stdout.write("      }")
         self.stdout.write("  }")
         self.stdout.write("")

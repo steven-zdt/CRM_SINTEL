@@ -6,18 +6,19 @@ SINTEL v3.10.1: Arquitectura Service Layer Modular.
 - _get_empresa_id_seguro(), get_qs_list(), get_qs_detail(), _get_empresa() → BaseServiceMixin
 - Mantiene solo métodos service_* específicos de Gastos
 """
+
 from apps.tenant.api.mixins import BaseServiceMixin
-from apps.tenant.gastos.services.selectors import (
-    ResolucionSelector,
-    DocumentoSelector,
-)
 from apps.tenant.gastos.services.business_service import (
     GastoBusinessService,
     ResolucionBusinessService,
 )
 from apps.tenant.gastos.services.crud_service import (
-    ResolucionCRUDService,
     DocumentoCRUDService,
+    ResolucionCRUDService,
+)
+from apps.tenant.gastos.services.selectors import (
+    DocumentoSelector,
+    ResolucionSelector,
 )
 
 
@@ -41,7 +42,7 @@ class GastoServiceMixin(BaseServiceMixin):
         )
 
         empresa_id = self._get_empresa_id_seguro()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
+        search = self.request.query_params.get("search") if hasattr(self, "request") else None
         try:
             sede_ids = OrganizationalScope.resolve(self.request).sede_ids
         except OrganizationalScopeError:
@@ -59,7 +60,7 @@ class GastoServiceMixin(BaseServiceMixin):
         )
 
         empresa_id = self._get_empresa_id_seguro()
-        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field or 'pk'
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field or "pk"
         lookup_value = self.kwargs.get(lookup_url_kwarg)
         try:
             sede_ids = OrganizationalScope.resolve(self.request).sede_ids
@@ -95,16 +96,19 @@ class ResolucionServiceMixin(BaseServiceMixin):
     def get_qs_list(self):
         """Sobrescribe para agregar parámetro vigentes."""
         empresa_id = self._get_empresa_id_seguro()
-        search = self.request.query_params.get('search') if hasattr(self, 'request') else None
-        solo_vigentes = self.request.query_params.get('vigentes') == 'true' if hasattr(self, 'request') else False
+        search = self.request.query_params.get("search") if hasattr(self, "request") else None
+        solo_vigentes = (
+            self.request.query_params.get("vigentes") == "true"
+            if hasattr(self, "request")
+            else False
+        )
         return self.selector_class.get_list(empresa_id, search=search, solo_vigentes=solo_vigentes)
 
     def service_crear_resolucion(self, serializer):
         """Crea resolucion usando business service."""
         empresa = self._get_empresa()
         return self.business_service_class.crear_resolucion(
-            data=serializer.validated_data,
-            empresa=empresa
+            data=serializer.validated_data, empresa=empresa
         )
 
     def service_desactivar_resolucion(self, resolucion):
@@ -123,5 +127,3 @@ class ResolucionServiceMixin(BaseServiceMixin):
         if not resolucion:
             return None
         return DocumentoCRUDService._obtener_siguiente_consecutivo(resolucion)
-
-

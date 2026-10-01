@@ -9,6 +9,7 @@ negocio real: buscar_cliente, validar_factura, crear_cotizacion).
 REGLA ABSOLUTA 5: separar READ / SUGGEST / VALIDATE / WRITE -- lo
 codifica ToolKind, no una convencion de nombres suelta.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -27,6 +28,7 @@ class ToolKind(str, Enum):
 
 class ToolRisk(str, Enum):
     """Fase 3/26 -- clasificacion de riesgo, determina si requiere aprobacion."""
+
     SAFE_READ = "SAFE_READ"
     SENSITIVE_READ = "SENSITIVE_READ"
     SAFE_WRITE = "SAFE_WRITE"
@@ -48,6 +50,7 @@ class ToolResult:
     SQL, nunca un secreto (Fase 34). `status` distingue exactamente lo
     que Regla Absoluta 10 exige poder distinguir.
     """
+
     status: str  # OK | VALIDATION_ERROR | PERMISSION_DENIED | NOT_FOUND | CONFLICT | DOMAIN_ERROR
     data: dict | list | None = None
     message: str = ""

@@ -6,6 +6,7 @@ Servicios internos del dominio Empresa.
 - Sin HTTP: Funciones puras que operan sobre modelos
 - Multi-tenant: Transparente (django-tenants maneja el aislamiento por esquema)
 """
+
 from .mailbox_service import (
     create_mailbox_config,
     delete_mailbox_config,
@@ -14,8 +15,8 @@ from .mailbox_service import (
 )
 
 __all__ = [
-    'list_mailbox_configs',
-    'create_mailbox_config',
-    'update_mailbox_config',
-    'delete_mailbox_config',
+    "list_mailbox_configs",
+    "create_mailbox_config",
+    "update_mailbox_config",
+    "delete_mailbox_config",
 ]

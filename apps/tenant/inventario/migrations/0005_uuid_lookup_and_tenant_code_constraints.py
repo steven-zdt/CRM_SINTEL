@@ -25,9 +25,11 @@ def populate_uuids(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ("tenant_inventario", "0004_rename_cuenta_contable_uuid_activofijo_cuenta_activo_uuid_and_more"),
+        (
+            "tenant_inventario",
+            "0004_rename_cuenta_contable_uuid_activofijo_cuenta_activo_uuid_and_more",
+        ),
     ]
 
     operations = [

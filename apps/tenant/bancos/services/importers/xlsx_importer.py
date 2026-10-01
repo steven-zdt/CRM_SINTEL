@@ -15,6 +15,7 @@ si se detecta dinamicamente buscando la fila de encabezado real
 layout distinto), se usa el layout por defecto verificado contra el
 fixture real (0:fecha,1:descripcion,2:sucursal,3:dcto,4:valor,5:saldo).
 """
+
 import contextlib
 import hashlib
 import re
@@ -92,7 +93,9 @@ def _extraer_resumen(df) -> dict:
     filas = df.values.tolist()
     for i, row in enumerate(filas):
         etiquetas = {_norm_text(v): idx for idx, v in enumerate(row)}
-        encontrados = {campo: etiquetas[et] for et, campo in _RESUMEN_ALIASES.items() if et in etiquetas}
+        encontrados = {
+            campo: etiquetas[et] for et, campo in _RESUMEN_ALIASES.items() if et in etiquetas
+        }
         if encontrados and i + 1 < len(filas):
             valores = filas[i + 1]
             for campo, idx in encontrados.items():

@@ -271,8 +271,12 @@ class ClientSerializer(serializers.ModelSerializer):
             "trial_days_remaining",
         )
         read_only_fields = (
-            "id", "created_on", "domains", "primary_domain",
-            "lifecycle_status", "trial_days_remaining",
+            "id",
+            "created_on",
+            "domains",
+            "primary_domain",
+            "lifecycle_status",
+            "trial_days_remaining",
         )
 
     def validate_schema_name(self, value: str) -> str:

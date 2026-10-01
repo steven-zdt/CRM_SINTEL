@@ -8,123 +8,402 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('empresa', '0001_initial'),
-        ('tenant_clientes', '0001_initial'),
+        ("empresa", "0001_initial"),
+        ("tenant_clientes", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ConfiguracionCotizacion',
+            name="ConfiguracionCotizacion",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('nombre_configuracion', models.CharField(help_text='Nombre descriptivo del perfil de configuracion', max_length=100, verbose_name='Nombre de Configuracion')),
-                ('es_activo', models.BooleanField(default=True, help_text='Indica si este perfil esta activo y disponible para uso', verbose_name='Activo')),
-                ('dias_validez', models.IntegerField(default=15, help_text='Dias de validez de la cotizacion (1 a 30 dias). Se usa para calcular automaticamente la fecha de vencimiento.', validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(30)], verbose_name='Dias de Validez')),
-                ('prefijo_secuencia', models.CharField(blank=True, default='', help_text='Prefijo para la numeracion (ej: "Cot-", "Fact-")', max_length=20, verbose_name='Prefijo de Secuencia')),
-                ('sufijo_secuencia', models.CharField(blank=True, default='', help_text='Sufijo para la numeracion (ej: "-2026", "-BOG")', max_length=20, verbose_name='Sufijo de Secuencia')),
-                ('semilla_inicial', models.IntegerField(default=1, help_text='Numero desde el cual empezar la secuencia (ej: 1, 100, 1000)', verbose_name='Semilla Inicial')),
-                ('ultimo_numero', models.IntegerField(default=0, help_text='Ultimo numero de secuencia generado para este perfil', verbose_name='Ultimo Numero Generado')),
-                ('empresa', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='empresa.empresa')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "nombre_configuracion",
+                    models.CharField(
+                        help_text="Nombre descriptivo del perfil de configuracion",
+                        max_length=100,
+                        verbose_name="Nombre de Configuracion",
+                    ),
+                ),
+                (
+                    "es_activo",
+                    models.BooleanField(
+                        default=True,
+                        help_text="Indica si este perfil esta activo y disponible para uso",
+                        verbose_name="Activo",
+                    ),
+                ),
+                (
+                    "dias_validez",
+                    models.IntegerField(
+                        default=15,
+                        help_text="Dias de validez de la cotizacion (1 a 30 dias). Se usa para calcular automaticamente la fecha de vencimiento.",
+                        validators=[
+                            django.core.validators.MinValueValidator(1),
+                            django.core.validators.MaxValueValidator(30),
+                        ],
+                        verbose_name="Dias de Validez",
+                    ),
+                ),
+                (
+                    "prefijo_secuencia",
+                    models.CharField(
+                        blank=True,
+                        default="",
+                        help_text='Prefijo para la numeracion (ej: "Cot-", "Fact-")',
+                        max_length=20,
+                        verbose_name="Prefijo de Secuencia",
+                    ),
+                ),
+                (
+                    "sufijo_secuencia",
+                    models.CharField(
+                        blank=True,
+                        default="",
+                        help_text='Sufijo para la numeracion (ej: "-2026", "-BOG")',
+                        max_length=20,
+                        verbose_name="Sufijo de Secuencia",
+                    ),
+                ),
+                (
+                    "semilla_inicial",
+                    models.IntegerField(
+                        default=1,
+                        help_text="Numero desde el cual empezar la secuencia (ej: 1, 100, 1000)",
+                        verbose_name="Semilla Inicial",
+                    ),
+                ),
+                (
+                    "ultimo_numero",
+                    models.IntegerField(
+                        default=0,
+                        help_text="Ultimo numero de secuencia generado para este perfil",
+                        verbose_name="Ultimo Numero Generado",
+                    ),
+                ),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to="empresa.empresa"
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Perfil de Configuracion',
-                'verbose_name_plural': 'Perfiles de Configuracion',
-                'db_table': 'tenant_cotizaciones_configuracion',
+                "verbose_name": "Perfil de Configuracion",
+                "verbose_name_plural": "Perfiles de Configuracion",
+                "db_table": "tenant_cotizaciones_configuracion",
             },
         ),
         migrations.CreateModel(
-            name='Cotizacion',
+            name="Cotizacion",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Timestamp auto-asignado al crear el registro.', verbose_name='Creado')),
-                ('updated_at', models.DateTimeField(auto_now=True, db_index=True, help_text='Timestamp auto-actualizado al modificar.', verbose_name='Actualizado')),
-                ('uuid', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
-                ('numero_cotizacion', models.CharField(max_length=50)),
-                ('codigo_unico', models.CharField(blank=True, db_index=True, help_text='Codigo unico generado automaticamente desde el perfil de configuracion (ej: "STS. 0422-2026")', max_length=100, null=True, unique=True, verbose_name='Codigo Unico')),
-                ('tipo_cotizacion', models.CharField(default='MIXTO', max_length=20)),
-                ('fecha_emision', models.DateField(auto_now_add=True)),
-                ('fecha_vencimiento', models.DateField()),
-                ('estado', models.CharField(choices=[('BORRADOR', 'Borrador'), ('ENVIADA', 'Enviada'), ('ACEPTADA', 'Aceptada'), ('CANCELADA', 'Cancelada')], default='BORRADOR', max_length=20)),
-                ('porcentaje_aiu_admin', models.DecimalField(decimal_places=2, default=0, max_digits=5)),
-                ('porcentaje_aiu_imprevistos', models.DecimalField(decimal_places=2, default=0, max_digits=5)),
-                ('porcentaje_aiu_utilidad', models.DecimalField(decimal_places=2, default=0, max_digits=5)),
-                ('iva_porcentaje', models.DecimalField(decimal_places=2, default=19.0, max_digits=5)),
-                ('total_con_impuestos', models.DecimalField(decimal_places=2, default=0, max_digits=15)),
-                ('cliente', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='tenant_clientes.cliente')),
-                ('configuracion', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='cotizaciones', to='tenant_cotizaciones.configuracioncotizacion')),
-                ('empresa', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='empresa.empresa')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        db_index=True,
+                        help_text="Timestamp auto-asignado al crear el registro.",
+                        verbose_name="Creado",
+                    ),
+                ),
+                (
+                    "updated_at",
+                    models.DateTimeField(
+                        auto_now=True,
+                        db_index=True,
+                        help_text="Timestamp auto-actualizado al modificar.",
+                        verbose_name="Actualizado",
+                    ),
+                ),
+                ("uuid", models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                ("numero_cotizacion", models.CharField(max_length=50)),
+                (
+                    "codigo_unico",
+                    models.CharField(
+                        blank=True,
+                        db_index=True,
+                        help_text='Codigo unico generado automaticamente desde el perfil de configuracion (ej: "STS. 0422-2026")',
+                        max_length=100,
+                        null=True,
+                        unique=True,
+                        verbose_name="Codigo Unico",
+                    ),
+                ),
+                ("tipo_cotizacion", models.CharField(default="MIXTO", max_length=20)),
+                ("fecha_emision", models.DateField(auto_now_add=True)),
+                ("fecha_vencimiento", models.DateField()),
+                (
+                    "estado",
+                    models.CharField(
+                        choices=[
+                            ("BORRADOR", "Borrador"),
+                            ("ENVIADA", "Enviada"),
+                            ("ACEPTADA", "Aceptada"),
+                            ("CANCELADA", "Cancelada"),
+                        ],
+                        default="BORRADOR",
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "porcentaje_aiu_admin",
+                    models.DecimalField(decimal_places=2, default=0, max_digits=5),
+                ),
+                (
+                    "porcentaje_aiu_imprevistos",
+                    models.DecimalField(decimal_places=2, default=0, max_digits=5),
+                ),
+                (
+                    "porcentaje_aiu_utilidad",
+                    models.DecimalField(decimal_places=2, default=0, max_digits=5),
+                ),
+                (
+                    "iva_porcentaje",
+                    models.DecimalField(decimal_places=2, default=19.0, max_digits=5),
+                ),
+                (
+                    "total_con_impuestos",
+                    models.DecimalField(decimal_places=2, default=0, max_digits=15),
+                ),
+                (
+                    "cliente",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="tenant_clientes.cliente",
+                    ),
+                ),
+                (
+                    "configuracion",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="cotizaciones",
+                        to="tenant_cotizaciones.configuracioncotizacion",
+                    ),
+                ),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, to="empresa.empresa"
+                    ),
+                ),
             ],
             options={
-                'db_table': 'tenant_cotizaciones_documento',
+                "db_table": "tenant_cotizaciones_documento",
             },
         ),
         migrations.CreateModel(
-            name='Producto',
+            name="Producto",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Timestamp auto-asignado al crear el registro.', verbose_name='Creado')),
-                ('updated_at', models.DateTimeField(auto_now=True, db_index=True, help_text='Timestamp auto-actualizado al modificar.', verbose_name='Actualizado')),
-                ('codigo', models.CharField(blank=True, max_length=50)),
-                ('nombre', models.CharField(max_length=255)),
-                ('marca', models.CharField(blank=True, max_length=100)),
-                ('referencia', models.CharField(blank=True, max_length=100)),
-                ('unidad', models.CharField(default='UND', max_length=20)),
-                ('precio_venta', models.DecimalField(decimal_places=2, max_digits=15)),
-                ('activo', models.BooleanField(default=True)),
-                ('empresa', models.ForeignKey(help_text='Empresa propietaria (SSoT por tenant). Requerido.', on_delete=django.db.models.deletion.PROTECT, related_name='%(app_label)s_%(class)s_related', to='empresa.empresa', verbose_name='Empresa')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        db_index=True,
+                        help_text="Timestamp auto-asignado al crear el registro.",
+                        verbose_name="Creado",
+                    ),
+                ),
+                (
+                    "updated_at",
+                    models.DateTimeField(
+                        auto_now=True,
+                        db_index=True,
+                        help_text="Timestamp auto-actualizado al modificar.",
+                        verbose_name="Actualizado",
+                    ),
+                ),
+                ("codigo", models.CharField(blank=True, max_length=50)),
+                ("nombre", models.CharField(max_length=255)),
+                ("marca", models.CharField(blank=True, max_length=100)),
+                ("referencia", models.CharField(blank=True, max_length=100)),
+                ("unidad", models.CharField(default="UND", max_length=20)),
+                ("precio_venta", models.DecimalField(decimal_places=2, max_digits=15)),
+                ("activo", models.BooleanField(default=True)),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        help_text="Empresa propietaria (SSoT por tenant). Requerido.",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_related",
+                        to="empresa.empresa",
+                        verbose_name="Empresa",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'tenant_cotizaciones_producto',
+                "db_table": "tenant_cotizaciones_producto",
             },
         ),
         migrations.CreateModel(
-            name='Servicio',
+            name="Servicio",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Timestamp auto-asignado al crear el registro.', verbose_name='Creado')),
-                ('updated_at', models.DateTimeField(auto_now=True, db_index=True, help_text='Timestamp auto-actualizado al modificar.', verbose_name='Actualizado')),
-                ('nombre', models.CharField(max_length=255)),
-                ('precio_venta', models.DecimalField(decimal_places=2, max_digits=15)),
-                ('activo', models.BooleanField(default=True)),
-                ('empresa', models.ForeignKey(help_text='Empresa propietaria (SSoT por tenant). Requerido.', on_delete=django.db.models.deletion.PROTECT, related_name='%(app_label)s_%(class)s_related', to='empresa.empresa', verbose_name='Empresa')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        db_index=True,
+                        help_text="Timestamp auto-asignado al crear el registro.",
+                        verbose_name="Creado",
+                    ),
+                ),
+                (
+                    "updated_at",
+                    models.DateTimeField(
+                        auto_now=True,
+                        db_index=True,
+                        help_text="Timestamp auto-actualizado al modificar.",
+                        verbose_name="Actualizado",
+                    ),
+                ),
+                ("nombre", models.CharField(max_length=255)),
+                ("precio_venta", models.DecimalField(decimal_places=2, max_digits=15)),
+                ("activo", models.BooleanField(default=True)),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        help_text="Empresa propietaria (SSoT por tenant). Requerido.",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_related",
+                        to="empresa.empresa",
+                        verbose_name="Empresa",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'tenant_cotizaciones_servicio',
+                "db_table": "tenant_cotizaciones_servicio",
             },
         ),
         migrations.CreateModel(
-            name='CotizacionItem',
+            name="CotizacionItem",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Timestamp auto-asignado al crear el registro.', verbose_name='Creado')),
-                ('updated_at', models.DateTimeField(auto_now=True, db_index=True, help_text='Timestamp auto-actualizado al modificar.', verbose_name='Actualizado')),
-                ('tipo_item', models.CharField(choices=[('PRODUCTO', 'Equipo'), ('MATERIAL', 'Material'), ('SERVICIO', 'Servicio')], max_length=20)),
-                ('descripcion', models.TextField(blank=True, default='', null=True)),
-                ('marca', models.CharField(blank=True, max_length=100)),
-                ('referencia', models.CharField(blank=True, max_length=100)),
-                ('unidad', models.CharField(default='UND', max_length=20)),
-                ('cantidad', models.DecimalField(decimal_places=2, default=1, max_digits=12)),
-                ('costo_unitario', models.DecimalField(decimal_places=2, default=0, max_digits=15)),
-                ('porcentaje_utilidad', models.DecimalField(decimal_places=2, default=0, max_digits=5)),
-                ('precio_unitario_venta', models.DecimalField(decimal_places=2, default=0, max_digits=15)),
-                ('subtotal_linea', models.DecimalField(decimal_places=2, default=0, max_digits=15)),
-                ('orden', models.PositiveIntegerField(default=0)),
-                ('cotizacion', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='items', to='tenant_cotizaciones.cotizacion')),
-                ('empresa', models.ForeignKey(help_text='Empresa propietaria (SSoT por tenant). Requerido.', on_delete=django.db.models.deletion.PROTECT, related_name='%(app_label)s_%(class)s_related', to='empresa.empresa', verbose_name='Empresa')),
-                ('producto', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='tenant_cotizaciones.producto')),
-                ('servicio', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='tenant_cotizaciones.servicio')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        db_index=True,
+                        help_text="Timestamp auto-asignado al crear el registro.",
+                        verbose_name="Creado",
+                    ),
+                ),
+                (
+                    "updated_at",
+                    models.DateTimeField(
+                        auto_now=True,
+                        db_index=True,
+                        help_text="Timestamp auto-actualizado al modificar.",
+                        verbose_name="Actualizado",
+                    ),
+                ),
+                (
+                    "tipo_item",
+                    models.CharField(
+                        choices=[
+                            ("PRODUCTO", "Equipo"),
+                            ("MATERIAL", "Material"),
+                            ("SERVICIO", "Servicio"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                ("descripcion", models.TextField(blank=True, default="", null=True)),
+                ("marca", models.CharField(blank=True, max_length=100)),
+                ("referencia", models.CharField(blank=True, max_length=100)),
+                ("unidad", models.CharField(default="UND", max_length=20)),
+                ("cantidad", models.DecimalField(decimal_places=2, default=1, max_digits=12)),
+                ("costo_unitario", models.DecimalField(decimal_places=2, default=0, max_digits=15)),
+                (
+                    "porcentaje_utilidad",
+                    models.DecimalField(decimal_places=2, default=0, max_digits=5),
+                ),
+                (
+                    "precio_unitario_venta",
+                    models.DecimalField(decimal_places=2, default=0, max_digits=15),
+                ),
+                ("subtotal_linea", models.DecimalField(decimal_places=2, default=0, max_digits=15)),
+                ("orden", models.PositiveIntegerField(default=0)),
+                (
+                    "cotizacion",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="items",
+                        to="tenant_cotizaciones.cotizacion",
+                    ),
+                ),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        help_text="Empresa propietaria (SSoT por tenant). Requerido.",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_related",
+                        to="empresa.empresa",
+                        verbose_name="Empresa",
+                    ),
+                ),
+                (
+                    "producto",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="tenant_cotizaciones.producto",
+                    ),
+                ),
+                (
+                    "servicio",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="tenant_cotizaciones.servicio",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'tenant_cotizaciones_item',
-                'ordering': ['orden'],
+                "db_table": "tenant_cotizaciones_item",
+                "ordering": ["orden"],
             },
         ),
         migrations.AddConstraint(
-            model_name='cotizacion',
-            constraint=models.UniqueConstraint(fields=('empresa', 'configuracion', 'numero_cotizacion'), name='unique_numero_cotizacion_por_perfil'),
+            model_name="cotizacion",
+            constraint=models.UniqueConstraint(
+                fields=("empresa", "configuracion", "numero_cotizacion"),
+                name="unique_numero_cotizacion_por_perfil",
+            ),
         ),
     ]

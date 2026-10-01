@@ -5,83 +5,196 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('empresa', '0001_initial'),
+        ("empresa", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Cliente',
+            name="Cliente",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Timestamp auto-asignado al crear el registro.', verbose_name='Creado')),
-                ('updated_at', models.DateTimeField(auto_now=True, db_index=True, help_text='Timestamp auto-actualizado al modificar.', verbose_name='Actualizado')),
-                ('tipo_persona', models.CharField(choices=[('NATURAL', 'Persona natural'), ('JURIDICA', 'Persona juridica')], max_length=10)),
-                ('tipo_documento', models.CharField(choices=[('CC', 'Cedula de ciudadania'), ('CE', 'Cedula de extranjeria'), ('NIT', 'NIT'), ('PA', 'Pasaporte')], max_length=5)),
-                ('numero_documento', models.CharField(max_length=32)),
-                ('razon_social', models.CharField(max_length=180)),
-                ('nombre_comercial', models.CharField(blank=True, max_length=180)),
-                ('regimen_tributario', models.CharField(choices=[('SIMPLE', 'Regimen Simple'), ('ORDINARIO', 'Regimen Ordinario'), ('NO_RESP', 'No responsable de IVA')], max_length=15)),
-                ('email', models.EmailField(blank=True, max_length=254)),
-                ('telefono', models.CharField(blank=True, max_length=32)),
-                ('direccion', models.CharField(blank=True, max_length=255)),
-                ('ciudad', models.CharField(blank=True, max_length=80)),
-                ('activo', models.BooleanField(default=True)),
-                ('observaciones', models.TextField(blank=True)),
-                ('empresa', models.ForeignKey(help_text='Empresa propietaria (SSoT por tenant). Requerido.', on_delete=django.db.models.deletion.PROTECT, related_name='%(app_label)s_%(class)s_related', to='empresa.empresa', verbose_name='Empresa')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        db_index=True,
+                        help_text="Timestamp auto-asignado al crear el registro.",
+                        verbose_name="Creado",
+                    ),
+                ),
+                (
+                    "updated_at",
+                    models.DateTimeField(
+                        auto_now=True,
+                        db_index=True,
+                        help_text="Timestamp auto-actualizado al modificar.",
+                        verbose_name="Actualizado",
+                    ),
+                ),
+                (
+                    "tipo_persona",
+                    models.CharField(
+                        choices=[("NATURAL", "Persona natural"), ("JURIDICA", "Persona juridica")],
+                        max_length=10,
+                    ),
+                ),
+                (
+                    "tipo_documento",
+                    models.CharField(
+                        choices=[
+                            ("CC", "Cedula de ciudadania"),
+                            ("CE", "Cedula de extranjeria"),
+                            ("NIT", "NIT"),
+                            ("PA", "Pasaporte"),
+                        ],
+                        max_length=5,
+                    ),
+                ),
+                ("numero_documento", models.CharField(max_length=32)),
+                ("razon_social", models.CharField(max_length=180)),
+                ("nombre_comercial", models.CharField(blank=True, max_length=180)),
+                (
+                    "regimen_tributario",
+                    models.CharField(
+                        choices=[
+                            ("SIMPLE", "Regimen Simple"),
+                            ("ORDINARIO", "Regimen Ordinario"),
+                            ("NO_RESP", "No responsable de IVA"),
+                        ],
+                        max_length=15,
+                    ),
+                ),
+                ("email", models.EmailField(blank=True, max_length=254)),
+                ("telefono", models.CharField(blank=True, max_length=32)),
+                ("direccion", models.CharField(blank=True, max_length=255)),
+                ("ciudad", models.CharField(blank=True, max_length=80)),
+                ("activo", models.BooleanField(default=True)),
+                ("observaciones", models.TextField(blank=True)),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        help_text="Empresa propietaria (SSoT por tenant). Requerido.",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_related",
+                        to="empresa.empresa",
+                        verbose_name="Empresa",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Cliente',
-                'verbose_name_plural': 'Clientes',
-                'ordering': ['razon_social'],
+                "verbose_name": "Cliente",
+                "verbose_name_plural": "Clientes",
+                "ordering": ["razon_social"],
             },
         ),
         migrations.CreateModel(
-            name='ContactoCliente',
+            name="ContactoCliente",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Timestamp auto-asignado al crear el registro.', verbose_name='Creado')),
-                ('updated_at', models.DateTimeField(auto_now=True, db_index=True, help_text='Timestamp auto-actualizado al modificar.', verbose_name='Actualizado')),
-                ('nombre_completo', models.CharField(help_text='Nombre del contacto', max_length=180)),
-                ('cargo', models.CharField(blank=True, help_text='Cargo del contacto', max_length=100)),
-                ('email', models.EmailField(help_text='Correo del contacto', max_length=254)),
-                ('telefono', models.CharField(blank=True, help_text='Telefono del contacto', max_length=32)),
-                ('activo', models.BooleanField(default=True, help_text='Estado del contacto')),
-                ('is_principal', models.BooleanField(default=False, help_text='Marca el contacto principal')),
-                ('cliente', models.ForeignKey(help_text='Cliente propietario del contacto', on_delete=django.db.models.deletion.CASCADE, related_name='contactos', to='tenant_clientes.cliente')),
-                ('empresa', models.ForeignKey(help_text='Empresa propietaria (SSoT por tenant). Requerido.', on_delete=django.db.models.deletion.PROTECT, related_name='%(app_label)s_%(class)s_related', to='empresa.empresa', verbose_name='Empresa')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        db_index=True,
+                        help_text="Timestamp auto-asignado al crear el registro.",
+                        verbose_name="Creado",
+                    ),
+                ),
+                (
+                    "updated_at",
+                    models.DateTimeField(
+                        auto_now=True,
+                        db_index=True,
+                        help_text="Timestamp auto-actualizado al modificar.",
+                        verbose_name="Actualizado",
+                    ),
+                ),
+                (
+                    "nombre_completo",
+                    models.CharField(help_text="Nombre del contacto", max_length=180),
+                ),
+                (
+                    "cargo",
+                    models.CharField(blank=True, help_text="Cargo del contacto", max_length=100),
+                ),
+                ("email", models.EmailField(help_text="Correo del contacto", max_length=254)),
+                (
+                    "telefono",
+                    models.CharField(blank=True, help_text="Telefono del contacto", max_length=32),
+                ),
+                ("activo", models.BooleanField(default=True, help_text="Estado del contacto")),
+                (
+                    "is_principal",
+                    models.BooleanField(default=False, help_text="Marca el contacto principal"),
+                ),
+                (
+                    "cliente",
+                    models.ForeignKey(
+                        help_text="Cliente propietario del contacto",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="contactos",
+                        to="tenant_clientes.cliente",
+                    ),
+                ),
+                (
+                    "empresa",
+                    models.ForeignKey(
+                        help_text="Empresa propietaria (SSoT por tenant). Requerido.",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="%(app_label)s_%(class)s_related",
+                        to="empresa.empresa",
+                        verbose_name="Empresa",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Contacto de Cliente',
-                'verbose_name_plural': 'Contactos de Clientes',
-                'ordering': ['-is_principal', 'nombre_completo'],
+                "verbose_name": "Contacto de Cliente",
+                "verbose_name_plural": "Contactos de Clientes",
+                "ordering": ["-is_principal", "nombre_completo"],
             },
         ),
         migrations.AddIndex(
-            model_name='cliente',
-            index=models.Index(fields=['empresa', 'activo'], name='tenant_clie_empresa_39ba10_idx'),
+            model_name="cliente",
+            index=models.Index(fields=["empresa", "activo"], name="tenant_clie_empresa_39ba10_idx"),
         ),
         migrations.AddIndex(
-            model_name='cliente',
-            index=models.Index(fields=['numero_documento'], name='tenant_clie_numero__21ed8f_idx'),
+            model_name="cliente",
+            index=models.Index(fields=["numero_documento"], name="tenant_clie_numero__21ed8f_idx"),
         ),
         migrations.AddConstraint(
-            model_name='cliente',
-            constraint=models.UniqueConstraint(fields=('empresa', 'tipo_documento', 'numero_documento'), name='uniq_doc_cliente_empresa'),
+            model_name="cliente",
+            constraint=models.UniqueConstraint(
+                fields=("empresa", "tipo_documento", "numero_documento"),
+                name="uniq_doc_cliente_empresa",
+            ),
         ),
         migrations.AddIndex(
-            model_name='contactocliente',
-            index=models.Index(fields=['cliente', 'activo'], name='tenant_clie_cliente_8d2c60_idx'),
+            model_name="contactocliente",
+            index=models.Index(fields=["cliente", "activo"], name="tenant_clie_cliente_8d2c60_idx"),
         ),
         migrations.AddIndex(
-            model_name='contactocliente',
-            index=models.Index(fields=['cliente', 'is_principal'], name='tenant_clie_cliente_fdc784_idx'),
+            model_name="contactocliente",
+            index=models.Index(
+                fields=["cliente", "is_principal"], name="tenant_clie_cliente_fdc784_idx"
+            ),
         ),
         migrations.AddConstraint(
-            model_name='contactocliente',
-            constraint=models.UniqueConstraint(fields=('cliente', 'email'), name='uniq_contacto_cliente_email'),
+            model_name="contactocliente",
+            constraint=models.UniqueConstraint(
+                fields=("cliente", "email"), name="uniq_contacto_cliente_email"
+            ),
         ),
     ]

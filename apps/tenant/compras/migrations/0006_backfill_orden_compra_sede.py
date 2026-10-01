@@ -11,21 +11,24 @@ empresa aun no tiene ninguna Sede, sus OrdenCompra quedan con sede_id NULL
 (la migracion 0007, que endurece la columna a NOT NULL, falla ruidosamente
 en ese caso en vez de continuar en un estado inconsistente).
 """
+
 from django.db import migrations
 
 
 def backfill_sede(apps, schema_editor):
-    OrdenCompra = apps.get_model('tenant_compras', 'OrdenCompra')
-    Sede = apps.get_model('empresa', 'Sede')
+    OrdenCompra = apps.get_model("tenant_compras", "OrdenCompra")
+    Sede = apps.get_model("empresa", "Sede")
 
-    empresa_ids = OrdenCompra.objects.filter(sede__isnull=True).values_list(
-        'empresa_id', flat=True
-    ).distinct()
+    empresa_ids = (
+        OrdenCompra.objects.filter(sede__isnull=True)
+        .values_list("empresa_id", flat=True)
+        .distinct()
+    )
 
     for empresa_id in empresa_ids:
-        sede = Sede.objects.filter(empresa_id=empresa_id, nombre='Principal').first()
+        sede = Sede.objects.filter(empresa_id=empresa_id, nombre="Principal").first()
         if sede is None:
-            sede = Sede.objects.filter(empresa_id=empresa_id).order_by('id').first()
+            sede = Sede.objects.filter(empresa_id=empresa_id).order_by("id").first()
         if sede is None:
             # Sin ninguna Sede para esta empresa: no hay nada razonable que
             # asignar. Se deja sede_id NULL a proposito - la migracion de
@@ -43,9 +46,8 @@ def noop_reverse(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('tenant_compras', '0005_add_empresa_sede_composite_index'),
+        ("tenant_compras", "0005_add_empresa_sede_composite_index"),
     ]
 
     operations = [

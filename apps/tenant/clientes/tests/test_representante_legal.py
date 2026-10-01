@@ -10,6 +10,7 @@ validar_representante_legal()), nunca solo en el formulario.
 externos (factura XML) siguen sin exigirla, ver docstring de
 registrar_cliente_completo().
 """
+
 import pytest
 from django_tenants.utils import schema_context
 
@@ -67,19 +68,19 @@ def test_crear_cliente_juridica_con_representante_funciona(client, admin_user, t
     with schema_context(tenant.schema_name):
         client.force_login(admin_user)
 
-    contactos = [{
-        "nombre_completo": "Juan Representante",
-        "email": "juan.representante@example.com",
-        "es_representante_legal": True,
-    }]
+    contactos = [
+        {
+            "nombre_completo": "Juan Representante",
+            "email": "juan.representante@example.com",
+            "es_representante_legal": True,
+        }
+    ]
     resp = _post_cliente(client, tenant, _base_payload("800300003", "JURIDICA", contactos))
     assert resp.status_code == 201, resp.content
 
     with schema_context(tenant.schema_name):
         cliente = Cliente.objects.get(numero_documento="800300003")
-        assert ContactoCliente.objects.filter(
-            cliente=cliente, es_representante_legal=True
-        ).exists()
+        assert ContactoCliente.objects.filter(cliente=cliente, es_representante_legal=True).exists()
 
 
 @pytest.mark.django_db
@@ -87,18 +88,21 @@ def test_actualizar_cliente_juridica_quitando_representante_falla(client, admin_
     with schema_context(tenant.schema_name):
         client.force_login(admin_user)
 
-    contactos = [{
-        "nombre_completo": "Juan Representante",
-        "email": "juan.representante2@example.com",
-        "es_representante_legal": True,
-    }]
+    contactos = [
+        {
+            "nombre_completo": "Juan Representante",
+            "email": "juan.representante2@example.com",
+            "es_representante_legal": True,
+        }
+    ]
     resp = _post_cliente(client, tenant, _base_payload("800300004", "JURIDICA", contactos))
     assert resp.status_code == 201, resp.content
     cliente_uuid = resp.json()["uuid"]
 
     with schema_context(tenant.schema_name):
         contacto_id = ContactoCliente.objects.get(
-            cliente__uuid=cliente_uuid, email="juan.representante2@example.com",
+            cliente__uuid=cliente_uuid,
+            email="juan.representante2@example.com",
         ).id
 
     # PATCH tocando contactos: quita la marca de representante legal. Envia
@@ -107,12 +111,16 @@ def test_actualizar_cliente_juridica_quitando_representante_falla(client, admin_
     # con el mismo email -> violaria uniq_contacto_cliente_email).
     resp2 = client.patch(
         f"/api/v1/clientes/{cliente_uuid}/",
-        data={"contactos": [{
-            "id": contacto_id,
-            "nombre_completo": "Juan Representante",
-            "email": "juan.representante2@example.com",
-            "es_representante_legal": False,
-        }]},
+        data={
+            "contactos": [
+                {
+                    "id": contacto_id,
+                    "nombre_completo": "Juan Representante",
+                    "email": "juan.representante2@example.com",
+                    "es_representante_legal": False,
+                }
+            ]
+        },
         content_type="application/json",
         HTTP_HOST=f"{tenant.schema_name}.sintel.net.co",
     )
@@ -132,9 +140,13 @@ def test_actualizar_cliente_juridica_sin_tocar_contactos_no_falla(client, admin_
         client.force_login(admin_user)
         empresa = Empresa.objects.first()
         cliente_historico = Cliente.objects.create(
-            empresa=empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="800300005", razon_social="Historico Sin Representante",
-            regimen_tributario="ORDINARIO", activo=True,
+            empresa=empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="800300005",
+            razon_social="Historico Sin Representante",
+            regimen_tributario="ORDINARIO",
+            activo=True,
         )
         cliente_uuid = str(cliente_historico.uuid)
 

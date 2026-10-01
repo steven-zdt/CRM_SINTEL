@@ -3,6 +3,7 @@ CRUD Service para Ventas - Persistencia transaccional pura.
 
 Responsabilidad: DML sin logica de negocio.
 """
+
 import logging
 from decimal import Decimal
 
@@ -135,7 +136,9 @@ class VentaCRUDService:
     def anular_venta(venta: Venta) -> Venta:
         """Marca la venta como ANULADA. La factura asociada no se elimina."""
         if venta.estado == Venta.Estado.FACTURADA_DIAN:
-            raise ValueError("Una venta facturada no puede anularse directamente. Emita nota credito.")
+            raise ValueError(
+                "Una venta facturada no puede anularse directamente. Emita nota credito."
+            )
         venta.estado = Venta.Estado.ANULADA
         venta.save(update_fields=["estado"])
         return venta
@@ -182,12 +185,20 @@ class ResolucionFacturacionCRUDService:
 
     @staticmethod
     @transaction.atomic
-    def actualizar_resolucion(resolucion: ResolucionFacturacion, data: dict) -> ResolucionFacturacion:
+    def actualizar_resolucion(
+        resolucion: ResolucionFacturacion, data: dict
+    ) -> ResolucionFacturacion:
         """Actualiza campos editables de ResolucionFacturacion."""
         campos = [
-            "numero_resolucion", "prefijo", "tipo",
-            "fecha_resolucion", "fecha_desde", "fecha_hasta",
-            "rango_desde", "rango_hasta", "vigente",
+            "numero_resolucion",
+            "prefijo",
+            "tipo",
+            "fecha_resolucion",
+            "fecha_desde",
+            "fecha_hasta",
+            "rango_desde",
+            "rango_hasta",
+            "vigente",
         ]
         for campo in campos:
             if campo in data:

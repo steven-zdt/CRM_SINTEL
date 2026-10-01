@@ -1,0 +1,12 @@
+{% load sintel_ui %}
+{# kpis_clientes.html — Fragmento HTMX: solo KPIs (la tabla ya no vive aqui, #}
+{# ver partials/tabla_clientes.html -- DataTables). #}
+
+<div class="row g-3 mb-3" id="clientes-kpis">
+  {% sintel_kpi_card icon="people" color="primary" value=kpis.total label="Total" %}
+  {% sintel_kpi_card icon="person-check" color="success" value=kpis.activos label="Activos" %}
+  {% sintel_kpi_card icon="building" color="info" value=kpis.juridicas label="Jurídicas" %}
+  {% sintel_kpi_card icon="person" color="secondary" value=kpis.naturales label="Naturales" %}
+  {% sintel_kpi_card icon="shield-check" color="warning" value=kpis.retenedores label="Retenedores" %}
+  {% sintel_kpi_card icon="person-x" color="danger" value=kpis.inactivos label="Inactivos" %}
+</div>

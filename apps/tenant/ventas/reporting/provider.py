@@ -9,6 +9,7 @@ consulta ORM vive aqui, dentro del dominio dueño de los datos.
 declara SedeAwareModel) -- `scope_fields=("empresa",)` unicamente, sin
 inventar una dimension de sede que el modelo no soporta (FASE 5).
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -36,7 +37,9 @@ _DIMENSIONS = (
 )
 
 _MEASURES = (
-    ReportMeasure("cantidad_ventas", "Cantidad de ventas", FieldType.INTEGER, Aggregation.COUNT, source="id"),
+    ReportMeasure(
+        "cantidad_ventas", "Cantidad de ventas", FieldType.INTEGER, Aggregation.COUNT, source="id"
+    ),
     ReportMeasure("subtotal", "Subtotal", FieldType.DECIMAL, Aggregation.SUM, source="subtotal"),
     ReportMeasure("impuestos", "Impuestos", FieldType.DECIMAL, Aggregation.SUM, source="impuestos"),
     ReportMeasure("total", "Total", FieldType.DECIMAL, Aggregation.SUM, source="total_neto"),
@@ -96,22 +99,28 @@ class VentasReportProvider:
         measures = request.measures or tuple(m.name for m in _MEASURES)
 
         group_sources = {name: _DATASET.get_dimension(name).source for name in group_by}
-        annotations = {name: _AGGREGATORS[name](_DATASET.get_measure(name).source) for name in measures}
+        annotations = {
+            name: _AGGREGATORS[name](_DATASET.get_measure(name).source) for name in measures
+        }
 
         values_qs = qs.values(*group_sources.values()).annotate(**annotations)
 
         if request.order_by:
             order_field = request.order_by.lstrip("-")
             prefix = "-" if request.order_by.startswith("-") else ""
-            resolved = group_sources.get(order_field, order_field if order_field in measures else None)
+            resolved = group_sources.get(
+                order_field, order_field if order_field in measures else None
+            )
             if resolved:
                 values_qs = values_qs.order_by(f"{prefix}{resolved}")
         else:
-            values_qs = values_qs.order_by(*[f"-{s}" for s in group_sources.values()][:1] or ["-fecha_emision"])
+            values_qs = values_qs.order_by(
+                *[f"-{s}" for s in group_sources.values()][:1] or ["-fecha_emision"]
+            )
 
         count = values_qs.count()
         start = (request.page - 1) * request.page_size
-        page_rows = list(values_qs[start:start + request.page_size])
+        page_rows = list(values_qs[start : start + request.page_size])
 
         rows = []
         for raw in page_rows:

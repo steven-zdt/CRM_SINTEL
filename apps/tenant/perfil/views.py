@@ -5,6 +5,7 @@ Perfil. Expansion Fase 5-BIS (ver documentacion/plan_refactorizacion.md).
 No reemplaza la API DRF (apps/tenant/perfil/api/viewsets.py), que sigue viva
 para crear/editar/eliminar/asignar-rol y para consumidores API-first.
 """
+
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin

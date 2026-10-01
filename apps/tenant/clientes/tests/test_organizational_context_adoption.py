@@ -8,6 +8,7 @@ empresa via resolve_tenant_empresa() (apps/tenant/api/utils.py), que no
 exige TenantProfile, mientras OrganizationalContext.resolve() si lo exige.
 No se repite la investigacion completa - se confirma con un test dedicado.
 """
+
 from apps.tenant.clientes.api.viewsets import ClienteViewSet
 from apps.tenant.clientes.models import Cliente
 from apps.tenant.clientes.services.selectors import ClienteSelector
@@ -25,15 +26,22 @@ class ClienteOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9 Clientes", nit="900000997", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9 Clientes",
+            nit="900000997",
+            direccion="Calle 1",
         )
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, razon_social="Cliente Fase9", numero_documento="123",
-            tipo_documento="CC", tipo_persona="NATURAL",
+            empresa=self.empresa,
+            razon_social="Cliente Fase9",
+            numero_documento="123",
+            tipo_documento="CC",
+            tipo_persona="NATURAL",
         )
 
     def test_clienteviewset_exposes_get_organizational_context_with_a_real_profile(self):
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         from rest_framework.test import APIRequestFactory
         from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -53,7 +61,9 @@ class ClienteOrganizationalContextAdoptionTests(SintelTenantTestCase):
         self.assertEqual(context.empresa_id, self.empresa.id)
 
         ids_context = set(context.filter(Cliente).values_list("id", flat=True))
-        ids_selector = set(ClienteSelector.get_cliente_list(self.empresa.id).values_list("id", flat=True))
+        ids_selector = set(
+            ClienteSelector.get_cliente_list(self.empresa.id).values_list("id", flat=True)
+        )
         self.assertEqual(ids_context, ids_selector)
         self.assertIn(self.cliente.id, ids_context)
 

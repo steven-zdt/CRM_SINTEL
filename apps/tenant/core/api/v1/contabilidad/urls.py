@@ -20,10 +20,12 @@ from .viewsets import (
 router = DefaultRouter(trailing_slash=True)
 
 # Registrar ViewSets
-router.register(r'cuentas', CuentaContableCoreViewSet, basename='core-cuenta-contable')
-router.register(r'asientos', AsientoContableCoreViewSet, basename='core-asiento-contable')
-router.register(r'movimientos', MovimientoContableCoreViewSet, basename='core-movimiento-contable')
-router.register(r'periodos-contables', PeriodoContableCoreViewSet, basename='core-periodo-contable')  # # WARNING: v2.61
-router.register(r'catalogo-niif', CatalogoMaestroNIIFCoreViewSet, basename='core-catalogo-niif')
+router.register(r"cuentas", CuentaContableCoreViewSet, basename="core-cuenta-contable")
+router.register(r"asientos", AsientoContableCoreViewSet, basename="core-asiento-contable")
+router.register(r"movimientos", MovimientoContableCoreViewSet, basename="core-movimiento-contable")
+router.register(
+    r"periodos-contables", PeriodoContableCoreViewSet, basename="core-periodo-contable"
+)  # # WARNING: v2.61
+router.register(r"catalogo-niif", CatalogoMaestroNIIFCoreViewSet, basename="core-catalogo-niif")
 
 urlpatterns = router.urls

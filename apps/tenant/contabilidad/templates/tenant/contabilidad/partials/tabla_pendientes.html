@@ -1,0 +1,27 @@
+{# tabla_pendientes.html — DataTables 3.x + ColumnControl (docs/ux/TABLES_FORMS_RELEASE_GATE.md) #}
+{# Esqueleto ESTATICO: reemplaza el Tabulator client-side de                #}
+{# pendiente_list.js (traia TODOS los pendientes en un solo GET sin         #}
+{# paginacion server-side). Poblado via ajax contra                        #}
+{# POST /api/v1/contabilidad/pendientes/dt/ -- endpoint MANUAL, no via      #}
+{# DataTableServer (la fuente mezcla 4 modelos de 4 apps en una lista       #}
+{# Python, ver docstring de DocumentosPendientesViewSet.dt()). Indices de   #}
+{# columna deben coincidir 1:1 con esa accion.                             #}
+
+<div class="w-100" style="max-width:100%; overflow-x:auto;">
+  <table id="tabla-pendientes" class="table table-hover align-middle mb-0 w-100">
+    <thead>
+      <tr>
+        <th>Tipo</th>
+        <th>Número</th>
+        <th>Fecha</th>
+        <th>Tercero</th>
+        <th class="text-end">Subtotal</th>
+        <th class="text-end">Impuestos</th>
+        <th class="text-end">Total</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>

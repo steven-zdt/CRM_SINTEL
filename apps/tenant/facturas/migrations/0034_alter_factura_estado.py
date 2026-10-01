@@ -4,15 +4,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('facturas', '0033_alter_notacredito_cude'),
+        ("facturas", "0033_alter_notacredito_cude"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='factura',
-            name='estado',
-            field=models.CharField(choices=[('BORRADOR', 'Borrador'), ('ENVIADA', 'Enviada'), ('ACEPTADA', 'Aceptada'), ('RECHAZADA', 'Rechazada'), ('ERROR_TRANSMISION', 'Error de transmisión'), ('ANULADA', 'Anulada')], default='BORRADOR', max_length=20, verbose_name='Estado'),
+            model_name="factura",
+            name="estado",
+            field=models.CharField(
+                choices=[
+                    ("BORRADOR", "Borrador"),
+                    ("ENVIADA", "Enviada"),
+                    ("ACEPTADA", "Aceptada"),
+                    ("RECHAZADA", "Rechazada"),
+                    ("ERROR_TRANSMISION", "Error de transmisión"),
+                    ("ANULADA", "Anulada"),
+                ],
+                default="BORRADOR",
+                max_length=20,
+                verbose_name="Estado",
+            ),
         ),
     ]

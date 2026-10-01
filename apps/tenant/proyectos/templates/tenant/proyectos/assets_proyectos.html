@@ -7,6 +7,10 @@
 {# 3. proyectos_list.js (Fase 5-BIS: delegacion de eventos sobre tabla server-rendered) - REQUERIDO #}
 {# 4. proyectos_editor.js (Feature: Editor y Offcanvas) - REQUERIDO #}
 
+{# DataTables 3.x (solo listado principal de Proyectos -- Tareas Cortas sigue en django-tables2/HTMX) #}
+{% include 'tenant/proyectos/assets_proyectos_datatables.html' %}
+<script src="{% static 'core/js/common/datatables.factory.js' %}"></script>
+
 {# BLOQUE 1: API Wrapper (REQUERIDO) #}
 <script src="{% static 'proyectos/js/proyectos.api.js' %}"></script>
 

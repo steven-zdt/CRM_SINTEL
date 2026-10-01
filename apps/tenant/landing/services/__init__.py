@@ -7,20 +7,20 @@ Service Layer para landing (tenant) v3.5.
 """
 
 # Nuevo Service Layer modular
-from apps.tenant.landing.services.selectors import LandingSelector
-from apps.tenant.landing.services.crud_service import LandingCRUDService
-from apps.tenant.landing.services.business_service import LandingBusinessService
 from apps.tenant.landing.services.api_mixins import LandingServiceMixin
+from apps.tenant.landing.services.business_service import LandingBusinessService
+from apps.tenant.landing.services.crud_service import LandingCRUDService
+from apps.tenant.landing.services.selectors import LandingSelector
 
 # Compatibilidad legacy
 from .landing_info_service import get_public_info
 
 __all__ = [
     # Nuevo Service Layer
-    'LandingSelector',
-    'LandingCRUDService',
-    'LandingBusinessService',
-    'LandingServiceMixin',
+    "LandingSelector",
+    "LandingCRUDService",
+    "LandingBusinessService",
+    "LandingServiceMixin",
     # Legacy
-    'get_public_info',
+    "get_public_info",
 ]

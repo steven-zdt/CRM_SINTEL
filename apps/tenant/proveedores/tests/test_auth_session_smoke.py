@@ -7,6 +7,7 @@ Valida que:
 2. Los endpoints NO devuelvan 401 si SessionAuthentication está configurado
 3. El handler del workspace NO redirija a login para este módulo no crítico
 """
+
 import pytest
 from django.core.management import call_command
 from django.db import connection
@@ -19,45 +20,65 @@ from apps.tenant.empresa.models import Empresa
 @pytest.fixture
 def tenant(db):
     tenant_obj = (
-        Client.objects.exclude(schema_name='public')
-        .exclude(schema_name__contains='_')
-        .only('id', 'schema_name', 'nombre')
+        Client.objects.exclude(schema_name="public")
+        .exclude(schema_name__contains="_")
+        .only("id", "schema_name", "nombre")
         .first()
     )
 
     if not tenant_obj:
-        with schema_context('public'):
-            tenant_obj = Client.objects.filter(schema_name='testtenant').only('id', 'schema_name', 'nombre').first()
+        with schema_context("public"):
+            tenant_obj = (
+                Client.objects.filter(schema_name="testtenant")
+                .only("id", "schema_name", "nombre")
+                .first()
+            )
             if not tenant_obj:
-                tenant_obj = Client(schema_name='testtenant', nombre='Test Tenant')
+                tenant_obj = Client(schema_name="testtenant", nombre="Test Tenant")
                 tenant_obj.auto_create_schema = False
                 tenant_obj.save(force_insert=True)
 
     Domain.objects.get_or_create(
         tenant=tenant_obj,
-        domain=f'{tenant_obj.schema_name}.sintel.net.co',
-        defaults={'is_primary': True},
+        domain=f"{tenant_obj.schema_name}.sintel.net.co",
+        defaults={"is_primary": True},
     )
 
     with connection.cursor() as cursor:
-        cursor.execute(f'CREATE SCHEMA IF NOT EXISTS {tenant_obj.schema_name}')
+        cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {tenant_obj.schema_name}")
 
     with schema_context(tenant_obj.schema_name):
         tables = set(connection.introspection.table_names())
 
-    if 'empresa_empresa' not in tables:
-        call_command('migrate_schemas', '--tenant', '-s', tenant_obj.schema_name, 'empresa', '--noinput', verbosity=0)
+    if "empresa_empresa" not in tables:
+        call_command(
+            "migrate_schemas",
+            "--tenant",
+            "-s",
+            tenant_obj.schema_name,
+            "empresa",
+            "--noinput",
+            verbosity=0,
+        )
 
-    if 'tenant_proveedores_proveedor' not in tables:
-        call_command('migrate_schemas', '--tenant', '-s', tenant_obj.schema_name, 'tenant_proveedores', '--noinput', verbosity=0)
+    if "tenant_proveedores_proveedor" not in tables:
+        call_command(
+            "migrate_schemas",
+            "--tenant",
+            "-s",
+            tenant_obj.schema_name,
+            "tenant_proveedores",
+            "--noinput",
+            verbosity=0,
+        )
 
     with schema_context(tenant_obj.schema_name):
-        if not Empresa.objects.only('id').first():
+        if not Empresa.objects.only("id").first():
             Empresa.objects.create(
-                razon_social='EMPRESA TEST PROVEEDORES S.A.S.',
-                nit='901234567',
-                direccion='Direccion de prueba',
-                telefono='3000000000',
+                razon_social="EMPRESA TEST PROVEEDORES S.A.S.",
+                nit="901234567",
+                direccion="Direccion de prueba",
+                telefono="3000000000",
             )
 
     return tenant_obj
@@ -67,20 +88,15 @@ def tenant(db):
 def test_proveedores_list_session_ok(client, django_user_model, tenant):
     """
     Verifica que tras login, el endpoint de proveedores NO devuelva 401.
-    
+
     Si el ViewSet acepta SessionAuthentication, NO debe devolver 401 tras login.
     """
     # Crear usuario
     user = django_user_model.objects.create(username="testuser", email="test@example.com")
-    
+
     # Crear membresía activa en el tenant
-    TenantMembership.objects.create(
-        client=tenant,
-        user=user,
-        is_active=True,
-        rol="ADMIN"
-    )
-    
+    TenantMembership.objects.create(client=tenant, user=user, is_active=True, rol="ADMIN")
+
     # django.contrib.sessions esta en TENANT_APPS (sesiones aisladas por
     # schema, ver config/settings.py) -- force_login() debe ejecutarse
     # dentro del schema del tenant para que la sesion se guarde en la

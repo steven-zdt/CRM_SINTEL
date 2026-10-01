@@ -33,6 +33,7 @@ def _resolve_empresa_id(empresa) -> int:
     """Acepta una instancia de Empresa o un id -- devuelve el id."""
     return int(getattr(empresa, "id", empresa))
 
+
 DEFAULT_K = 5
 MAX_K = 50
 
@@ -44,7 +45,7 @@ class RetrievalHit:
     source_id: str
     document_uuid: str
     chunk_index: int
-    distance: float          # 0 = identico, 2 = opuesto (distancia coseno)
+    distance: float  # 0 = identico, 2 = opuesto (distancia coseno)
     metadata: dict
 
     @property

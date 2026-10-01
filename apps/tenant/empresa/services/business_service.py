@@ -1,13 +1,17 @@
-from typing import Any
 from django.db import transaction
 
+from apps.tenant.empresa.models import Area, Empresa, Sede
 from apps.tenant.perfil.models import TenantProfile
-from apps.tenant.empresa.models import Empresa, Sede, Area
 
 from .crud_service import (
-    crear_empresa_db, actualizar_empresa_db, get_empresa_data,
-    crear_sede_db, actualizar_sede_db, eliminar_sede_db,
-    crear_area_db, actualizar_area_db, eliminar_area_db
+    actualizar_area_db,
+    actualizar_empresa_db,
+    actualizar_sede_db,
+    crear_area_db,
+    crear_empresa_db,
+    crear_sede_db,
+    eliminar_area_db,
+    eliminar_sede_db,
 )
 
 
@@ -23,7 +27,7 @@ class EmpresaService:
         if empresa:
             return empresa
 
-        if Empresa.objects.filter(nit=data.get('nit')).exists():
+        if Empresa.objects.filter(nit=data.get("nit")).exists():
             raise ValueError("Ya existe una empresa con este NIT en el tenant.")
 
         return crear_empresa_db(data)
@@ -70,14 +74,14 @@ def asegurar_estructura_organizacional_inicial(empresa: Empresa) -> Sede:
     organizacional-sede-area.md. Reutiliza SedeService/AreaService (arriba)
     en vez de crear Sede/Area directamente, para no duplicar sus validaciones.
     """
-    sede = Sede.objects.filter(empresa=empresa).order_by('nombre').first()
+    sede = Sede.objects.filter(empresa=empresa).order_by("nombre").first()
     if sede is None:
-        sede = SedeService.crear_sede(empresa.id, {'nombre': 'Principal'})
+        sede = SedeService.crear_sede(empresa.id, {"nombre": "Principal"})
 
     if not Area.objects.filter(sede=sede).exists():
         AreaService.crear_area(
             empresa.id,
-            {'sede': sede.id, 'nombre': 'General', 'codigo_funcionamiento': 'GEN'},
+            {"sede": sede.id, "nombre": "General", "codigo_funcionamiento": "GEN"},
         )
 
     return sede
@@ -87,6 +91,7 @@ class SedeService:
     """
     Business Service para Sede. Orquesta validaciones y reglas de negocio sobre las primitivas CRUD.
     """
+
     @staticmethod
     @transaction.atomic
     def crear_sede(empresa_id: int, data: dict) -> Sede:
@@ -115,6 +120,7 @@ class AreaService:
     """
     Business Service para Area. Orquesta validaciones y reglas de negocio sobre las primitivas CRUD.
     """
+
     @staticmethod
     @transaction.atomic
     def crear_area(empresa_id: int, data: dict) -> Area:

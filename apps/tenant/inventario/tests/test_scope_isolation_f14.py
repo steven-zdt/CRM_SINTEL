@@ -6,6 +6,7 @@ para el contexto transversal. Este archivo cierra el gap para `inventario`
 frozenset(), ve solo sin-sede; (2) alcance=SEDE con DOS sedes asignadas ->
 ve movimientos de ambas.
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa, Sede
@@ -18,17 +19,24 @@ class MovimientoIsolationF14Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F14 Inventario", nit="900000795", direccion="Calle 1",
+            razon_social="Empresa Test F14 Inventario",
+            nit="900000795",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F14 Inv")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F14 Inv")
         self.producto = Producto.objects.create(
-            empresa=self.empresa, codigo="SKU-F14", nombre="Producto F14",
+            empresa=self.empresa,
+            codigo="SKU-F14",
+            nombre="Producto F14",
         )
 
     def _crear(self, sede=None):
         return MovimientoInventario.objects.create(
-            empresa=self.empresa, tipo="ENTRADA_AJUSTE", cantidad=1, sede=sede,
+            empresa=self.empresa,
+            tipo="ENTRADA_AJUSTE",
+            cantidad=1,
+            sede=sede,
             producto=self.producto,
         )
 
@@ -37,7 +45,10 @@ class MovimientoIsolationF14Tests(SintelTenantTestCase):
         m_a = self._crear(sede=self.sede_a)
 
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
 
         resp = self.api_client.get("/api/v1/inventario/movimientos/")
@@ -55,7 +66,10 @@ class MovimientoIsolationF14Tests(SintelTenantTestCase):
         m_c = self._crear(sede=sede_c)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a, self.sede_b])
 

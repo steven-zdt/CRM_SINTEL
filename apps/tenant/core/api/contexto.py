@@ -18,6 +18,7 @@ plural a la UI. Se extiende este mismo endpoint (en vez de crear uno nuevo)
 porque ya es el punto de entrada que el Workspace consulta al cargar tras el
 login - mismo criterio de "no duplicar mecanismos" de toda la sesion.
 """
+
 import logging
 
 from rest_framework import status
@@ -49,6 +50,7 @@ class ContextoOrganizacionalView(OrganizationalContextMixin, APIView):
     ambos mixins solo requieren `self.request`, sin importar que
     authentication_class lo poblo.
     """
+
     permission_classes = [IsAuthenticated, IsTenantMember]
 
     def get(self, request, *args, **kwargs):
@@ -85,19 +87,20 @@ class ContextoSedeView(APIView):
     (apps/tenant/api/permissions.py), aplicado aqui al momento de elegirla
     en vez de al momento de leer un objeto ya existente.
     """
+
     permission_classes = [IsAuthenticated, IsTenantMember]
 
     def post(self, request, *args, **kwargs):
         from apps.tenant.empresa.models import Sede
 
-        sede_uuid = request.data.get('sede_uuid')
+        sede_uuid = request.data.get("sede_uuid")
         if not sede_uuid:
             return Response(
                 {"error": "sede_uuid_requerido", "message": "Debe indicar sede_uuid."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        perfil = getattr(request.user, 'tenant_profile', None)
+        perfil = getattr(request.user, "tenant_profile", None)
         if perfil is None:
             return Response(
                 {"error": "sin_perfil", "message": "El usuario no tiene un perfil en este tenant."},
@@ -107,16 +110,24 @@ class ContextoSedeView(APIView):
         sede = Sede.objects.filter(uuid=sede_uuid, empresa_id=perfil.empresa_id).first()
         if not sede:
             return Response(
-                {"error": "sede_invalida", "message": "La sede indicada no existe o no pertenece a su empresa."},
+                {
+                    "error": "sede_invalida",
+                    "message": "La sede indicada no existe o no pertenece a su empresa.",
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if perfil.alcance != 'EMPRESA' and not perfil.sedes_asignadas.filter(id=sede.id).exists():
+        if perfil.alcance != "EMPRESA" and not perfil.sedes_asignadas.filter(id=sede.id).exists():
             return Response(
                 {"error": "sede_no_asignada", "message": "No tiene esta sede asignada."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        request.session['sede_activa_id'] = sede.id
-        logger.info("[ContextoSede] usuario=%s sede_activa=%s (%s)", request.user.id, sede.id, sede.nombre)
-        return Response({"sede_id": sede.id, "sede_uuid": str(sede.uuid), "nombre": sede.nombre}, status=status.HTTP_200_OK)
+        request.session["sede_activa_id"] = sede.id
+        logger.info(
+            "[ContextoSede] usuario=%s sede_activa=%s (%s)", request.user.id, sede.id, sede.nombre
+        )
+        return Response(
+            {"sede_id": sede.id, "sede_uuid": str(sede.uuid), "nombre": sede.nombre},
+            status=status.HTTP_200_OK,
+        )

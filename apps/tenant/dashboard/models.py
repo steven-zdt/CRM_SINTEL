@@ -7,7 +7,6 @@ from django.utils.translation import gettext_lazy as _
 from apps.tenant.core.models import SintelTenantBaseModel
 
 
-
 class SnapshotMetricaDiaria(SintelTenantBaseModel):
     """
     Snapshot diario de métricas consolidadas.
@@ -20,10 +19,10 @@ class SnapshotMetricaDiaria(SintelTenantBaseModel):
     # del tenant; estos snapshots son datos analiticos derivados/regenerables y deben
     # desaparecer junto con la empresa, no bloquear su eliminacion.
     empresa = models.ForeignKey(
-        'empresa.Empresa',
+        "empresa.Empresa",
         on_delete=models.CASCADE,
-        related_name='dashboard_snapshots',
-        verbose_name=_('Empresa'),
+        related_name="dashboard_snapshots",
+        verbose_name=_("Empresa"),
         null=False,
         blank=False,
         db_index=True,
@@ -36,25 +35,19 @@ class SnapshotMetricaDiaria(SintelTenantBaseModel):
     total_facturas = models.IntegerField(default=0)
     facturas_pendientes = models.IntegerField(default=0)
     facturas_vencidas = models.IntegerField(default=0)
-    ingresos_mes = models.DecimalField(
-        max_digits=15, decimal_places=2, default=Decimal('0.00')
-    )
+    ingresos_mes = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal("0.00"))
 
     # Inventario
     total_productos = models.IntegerField(default=0)
     productos_bajo_stock = models.IntegerField(default=0)
-    valor_inventario = models.DecimalField(
-        max_digits=15, decimal_places=2, default=Decimal('0.00')
-    )
+    valor_inventario = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal("0.00"))
 
     # Provedores
     total_provedores = models.IntegerField(default=0)
-    total_gastos = models.DecimalField(
-        max_digits=15, decimal_places=2, default=Decimal('0.00')
-    )
+    total_gastos = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal("0.00"))
 
     cartera_pendiente = models.DecimalField(
-        max_digits=15, decimal_places=2, default=Decimal('0.00')
+        max_digits=15, decimal_places=2, default=Decimal("0.00")
     )
 
     # Empleados
@@ -64,17 +57,17 @@ class SnapshotMetricaDiaria(SintelTenantBaseModel):
 
     # Metadata
     generado_por = models.CharField(
-        max_length=50, default='celery-beat', help_text='Origen del snapshot'
+        max_length=50, default="celery-beat", help_text="Origen del snapshot"
     )
 
     class Meta:
-        db_table = 'dashboard_snapshot_metrica_diaria'
-        ordering = ['-fecha']
+        db_table = "dashboard_snapshot_metrica_diaria"
+        ordering = ["-fecha"]
         indexes = [
-            models.Index(fields=['empresa_id', 'fecha']),
+            models.Index(fields=["empresa_id", "fecha"]),
         ]
-        verbose_name = 'Snapshot de Métrica Diaria'
-        verbose_name_plural = 'Snapshots de Métricas Diarias'
+        verbose_name = "Snapshot de Métrica Diaria"
+        verbose_name_plural = "Snapshots de Métricas Diarias"
 
     def __str__(self):
         return f"{self.empresa_id} - {self.fecha}"

@@ -1,14 +1,22 @@
 import logging
-from decimal import Decimal
+
 from django.db import transaction
-from django.db.models import Q
 
 from ..models import Servicio
 
 logger = logging.getLogger(__name__)
 
-SERVICIO_LIST_FIELDS = ('id', 'uuid', 'empresa_id', 'nombre', 'precio_venta', 'activo', 'created_at')
+SERVICIO_LIST_FIELDS = (
+    "id",
+    "uuid",
+    "empresa_id",
+    "nombre",
+    "precio_venta",
+    "activo",
+    "created_at",
+)
 SERVICIO_DETAIL_FIELDS = SERVICIO_LIST_FIELDS
+
 
 class ServicioSelector:
     @staticmethod
@@ -18,13 +26,22 @@ class ServicioSelector:
             qs = qs.filter(nombre__icontains=search)
         if activo is not None:
             qs = qs.filter(activo=activo)
-        return qs.only(*SERVICIO_LIST_FIELDS).order_by('-created_at')
+        return qs.only(*SERVICIO_LIST_FIELDS).order_by("-created_at")
 
     @staticmethod
     def get_detail(empresa_id, pk=None, uuid=None):
         if uuid:
-            return Servicio.objects.filter(empresa_id=empresa_id, uuid=uuid).only(*SERVICIO_DETAIL_FIELDS).first()
-        return Servicio.objects.filter(empresa_id=empresa_id, pk=pk).only(*SERVICIO_DETAIL_FIELDS).first()
+            return (
+                Servicio.objects.filter(empresa_id=empresa_id, uuid=uuid)
+                .only(*SERVICIO_DETAIL_FIELDS)
+                .first()
+            )
+        return (
+            Servicio.objects.filter(empresa_id=empresa_id, pk=pk)
+            .only(*SERVICIO_DETAIL_FIELDS)
+            .first()
+        )
+
 
 class ServicioCRUDService:
     @staticmethod
@@ -46,6 +63,7 @@ class ServicioCRUDService:
         instance.delete()
         return True
 
+
 class ServicioBusinessService:
     @staticmethod
     def registrar(empresa_id, data, instance=None):
@@ -56,6 +74,7 @@ class ServicioBusinessService:
     @staticmethod
     def eliminar(instance):
         return ServicioCRUDService.eliminar(instance)
+
 
 class ServicioServiceMixin:
     @property
@@ -68,7 +87,7 @@ class ServicioServiceMixin:
 
     def get_qs_list(self):
         empresa_id = self.get_empresa_id()
-        search = self.request.query_params.get('search')
+        search = self.request.query_params.get("search")
         return self.selector_class.get_list(empresa_id, search=search)
 
     def get_qs_detail(self):
@@ -81,7 +100,9 @@ class ServicioServiceMixin:
 
     def service_actualizar_servicio(self, instance, serializer):
         empresa_id = self.get_empresa_id()
-        return self.business_service_class.registrar(empresa_id, serializer.validated_data, instance=instance)
+        return self.business_service_class.registrar(
+            empresa_id, serializer.validated_data, instance=instance
+        )
 
     def service_eliminar_servicio(self, instance):
         return self.business_service_class.eliminar(instance)

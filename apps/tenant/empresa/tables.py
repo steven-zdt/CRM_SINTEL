@@ -8,6 +8,7 @@ mailinboxconfig_list.js (getColumns). Reutiliza EmpresaSelector/SedeSelector/
 AreaSelector/MailInboxConfigSelector.get_list, la misma SSoT que consume la
 API DRF -- ver views.py.
 """
+
 import django_tables2 as tables
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -42,17 +43,25 @@ class SedeTable(tables.Table):
     def render_nombre(self, value):
         if not value:
             return _SIN_DATO
-        return format_html('<i class="bi bi-geo-alt-fill text-primary me-2"></i><span class="fw-semibold">{}</span>', value)
+        return format_html(
+            '<i class="bi bi-geo-alt-fill text-primary me-2"></i><span class="fw-semibold">{}</span>',
+            value,
+        )
 
     def render_direccion(self, value):
         if not value:
             return _SIN_DATO
-        return format_html('<i class="bi bi-house text-secondary me-1"></i><span class="small">{}</span>', value)
+        return format_html(
+            '<i class="bi bi-house text-secondary me-1"></i><span class="small">{}</span>', value
+        )
 
     def render_telefono(self, value):
         if not value:
             return _SIN_DATO
-        return format_html('<i class="bi bi-telephone text-success me-1"></i><span class="text-monospace">{}</span>', value)
+        return format_html(
+            '<i class="bi bi-telephone text-success me-1"></i><span class="text-monospace">{}</span>',
+            value,
+        )
 
     def render_encargado_nombre(self, value):
         if not value:
@@ -79,7 +88,9 @@ class AreaTable(tables.Table):
     # real posible detras).
     nombre = tables.Column(verbose_name="Área / Departamento", empty_values=())
     codigo_funcionamiento = tables.Column(verbose_name="Código", empty_values=())
-    sede = tables.Column(accessor="sede__nombre", verbose_name="Sede", order_by=("sede__nombre",), empty_values=())
+    sede = tables.Column(
+        accessor="sede__nombre", verbose_name="Sede", order_by=("sede__nombre",), empty_values=()
+    )
     acciones = tables.Column(empty_values=(), orderable=False, verbose_name="")
 
     class Meta:
@@ -93,7 +104,10 @@ class AreaTable(tables.Table):
     def render_nombre(self, value):
         if not value:
             return _SIN_DATO
-        return format_html('<i class="bi bi-diagram-3 text-success me-2"></i><span class="fw-semibold">{}</span>', value)
+        return format_html(
+            '<i class="bi bi-diagram-3 text-success me-2"></i><span class="fw-semibold">{}</span>',
+            value,
+        )
 
     def render_codigo_funcionamiento(self, value):
         if not value:
@@ -103,7 +117,10 @@ class AreaTable(tables.Table):
     def render_sede(self, record):
         if not record.sede_id:
             return _SIN_DATO
-        return format_html('<i class="bi bi-geo-alt text-primary me-1"></i><span class="small">{}</span>', record.sede.nombre)
+        return format_html(
+            '<i class="bi bi-geo-alt text-primary me-1"></i><span class="small">{}</span>',
+            record.sede.nombre,
+        )
 
     def render_acciones(self, record):
         return format_html(
@@ -151,17 +168,23 @@ class EmpresaTable(tables.Table):
     def render_direccion(self, value):
         if not value:
             return _SIN_DATO
-        return format_html('<i class="bi bi-geo-alt text-primary me-1"></i><span class="small">{}</span>', value)
+        return format_html(
+            '<i class="bi bi-geo-alt text-primary me-1"></i><span class="small">{}</span>', value
+        )
 
     def render_telefono(self, value):
         if not value:
             return _SIN_DATO
-        return format_html('<i class="bi bi-telephone text-success me-1"></i><span>{}</span>', value)
+        return format_html(
+            '<i class="bi bi-telephone text-success me-1"></i><span>{}</span>', value
+        )
 
     def render_email_contacto(self, value):
         if not value:
             return _SIN_DATO
-        return format_html('<i class="bi bi-envelope text-info me-1"></i><span class="small">{}</span>', value)
+        return format_html(
+            '<i class="bi bi-envelope text-info me-1"></i><span class="small">{}</span>', value
+        )
 
     def render_acciones(self, record):
         return format_html(
@@ -212,9 +235,12 @@ class MailInboxConfigTable(tables.Table):
         port = f":{record.imap_port}" if record.imap_port else ""
         ssl_badge = (
             '<span class="badge bg-success-subtle text-success border border-success-subtle ms-1 small">SSL</span>'
-            if record.imap_ssl else ""
+            if record.imap_ssl
+            else ""
         )
-        return format_html('<code class="small">{}{}</code>{}', record.imap_host, port, mark_safe(ssl_badge))
+        return format_html(
+            '<code class="small">{}{}</code>{}', record.imap_host, port, mark_safe(ssl_badge)
+        )
 
     def render_is_active(self, value):
         if value:

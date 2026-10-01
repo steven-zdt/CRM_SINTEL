@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('empresa', '0009_sedes_areas_explicit_fk'),
-        ('facturas', '0040_alter_factura_consecutivo'),
+        ("empresa", "0009_sedes_areas_explicit_fk"),
+        ("facturas", "0040_alter_factura_consecutivo"),
     ]
 
     operations = [
         migrations.AddConstraint(
-            model_name='factura',
-            constraint=models.UniqueConstraint(fields=('empresa', 'numero'), name='uniq_factura_numero_por_empresa'),
+            model_name="factura",
+            constraint=models.UniqueConstraint(
+                fields=("empresa", "numero"), name="uniq_factura_numero_por_empresa"
+            ),
         ),
     ]

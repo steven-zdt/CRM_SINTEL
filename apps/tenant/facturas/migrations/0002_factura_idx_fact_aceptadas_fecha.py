@@ -4,15 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('empresa', '0001_initial'),
-        ('facturas', '0001_initial'),
+        ("empresa", "0001_initial"),
+        ("facturas", "0001_initial"),
     ]
 
     operations = [
         migrations.AddIndex(
-            model_name='factura',
-            index=models.Index(condition=models.Q(('estado', 'ACEPTADA')), fields=['fecha_emision'], name='idx_fact_aceptadas_fecha'),
+            model_name="factura",
+            index=models.Index(
+                condition=models.Q(("estado", "ACEPTADA")),
+                fields=["fecha_emision"],
+                name="idx_fact_aceptadas_fecha",
+            ),
         ),
     ]

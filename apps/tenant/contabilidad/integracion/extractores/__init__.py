@@ -6,9 +6,9 @@ from .inventario import ExtractorInventario
 from .nomina import ExtractorNomina
 
 __all__ = [
-    'AbstractExtractor',
-    'ExtractorGastos',
-    'ExtractorFacturas',
-    'ExtractorNomina',
-    'ExtractorInventario',
+    "AbstractExtractor",
+    "ExtractorGastos",
+    "ExtractorFacturas",
+    "ExtractorNomina",
+    "ExtractorInventario",
 ]

@@ -15,25 +15,27 @@ from .viewsets import (
 router = DefaultRouter()
 
 # 1. Categorías (Maestras)
-router.register(r'categorias', CategoriaItemViewSet, basename='inv-categorias')
+router.register(r"categorias", CategoriaItemViewSet, basename="inv-categorias")
 
 # 2. Catálogo Comercial (Separado)
-router.register(r'productos', ProductoViewSet, basename='inv-productos')
-router.register(r'servicios', ServicioViewSet, basename='inv-servicios')
+router.register(r"productos", ProductoViewSet, basename="inv-productos")
+router.register(r"servicios", ServicioViewSet, basename="inv-servicios")
 
 # 3. Activos Fijos (Internos)
-router.register(r'activos', ActivoFijoViewSet, basename='inv-activos')
+router.register(r"activos", ActivoFijoViewSet, basename="inv-activos")
 
 # 4. Trazabilidad y Movimientos
-router.register(r'movimientos', MovimientoInventarioViewSet, basename='inv-movimientos')
-router.register(r'historial-servicios', HistorialServicioViewSet, basename='inv-historial-servicios')
+router.register(r"movimientos", MovimientoInventarioViewSet, basename="inv-movimientos")
+router.register(
+    r"historial-servicios", HistorialServicioViewSet, basename="inv-historial-servicios"
+)
 
 # 5. Traslados entre Sedes (F21)
-router.register(r'traslados', TrasladoInventarioViewSet, basename='inv-traslados')
+router.register(r"traslados", TrasladoInventarioViewSet, basename="inv-traslados")
 
 # Registro de URLs
 urlpatterns = [
-    path('', include(router.urls)),
+    path("", include(router.urls)),
 ]
 
 # NOTA DE ARQUITECTURA v2.40:

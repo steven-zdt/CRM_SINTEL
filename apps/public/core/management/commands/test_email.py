@@ -204,4 +204,4 @@ Si recibes este email, la configuración SMTP está funcionando correctamente.
                     )
                 )
 
-            raise CommandError(f"Fallo en envío de email: {str(e)}")
+            raise CommandError(f"Fallo en envío de email: {str(e)}") from e

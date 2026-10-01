@@ -4,6 +4,7 @@ Fase F7 (proyecto OSF), "Migrar Selectors a scope-aware" - Proyecto,
 pero nunca se usaba para filtrar. NULL-safe: el 100% de los Proyecto
 reales tiene sede=NULL hoy.
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa, Sede
@@ -16,7 +17,9 @@ class ProyectosScopeSelectorsF7Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F7 Proyectos", nit="900000780", direccion="Calle 1",
+            razon_social="Empresa Test F7 Proyectos",
+            nit="900000780",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F7 Proy")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F7 Proy")
@@ -30,7 +33,10 @@ class ProyectosScopeSelectorsF7Tests(SintelTenantTestCase):
         p_b = self._crear("Proyecto F7 Sede B", sede=self.sede_b)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a])
 
@@ -47,7 +53,9 @@ class ProyectosScopeSelectorsF7Tests(SintelTenantTestCase):
         self._crear("Proyecto F7 E B", sede=self.sede_b)
         self._crear("Proyecto F7 E Sin")
 
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         resp = self.api_client.get("/api/v1/proyectos/")
 

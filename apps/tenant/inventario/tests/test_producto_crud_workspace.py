@@ -16,6 +16,7 @@ Verifica:
 - DELETE: DELETE /api/v1/inventario/productos/{uuid}/ (regla real: solo inactivo)
 - Negativos: codigo duplicado, campos requeridos vacios, UUID inexistente
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa
@@ -28,11 +29,14 @@ class ProductoCrudWorkspaceTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test Inventario CRUD", nit="900555333", direccion="Calle 1",
+            razon_social="Empresa Test Inventario CRUD",
+            nit="900555333",
+            direccion="Calle 1",
         )
         # IsTenantAdminOrReadOnly lee TenantProfile.rol, no TenantMembership.rol.
         TenantProfile.objects.get_or_create(
-            user=self.user, empresa=self.empresa,
+            user=self.user,
+            empresa=self.empresa,
             defaults={"rol": "ADMIN", "alcance": "EMPRESA", "cargo": "Gerente de Inventario"},
         )
 
@@ -53,7 +57,9 @@ class ProductoCrudWorkspaceTests(SintelTenantTestCase):
         initial_count = len(resp.json().get("results", resp.json()))
 
         # 2. CREATE
-        resp = self.api_client.post("/api/v1/inventario/productos/", data=self._payload_valido(), format="json")
+        resp = self.api_client.post(
+            "/api/v1/inventario/productos/", data=self._payload_valido(), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content)
         created = resp.json()
         self.assertEqual(created["codigo"], "PROD-CRUD-001")
@@ -103,10 +109,14 @@ class ProductoCrudWorkspaceTests(SintelTenantTestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.content)
 
     def test_producto_create_codigo_duplicado_es_rechazado(self):
-        resp = self.api_client.post("/api/v1/inventario/productos/", data=self._payload_valido(), format="json")
+        resp = self.api_client.post(
+            "/api/v1/inventario/productos/", data=self._payload_valido(), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content)
 
-        resp = self.api_client.post("/api/v1/inventario/productos/", data=self._payload_valido(), format="json")
+        resp = self.api_client.post(
+            "/api/v1/inventario/productos/", data=self._payload_valido(), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.content)
         # Hallazgo menor (Batch 2, no corregido -- fuera de alcance quirurgico
         # de esta pasada): ProductoViewSet.create() intenta dar un mensaje
@@ -119,5 +129,7 @@ class ProductoCrudWorkspaceTests(SintelTenantTestCase):
         self.assertEqual(resp.json().get("error"), "integrity_error")
 
     def test_producto_read_uuid_inexistente_retorna_404(self):
-        resp = self.api_client.get("/api/v1/inventario/productos/00000000-0000-0000-0000-000000000000/")
+        resp = self.api_client.get(
+            "/api/v1/inventario/productos/00000000-0000-0000-0000-000000000000/"
+        )
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND, resp.content)

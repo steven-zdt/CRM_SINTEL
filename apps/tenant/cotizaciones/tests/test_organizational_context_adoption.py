@@ -11,7 +11,7 @@ resolve_tenant_empresa() (mecanismo mas permisivo, sin exigir
 TenantProfile) - una inconsistencia interna real dentro de la MISMA
 ViewSet.
 """
-from apps.tenant.core.services.organizational_context import OrganizationalContext
+
 from apps.tenant.cotizaciones.api.viewsets import CotizacionViewSet
 from apps.tenant.cotizaciones.models import Cotizacion
 from apps.tenant.cotizaciones.services.selectors import CotizacionSelector
@@ -25,10 +25,14 @@ class CotizacionesOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9 Cotizaciones", nit="900000988", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9 Cotizaciones",
+            nit="900000988",
+            direccion="Calle 1",
         )
         self.cotizacion = Cotizacion.objects.create(
-            empresa=self.empresa, numero_cotizacion="COT-F9-1", fecha_vencimiento="2026-12-31",
+            empresa=self.empresa,
+            numero_cotizacion="COT-F9-1",
+            fecha_vencimiento="2026-12-31",
         )
 
     def test_cotizacionviewset_get_organizational_context_matches_the_ssot_it_already_used(self):
@@ -36,7 +40,9 @@ class CotizacionesOrganizationalContextAdoptionTests(SintelTenantTestCase):
         para esa ruta especifica (exportar_pdf/render_offcanvas_* son un
         hallazgo aparte, documentado pero no cubierto por test dedicado
         porque no involucran OrganizationalContext directamente)."""
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         from rest_framework.test import APIRequestFactory
         from rest_framework_simplejwt.authentication import JWTAuthentication

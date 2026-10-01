@@ -46,57 +46,39 @@
             <i class="bi bi-arrow-clockwise"></i>
           </button>
         </div>
-        <div class="input-group input-group-sm" style="max-width:300px;">
-          <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-          <input type="text" id="search-cliente" class="form-control border-start-0 ps-0"
-                 placeholder="Buscar cliente, NIT, ciudad..."
-                 hx-get="{% url 'clientes:cliente-tabla' %}"
-                 hx-trigger="keyup changed delay:400ms, search"
-                 hx-target="#clientes-panel"
-                 hx-include="#filtros-tipo-clientes .active"
-                 name="q">
-        </div>
       </div>
 
-      {# Filtros por tipo #}
+      {# Filtros por tipo -- DataTables (columnSearch), ver clientes.list.js #}
       <div class="d-flex gap-2 flex-wrap mb-3" id="filtros-tipo-clientes">
-        <button class="btn btn-sm btn-outline-dark active" data-filtro-cl=""
-                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
-                hx-include="#search-cliente" name="filtro" value="">
+        <button class="btn btn-sm btn-outline-dark active" data-filtro-cl="">
           <i class="bi bi-grid-3x3-gap me-1"></i>Todos
         </button>
-        <button class="btn btn-sm btn-outline-info" data-filtro-cl="JURIDICA"
-                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
-                hx-include="#search-cliente" name="filtro" value="JURIDICA">
+        <button class="btn btn-sm btn-outline-info" data-filtro-cl="JURIDICA">
           <i class="bi bi-building me-1"></i>Jurídicas
         </button>
-        <button class="btn btn-sm btn-outline-secondary" data-filtro-cl="NATURAL"
-                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
-                hx-include="#search-cliente" name="filtro" value="NATURAL">
+        <button class="btn btn-sm btn-outline-secondary" data-filtro-cl="NATURAL">
           <i class="bi bi-person me-1"></i>Naturales
         </button>
-        <button class="btn btn-sm btn-outline-warning" data-filtro-cl="RETENEDOR"
-                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
-                hx-include="#search-cliente" name="filtro" value="RETENEDOR">
+        <button class="btn btn-sm btn-outline-warning" data-filtro-cl="RETENEDOR">
           <i class="bi bi-shield-check me-1"></i>Retenedores
         </button>
-        <button class="btn btn-sm btn-outline-success" data-filtro-cl="ACTIVO"
-                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
-                hx-include="#search-cliente" name="filtro" value="ACTIVO">
+        <button class="btn btn-sm btn-outline-success" data-filtro-cl="ACTIVO">
           <i class="bi bi-check-circle me-1"></i>Activos
         </button>
-        <button class="btn btn-sm btn-outline-danger" data-filtro-cl="INACTIVO"
-                hx-get="{% url 'clientes:cliente-tabla' %}" hx-target="#clientes-panel"
-                hx-include="#search-cliente" name="filtro" value="INACTIVO">
+        <button class="btn btn-sm btn-outline-danger" data-filtro-cl="INACTIVO">
           <i class="bi bi-x-circle me-1"></i>Inactivos
         </button>
       </div>
 
-      {# Panel KPIs + Grid (django-tables2 + HTMX) — Fase 5-BIS #}
-      <div id="clientes-panel"
+      {# KPIs -- siguen server-rendered via HTMX (kpis_clientes.html) #}
+      <div id="clientes-kpis-panel"
            hx-get="{% url 'clientes:cliente-tabla' %}"
            hx-trigger="load, cliente-updated from:body"
-           hx-target="this"></div>
+           hx-target="this"
+           hx-swap="innerHTML"></div>
+
+      {# Tabla -- esqueleto estatico, poblado via ajax por clientes.list.js #}
+      {% include 'tenant/clientes/partials/tabla_clientes.html' %}
     </div>
 
     {# ── TAB: CONTACTOS ────────────────────────────────────────────── #}

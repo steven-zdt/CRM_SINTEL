@@ -65,7 +65,9 @@ class Command(BaseCommand):
         parser.add_argument("--schema", default="aipoc")
         parser.add_argument("--iterations", type=int, default=7)
         parser.add_argument("--k", type=int, default=5)
-        parser.add_argument("--json", action="store_true", help="Volcar el reporte como JSON al final")
+        parser.add_argument(
+            "--json", action="store_true", help="Volcar el reporte como JSON al final"
+        )
 
     def handle(self, *args, **opts):
         schema = opts["schema"]
@@ -87,9 +89,13 @@ class Command(BaseCommand):
                 raise CommandError(f"schema '{schema}' sin Empresa.")
 
             n_docs = AIKnowledgeDocument.objects.filter(empresa=empresa).count()
-            n_chunks = AIKnowledgeChunk.objects.filter(empresa=empresa, embedding__isnull=False).count()
+            n_chunks = AIKnowledgeChunk.objects.filter(
+                empresa=empresa, embedding__isnull=False
+            ).count()
             if n_chunks == 0:
-                raise CommandError("No hay chunks embebidos -- corre reindex_tenant_knowledge primero.")
+                raise CommandError(
+                    "No hay chunks embebidos -- corre reindex_tenant_knowledge primero."
+                )
 
             report: dict = {
                 "schema": schema,
@@ -113,15 +119,27 @@ class Command(BaseCommand):
                     f"  {label:38} {timing['ms_median']:>7.2f} ms  |  {q_per_call} query/call  |  {_out} filas"
                 )
 
-            _run_and_count("Cliente list (ClienteSelector)",
-                           lambda: len(list(ClienteSelector.get_cliente_list(empresa_id=empresa.id))))
-            _run_and_count("Producto list (ProductoSelector)",
-                           lambda: len(list(ProductoSelector.get_list(empresa_id=empresa.id))))
-            _run_and_count("Cliente detail x1",
-                           lambda: bool(ClienteSelector.get_cliente_detail(
-                               empresa_id=empresa.id, pk=Cliente.objects.values_list("pk", flat=True).first())))
-            _run_and_count("Producto count (aggregate)",
-                           lambda: Producto.objects.filter(empresa_id=empresa.id).count())
+            _run_and_count(
+                "Cliente list (ClienteSelector)",
+                lambda: len(list(ClienteSelector.get_cliente_list(empresa_id=empresa.id))),
+            )
+            _run_and_count(
+                "Producto list (ProductoSelector)",
+                lambda: len(list(ProductoSelector.get_list(empresa_id=empresa.id))),
+            )
+            _run_and_count(
+                "Cliente detail x1",
+                lambda: bool(
+                    ClienteSelector.get_cliente_detail(
+                        empresa_id=empresa.id,
+                        pk=Cliente.objects.values_list("pk", flat=True).first(),
+                    )
+                ),
+            )
+            _run_and_count(
+                "Producto count (aggregate)",
+                lambda: Producto.objects.filter(empresa_id=empresa.id).count(),
+            )
 
             # EXPLAIN ANALYZE de la busqueda vectorial (T_retrieval puro en la BD)
             provider = get_embedding_provider()
@@ -151,17 +169,23 @@ class Command(BaseCommand):
             # ---------------------------------------------------------------- #
             # B. BASELINE vs VECTOR
             # ---------------------------------------------------------------- #
-            self.stdout.write(self.style.MIGRATE_HEADING("\nB. AI efficiency: BASELINE (mandar todo) vs VECTOR (top-k)"))
+            self.stdout.write(
+                self.style.MIGRATE_HEADING(
+                    "\nB. AI efficiency: BASELINE (mandar todo) vs VECTOR (top-k)"
+                )
+            )
             ret = RetrievalService(provider=provider)
 
             # -- BASELINE: traer TODOS los textos de origen (1 query por dominio) --
             def _baseline_fetch():
                 textos = list(
                     Cliente.objects.filter(empresa_id=empresa.id)
-                    .exclude(observaciones="").values_list("observaciones", flat=True)
+                    .exclude(observaciones="")
+                    .values_list("observaciones", flat=True)
                 ) + list(
                     Producto.objects.filter(empresa_id=empresa.id)
-                    .exclude(descripcion__isnull=True).exclude(descripcion="")
+                    .exclude(descripcion__isnull=True)
+                    .exclude(descripcion="")
                     .values_list("descripcion", flat=True)
                 )
                 return textos
@@ -191,24 +215,27 @@ class Command(BaseCommand):
             # cache caliente.
             per_query = []
             for q, expected in QUERY_SET:
-                def _search():
+
+                def _search(q=q):
                     return ret.search(empresa=empresa, query=q, k=k)
 
                 with CaptureQueriesContext(connection) as rctx:
                     hits, search_t = _time_it(_search, iters)
                 tokens_vec = sum(_tok(h.content) for h in hits) + _tok(q)
                 top1 = hits[0] if hits else None
-                per_query.append({
-                    "query": q,
-                    "T_search_ms": search_t["ms_median"],
-                    "T_search_ms_best": search_t["ms_min"],
-                    "T_total_ms": search_t["ms_median"],
-                    "db_queries": len(rctx.captured_queries) // iters,
-                    "tokens_to_llm": tokens_vec,
-                    "top1_score": round(top1.score, 4) if top1 else 0.0,
-                    "top1_source": f"{top1.source_type}:{top1.source_id[:8]}" if top1 else None,
-                    "hit": bool(top1 and expected.lower() in top1.content.lower()),
-                })
+                per_query.append(
+                    {
+                        "query": q,
+                        "T_search_ms": search_t["ms_median"],
+                        "T_search_ms_best": search_t["ms_min"],
+                        "T_total_ms": search_t["ms_median"],
+                        "db_queries": len(rctx.captured_queries) // iters,
+                        "tokens_to_llm": tokens_vec,
+                        "top1_score": round(top1.score, 4) if top1 else 0.0,
+                        "top1_source": f"{top1.source_type}:{top1.source_id[:8]}" if top1 else None,
+                        "hit": bool(top1 and expected.lower() in top1.content.lower()),
+                    }
+                )
                 p = per_query[-1]
                 self.stdout.write(
                     f"  [{'HIT ' if p['hit'] else 'miss'}] {q[:44]:44}  "
@@ -218,10 +245,14 @@ class Command(BaseCommand):
 
             vec_mean = {
                 "T_search_ms": round(statistics.mean(p["T_search_ms"] for p in per_query), 2),
-                "T_search_ms_best": round(statistics.mean(p["T_search_ms_best"] for p in per_query), 2),
+                "T_search_ms_best": round(
+                    statistics.mean(p["T_search_ms_best"] for p in per_query), 2
+                ),
                 "T_total_ms": round(statistics.mean(p["T_total_ms"] for p in per_query), 2),
                 "db_queries": round(statistics.mean(p["db_queries"] for p in per_query), 1),
-                "tokens_to_llm_mean": round(statistics.mean(p["tokens_to_llm"] for p in per_query), 1),
+                "tokens_to_llm_mean": round(
+                    statistics.mean(p["tokens_to_llm"] for p in per_query), 1
+                ),
             }
             report["baseline"] = baseline
             report["vector"] = {"mean": vec_mean, "per_query": per_query}
@@ -229,11 +260,16 @@ class Command(BaseCommand):
             # ---------------------------------------------------------------- #
             # C. MEMORIA / ALMACENAMIENTO
             # ---------------------------------------------------------------- #
-            self.stdout.write(self.style.MIGRATE_HEADING("\nC. Impacto de memoria / almacenamiento"))
+            self.stdout.write(
+                self.style.MIGRATE_HEADING("\nC. Impacto de memoria / almacenamiento")
+            )
             with connection.cursor() as cur:
                 cur.execute(
                     "SELECT pg_total_relation_size(%s) + pg_total_relation_size(%s)",
-                    ["tenant_ai_knowledge_aiknowledgechunk", "tenant_ai_knowledge_aiknowledgedocument"],
+                    [
+                        "tenant_ai_knowledge_aiknowledgechunk",
+                        "tenant_ai_knowledge_aiknowledgedocument",
+                    ],
                 )
                 table_bytes = cur.fetchone()[0]
             rss_delta = _measure_model_rss(provider, QUERY_SET[0][0])
@@ -255,15 +291,25 @@ class Command(BaseCommand):
             v_total = vec_mean["T_total_ms"]
             gate = {
                 "LATENCY_GAIN": round((b_total - v_total) / b_total, 4) if b_total else None,
-                "QUERY_REDUCTION": round(1 - (vec_mean["db_queries"] / max(baseline["db_queries"], 1)), 4),
-                "TOKEN_REDUCTION": round(1 - (vec_mean["tokens_to_llm_mean"] / max(baseline["tokens_to_llm_mean"], 1)), 4),
+                "QUERY_REDUCTION": round(
+                    1 - (vec_mean["db_queries"] / max(baseline["db_queries"], 1)), 4
+                ),
+                "TOKEN_REDUCTION": round(
+                    1 - (vec_mean["tokens_to_llm_mean"] / max(baseline["tokens_to_llm_mean"], 1)), 4
+                ),
                 "MEMORY_IMPACT_bytes": table_bytes + (rss_delta or 0),
-                "RELEVANCE_SCORE_top1_cos": round(statistics.mean(p["top1_score"] for p in per_query), 4),
-                "RELEVANCE_precision_at_1": round(sum(p["hit"] for p in per_query) / len(per_query), 4),
+                "RELEVANCE_SCORE_top1_cos": round(
+                    statistics.mean(p["top1_score"] for p in per_query), 4
+                ),
+                "RELEVANCE_precision_at_1": round(
+                    sum(p["hit"] for p in per_query) / len(per_query), 4
+                ),
             }
             report["gate"] = gate
 
-            self.stdout.write(self.style.MIGRATE_HEADING("\nGATE -- valores medidos (no objetivos inventados)"))
+            self.stdout.write(
+                self.style.MIGRATE_HEADING("\nGATE -- valores medidos (no objetivos inventados)")
+            )
             for kk, vv in gate.items():
                 self.stdout.write(f"  {kk:32} = {vv}")
 
@@ -273,8 +319,12 @@ class Command(BaseCommand):
                 "query-embeddings, AI-VECTOR-11A) da %s ms de mediana y %s ms en el mejor caso "
                 "(cache-hit). El valor MEDIDO esta en TOKEN_REDUCTION (%s) y en que el coste de "
                 "retrieval no crece con el dataset. A escala (miles de docs) el baseline se "
-                "vuelve inviable y el vector gana en todos los ejes." % (
-                    n_docs, b_total, vec_mean["T_search_ms"], vec_mean["T_search_ms_best"],
+                "vuelve inviable y el vector gana en todos los ejes."
+                % (
+                    n_docs,
+                    b_total,
+                    vec_mean["T_search_ms"],
+                    vec_mean["T_search_ms_best"],
                     gate["TOKEN_REDUCTION"],
                 )
             )
@@ -287,6 +337,7 @@ class Command(BaseCommand):
 def _measure_model_rss(provider, sample_query: str) -> int | None:
     """RSS del proceso antes/despues de cargar+usar el modelo de embeddings."""
     try:
+
         def rss():
             with open("/proc/self/status") as f:
                 for line in f:

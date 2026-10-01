@@ -13,6 +13,7 @@ WARNING: SEGURIDAD: Cross-Tenant Isolation
 - IsTenantMember valida TenantMembership antes de cualquier operacion.
 - HasTenantRole aplica DSV (Double Semantic Verification) sobre TenantProfile.
 """
+
 import logging
 
 from rest_framework import permissions
@@ -24,14 +25,16 @@ log = logging.getLogger("tenant.permissions")
 # Helpers internos (DSV)
 # ---------------------------------------------------------------------------
 
+
 def _resolve_empresa():
     """Resuelve la Empresa del tenant activo. Retorna None si falla."""
     try:
         from apps.tenant.empresa.models import Empresa
+
         # Buscar prioritariamente la SSoT con singleton_key=1
-        empresa = Empresa.objects.filter(singleton_key=1).only('id').first()
+        empresa = Empresa.objects.filter(singleton_key=1).only("id").first()
         if not empresa:
-            empresa = Empresa.objects.only('id').order_by('id').first()
+            empresa = Empresa.objects.only("id").order_by("id").first()
         return empresa
     except Exception:
         return None
@@ -39,12 +42,13 @@ def _resolve_empresa():
 
 def _get_perfil(user):
     """Retorna tenant_profile del user si existe, None en caso contrario."""
-    return getattr(user, 'tenant_profile', None)
+    return getattr(user, "tenant_profile", None)
 
 
 # ---------------------------------------------------------------------------
 # Clase base: membresia cross-schema
 # ---------------------------------------------------------------------------
+
 
 class IsTenantMember(permissions.BasePermission):
     """
@@ -59,11 +63,12 @@ class IsTenantMember(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
 
-        tenant = getattr(request, 'tenant', None)
+        tenant = getattr(request, "tenant", None)
         if not tenant:
             return True
 
         from apps.tenant.core.services.membership import check_membership_exists
+
         return check_membership_exists(request.user, tenant)
 
     def has_object_permission(self, request, view, obj):
@@ -73,6 +78,7 @@ class IsTenantMember(permissions.BasePermission):
 # ---------------------------------------------------------------------------
 # Clases basadas en TenantProfile.rol (SSoT v2.61.8)
 # ---------------------------------------------------------------------------
+
 
 class HasTenantRole(permissions.BasePermission):
     """[RULE 13/15] Verifica que el usuario tenga un rol permitido en el tenant.
@@ -99,7 +105,7 @@ class HasTenantRole(permissions.BasePermission):
         if not empresa or perfil.empresa_id != empresa.id:
             return False
 
-        required_roles = getattr(view, 'required_roles', [])
+        required_roles = getattr(view, "required_roles", [])
         if not required_roles:
             return True
 
@@ -122,7 +128,7 @@ class IsTenantProfileAdmin(permissions.BasePermission):
         empresa = _resolve_empresa()
         if not empresa or perfil.empresa_id != empresa.id:
             return False
-        return perfil.rol == 'ADMIN'
+        return perfil.rol == "ADMIN"
 
 
 class IsTenantProfileOperadorOrAdmin(permissions.BasePermission):
@@ -141,7 +147,7 @@ class IsTenantProfileOperadorOrAdmin(permissions.BasePermission):
         empresa = _resolve_empresa()
         if not empresa or perfil.empresa_id != empresa.id:
             return False
-        return perfil.rol in ('ADMIN', 'OPERADOR')
+        return perfil.rol in ("ADMIN", "OPERADOR")
 
 
 class IsTenantAdmin(IsTenantProfileAdmin):
@@ -156,6 +162,7 @@ class IsTenantAdmin(IsTenantProfileAdmin):
 # ---------------------------------------------------------------------------
 # Permiso compuesto: Admin-or-ReadOnly
 # ---------------------------------------------------------------------------
+
 
 class HasOrganizationalScope(permissions.BasePermission):
     """[ADR-003] Restringe el acceso a un objeto segun
@@ -174,6 +181,7 @@ class HasOrganizationalScope(permissions.BasePermission):
     en apps/tenant/compras/services/api_mixins.py), por lo que
     has_permission() siempre permite continuar.
     """
+
     message = "No tiene acceso a la sede/area de este recurso (alcance organizacional)."
 
     def has_permission(self, request, view) -> bool:
@@ -181,15 +189,15 @@ class HasOrganizationalScope(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj) -> bool:
         perfil = _get_perfil(request.user)
-        if perfil is None or perfil.alcance == 'EMPRESA':
+        if perfil is None or perfil.alcance == "EMPRESA":
             return True
 
-        if perfil.alcance == 'SEDE':
-            sede_id = getattr(obj, 'sede_id', None)
+        if perfil.alcance == "SEDE":
+            sede_id = getattr(obj, "sede_id", None)
             return sede_id is not None and perfil.sedes_asignadas.filter(id=sede_id).exists()
 
-        if perfil.alcance == 'AREA':
-            area_id = getattr(obj, 'area_id', None)
+        if perfil.alcance == "AREA":
+            area_id = getattr(obj, "area_id", None)
             return area_id is not None and perfil.areas_asignadas.filter(id=area_id).exists()
 
         return True
@@ -218,14 +226,15 @@ class OrganizationalPermission(permissions.BasePermission):
     clase no restringe nada (permite continuar) - es responsabilidad del
     ViewSet optar explicitamente.
     """
+
     message = "Su nivel organizacional no tiene permiso para esta operacion."
 
     def has_permission(self, request, view) -> bool:
-        minimum = getattr(view, 'minimum_organizational_level', None)
+        minimum = getattr(view, "minimum_organizational_level", None)
         if not minimum:
             return True
 
-        get_context = getattr(view, 'get_organizational_context', None)
+        get_context = getattr(view, "get_organizational_context", None)
         if get_context is None:
             return False  # fail-closed: el ViewSet no hereda OrganizationalContextMixin
 
@@ -240,8 +249,10 @@ class OrganizationalPermission(permissions.BasePermission):
         except OrganizationalContextError:
             return False
 
-        is_staff = bool(getattr(request.user, 'is_staff', False))
-        level = resolve_organizational_permission_level(rol=context.rol, alcance=context.alcance, is_staff=is_staff)
+        is_staff = bool(getattr(request.user, "is_staff", False))
+        level = resolve_organizational_permission_level(
+            rol=context.rol, alcance=context.alcance, is_staff=is_staff
+        )
         return level_meets_minimum(level, minimum)
 
 
@@ -255,6 +266,7 @@ class IsTenantAdminOrReadOnly(permissions.BasePermission):
     permiso permite todas las operaciones y la verificacion real se hace
     dentro del metodo del ViewSet (retorna 405 con mensaje claro).
     """
+
     message = "Solo usuarios ADMIN del tenant pueden crear/editar/eliminar."
 
     def has_permission(self, request, view):
@@ -267,8 +279,19 @@ class IsTenantAdminOrReadOnly(permissions.BasePermission):
         if request.method in SAFE_METHODS:
             return True
 
+        # dt() (migracion DataTables 3.x, ver
+        # docs/remediation/TABLES_FORMS_MIGRATION_STATUS.md) es siempre una
+        # accion de LECTURA (listado server-side) que usa POST por
+        # convencion de la libreria DataTables/ColumnControl, no porque
+        # escriba nada -- tratarlo como escritura bloqueaba a cualquier
+        # usuario no-ADMIN de ver una grilla que antes (via GET/HTMX) si
+        # podia ver. Hallazgo real: apps/tenant/compras/tests/
+        # test_scope_pilot_f5.py::test_dt_con_alcance_sede_ve_todas_las_sedes_asignadas.
+        if getattr(view, "action", None) == "dt":
+            return True
+
         # ViewSets con enforced mode manejan la verificacion internamente
-        if hasattr(view, '_check_enforced_mode'):
+        if hasattr(view, "_check_enforced_mode"):
             return True
 
         return IsTenantAdmin().has_permission(request, view)

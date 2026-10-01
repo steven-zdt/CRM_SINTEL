@@ -8,6 +8,7 @@ explicito), unicidad de documento por proveedor, regla de negocio "no se
 puede eliminar el unico representante principal", y CRUD real via HTTP
 sobre RepresentanteViewSet.
 """
+
 from rest_framework.exceptions import ValidationError
 
 from apps.tenant.empresa.models import Empresa
@@ -22,10 +23,15 @@ class RepresentanteServiceCRUDTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test Representantes", nit="900111222", direccion="Calle 1",
+            razon_social="Empresa Test Representantes",
+            nit="900111222",
+            direccion="Calle 1",
         )
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor Uno", numero_documento="800111222", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor Uno",
+            numero_documento="800111222",
+            tipo_documento="NIT",
         )
         self.service = RepresentanteBusinessService()
 
@@ -34,8 +40,10 @@ class RepresentanteServiceCRUDTests(SintelTenantTestCase):
             empresa_id=self.empresa.id,
             proveedor_uuid=str(self.proveedor.uuid),
             data={
-                "tipo_documento": "CC", "numero_documento": "1010101010",
-                "nombre_completo": "Juan Perez", "cargo": "Representante Legal",
+                "tipo_documento": "CC",
+                "numero_documento": "1010101010",
+                "nombre_completo": "Juan Perez",
+                "cargo": "Representante Legal",
                 "es_principal": True,
             },
         )
@@ -50,6 +58,7 @@ class RepresentanteServiceCRUDTests(SintelTenantTestCase):
         de OTRO tenant" resuelve al mismo path de codigo (0 filas al filtrar
         por empresa_id+uuid), reproducido aqui con un UUID que no existe."""
         import uuid as uuid_lib
+
         with self.assertRaises(ValidationError):
             self.service.crear_representante(
                 empresa_id=self.empresa.id,
@@ -67,78 +76,133 @@ class RepresentanteServiceCRUDTests(SintelTenantTestCase):
 
     def test_unicidad_documento_por_proveedor(self):
         self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
             data={"tipo_documento": "CC", "numero_documento": "4040404040", "nombre_completo": "A"},
         )
         with self.assertRaises(ValidationError):
             self.service.crear_representante(
-                empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
-                data={"tipo_documento": "CC", "numero_documento": "4040404040", "nombre_completo": "B"},
+                empresa_id=self.empresa.id,
+                proveedor_uuid=str(self.proveedor.uuid),
+                data={
+                    "tipo_documento": "CC",
+                    "numero_documento": "4040404040",
+                    "nombre_completo": "B",
+                },
             )
 
     def test_mismo_documento_en_proveedores_distintos_no_colisiona(self):
         proveedor2 = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor Dos", numero_documento="800222333", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor Dos",
+            numero_documento="800222333",
+            tipo_documento="NIT",
         )
         self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
             data={"tipo_documento": "CC", "numero_documento": "5050505050", "nombre_completo": "A"},
         )
         # mismo numero_documento, proveedor distinto -> permitido
         rep2 = self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(proveedor2.uuid),
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(proveedor2.uuid),
             data={"tipo_documento": "CC", "numero_documento": "5050505050", "nombre_completo": "B"},
         )
         self.assertEqual(rep2.proveedor_id, proveedor2.id)
 
     def test_actualizar_representante_ok(self):
         rep = self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
-            data={"tipo_documento": "CC", "numero_documento": "6060606060", "nombre_completo": "Original"},
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
+            data={
+                "tipo_documento": "CC",
+                "numero_documento": "6060606060",
+                "nombre_completo": "Original",
+            },
         )
         actualizado = self.service.actualizar_representante(
-            empresa_id=self.empresa.id, representante_uuid=str(rep.uuid),
+            empresa_id=self.empresa.id,
+            representante_uuid=str(rep.uuid),
             data={"nombre_completo": "Actualizado"},
         )
         self.assertEqual(actualizado.nombre_completo, "Actualizado")
 
     def test_actualizar_representante_inexistente_falla(self):
         import uuid as uuid_lib
+
         with self.assertRaises(ValidationError):
             self.service.actualizar_representante(
-                empresa_id=self.empresa.id, representante_uuid=str(uuid_lib.uuid4()),
+                empresa_id=self.empresa.id,
+                representante_uuid=str(uuid_lib.uuid4()),
                 data={"nombre_completo": "X"},
             )
 
     def test_eliminar_representante_no_principal_ok(self):
         self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
-            data={"tipo_documento": "CC", "numero_documento": "7070707070", "nombre_completo": "Principal", "es_principal": True},
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
+            data={
+                "tipo_documento": "CC",
+                "numero_documento": "7070707070",
+                "nombre_completo": "Principal",
+                "es_principal": True,
+            },
         )
         secundario = self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
-            data={"tipo_documento": "CC", "numero_documento": "7070707071", "nombre_completo": "Secundario", "es_principal": False},
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
+            data={
+                "tipo_documento": "CC",
+                "numero_documento": "7070707071",
+                "nombre_completo": "Secundario",
+                "es_principal": False,
+            },
         )
-        self.service.eliminar_representante(empresa_id=self.empresa.id, representante_uuid=str(secundario.uuid))
-        self.assertEqual(Representante.objects.filter(empresa=self.empresa, proveedor=self.proveedor).count(), 1)
+        self.service.eliminar_representante(
+            empresa_id=self.empresa.id, representante_uuid=str(secundario.uuid)
+        )
+        self.assertEqual(
+            Representante.objects.filter(empresa=self.empresa, proveedor=self.proveedor).count(), 1
+        )
 
     def test_no_se_puede_eliminar_el_unico_principal(self):
         rep = self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
-            data={"tipo_documento": "CC", "numero_documento": "8080808080", "nombre_completo": "Unico", "es_principal": True},
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
+            data={
+                "tipo_documento": "CC",
+                "numero_documento": "8080808080",
+                "nombre_completo": "Unico",
+                "es_principal": True,
+            },
         )
         with self.assertRaises(ValidationError):
-            self.service.eliminar_representante(empresa_id=self.empresa.id, representante_uuid=str(rep.uuid))
+            self.service.eliminar_representante(
+                empresa_id=self.empresa.id, representante_uuid=str(rep.uuid)
+            )
         self.assertTrue(Representante.objects.filter(uuid=rep.uuid).exists())
 
     def test_se_puede_eliminar_principal_si_hay_otro_principal(self):
         principal1 = self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
-            data={"tipo_documento": "CC", "numero_documento": "9090909090", "nombre_completo": "P1", "es_principal": True},
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
+            data={
+                "tipo_documento": "CC",
+                "numero_documento": "9090909090",
+                "nombre_completo": "P1",
+                "es_principal": True,
+            },
         )
         principal2 = self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
-            data={"tipo_documento": "CC", "numero_documento": "9090909091", "nombre_completo": "P2", "es_principal": True},
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
+            data={
+                "tipo_documento": "CC",
+                "numero_documento": "9090909091",
+                "nombre_completo": "P2",
+                "es_principal": True,
+            },
         )
         # RELEASE-CLOSE/PROVEEDORES-02: crear_representante() ahora degrada
         # automaticamente cualquier OTRO principal existente al crear uno
@@ -151,7 +215,9 @@ class RepresentanteServiceCRUDTests(SintelTenantTestCase):
         principal1.refresh_from_db()
         self.assertFalse(principal1.es_principal)
         self.assertTrue(Representante.objects.get(pk=principal2.pk).es_principal)
-        self.service.eliminar_representante(empresa_id=self.empresa.id, representante_uuid=str(principal1.uuid))
+        self.service.eliminar_representante(
+            empresa_id=self.empresa.id, representante_uuid=str(principal1.uuid)
+        )
         self.assertFalse(Representante.objects.filter(uuid=principal1.uuid).exists())
 
 
@@ -161,17 +227,25 @@ class RepresentanteHTTPTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test Representantes HTTP", nit="900555666", direccion="Calle 1",
+            razon_social="Empresa Test Representantes HTTP",
+            nit="900555666",
+            direccion="Calle 1",
         )
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor HTTP", numero_documento="800555666", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor HTTP",
+            numero_documento="800555666",
+            tipo_documento="NIT",
         )
         # IsTenantAdminOrReadOnly exige TenantProfile.rol == ADMIN dentro del
         # schema del tenant -- distinto de TenantMembership (public schema),
         # que SintelTenantTestCase.setup_membership() ya crea pero no basta.
         from apps.tenant.perfil.models import TenantProfile
+
         TenantProfile.objects.get_or_create(
-            user=self.user, empresa=self.empresa, defaults={"rol": "ADMIN", "alcance": "EMPRESA"},
+            user=self.user,
+            empresa=self.empresa,
+            defaults={"rol": "ADMIN", "alcance": "EMPRESA"},
         )
 
     def test_create_list_update_delete_representante_http(self):
@@ -180,8 +254,11 @@ class RepresentanteHTTPTests(SintelTenantTestCase):
             "/api/v1/proveedores/representantes/",
             data={
                 "proveedor_uuid": str(self.proveedor.uuid),
-                "tipo_documento": "CC", "numero_documento": "1111111111",
-                "nombre_completo": "Rep HTTP", "cargo": "Gerente", "es_principal": True,
+                "tipo_documento": "CC",
+                "numero_documento": "1111111111",
+                "nombre_completo": "Rep HTTP",
+                "cargo": "Gerente",
+                "es_principal": True,
             },
             format="json",
         )
@@ -189,7 +266,9 @@ class RepresentanteHTTPTests(SintelTenantTestCase):
         rep_uuid = resp.json()["uuid"]
 
         # LIST filtrado por proveedor_uuid
-        resp = self.api_client.get(f"/api/v1/proveedores/representantes/?proveedor_uuid={self.proveedor.uuid}")
+        resp = self.api_client.get(
+            f"/api/v1/proveedores/representantes/?proveedor_uuid={self.proveedor.uuid}"
+        )
         self.assertEqual(resp.status_code, 200, resp.content)
         body = resp.json()
         rows = body["results"] if isinstance(body, dict) and "results" in body else body
@@ -227,6 +306,7 @@ class RepresentanteHTTPTests(SintelTenantTestCase):
         test_cuentas_pagar_isolation_and_abono.py; este test cubre el mismo
         path de codigo (DSV: 0 filas al filtrar por empresa_id+uuid)."""
         import uuid as uuid_lib
+
         resp = self.api_client.patch(
             f"/api/v1/proveedores/representantes/{uuid_lib.uuid4()}/",
             data={"nombre_completo": "Hackeado"},

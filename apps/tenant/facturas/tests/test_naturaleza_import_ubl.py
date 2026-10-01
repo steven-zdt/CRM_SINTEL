@@ -36,6 +36,7 @@ un endpoint deprecado con cobertura ya duplicada en otro lado (mayor riesgo
 que beneficio); candidato real a CONSOLIDAR/ELIMINAR en una pasada
 dedicada.
 """
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
@@ -147,20 +148,18 @@ class NaturalezaImportTests(SintelTenantTestCase):
             nit="900123456",
             dv="1",
             direccion="Calle 123",
-            telefono="1234567890"
+            telefono="1234567890",
         )
-    
+
     def _post_upload(self, xml_bytes, preview=True):
         """Helper para hacer POST a upload-ubl."""
         # El router DRF genera el nombre como "factura-upload-ubl" (basename + action)
         url = reverse("factura-upload-ubl")
         f = SimpleUploadedFile("fact.xml", xml_bytes, content_type="text/xml")
         return self.client.post(
-            f"{url}?preview={'true' if preview else 'false'}",
-            {"file": f},
-            format="multipart"
+            f"{url}?preview={'true' if preview else 'false'}", {"file": f}, format="multipart"
         )
-    
+
     def test_preview_venta(self):
         """Test: Preview de XML con emisor == empresa debe retornar naturaleza=VENTA."""
         resp = self._post_upload(XML_VENTA, preview=True)
@@ -169,9 +168,9 @@ class NaturalezaImportTests(SintelTenantTestCase):
         self.assertEqual(
             resp.json()["factura"]["naturaleza"],
             Factura.Naturaleza.VENTA,
-            f"Esperado VENTA, obtenido: {resp.json()['factura'].get('naturaleza')}"
+            f"Esperado VENTA, obtenido: {resp.json()['factura'].get('naturaleza')}",
         )
-    
+
     def test_preview_compra(self):
         """Test: Preview de XML con emisor != empresa debe retornar naturaleza=COMPRA."""
         resp = self._post_upload(XML_COMPRA, preview=True)
@@ -179,9 +178,9 @@ class NaturalezaImportTests(SintelTenantTestCase):
         self.assertEqual(
             resp.json()["factura"]["naturaleza"],
             Factura.Naturaleza.COMPRA,
-            f"Esperado COMPRA, obtenido: {resp.json()['factura'].get('naturaleza')}"
+            f"Esperado COMPRA, obtenido: {resp.json()['factura'].get('naturaleza')}",
         )
-    
+
     def test_persistencia_asigna_naturaleza_venta(self):
         """Test: Persistencia de XML con emisor == empresa debe asignar naturaleza=VENTA."""
         resp = self._post_upload(XML_VENTA, preview=False)
@@ -189,7 +188,7 @@ class NaturalezaImportTests(SintelTenantTestCase):
         self.assertTrue(Factura.objects.exists())
         factura = Factura.objects.first()
         self.assertEqual(factura.naturaleza, Factura.Naturaleza.VENTA)
-    
+
     def test_persistencia_asigna_naturaleza_compra(self):
         """Test: Persistencia de XML con emisor != empresa debe asignar naturaleza=COMPRA."""
         resp = self._post_upload(XML_COMPRA, preview=False)
@@ -197,7 +196,7 @@ class NaturalezaImportTests(SintelTenantTestCase):
         self.assertTrue(Factura.objects.exists())
         factura = Factura.objects.first()
         self.assertEqual(factura.naturaleza, Factura.Naturaleza.COMPRA)
-    
+
     def test_ignora_naturaleza_del_cliente(self):
         """Test: La naturaleza enviada por el cliente es ignorada."""
         # Intentar enviar naturaleza=COMPRA para XML_VENTA (debería ser ignorado)
@@ -206,7 +205,7 @@ class NaturalezaImportTests(SintelTenantTestCase):
         resp = self.client.post(
             f"{url}?preview=true",
             {"file": f, "naturaleza": "COMPRA"},  # Cliente envía COMPRA
-            format="multipart"
+            format="multipart",
         )
         self.assertEqual(resp.status_code, 200)
         # Debe ser VENTA (calculado automáticamente), no COMPRA (ignorado)

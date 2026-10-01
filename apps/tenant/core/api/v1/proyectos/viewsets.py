@@ -12,6 +12,6 @@ from . import serializers as ws_serializers
 
 class ProyectoCoreViewSet(ProyectoViewSet):
     def get_serializer_class(self):
-        if self.action == 'list':
+        if self.action == "list":
             return ws_serializers.ProyectoWorkspaceListSerializer
         return ws_serializers.ProyectoWorkspaceDetailSerializer

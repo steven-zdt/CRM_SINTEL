@@ -15,7 +15,7 @@ class EmpleadoCoreViewSet(EmpleadoViewSet):
     def get_serializer_class(self):
         return (
             ws_serializers.EmpleadoWorkspaceListSerializer
-            if self.action == 'list'
+            if self.action == "list"
             else ws_serializers.EmpleadoWorkspaceDetailSerializer
         )
 

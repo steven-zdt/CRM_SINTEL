@@ -2,6 +2,7 @@
 BAN-12 (.agent/AUDITORIA_FLUJO_COMPLETO.md §10): exportar el reporte de
 conciliacion de un extracto (periodo = cuenta + mes/anio) a CSV.
 """
+
 import csv
 import io
 from datetime import date
@@ -20,32 +21,58 @@ class ExportarConciliacionTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa BAN-12", nit="900000814", direccion="Calle 1",
+            razon_social="Empresa BAN-12",
+            nit="900000814",
+            direccion="Calle 1",
         )
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
         )
         self.cuenta = CuentaBancaria.objects.create(
-            empresa=self.empresa, nombre="Cuenta BAN-12", banco="Banco Test",
-            tipo="AHORROS", numero="BAN12-1",
+            empresa=self.empresa,
+            nombre="Cuenta BAN-12",
+            banco="Banco Test",
+            tipo="AHORROS",
+            numero="BAN12-1",
         )
         self.extracto = ExtractoBancario.objects.create(
-            empresa=self.empresa, cuenta=self.cuenta, mes=6, anio=2026,
-            procesado=True, saldo_inicial=Decimal("0"), saldo_final=Decimal("100000"),
+            empresa=self.empresa,
+            cuenta=self.cuenta,
+            mes=6,
+            anio=2026,
+            procesado=True,
+            saldo_inicial=Decimal("0"),
+            saldo_final=Decimal("100000"),
         )
         self.cliente = Cliente.objects.create(
-            empresa=self.empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900666777", razon_social="Cliente BAN-12",
-            regimen_tributario="ORDINARIO", activo=True,
+            empresa=self.empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900666777",
+            razon_social="Cliente BAN-12",
+            regimen_tributario="ORDINARIO",
+            activo=True,
         )
         TransaccionBancaria.objects.create(
-            empresa=self.empresa, extracto=self.extracto, fecha=date(2026, 6, 10),
-            descripcion="Pago sin conciliar", valor=Decimal("50000"), saldo=Decimal("50000"),
+            empresa=self.empresa,
+            extracto=self.extracto,
+            fecha=date(2026, 6, 10),
+            descripcion="Pago sin conciliar",
+            valor=Decimal("50000"),
+            saldo=Decimal("50000"),
         )
         TransaccionBancaria.objects.create(
-            empresa=self.empresa, extracto=self.extracto, fecha=date(2026, 6, 20),
-            descripcion="Pago conciliado", valor=Decimal("100000"), saldo=Decimal("150000"),
-            conciliado=True, cliente_uuid=self.cliente.uuid,
+            empresa=self.empresa,
+            extracto=self.extracto,
+            fecha=date(2026, 6, 20),
+            descripcion="Pago conciliado",
+            valor=Decimal("100000"),
+            saldo=Decimal("150000"),
+            conciliado=True,
+            cliente_uuid=self.cliente.uuid,
         )
 
     def test_exportar_devuelve_csv_con_todas_las_transacciones(self):

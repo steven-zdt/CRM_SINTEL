@@ -1,0 +1,27 @@
+{# tabla_cotizaciones.html — DataTables 3.x + ColumnControl (docs/ux/TABLES_FORMS_RELEASE_GATE.md) #}
+{# Esqueleto ESTATICO: ya no se sirve via Tabulator client-side -- se       #}
+{# incluye una sola vez en list.html y cotizaciones.table.js puebla        #}
+{# <tbody> via ajax contra POST /api/v1/cotizaciones/dt/                   #}
+{# (CotizacionViewSet.dt()). Indices de columna deben coincidir 1:1 con    #}
+{# fields_map/column_filters de esa accion.                                #}
+
+<div class="card shadow-sm border-0">
+  <div class="card-body p-0">
+    <div class="w-100" style="max-width:100%; overflow-x:auto;">
+      <table id="tabla-cotizaciones-principal" class="table table-hover align-middle mb-0 w-100">
+        <thead>
+          <tr>
+            <th>Cotizacion</th>
+            <th>Cliente</th>
+            <th>Emision</th>
+            <th>Vencimiento</th>
+            <th>Estado</th>
+            <th class="text-end">Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>

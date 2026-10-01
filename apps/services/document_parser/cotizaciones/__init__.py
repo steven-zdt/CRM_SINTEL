@@ -7,6 +7,7 @@ WARNING: PRINCIPIOS:
 - Normalizers y DTOs específicos para cotizaciones
 - Extensible y mantenible
 """
+
 from . import dto as cotizaciones_dto
 
 # Exportar normalizers y DTOs
@@ -14,7 +15,7 @@ from . import normalizers as cotizaciones_normalizers
 from .excel_parser import parse_catalogo_to_dto
 
 __all__ = [
-    'parse_catalogo_to_dto',
-    'cotizaciones_normalizers',
-    'cotizaciones_dto',
+    "parse_catalogo_to_dto",
+    "cotizaciones_normalizers",
+    "cotizaciones_dto",
 ]

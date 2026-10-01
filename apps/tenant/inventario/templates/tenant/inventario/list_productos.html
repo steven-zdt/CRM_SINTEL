@@ -8,16 +8,8 @@
 <div class="ui-module h-100 d-flex flex-column">
   <div id="feedback-productos-list" class="alert d-none mb-2" role="alert"></div>
 
-  {# Toolbar #}
-  <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-    <div class="d-flex align-items-center gap-2 flex-grow-1">
-      <input type="text" id="search-producto" class="form-control form-control-sm"
-             placeholder="Buscar código, nombre, categoría..." style="max-width:320px"
-             hx-get="{% url 'inventario:producto-tabla' %}"
-             hx-trigger="keyup changed delay:400ms, search"
-             hx-target="#productos-panel"
-             name="q">
-    </div>
+  {# Toolbar -- sin buscador propio: DataTables trae el suyo #}
+  <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
     <div class="d-flex gap-1">
       <button type="button" class="btn btn-sm btn-outline-secondary"
               onclick="window.Sintel?.Inventario?.Productos?.List?.recargar()"
@@ -34,13 +26,16 @@
     </div>
   </div>
 
-  {# Tabla server-rendered (django-tables2 + HTMX) — KPIs incluidos en el partial #}
-  <div id="productos-panel"
-       class="flex-grow-1"
+  {# KPIs -- siguen server-rendered via HTMX (kpis_productos.html) #}
+  <div id="productos-kpis-panel"
        hx-get="{% url 'inventario:producto-tabla' %}"
        hx-trigger="load, producto-updated from:body"
        hx-target="this"
-       hx-swap="innerHTML"
-       hx-boost="true">
+       hx-swap="innerHTML">
+  </div>
+
+  {# Tabla -- esqueleto estatico, poblado via ajax por productos_list.js #}
+  <div class="flex-grow-1">
+    {% include 'tenant/inventario/partials/tabla_productos.html' %}
   </div>
 </div>

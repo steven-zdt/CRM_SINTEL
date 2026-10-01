@@ -44,7 +44,9 @@ def parse_int(value: Any, default: int) -> int:
         return default
 
 
-def get_pagination_params(request, *, default_page: int = 1, default_page_size: int = 20) -> tuple[int, int]:
+def get_pagination_params(
+    request, *, default_page: int = 1, default_page_size: int = 20
+) -> tuple[int, int]:
     """Extrae page y page_size en forma segura."""
     page = parse_int(getattr(request, "query_params", {}).get("page"), default_page)
     page_size = parse_int(getattr(request, "query_params", {}).get("page_size"), default_page_size)
@@ -55,5 +57,7 @@ def get_pagination_params(request, *, default_page: int = 1, default_page_size: 
     return page, page_size
 
 
-def error_response(message: str, *, error: str = "bad_request", http_status: int = status.HTTP_400_BAD_REQUEST) -> Response:
+def error_response(
+    message: str, *, error: str = "bad_request", http_status: int = status.HTTP_400_BAD_REQUEST
+) -> Response:
     return Response({"error": error, "detail": message}, status=http_status)

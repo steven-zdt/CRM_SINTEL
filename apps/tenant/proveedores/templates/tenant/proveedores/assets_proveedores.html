@@ -2,6 +2,10 @@
 {# assets_proveedores.html - Assets del módulo Proveedores v3.17.0 #}
 {# Orden de carga crítico: API primero (requerido por features) #}
 
+{# DataTables 3.x (Directorio de Proveedores, Cuentas por Pagar, Directorio de Representantes) #}
+{% include 'tenant/proveedores/assets_proveedores_datatables.html' %}
+<script src="{% static 'core/js/common/datatables.factory.js' %}"></script>
+
 {# BLOQUE 1: API Wrappers - DEBE cargarse PRIMERO (requerido por features) #}
 <script src="{% static 'proveedores/js/proveedores.api.js' %}"></script>
 <script src="{% static 'proveedores/js/representante.api.js' %}"></script>

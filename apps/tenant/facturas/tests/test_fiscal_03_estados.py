@@ -6,6 +6,7 @@ Puro Python -- solo lee factura.estado, sin queries -- unittest.TestCase
 sin pytest.mark.django_db (una instancia Factura() sin guardar es
 suficiente, no hace falta tenant/schema real).
 """
+
 import unittest
 
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -20,7 +21,9 @@ class FacturaTransicionesFiscalesTests(unittest.TestCase):
 
     def test_borrador_puede_pasar_a_enviada(self):
         factura = self._factura_en_estado(Factura.Estado.BORRADOR)
-        FacturaBusinessService.validar_transicion_automatica(factura, Factura.Estado.ENVIADA)  # no debe lanzar
+        FacturaBusinessService.validar_transicion_automatica(
+            factura, Factura.Estado.ENVIADA
+        )  # no debe lanzar
 
     def test_borrador_no_puede_saltar_directo_a_aceptada(self):
         factura = self._factura_en_estado(Factura.Estado.BORRADOR)
@@ -28,20 +31,28 @@ class FacturaTransicionesFiscalesTests(unittest.TestCase):
             FacturaBusinessService.validar_transicion_automatica(factura, Factura.Estado.ACEPTADA)
 
     def test_enviada_puede_pasar_a_los_3_desenlaces_reales(self):
-        for destino in (Factura.Estado.ACEPTADA, Factura.Estado.RECHAZADA, Factura.Estado.ERROR_TRANSMISION):
+        for destino in (
+            Factura.Estado.ACEPTADA,
+            Factura.Estado.RECHAZADA,
+            Factura.Estado.ERROR_TRANSMISION,
+        ):
             factura = self._factura_en_estado(Factura.Estado.ENVIADA)
             FacturaBusinessService.validar_transicion_automatica(factura, destino)  # no debe lanzar
 
     def test_aceptada_es_practicamente_terminal_solo_permite_anulada(self):
         factura = self._factura_en_estado(Factura.Estado.ACEPTADA)
-        FacturaBusinessService.validar_transicion_automatica(factura, Factura.Estado.ANULADA)  # no debe lanzar
+        FacturaBusinessService.validar_transicion_automatica(
+            factura, Factura.Estado.ANULADA
+        )  # no debe lanzar
         with self.assertRaises(DRFValidationError):
             FacturaBusinessService.validar_transicion_automatica(factura, Factura.Estado.ENVIADA)
 
     def test_rechazada_y_error_transmision_permiten_reintentar_enviada(self):
         for origen in (Factura.Estado.RECHAZADA, Factura.Estado.ERROR_TRANSMISION):
             factura = self._factura_en_estado(origen)
-            FacturaBusinessService.validar_transicion_automatica(factura, Factura.Estado.ENVIADA)  # no debe lanzar
+            FacturaBusinessService.validar_transicion_automatica(
+                factura, Factura.Estado.ENVIADA
+            )  # no debe lanzar
 
     def test_anulada_es_terminal(self):
         factura = self._factura_en_estado(Factura.Estado.ANULADA)

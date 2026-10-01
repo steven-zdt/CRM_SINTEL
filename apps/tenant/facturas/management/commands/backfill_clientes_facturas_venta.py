@@ -26,22 +26,26 @@ class Command(BaseCommand):
         empresa_id = options.get("empresa_id")
         dry_run = options.get("dry_run")
 
-        qs = Factura.objects.filter(
-            naturaleza=Factura.Naturaleza.VENTA,
-            cliente_uuid__isnull=True,
-        ).only(
-            "id",
-            "uuid",
-            "numero",
-            "empresa_id",
-            "naturaleza",
-            "cliente_uuid",
-            "receptor_nit",
-            "receptor_razon_social",
-            "receptor_email",
-            "receptor_telefono",
-            "receptor_direccion",
-        ).order_by("empresa_id", "id")
+        qs = (
+            Factura.objects.filter(
+                naturaleza=Factura.Naturaleza.VENTA,
+                cliente_uuid__isnull=True,
+            )
+            .only(
+                "id",
+                "uuid",
+                "numero",
+                "empresa_id",
+                "naturaleza",
+                "cliente_uuid",
+                "receptor_nit",
+                "receptor_razon_social",
+                "receptor_email",
+                "receptor_telefono",
+                "receptor_direccion",
+            )
+            .order_by("empresa_id", "id")
+        )
 
         if empresa_id:
             qs = qs.filter(empresa_id=empresa_id)

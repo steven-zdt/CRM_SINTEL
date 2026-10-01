@@ -108,12 +108,17 @@
     var estado = data ? data.estado : 'BORRADOR';
     var codigo = data ? (data.codigo_unico || data.numero_cotizacion) : 'N/A';
 
-    // Borrado Seguro: Solo permitir si está en BORRADOR o CANCELADA
-    if (estado !== 'BORRADOR' && estado !== 'CANCELADA') {
+    // Borrado seguro -- regla real: CotizacionService.eliminar_cotizacion()
+    // solo admite BORRADOR/ENVIADA (APROBADA/RECHAZADA/ARCHIVADA nunca se
+    // borran, la trazabilidad se conserva via esos estados). Hallazgo real
+    // (2026-09-25): esta condicion comparaba contra 'CANCELADA', el nombre
+    // de estado anterior al rename de COTIZACIONES-02 -- nunca coincidia
+    // con un valor real.
+    if (estado !== 'BORRADOR' && estado !== 'ENVIADA') {
       if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
-        w.UIManager.notifyError('La cotización "' + codigo + '" está activa (' + estado + '). Debe cancelarla primero antes de eliminarla.');
+        w.UIManager.notifyError('La cotización "' + codigo + '" está en estado ' + estado + ' y ya no admite eliminación.');
       } else {
-        alert('La cotización debe estar cancelada para ser eliminada.');
+        alert('La cotización ya no admite eliminación en este estado.');
       }
       return;
     }
@@ -160,11 +165,155 @@
           w.UIManager.notifyError(err.error || 'Error al eliminar cotizacion');
         }
       })
-      .finally(function () { 
-        _deleteUuid = null; 
+      .finally(function () {
+        _deleteUuid = null;
         var btnConfirmar = d.getElementById('btn-confirmar-eliminar-cotizacion');
         if (btnConfirmar) btnConfirmar.disabled = false;
       });
+  }
+
+  // ── Maquina de estados (2026-09-25) ──────────────────────────────────
+  // BORRADOR->ENVIADA (generar-pdf, gated por PDF exitoso)->APROBADA|
+  // RECHAZADA (con motivo obligatorio) -- endpoints reales ya existentes
+  // en CotizacionViewSet, ver business_service.py::cambiar_estado().
+
+  /**
+   * POST generico a un endpoint de transicion de estado (aprobar/rechazar).
+   */
+  function _cambiarEstado(uuid, accion, payload) {
+    var api = w.Sintel.Cotizaciones.api;
+    if (!api) return;
+    var url = accion === 'aprobar' ? api.aprobarUrl(uuid) : api.rechazarUrl(uuid);
+    var headers = typeof api.getHeaders === 'function' ? api.getHeaders() : { 'Content-Type': 'application/json' };
+
+    fetch(url, { method: 'POST', headers: headers, credentials: 'same-origin', body: JSON.stringify(payload || {}) })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (data) {
+          if (!r.ok) throw data;
+          return data;
+        });
+      })
+      .then(function () {
+        var msg = accion === 'aprobar' ? 'Cotizacion aprobada correctamente.' : 'Cotizacion rechazada correctamente.';
+        if (w.UIManager && typeof w.UIManager.notifySuccess === 'function') {
+          w.UIManager.notifySuccess(msg);
+        }
+        if (w.Sintel.Cotizaciones.table && typeof w.Sintel.Cotizaciones.table.refresh === 'function') {
+          w.Sintel.Cotizaciones.table.refresh();
+        }
+      })
+      .catch(function (err) {
+        console.error(MOD + ' Error cambiando estado (' + accion + '):', err);
+        if (w.UIManager && typeof w.UIManager.handleError === 'function') {
+          w.UIManager.handleError(err);
+        } else if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
+          var detail = (err && err.estado && err.estado[0]) || err.message || err.detail || 'Error al cambiar estado';
+          w.UIManager.notifyError(detail);
+        }
+      });
+  }
+
+  /**
+   * Enviar (BORRADOR -> ENVIADA): genera el PDF real (POST generar-pdf/,
+   * mismo endpoint que descarga el archivo) y solo si tiene exito
+   * transiciona el estado -- exactamente el contrato de
+   * CotizacionService.generar_pdf_y_enviar(). El PDF se abre en una
+   * pestana nueva, misma UX que el boton "Descargar PDF" ya existente.
+   */
+  function confirmarEnviar(uuid) {
+    var doEnviar = function () {
+      var api = w.Sintel.Cotizaciones.api;
+      if (!api) return;
+      var headers = typeof api.getHeaders === 'function' ? api.getHeaders() : {};
+
+      fetch(api.generarPdfUrl(uuid), { method: 'POST', headers: headers, credentials: 'same-origin' })
+        .then(function (r) {
+          if (!r.ok) return r.json().then(function (err) { throw err; });
+          return r.blob();
+        })
+        .then(function (blob) {
+          var url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+          setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+          if (w.UIManager && typeof w.UIManager.notifySuccess === 'function') {
+            w.UIManager.notifySuccess('Cotizacion enviada correctamente (PDF generado).');
+          }
+          if (w.Sintel.Cotizaciones.table && typeof w.Sintel.Cotizaciones.table.refresh === 'function') {
+            w.Sintel.Cotizaciones.table.refresh();
+          }
+        })
+        .catch(function (err) {
+          console.error(MOD + ' Error enviando cotizacion:', err);
+          if (w.UIManager && typeof w.UIManager.handleError === 'function') {
+            w.UIManager.handleError(err);
+          } else if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
+            w.UIManager.notifyError(err.message || err.detail || 'Error al enviar cotizacion');
+          }
+        });
+    };
+
+    if (w.UIManager && typeof w.UIManager.confirm === 'function') {
+      w.UIManager.confirm('Se generara el PDF y la cotizacion pasara a estado Enviada.', 'Enviar cotizacion?')
+        .then(function (ok) { if (ok) doEnviar(); });
+    } else if (w.confirm('Enviar esta cotizacion? Se generara el PDF y pasara a estado Enviada.')) {
+      doEnviar();
+    }
+  }
+
+  /**
+   * Aprobar (ENVIADA -> APROBADA).
+   */
+  function confirmarAprobar(uuid) {
+    var doAprobar = function () { _cambiarEstado(uuid, 'aprobar', {}); };
+
+    if (w.UIManager && typeof w.UIManager.confirm === 'function') {
+      w.UIManager.confirm('La cotizacion pasara a estado Aprobada.', 'Aprobar cotizacion?')
+        .then(function (ok) { if (ok) doAprobar(); });
+    } else if (w.confirm('Aprobar esta cotizacion?')) {
+      doAprobar();
+    }
+  }
+
+  /**
+   * Rechazar (ENVIADA -> RECHAZADA) -- exige un motivo (concepto de por
+   * que no se aplico), guardado en CotizacionHistorialEstado.motivo via
+   * cambiar_estado(). Usa SweetAlert2 (input: 'textarea') cuando esta
+   * disponible (mismo lib que UIManager.confirm ya usa); fallback a
+   * window.prompt si no.
+   */
+  function confirmarRechazar(uuid) {
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: 'Rechazar cotizacion',
+        text: 'Indica el motivo por el que no se aplico (obligatorio).',
+        input: 'textarea',
+        inputPlaceholder: 'Ej: el cliente eligio otro proveedor por precio...',
+        showCancelButton: true,
+        confirmButtonText: 'Rechazar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc3545',
+        reverseButtons: true,
+        inputValidator: function (value) {
+          if (!value || !value.trim()) return 'El motivo es obligatorio.';
+        },
+      }).then(function (result) {
+        if (result.isConfirmed) {
+          _cambiarEstado(uuid, 'rechazar', { motivo: result.value.trim() });
+        }
+      });
+      return;
+    }
+
+    var motivo = w.prompt('Motivo del rechazo (obligatorio):', '');
+    if (motivo === null) return;
+    motivo = motivo.trim();
+    if (!motivo) {
+      if (w.UIManager && typeof w.UIManager.notifyError === 'function') {
+        w.UIManager.notifyError('El motivo es obligatorio para rechazar.');
+      }
+      return;
+    }
+    _cambiarEstado(uuid, 'rechazar', { motivo: motivo });
   }
 
   /**
@@ -211,7 +360,10 @@
     showOffcanvas: showOffcanvas,
     hideOffcanvas: hideOffcanvas,
     confirmarEliminar: confirmarEliminar,
-    ejecutarEliminar: ejecutarEliminar
+    ejecutarEliminar: ejecutarEliminar,
+    confirmarEnviar: confirmarEnviar,
+    confirmarAprobar: confirmarAprobar,
+    confirmarRechazar: confirmarRechazar
   };
 
 })(window, document);

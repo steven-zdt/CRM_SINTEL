@@ -24,6 +24,7 @@ dependencia cross-app reales que el grafo actual no modela de forma
 directamente consultable sin trabajo adicional genuino; ver
 docs/ai/AI_BASELINE_EXECUTION.md para el detalle de este alcance.
 """
+
 from __future__ import annotations
 
 import json
@@ -37,7 +38,9 @@ _EKG_OUT_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "tools", "ekg", "out")
 )
 
-_VALID_QUESTIONS = frozenset({"owner", "rules_for_app", "docs_for_app", "fk_relationships", "endpoints_for_model"})
+_VALID_QUESTIONS = frozenset(
+    {"owner", "rules_for_app", "docs_for_app", "fk_relationships", "endpoints_for_model"}
+)
 
 
 def _folder_name_from_module(module_path: str) -> str | None:
@@ -91,12 +94,11 @@ class ProjectMapTool(BaseTool):
     def _resolve_owner(self, model_name: str) -> ToolResult:
         from django.apps import apps as django_apps
 
-        matches = [
-            m for m in django_apps.get_models()
-            if m.__name__.lower() == model_name.lower()
-        ]
+        matches = [m for m in django_apps.get_models() if m.__name__.lower() == model_name.lower()]
         if not matches:
-            return ToolResult(status="NOT_FOUND", message=f"Ningun modelo llamado '{model_name}' esta registrado.")
+            return ToolResult(
+                status="NOT_FOUND", message=f"Ningun modelo llamado '{model_name}' esta registrado."
+            )
         data = [
             {
                 "model": m.__name__,
@@ -154,9 +156,11 @@ class ProjectMapTool(BaseTool):
                 ),
             )
 
-        generated_at = __import__("datetime").datetime.fromtimestamp(
-            os.path.getmtime(snapshot_path)
-        ).isoformat()
+        generated_at = (
+            __import__("datetime")
+            .datetime.fromtimestamp(os.path.getmtime(snapshot_path))
+            .isoformat()
+        )
 
         with open(snapshot_path, encoding="utf-8") as fh:
             graph = ekg_schema.graph_from_jsonable(json.load(fh))

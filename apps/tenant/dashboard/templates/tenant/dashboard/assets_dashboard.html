@@ -6,3 +6,9 @@
 
 <!-- Feature Modules -->
 <script src="{% static 'dashboard/js/features/dashboard_main.js' %}"></script>
+
+<!-- Centro de Aprobaciones (Fase 8 de PLAN_CENTRO_APROBACIONES_DASHBOARD_COMPRAS.md) -->
+{% include 'tenant/core/partials/assets_datatables_cdn.html' %}
+<script src="{% static 'core/js/common/datatables.factory.js' %}"></script>
+<script src="{% static 'approvals/js/approvals.api.js' %}"></script>
+<script src="{% static 'approvals/js/features/centro_aprobaciones.js' %}"></script>

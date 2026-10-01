@@ -19,6 +19,7 @@ Principios:
 - Cancelación cooperativa: Lee estado CANCEL_REQUESTED desde BD (no usa self.is_aborted())
 - Logging estructurado: Logger dedicado 'maildigester' para trazabilidad (sin secretos)
 """
+
 from __future__ import annotations
 
 import logging
@@ -42,18 +43,18 @@ logger = logging.getLogger("maildigester")
 def _should_abort(tenant_schema: str, task_id: str) -> bool:
     """
     Verifica si la tarea debe abortar (cancelación cooperativa).
-    
+
     Lee el estado CANCEL_REQUESTED desde BD dentro de schema_context.
-    
+
     Args:
         tenant_schema: Nombre del esquema del tenant
         task_id: ID de la tarea Celery
-        
+
     Returns:
         True si el run está en CANCEL_REQUESTED, False en caso contrario
     """
     from apps.tenant.facturas.models import MailIngestionRun
-    
+
     try:
         with schema_context(tenant_schema):
             run = MailIngestionRun.objects.only("status").get(task_id=task_id)
@@ -69,26 +70,22 @@ def _should_abort(tenant_schema: str, task_id: str) -> bool:
 def _update_run(tenant_schema: str, task_id: str, **fields):
     """
     Actualiza un MailIngestionRun de forma atómica.
-    
+
     Usa select_for_update para evitar condiciones de carrera.
-    
+
     Args:
         tenant_schema: Nombre del esquema del tenant
         task_id: ID de la tarea Celery
         **fields: Campos a actualizar (status, counts, finished_at, summary, etc.)
-        
+
     Returns:
         MailIngestionRun actualizado o None si no existe
     """
     from apps.tenant.facturas.models import MailIngestionRun
-    
+
     try:
         with schema_context(tenant_schema), transaction.atomic():
-            run = (
-                MailIngestionRun.objects
-                .select_for_update()
-                .get(task_id=task_id)
-            )
+            run = MailIngestionRun.objects.select_for_update().get(task_id=task_id)
             for k, v in fields.items():
                 setattr(run, k, v)
             run.save()
@@ -111,15 +108,15 @@ def _clasificar_excepcion(exc: Exception) -> str:
     con logger.error + exc_info=True (nunca silenciado bajo un warning
     generico), el resto con logger.warning + exc_info=True.
     """
-    if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+    if isinstance(exc, ConnectionError | TimeoutError | OSError):
         return "transient"
     if isinstance(exc, PermissionError):
         return "security"
-    if isinstance(exc, (ImportError, AttributeError, ProgrammingError, NameError, TypeError)):
+    if isinstance(exc, ImportError | AttributeError | ProgrammingError | NameError | TypeError):
         return "programming"
     if isinstance(exc, IntegrityError):
         return "domain"
-    if isinstance(exc, (DjangoValidationError, ValueError, KeyError)):
+    if isinstance(exc, DjangoValidationError | ValueError | KeyError):
         return "validation"
     return "unknown"
 
@@ -127,7 +124,7 @@ def _clasificar_excepcion(exc: Exception) -> str:
 class MailDigesterResult(TypedDict, total=False):
     """
     DTO de resultado de la tarea de ingesta de correo.
-    
+
     Ejemplo:
         result = {
             "tenant_schema": "tenant_acme",
@@ -145,6 +142,7 @@ class MailDigesterResult(TypedDict, total=False):
             ]
         }
     """
+
     tenant_schema: str
     naturaleza: str
     processed_messages: int
@@ -160,11 +158,11 @@ class MailDigesterResult(TypedDict, total=False):
 def _build_result(tenant_schema: str, naturaleza: str) -> MailDigesterResult:
     """
     Construye un resultado inicial vacío.
-    
+
     Args:
         tenant_schema: Nombre del esquema del tenant
         naturaleza: Naturaleza de las facturas (VENTA|COMPRA)
-        
+
     Returns:
         MailDigesterResult inicializado con contadores en cero
     """
@@ -196,26 +194,29 @@ def fetch_and_process_billing_mail(
     tenant_schema: str,
     config_id: int,
     limit_messages: int = 50,
-    naturaleza: str | None = None
+    naturaleza: str | None = None,
 ):
     """
     Procesa correo → XML UBL → Facturas (histórico completo + incremental por UIDs).
-    
+
     Cancelación cooperativa leyendo BD (CANCEL_REQUESTED).
     Procesamiento por UIDs IMAP para evitar reprocesar correos ya examinados.
     """
     task_id = self.request.id
-    logger.info("maildigester.start", extra={"tenant_schema": tenant_schema, "task_id": task_id, "config_id": config_id})
-    
+    logger.info(
+        "maildigester.start",
+        extra={"tenant_schema": tenant_schema, "task_id": task_id, "config_id": config_id},
+    )
+
     try:
         # 1) RUNNING
         _update_run(tenant_schema, task_id, status="RUNNING")
-        
+
         # 2) Abort cooperativo (inicio)
         if _should_abort(tenant_schema, task_id):
             _update_run(tenant_schema, task_id, status="CANCELED", finished_at=timezone.now())
             return {"ok": False, "canceled": True}
-        
+
         # 3) Resolver config desde BD (sin credenciales en payload)
         from apps.services.maildigester import pipeline
         from apps.tenant.empresa.services import get_mailbox_config
@@ -225,20 +226,26 @@ def fetch_and_process_billing_mail(
 
             # 3b) Resolver empresa_id del tenant (nunca se infiere desde el DTO)
             from apps.tenant.empresa.models import MailInboxConfig
+
             empresa_id = MailInboxConfig.objects.only("empresa_id").get(id=config_id).empresa_id
 
             # 3c) MAIL-17: resolver run_id una sola vez para el detalle por documento
             from apps.tenant.facturas.models import DocumentProcessing, MailIngestionRun
+
             run_id = MailIngestionRun.objects.only("id").get(task_id=task_id).id
 
             # 4) Obtener estado del buzón (último UID procesado)
             # WARNING: IMPORT LAZY: Importar desde módulo puro (evita ciclos)
             from apps.tenant.facturas.inbox_state import get_or_create_inbox_state
-            
+
             inbox_state = get_or_create_inbox_state(config_id)
             start_uid = inbox_state.last_seen_uid  # None = histórico completo, int = incremental
-            
-            mode = "histórico completo" if start_uid is None else f"incremental (desde UID {start_uid + 1})"
+
+            mode = (
+                "histórico completo"
+                if start_uid is None
+                else f"incremental (desde UID {start_uid + 1})"
+            )
             logger.info(
                 "maildigester.mode",
                 extra={
@@ -246,15 +253,21 @@ def fetch_and_process_billing_mail(
                     "config_id": config_id,
                     "mode": mode,
                     "task_id": task_id,
-                }
+                },
             )
-            
+
             # 5) Procesar por lotes (UIDs)
-            counts = {"processed": 0, "xml_detected": 0, "imported": 0, "duplicates": 0, "errors": 0}
+            counts = {
+                "processed": 0,
+                "xml_detected": 0,
+                "imported": 0,
+                "duplicates": 0,
+                "errors": 0,
+            }
             batch_size = limit_messages  # Usar limit_messages como tamaño de lote
             current_uid = start_uid
             total_messages_processed = 0
-            
+
             # Procesar en lotes hasta que no haya más mensajes o se cancele
             while True:
                 # Abort cooperativo antes de cada lote
@@ -263,25 +276,31 @@ def fetch_and_process_billing_mail(
                     if current_uid is not None:
                         # WARNING: IMPORT LAZY: Importar desde módulo puro (evita ciclos)
                         from apps.tenant.facturas.inbox_state import update_inbox_state
+
                         update_inbox_state(config_id, current_uid, total_messages_processed)
-                    _update_run(tenant_schema, task_id, status="CANCELED", counts=counts, finished_at=timezone.now())
+                    _update_run(
+                        tenant_schema,
+                        task_id,
+                        status="CANCELED",
+                        counts=counts,
+                        finished_at=timezone.now(),
+                    )
                     return {"ok": False, "canceled": True, "counts": counts}
-                
+
                 # Obtener lote de mensajes por UID
                 xml_items, last_uid = pipeline.collect_invoice_xml_from_mailbox_by_uid(
                     mailbox_config,
                     start_uid=current_uid,
                     batch_size=batch_size,
                     naturaleza=naturaleza,
-                    should_abort=lambda: _should_abort(tenant_schema, task_id)
+                    should_abort=lambda: _should_abort(tenant_schema, task_id),
                 )
-                
+
                 # Si no hay mensajes nuevos, terminar
-                if not xml_items:
-                    if last_uid is None or last_uid == current_uid:
-                        # No hay más mensajes para procesar
-                        break
-                
+                if not xml_items and (last_uid is None or last_uid == current_uid):
+                    # No hay más mensajes para procesar
+                    break
+
                 # Procesar XMLs del lote
                 batch_messages = 0
                 for item in xml_items:
@@ -290,21 +309,32 @@ def fetch_and_process_billing_mail(
                         if current_uid is not None:
                             # WARNING: IMPORT LAZY: Importar desde módulo puro (evita ciclos)
                             from apps.tenant.facturas.inbox_state import update_inbox_state
+
                             update_inbox_state(config_id, current_uid, total_messages_processed)
-                        _update_run(tenant_schema, task_id, status="CANCELED", counts=counts, finished_at=timezone.now())
+                        _update_run(
+                            tenant_schema,
+                            task_id,
+                            status="CANCELED",
+                            counts=counts,
+                            finished_at=timezone.now(),
+                        )
                         return {"ok": False, "canceled": True, "counts": counts}
-                    
+
                     counts["processed"] += 1
                     batch_messages += 1
-                    
+
                     try:
                         # WARNING: v2.37: Usar pipeline universal SOLO para parsear/validar (NO persiste)
                         from apps.services.document_ingest.ingest_service import ingest_document
-                        
+
                         # Convertir XML texto a bytes
-                        xml_bytes = item["xml_text"].encode("utf-8") if isinstance(item["xml_text"], str) else item["xml_text"]
+                        xml_bytes = (
+                            item["xml_text"].encode("utf-8")
+                            if isinstance(item["xml_text"], str)
+                            else item["xml_text"]
+                        )
                         source_filename = item.get("source_filename", "ubl.xml")
-                        
+
                         # Llamar al pipeline universal (SOLO parsing, preview=True para obtener DTO)
                         parsed, status_code = ingest_document(
                             content=xml_bytes,
@@ -312,7 +342,7 @@ def fetch_and_process_billing_mail(
                             mime_type="application/xml",
                             kind_hint="xml",
                             preview=True,  # Siempre preview - document_ingest NO persiste
-                            async_mode=False
+                            async_mode=False,
                         )
 
                         # Verificar si hubo error en el parsing
@@ -333,12 +363,15 @@ def fetch_and_process_billing_mail(
                                     # bajo un error de logging distinto. Bug preexistente, hallado al
                                     # verificar MAIL-17 con un documento invalido real.
                                     "error_detail": error_msg,
-                                }
+                                },
                             )
                             DocumentProcessing.objects.create(
-                                empresa_id=empresa_id, run_id=run_id,
-                                source="EMAIL", filename=source_filename,
-                                status="INVALID", error_message=error_msg,
+                                empresa_id=empresa_id,
+                                run_id=run_id,
+                                source="EMAIL",
+                                filename=source_filename,
+                                status="INVALID",
+                                error_message=error_msg,
                             )
                             continue
 
@@ -352,15 +385,18 @@ def fetch_and_process_billing_mail(
                                     "tenant_schema": tenant_schema,
                                     "task_id": task_id,
                                     "source_filename": source_filename,
-                                }
+                                },
                             )
                             DocumentProcessing.objects.create(
-                                empresa_id=empresa_id, run_id=run_id,
-                                source="EMAIL", filename=source_filename,
-                                status="INVALID", error_message="empty_dto",
+                                empresa_id=empresa_id,
+                                run_id=run_id,
+                                source="EMAIL",
+                                filename=source_filename,
+                                status="INVALID",
+                                error_message="empty_dto",
                             )
                             continue
-                        
+
                         # WARNING: MAIL-16: dispatch generico -- este modulo ya NO conoce
                         # Facturas. El dto ya parseado viaja en metadata para que el handler
                         # no tenga que volver a parsear el mismo XML (ver InvoiceHandler).
@@ -407,7 +443,7 @@ def fetch_and_process_billing_mail(
                                     "handler": result.handler,
                                     "numero": result.metadata.get("numero"),
                                     "cufe": result.metadata.get("cufe"),
-                                }
+                                },
                             )
                         elif result.status == ProcessingStatus.DUPLICATE:
                             # Idempotencia real (por CUFE/CUDE o por numero) -- documento ya existia
@@ -419,7 +455,7 @@ def fetch_and_process_billing_mail(
                                     "task_id": task_id,
                                     "handler": result.handler,
                                     "numero": result.metadata.get("numero"),
-                                }
+                                },
                             )
                         else:
                             # INVALID / FAILED / REQUIRES_REVIEW / PARTIAL -- ninguno es exito
@@ -435,14 +471,18 @@ def fetch_and_process_billing_mail(
                                     "handler": result.handler,
                                     "domain": result.domain,
                                     "errors": result.errors,
-                                }
+                                },
                             )
-                    
+
                     except Exception as e:
                         # FASE 3: clasificar tambien los errores de la etapa de parsing (previa a persistencia)
                         error_type = _clasificar_excepcion(e)
                         counts["errors"] += 1
-                        log_fn = logger.error if error_type in ("programming", "security") else logger.warning
+                        log_fn = (
+                            logger.error
+                            if error_type in ("programming", "security")
+                            else logger.warning
+                        )
                         log_fn(
                             "maildigester.process_error",
                             exc_info=True,
@@ -452,31 +492,35 @@ def fetch_and_process_billing_mail(
                                 "source_filename": item.get("source_filename", "unknown"),
                                 "error_type": error_type,
                                 "error": str(e),
-                            }
+                            },
                         )
                         DocumentProcessing.objects.create(
-                            empresa_id=empresa_id, run_id=run_id,
-                            source="EMAIL", filename=item.get("source_filename", "unknown"),
-                            status="FAILED", error_message=str(e),
+                            empresa_id=empresa_id,
+                            run_id=run_id,
+                            source="EMAIL",
+                            filename=item.get("source_filename", "unknown"),
+                            status="FAILED",
+                            error_message=str(e),
                         )
 
                 counts["xml_detected"] += len(xml_items)
                 total_messages_processed += batch_messages
-                
+
                 # Actualizar estado después de cada lote
                 if last_uid is not None and last_uid != current_uid:
                     # WARNING: IMPORT LAZY: Importar desde módulo puro (evita ciclos)
                     from apps.tenant.facturas.inbox_state import update_inbox_state
+
                     update_inbox_state(config_id, last_uid, batch_messages)
                     current_uid = last_uid
                 elif last_uid is None:
                     # No hay más mensajes (primera ejecución sin mensajes o inbox vacío)
                     break
-                
+
                 # Si el lote está incompleto (menos de batch_size), no hay más mensajes
                 if batch_messages < batch_size:
                     break
-            
+
             # 6) Estado final segun resultados REALES (FASE 2 -- nunca SUCCESS falso)
             imported = counts["imported"]
             duplicates = counts["duplicates"]
@@ -488,7 +532,13 @@ def fetch_and_process_billing_mail(
             else:
                 final_status = "FAILED"
 
-            _update_run(tenant_schema, task_id, status=final_status, counts=counts, finished_at=timezone.now())
+            _update_run(
+                tenant_schema,
+                task_id,
+                status=final_status,
+                counts=counts,
+                finished_at=timezone.now(),
+            )
             logger.info(
                 "maildigester.end",
                 extra={
@@ -498,15 +548,30 @@ def fetch_and_process_billing_mail(
                     "status": final_status,
                     "last_uid": current_uid,
                     "mode": mode,
-                }
+                },
             )
-            return {"ok": final_status != "FAILED", "status": final_status, "counts": counts, "last_uid": current_uid}
-    
+            return {
+                "ok": final_status != "FAILED",
+                "status": final_status,
+                "counts": counts,
+                "last_uid": current_uid,
+            }
+
     except Exception as e:
-        logger.error("maildigester.task_failure", exc_info=True, extra={"tenant_schema": tenant_schema, "task_id": task_id})
+        logger.error(
+            "maildigester.task_failure",
+            exc_info=True,
+            extra={"tenant_schema": tenant_schema, "task_id": task_id},
+        )
         # 6) FAILED (no reintentar AttributeError; el decorador ya no autoretry para AttributeError)
         try:
-            _update_run(tenant_schema, task_id, status="FAILED", finished_at=timezone.now(), summary={"error": str(e)})
+            _update_run(
+                tenant_schema,
+                task_id,
+                status="FAILED",
+                finished_at=timezone.now(),
+                summary={"error": str(e)},
+            )
         except Exception:
             # Evitar fallar al persistir error (p.ej., tabla no existe): log minimal
             logger.warning("maildigester.persist_error", extra={"task_id": task_id})

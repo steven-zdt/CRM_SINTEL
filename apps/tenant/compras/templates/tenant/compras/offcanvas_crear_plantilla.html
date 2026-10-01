@@ -49,6 +49,17 @@
       <p class="section-title"><i class="bi bi-info-circle me-1"></i>Identificacion</p>
       <div class="row g-3 mb-4">
         <div class="col-12">
+          <label for="plt-tipo-documento" class="form-label">Tipo de Documento *</label>
+          <select class="form-select" id="plt-tipo-documento" required
+                  {% if plantilla %}disabled{% endif %}>
+            <option value="ORDEN_COMPRA" {% if not plantilla or plantilla.tipo_documento == 'ORDEN_COMPRA' %}selected{% endif %}>Orden de Compra</option>
+            <option value="REQUISICION" {% if plantilla.tipo_documento == 'REQUISICION' %}selected{% endif %}>Requisición de Compra</option>
+          </select>
+          {% if plantilla %}
+            <div class="form-text">No se puede cambiar el tipo de documento de una plantilla ya en uso.</div>
+          {% endif %}
+        </div>
+        <div class="col-12">
           <label for="plt-nombre" class="form-label">Nombre *</label>
           <input type="text" class="form-control" id="plt-nombre"
                  placeholder="Ej: Ordenes de Compra 2026" required maxlength="100"

@@ -32,8 +32,11 @@
         if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
             return w.DOMUtils.formatCurrency(n, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency', currency: 'COP',
+        // Fallback -- mismo truco documentado en dom-utils.js::formatCurrency
+        // (en-US agrupa con coma/punto como este proyecto necesita; currency:'USD'
+        // es solo el simbolo "$", el valor sigue siendo COP real).
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency', currency: 'USD',
             minimumFractionDigits: 2, maximumFractionDigits: 2
         }).format(n);
     }

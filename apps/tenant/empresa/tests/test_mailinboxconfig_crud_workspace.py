@@ -23,6 +23,7 @@ Verifica:
 - DELETE: DELETE /api/v1/empresas/mail-inbox-config/{id}/
 - Negativo: campo requerido invalido (email malformado)
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa, MailInboxConfig
@@ -34,10 +35,13 @@ class MailInboxConfigCrudWorkspaceTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test MailInbox CRUD", nit="900555777", direccion="Calle 1",
+            razon_social="Empresa Test MailInbox CRUD",
+            nit="900555777",
+            direccion="Calle 1",
         )
         TenantProfile.objects.get_or_create(
-            user=self.user, empresa=self.empresa,
+            user=self.user,
+            empresa=self.empresa,
             defaults={"rol": "ADMIN", "alcance": "EMPRESA"},
         )
 
@@ -96,7 +100,9 @@ class MailInboxConfigCrudWorkspaceTests(SintelTenantTestCase):
     def test_mailinboxconfig_create_email_invalido_es_rechazado(self):
         payload = self._payload_valido()
         payload["email_address"] = "no-es-un-email"
-        resp = self.api_client.post("/api/v1/empresas/mail-inbox-config/", data=payload, format="json")
+        resp = self.api_client.post(
+            "/api/v1/empresas/mail-inbox-config/", data=payload, format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.content)
 
     def test_mailinboxconfig_read_id_inexistente_retorna_404(self):

@@ -1,5 +1,25 @@
-{% load django_tables2 %}
-{# Fragmento HTMX: tabla de Plantillas Contables. Reemplaza #plantillas-panel completo. #}
-<div class="w-100" style="max-width:100%; overflow-x:auto;">
-  {% render_table table %}
+{# tabla_plantillas.html — DataTables 3.x + ColumnControl (docs/ux/TABLES_FORMS_RELEASE_GATE.md) #}
+{# Esqueleto ESTATICO: ya no se sirve via HTMX/django-tables2 -- se incluye  #}
+{# una sola vez en list_plantillas.html y plantilla_list.js puebla <tbody>  #}
+{# via ajax contra POST /api/v1/contabilidad/plantillas-contables/dt/       #}
+{# (PlantillaContableViewSet.dt()). Indices de columna deben coincidir 1:1  #}
+{# con fields_map/column_filters de esa accion.                            #}
+
+<div class="border rounded shadow-sm bg-white">
+  <div class="w-100" style="max-width:100%; overflow-x:auto;">
+    <table id="tabla-plantillas-contables" class="table table-hover align-middle mb-0 w-100">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Tipo</th>
+          <th>Modo</th>
+          <th>Líneas</th>
+          <th>Estado</th>
+          <th>Creada</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>

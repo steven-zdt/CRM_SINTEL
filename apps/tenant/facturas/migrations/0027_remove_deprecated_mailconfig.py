@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("facturas", "0026_remove_factura_cuenta_contable_uuid"),
     ]

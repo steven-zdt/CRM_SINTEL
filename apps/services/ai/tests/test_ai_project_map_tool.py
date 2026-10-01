@@ -5,18 +5,28 @@ tool de dominio `platform`, no de un tenant), asi que un AIContext
 minimo de prueba basta; solo el ultimo test pasa por el AIEngine real
 completo (con DB) para probar la integracion end-to-end una vez.
 """
-import pytest
+
+from django.contrib.auth import get_user_model
 from django.test import override_settings
 
 from apps.services.ai.context import AIContext
+from apps.services.ai.engine import run_tool
 from apps.services.ai.tools.ekg_tools import ProjectMapTool
+from apps.tenant.empresa.models import Empresa
+from apps.tenant.perfil.models import TenantProfile
+from tests.tenant.base_test import SintelTenantTestCase
 
 AI_FLAGS_ON = {"AI_ENABLED": True, "AI_READ_ENABLED": True}
+User = get_user_model()
 
 
 def _fake_context() -> AIContext:
     return AIContext(
-        user_id=1, empresa_id=1, schema_name="test", rol="ADMIN", alcance="EMPRESA",
+        user_id=1,
+        empresa_id=1,
+        schema_name="test",
+        rol="ADMIN",
+        alcance="EMPRESA",
     )
 
 
@@ -76,7 +86,9 @@ def test_rules_for_app_usa_snapshot_real_y_reporta_fecha():
 
 def test_rules_for_app_sin_snapshot_es_not_found():
     result = ProjectMapTool().run(
-        _fake_context(), question="rules_for_app", name="app_que_nunca_tuvo_ekg_build",
+        _fake_context(),
+        question="rules_for_app",
+        name="app_que_nunca_tuvo_ekg_build",
     )
     assert result.status == "NOT_FOUND"
 
@@ -88,16 +100,6 @@ def test_fk_relationships_resuelve_app_por_nombre_de_modelo():
     assert result.status == "OK"
     assert result.data["app_name"] == "clientes"
     assert isinstance(result.data["results"], list)
-
-
-from django.contrib.auth import get_user_model
-
-from apps.services.ai.engine import run_tool
-from apps.tenant.empresa.models import Empresa
-from apps.tenant.perfil.models import TenantProfile
-from tests.tenant.base_test import SintelTenantTestCase
-
-User = get_user_model()
 
 
 class _FakeRequest:
@@ -114,7 +116,9 @@ class ProjectMapToolEngineIntegrationTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA EKG TEST S.A.S.", nit="900333444", direccion="Calle EKG",
+            razon_social="EMPRESA EKG TEST S.A.S.",
+            nit="900333444",
+            direccion="Calle EKG",
         )
         self.user = User.objects.create_user(email="ekg_user@test.local", password="testpass123")
         TenantProfile.objects.create(user=self.user, empresa=self.empresa)
@@ -128,7 +132,12 @@ class ProjectMapToolEngineIntegrationTests(SintelTenantTestCase):
         assert result.status == "OK"
         assert "tenant_clientes" in {m["app_label"] for m in result.data["matches"]}
 
+    @override_settings(AI_ENABLED=False)
     def test_ai_project_map_bloqueado_si_ai_engine_deshabilitado(self):
+        """Hallazgo real (2026-09-25): sin este override, el test dependia
+        de que AI_ENABLED sea False por defecto -- falla en cualquier
+        entorno con AI_ENABLED=true en .env (este mismo). Ver
+        docs/mcp/MCP_RELEASE_GATE.md."""
         request = _FakeRequest(user=self.user, tenant=self.tenant)
 
         result = run_tool("ai_project_map", request, question="owner", name="Cliente")

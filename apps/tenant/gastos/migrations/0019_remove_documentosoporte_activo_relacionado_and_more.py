@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("tenant_gastos", "0018_documentosoporte_activo_relacionado_and_more"),
     ]

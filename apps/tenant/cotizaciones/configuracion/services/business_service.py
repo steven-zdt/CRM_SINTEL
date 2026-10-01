@@ -1,10 +1,13 @@
 """
 Business Service for ConfiguracionCotizacion v2.62.0.
 """
+
 import logging
+
 from .crud_service import ConfiguracionCRUDService
 
 logger = logging.getLogger(__name__)
+
 
 class ConfiguracionBusinessService:
     @staticmethod

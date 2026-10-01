@@ -7,6 +7,7 @@ Verifica que el dataset tax.iva separa generado/descontable correctamente
 y que el SALDO_FISCAL_CALCULADO (generado - descontable) es correcto -- no
 se afirma "valor a pagar" en ningun lado (ver docs/tax/TAX_BASELINE.md §6).
 """
+
 from decimal import Decimal
 
 from rest_framework.test import APIRequestFactory
@@ -26,51 +27,94 @@ class TaxIvaProviderTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Tax IVA", nit="900000932", direccion="Calle Tax IVA",
+            razon_social="Empresa Tax IVA",
+            nit="900000932",
+            direccion="Calle Tax IVA",
         )
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         factura_venta = Factura.objects.create(
-            empresa=self.empresa, numero="FV-TAX-1", prefijo="FV", consecutivo=1,
-            tipo=Factura.TipoFactura.FE, estado=Factura.Estado.ACEPTADA, naturaleza=Factura.Naturaleza.VENTA,
+            empresa=self.empresa,
+            numero="FV-TAX-1",
+            prefijo="FV",
+            consecutivo=1,
+            tipo=Factura.TipoFactura.FE,
+            estado=Factura.Estado.ACEPTADA,
+            naturaleza=Factura.Naturaleza.VENTA,
             fecha_emision="2026-06-01T10:00:00Z",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
-            receptor_nit="900111222", receptor_razon_social="Cliente Tax IVA SAS",
-            subtotal=Decimal("1000000.00"), impuestos=Decimal("190000.00"), total=Decimal("1190000.00"),
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
+            receptor_nit="900111222",
+            receptor_razon_social="Cliente Tax IVA SAS",
+            subtotal=Decimal("1000000.00"),
+            impuestos=Decimal("190000.00"),
+            total=Decimal("1190000.00"),
             cufe="CUFE-TAX-VENTA-1",
         )
         FacturaImpuesto.objects.create(
-            factura=factura_venta, empresa=self.empresa, tipo_impuesto=FacturaImpuesto.TipoImpuesto.IVA,
-            porcentaje=Decimal("19.00"), base_imponible=Decimal("1000000.00"), valor_impuesto=Decimal("190000.00"),
+            factura=factura_venta,
+            empresa=self.empresa,
+            tipo_impuesto=FacturaImpuesto.TipoImpuesto.IVA,
+            porcentaje=Decimal("19.00"),
+            base_imponible=Decimal("1000000.00"),
+            valor_impuesto=Decimal("190000.00"),
         )
 
         factura_compra = Factura.objects.create(
-            empresa=self.empresa, numero="FC-TAX-1", prefijo="FC", consecutivo=1,
-            tipo=Factura.TipoFactura.FE, estado=Factura.Estado.ACEPTADA, naturaleza=Factura.Naturaleza.COMPRA,
+            empresa=self.empresa,
+            numero="FC-TAX-1",
+            prefijo="FC",
+            consecutivo=1,
+            tipo=Factura.TipoFactura.FE,
+            estado=Factura.Estado.ACEPTADA,
+            naturaleza=Factura.Naturaleza.COMPRA,
             fecha_emision="2026-06-02T10:00:00Z",
-            emisor_nit="900333444", emisor_razon_social="Proveedor Tax IVA SAS",
-            receptor_nit=self.empresa.nit, receptor_razon_social=self.empresa.razon_social,
-            subtotal=Decimal("400000.00"), impuestos=Decimal("76000.00"), total=Decimal("476000.00"),
+            emisor_nit="900333444",
+            emisor_razon_social="Proveedor Tax IVA SAS",
+            receptor_nit=self.empresa.nit,
+            receptor_razon_social=self.empresa.razon_social,
+            subtotal=Decimal("400000.00"),
+            impuestos=Decimal("76000.00"),
+            total=Decimal("476000.00"),
             cufe="CUFE-TAX-COMPRA-1",
         )
         FacturaImpuesto.objects.create(
-            factura=factura_compra, empresa=self.empresa, tipo_impuesto=FacturaImpuesto.TipoImpuesto.IVA,
-            porcentaje=Decimal("19.00"), base_imponible=Decimal("400000.00"), valor_impuesto=Decimal("76000.00"),
+            factura=factura_compra,
+            empresa=self.empresa,
+            tipo_impuesto=FacturaImpuesto.TipoImpuesto.IVA,
+            porcentaje=Decimal("19.00"),
+            base_imponible=Decimal("400000.00"),
+            valor_impuesto=Decimal("76000.00"),
         )
 
         # Factura rechazada con IVA -- NO debe contar (estado != ACEPTADA).
         factura_rechazada = Factura.objects.create(
-            empresa=self.empresa, numero="FV-TAX-2", prefijo="FV", consecutivo=2,
-            tipo=Factura.TipoFactura.FE, estado=Factura.Estado.RECHAZADA, naturaleza=Factura.Naturaleza.VENTA,
+            empresa=self.empresa,
+            numero="FV-TAX-2",
+            prefijo="FV",
+            consecutivo=2,
+            tipo=Factura.TipoFactura.FE,
+            estado=Factura.Estado.RECHAZADA,
+            naturaleza=Factura.Naturaleza.VENTA,
             fecha_emision="2026-06-03T10:00:00Z",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
-            receptor_nit="900111222", receptor_razon_social="Cliente Tax IVA SAS",
-            subtotal=Decimal("500000.00"), impuestos=Decimal("95000.00"), total=Decimal("595000.00"),
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
+            receptor_nit="900111222",
+            receptor_razon_social="Cliente Tax IVA SAS",
+            subtotal=Decimal("500000.00"),
+            impuestos=Decimal("95000.00"),
+            total=Decimal("595000.00"),
             cufe="CUFE-TAX-RECHAZADA-1",
         )
         FacturaImpuesto.objects.create(
-            factura=factura_rechazada, empresa=self.empresa, tipo_impuesto=FacturaImpuesto.TipoImpuesto.IVA,
-            porcentaje=Decimal("19.00"), base_imponible=Decimal("500000.00"), valor_impuesto=Decimal("95000.00"),
+            factura=factura_rechazada,
+            empresa=self.empresa,
+            tipo_impuesto=FacturaImpuesto.TipoImpuesto.IVA,
+            porcentaje=Decimal("19.00"),
+            base_imponible=Decimal("500000.00"),
+            valor_impuesto=Decimal("95000.00"),
         )
 
     def _authenticated_request(self):
@@ -88,7 +132,9 @@ class TaxIvaProviderTests(SintelTenantTestCase):
 
     def test_iva_generado_y_descontable_separados_correctamente(self):
         request = self._authenticated_request()
-        report_request = ReportRequest(dataset_id="tax.iva", group_by=("naturaleza",), measures=("base_imponible", "valor_iva"))
+        report_request = ReportRequest(
+            dataset_id="tax.iva", group_by=("naturaleza",), measures=("base_imponible", "valor_iva")
+        )
         result = ReportQueryEngine().execute(report_request, request)
 
         rows_by_naturaleza = {row["naturaleza"]: row for row in result.rows}

@@ -7,6 +7,7 @@ viva para crear/editar/eliminar y para consumidores API-first. Reutilizan
 los mismos selectors que la API (SedeSelector/AreaSelector) para no
 duplicar logica.
 """
+
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -14,9 +15,12 @@ from django_tables2 import SingleTableView
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from apps.tenant.api.mixins import SintelDSVMixin
-from apps.tenant.empresa.models import Area, Empresa, MailInboxConfig, Sede
+from apps.tenant.empresa.models import Area, MailInboxConfig, Sede
 from apps.tenant.empresa.services.selectors import (
-    AreaSelector, EmpresaSelector, MailInboxConfigSelector, SedeSelector,
+    AreaSelector,
+    EmpresaSelector,
+    MailInboxConfigSelector,
+    SedeSelector,
 )
 from apps.tenant.empresa.tables import AreaTable, EmpresaTable, MailInboxConfigTable, SedeTable
 
@@ -32,7 +36,8 @@ class _EmpresaTableViewBase(LoginRequiredMixin, SintelDSVMixin, SingleTableView)
         except DRFValidationError:
             logger.warning(
                 "[%s] Sin empresa resuelta para user=%s",
-                self.__class__.__name__, self.request.user.pk,
+                self.__class__.__name__,
+                self.request.user.pk,
             )
             return None
 

@@ -1,6 +1,7 @@
 """
 Tests de humo para validar importación de XMLs pesados sin error 500.
 """
+
 import textwrap
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -11,7 +12,8 @@ from apps.tenant.facturas.models import Factura, FacturaAnexos, NaturalezaFactur
 from tests.tenant.base_test import SintelTenantTestCase
 
 # XML pesado simulado (con bloques grandes de firma y AttachedDocument)
-HEAVY_XML = textwrap.dedent("""<?xml version="1.0" encoding="UTF-8"?>
+HEAVY_XML = (
+    textwrap.dedent("""<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
          xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
          xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
@@ -67,14 +69,17 @@ HEAVY_XML = textwrap.dedent("""<?xml version="1.0" encoding="UTF-8"?>
         </cac:Attachment>
     </cac:AdditionalDocumentReference>
 </Invoice>
-""").format(
-    base64_large_content="A" * 10000  # Simular contenido grande
-).encode("utf-8")
+""")
+    .format(
+        base64_large_content="A" * 10000  # Simular contenido grande
+    )
+    .encode("utf-8")
+)
 
 
 class HeavyUBLTests(SintelTenantTestCase):
     """Tests para validar importación de XMLs pesados sin error 500."""
-    
+
     def setUp(self):
         super().setUp()
         # Crear empresa del tenant (SSoT)
@@ -83,9 +88,9 @@ class HeavyUBLTests(SintelTenantTestCase):
             nit="901123299",
             dv="1",
             direccion="Calle 123",
-            telefono="3001234567"
+            telefono="3001234567",
         )
-    
+
     def test_upload_heavy_ok(self):
         """Valida que XMLs pesados se importan correctamente (201 o 413 según umbral)."""
         # Mismo endpoint deprecado (factura-upload-ubl) y mismos 2 problemas
@@ -104,29 +109,35 @@ class HeavyUBLTests(SintelTenantTestCase):
         )
         url = reverse("factura-upload-ubl")
         f = SimpleUploadedFile("heavy.xml", HEAVY_XML, content_type="text/xml")
-        
+
         resp = self.client.post(f"{url}?preview=false", {"file": f})
-        
+
         # Esperado: 201 con persistencia y SIN 500
         # Si supera umbral, 413 (pero no 500)
-        self.assertIn(resp.status_code, (201, 413), 
-                     f"Status inesperado: {resp.status_code}. Respuesta: {resp.data}")
-        
+        self.assertIn(
+            resp.status_code,
+            (201, 413),
+            f"Status inesperado: {resp.status_code}. Respuesta: {resp.data}",
+        )
+
         if resp.status_code == 201:
             # Validar que la factura se creó
             self.assertTrue(Factura.objects.exists(), "La factura debería haberse creado")
-            
+
             # Validar que los anexos se guardaron
             factura = Factura.objects.first()
             self.assertTrue(
                 FacturaAnexos.objects.filter(factura=factura).exists(),
-                "Los anexos deberían haberse guardado en FacturaAnexos"
+                "Los anexos deberían haberse guardado en FacturaAnexos",
             )
-            
+
             # Validar que la naturaleza se calculó correctamente
-            self.assertEqual(factura.naturaleza, NaturalezaFactura.VENTA,
-                           "La naturaleza debería ser VENTA (emisor = empresa)")
-    
+            self.assertEqual(
+                factura.naturaleza,
+                NaturalezaFactura.VENTA,
+                "La naturaleza debería ser VENTA (emisor = empresa)",
+            )
+
     def test_list_no_incluye_blobs(self):
         """Valida que el listado NO incluye campos XML pesados."""
         # Crear factura con anexos
@@ -140,29 +151,32 @@ class HeavyUBLTests(SintelTenantTestCase):
             subtotal=1000,
             impuestos=190,
             total=1190,
-            moneda="COP"
+            moneda="COP",
         )
         FacturaAnexos.objects.create(
             factura=factura,
             ubl_xml="<Invoice>...</Invoice>" * 1000,  # XML grande
-            application_response_xml="<ApplicationResponse>...</ApplicationResponse>" * 1000
+            application_response_xml="<ApplicationResponse>...</ApplicationResponse>" * 1000,
         )
-        
+
         url = reverse("factura-list")
         resp = self.client.get(url)
-        
+
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         results = data.get("results", data)
-        
+
         # Validar que el listado NO incluye campos XML
         if results:
             row = results[0]
             self.assertIn("naturaleza", row)
             self.assertNotIn("ubl_xml", row, "El listado NO debe incluir ubl_xml")
-            self.assertNotIn("application_response_xml", row, 
-                           "El listado NO debe incluir application_response_xml")
-    
+            self.assertNotIn(
+                "application_response_xml",
+                row,
+                "El listado NO debe incluir application_response_xml",
+            )
+
     def test_detail_incluye_anexos(self):
         """Valida que el detalle expone metadatos de anexos (no el XML crudo).
 
@@ -183,21 +197,21 @@ class HeavyUBLTests(SintelTenantTestCase):
             subtotal=1000,
             impuestos=190,
             total=1190,
-            moneda="COP"
+            moneda="COP",
         )
         FacturaAnexos.objects.create(
             factura=factura,
             ubl_xml="<Invoice>XML completo</Invoice>",
-            application_response_xml="<ApplicationResponse>Respuesta DIAN</ApplicationResponse>"
+            application_response_xml="<ApplicationResponse>Respuesta DIAN</ApplicationResponse>",
         )
-        
+
         # F29-001: BaseTenantViewSet.lookup_field = "uuid", no PK entero.
         url = reverse("factura-detail", args=[factura.uuid])
         resp = self.client.get(url)
-        
+
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
-        
+
         # Validar que el detalle expone metadatos de los anexos (no el XML crudo)
         self.assertTrue(data["has_ubl_xml"])
         self.assertTrue(data["has_application_response_xml"])

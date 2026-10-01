@@ -36,8 +36,10 @@ class _Stub:
 
     def embed_documents(self, texts):
         return EmbeddingResult(
-            vectors=[self._vec(t) for t in texts], model=self.model,
-            provider=self.name, dimension=self.dimension,
+            vectors=[self._vec(t) for t in texts],
+            model=self.model,
+            provider=self.name,
+            dimension=self.dimension,
         )
 
     def embed_query(self, text):
@@ -71,28 +73,47 @@ class RetrievalToolTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.create(
-            razon_social="EMPRESA POC S.A.S.", nit="900222222", direccion="Cra 1",
+            razon_social="EMPRESA POC S.A.S.",
+            nit="900222222",
+            direccion="Cra 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B")
         self.profile = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="EMPRESA",
         )
         # AI-VECTOR-11: flag por tenant, encendido por defecto en estos tests
         # (el rollout gate por gate se prueba explicitamente abajo).
         AIKnowledgeSettings.objects.create(empresa=self.empresa, retrieval_enabled=True)
         self._p1, self._p2 = _patched_provider()
-        self._p1.start(); self._p2.start()
-        self.addCleanup(self._p1.stop); self.addCleanup(self._p2.stop)
+        self._p1.start()
+        self._p2.start()
+        self.addCleanup(self._p1.stop)
+        self.addCleanup(self._p2.stop)
 
         emb = EmbeddingService()
-        emb.index_text(empresa=self.empresa, source_type="cliente_observaciones",
-                       source_id="C1", text="condiciones comerciales especiales de pago a 45 dias")
-        emb.index_text(empresa=self.empresa, source_type="producto_descripcion",
-                       source_id="P1", text="tornillo de acero inoxidable para exteriores")
-        emb.index_text(empresa=self.empresa, source_type="cliente_observaciones",
-                       source_id="C_SEDE_B", text="nota restringida de la sede B",
-                       metadata={"sede_id": self.sede_b.id})
+        emb.index_text(
+            empresa=self.empresa,
+            source_type="cliente_observaciones",
+            source_id="C1",
+            text="condiciones comerciales especiales de pago a 45 dias",
+        )
+        emb.index_text(
+            empresa=self.empresa,
+            source_type="producto_descripcion",
+            source_id="P1",
+            text="tornillo de acero inoxidable para exteriores",
+        )
+        emb.index_text(
+            empresa=self.empresa,
+            source_type="cliente_observaciones",
+            source_id="C_SEDE_B",
+            text="nota restringida de la sede B",
+            metadata={"sede_id": self.sede_b.id},
+        )
 
     def _req(self):
         return _FakeRequest(self.user, self.tenant)
@@ -106,8 +127,13 @@ class RetrievalToolTests(SintelTenantTestCase):
         names = {m["name"] for m in tool_metadata()}
         assert "buscar_conocimiento" in names
 
-    @override_settings(AI_ENABLED=True, AI_READ_ENABLED=True)  # AI_RETRIEVAL_ENABLED por defecto: False
+    @override_settings(AI_ENABLED=True, AI_READ_ENABLED=True, AI_RETRIEVAL_ENABLED=False)
     def test_deshabilitada_por_defecto_aunque_read_este_on(self):
+        """Hallazgo real (2026-09-25): 'por defecto' no forzaba
+        AI_RETRIEVAL_ENABLED=False explicitamente -- este entorno tiene
+        AI_RETRIEVAL_ENABLED=true en .env (usado para el benchmark de
+        AI-VECTOR-07), asi que el test fallaba pese a que AI_ENABLED/
+        AI_READ_ENABLED si estaban forzados. Ver docs/mcp/MCP_RELEASE_GATE.md."""
         res = run_tool("buscar_conocimiento", self._req(), query="condiciones de pago")
         assert res.status == "PERMISSION_DENIED"
         assert "recuperacion semantica" in res.message.lower()
@@ -119,7 +145,9 @@ class RetrievalToolTests(SintelTenantTestCase):
 
     @override_settings(**ALL_ON)
     def test_retrieval_ok_devuelve_hits(self):
-        res = run_tool("buscar_conocimiento", self._req(), query="condiciones comerciales de pago", k=3)
+        res = run_tool(
+            "buscar_conocimiento", self._req(), query="condiciones comerciales de pago", k=3
+        )
         assert res.status == "OK"
         assert res.data and res.data[0]["source_id"] == "C1"
         assert set(res.data[0]) == {"content", "source_type", "source_id", "document_uuid", "score"}
@@ -131,8 +159,14 @@ class RetrievalToolTests(SintelTenantTestCase):
 
     @override_settings(**ALL_ON)
     def test_k_fuera_de_rango(self):
-        assert run_tool("buscar_conocimiento", self._req(), query="x", k=0).status == "VALIDATION_ERROR"
-        assert run_tool("buscar_conocimiento", self._req(), query="x", k=99).status == "VALIDATION_ERROR"
+        assert (
+            run_tool("buscar_conocimiento", self._req(), query="x", k=0).status
+            == "VALIDATION_ERROR"
+        )
+        assert (
+            run_tool("buscar_conocimiento", self._req(), query="x", k=99).status
+            == "VALIDATION_ERROR"
+        )
 
     @override_settings(**ALL_ON)
     def test_alcance_empresa_ve_el_doc_de_sede_b(self):
@@ -148,7 +182,9 @@ class RetrievalToolTests(SintelTenantTestCase):
         got = {h["source_id"] for h in res.data}
         assert "C_SEDE_B" not in got  # unauthorized_retrieval = 0
         # los docs sin sede siguen visibles
-        res2 = run_tool("buscar_conocimiento", self._req(), query="condiciones comerciales de pago", k=10)
+        res2 = run_tool(
+            "buscar_conocimiento", self._req(), query="condiciones comerciales de pago", k=10
+        )
         assert any(h["source_id"] == "C1" for h in res2.data)
 
     @override_settings(**ALL_ON)

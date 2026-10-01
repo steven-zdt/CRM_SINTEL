@@ -28,9 +28,9 @@
       return w.DOMUtils.formatCurrency(v, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     const num = parseFloat(v) || 0;
-    return new Intl.NumberFormat('es-CO', {
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'COP',
+      currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(num);

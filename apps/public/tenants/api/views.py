@@ -134,7 +134,10 @@ class CreateTenantOnboardingAPIView(APIView):
         schema_name = data.get("schema_name")
 
         if not company_name or not admin_email:
-            return Response({"detail": "company_name y admin_email son requeridos"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "company_name y admin_email son requeridos"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             from apps.public.tenants.services.onboarding import create_onboarding_ott
@@ -159,7 +162,9 @@ class CreateTenantOnboardingAPIView(APIView):
             # validacion legitimo, no un error de servidor.
             logger.info("Onboarding rechazado por validacion: %s", exc)
             detail = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
-            return Response({"success": False, "detail": detail}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"success": False, "detail": detail}, status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as exc:
             logger.error("Error creating onboarding tenant: %s", exc, exc_info=True)
             return Response(

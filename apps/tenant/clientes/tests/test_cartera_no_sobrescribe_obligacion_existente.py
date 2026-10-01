@@ -17,6 +17,7 @@ test_cartera_crud_api.py, para el uso ETL futuro).
 
 Ver docs/remediation/AUDIT_BASELINE_20260912.md hallazgo C-2.
 """
+
 from decimal import Decimal
 
 import pytest
@@ -35,17 +36,26 @@ def test_post_duplicado_no_sobrescribe_abono_ya_registrado(client, admin_user, t
     with schema_context(tenant.schema_name):
         empresa = Empresa.objects.first()
         cliente = Cliente.objects.create(
-            empresa=empresa, tipo_persona="JURIDICA", tipo_documento="NIT",
-            numero_documento="900444555", razon_social="Cliente C2",
-            regimen_tributario="ORDINARIO", activo=True,
+            empresa=empresa,
+            tipo_persona="JURIDICA",
+            tipo_documento="NIT",
+            numero_documento="900444555",
+            razon_social="Cliente C2",
+            regimen_tributario="ORDINARIO",
+            activo=True,
         )
         cartera = Cartera.objects.create(
-            empresa=empresa, cliente=cliente, numero_factura="FE-C2-1",
-            fecha_emision="2026-06-01", fecha_vencimiento="2026-07-01",
+            empresa=empresa,
+            cliente=cliente,
+            numero_factura="FE-C2-1",
+            fecha_emision="2026-06-01",
+            fecha_vencimiento="2026-07-01",
             valor_total=Decimal("1000000.00"),
         )
         CarteraBusinessService.registrar_abono(
-            empresa_id=empresa.id, cartera_uuid=cartera.uuid, monto=Decimal("300000.00"),
+            empresa_id=empresa.id,
+            cartera_uuid=cartera.uuid,
+            monto=Decimal("300000.00"),
         )
         cartera.refresh_from_db()
         assert cartera.valor_pagado == Decimal("300000.00")

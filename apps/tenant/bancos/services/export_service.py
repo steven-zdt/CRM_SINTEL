@@ -3,10 +3,14 @@ conciliacion de un extracto (periodo = cuenta + mes/anio) a CSV.
 
 Solo lectura -- reutiliza los selectores ya existentes (TransaccionBancariaSelector,
 TerceroDisplaySelector) en vez de reimplementar el resuelto de nombres."""
+
 import csv
 import io
 
-from apps.tenant.bancos.services.selectors import TerceroDisplaySelector, TransaccionBancariaSelector
+from apps.tenant.bancos.services.selectors import (
+    TerceroDisplaySelector,
+    TransaccionBancariaSelector,
+)
 
 
 class ExtractoBancarioExportService:
@@ -15,7 +19,9 @@ class ExtractoBancarioExportService:
     @staticmethod
     def generar_csv_conciliacion(empresa_id: int, extracto) -> str:
         transacciones = list(
-            TransaccionBancariaSelector.get_list(empresa_id=empresa_id, extracto_uuid=str(extracto.uuid))
+            TransaccionBancariaSelector.get_list(
+                empresa_id=empresa_id, extracto_uuid=str(extracto.uuid)
+            )
         )
         display_map = TerceroDisplaySelector.resolver(
             empresa_id,
@@ -26,10 +32,19 @@ class ExtractoBancarioExportService:
 
         buffer = io.StringIO()
         writer = csv.writer(buffer)
-        writer.writerow([
-            "Fecha", "Descripcion", "Documento", "Tipo", "Valor", "Saldo",
-            "Conciliado", "Vinculo", "Notas",
-        ])
+        writer.writerow(
+            [
+                "Fecha",
+                "Descripcion",
+                "Documento",
+                "Tipo",
+                "Valor",
+                "Saldo",
+                "Conciliado",
+                "Vinculo",
+                "Notas",
+            ]
+        )
         for t in transacciones:
             vinculo = ""
             if t.factura_uuid:
@@ -39,15 +54,17 @@ class ExtractoBancarioExportService:
             elif t.cliente_uuid:
                 vinculo = display_map.get(str(t.cliente_uuid)) or f"Cliente {t.cliente_uuid}"
 
-            writer.writerow([
-                t.fecha.strftime("%Y-%m-%d"),
-                t.descripcion,
-                t.dcto or "",
-                t.tipo_movimiento,
-                str(t.valor),
-                str(t.saldo),
-                "Si" if t.conciliado else "No",
-                vinculo,
-                t.notas_conciliacion or "",
-            ])
+            writer.writerow(
+                [
+                    t.fecha.strftime("%Y-%m-%d"),
+                    t.descripcion,
+                    t.dcto or "",
+                    t.tipo_movimiento,
+                    str(t.valor),
+                    str(t.saldo),
+                    "Si" if t.conciliado else "No",
+                    vinculo,
+                    t.notas_conciliacion or "",
+                ]
+            )
         return buffer.getvalue()

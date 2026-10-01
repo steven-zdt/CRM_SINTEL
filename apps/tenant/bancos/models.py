@@ -8,10 +8,20 @@ from django.utils.translation import gettext_lazy as _
 from apps.tenant.core.models import SintelTenantBaseModel
 
 MES_CHOICES = [
-    (1, _('Enero')), (2, _('Febrero')), (3, _('Marzo')), (4, _('Abril')),
-    (5, _('Mayo')), (6, _('Junio')), (7, _('Julio')), (8, _('Agosto')),
-    (9, _('Septiembre')), (10, _('Octubre')), (11, _('Noviembre')), (12, _('Diciembre')),
+    (1, _("Enero")),
+    (2, _("Febrero")),
+    (3, _("Marzo")),
+    (4, _("Abril")),
+    (5, _("Mayo")),
+    (6, _("Junio")),
+    (7, _("Julio")),
+    (8, _("Agosto")),
+    (9, _("Septiembre")),
+    (10, _("Octubre")),
+    (11, _("Noviembre")),
+    (12, _("Diciembre")),
 ]
+
 
 class CuentaBancaria(SintelTenantBaseModel):
     uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
@@ -37,15 +47,27 @@ class CuentaBancaria(SintelTenantBaseModel):
     def __str__(self):
         return f"{self.nombre} - {self.numero}"
 
+
 class ExtractoBancario(SintelTenantBaseModel):
     uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
-    cuenta = models.ForeignKey(CuentaBancaria, on_delete=models.CASCADE, related_name="extractos", verbose_name=_("Cuenta Bancaria"))
+    cuenta = models.ForeignKey(
+        CuentaBancaria,
+        on_delete=models.CASCADE,
+        related_name="extractos",
+        verbose_name=_("Cuenta Bancaria"),
+    )
     mes = models.IntegerField(choices=MES_CHOICES, verbose_name=_("Mes"))
     anio = models.IntegerField(verbose_name=_("Anio"))
-    archivo_s3 = models.FileField(upload_to="extractos/", null=True, blank=True, verbose_name=_("Archivo de Extracto"))
+    archivo_s3 = models.FileField(
+        upload_to="extractos/", null=True, blank=True, verbose_name=_("Archivo de Extracto")
+    )
     procesado = models.BooleanField(default=False, verbose_name=_("Procesado"))
-    saldo_inicial = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, verbose_name=_("Saldo Inicial"))
-    saldo_final = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, verbose_name=_("Saldo Final"))
+    saldo_inicial = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0.00, verbose_name=_("Saldo Inicial")
+    )
+    saldo_final = models.DecimalField(
+        max_digits=15, decimal_places=2, default=0.00, verbose_name=_("Saldo Final")
+    )
 
     # BAN-11 (DT-SEDE-01): sede para KPIs por sede. Opcional -- si no se
     # asigna, el extracto aplica a toda la empresa (mismo criterio que
@@ -57,8 +79,10 @@ class ExtractoBancario(SintelTenantBaseModel):
         blank=True,
         related_name="extractos_bancarios",
         verbose_name=_("Sede"),
-        help_text=_("Sede de la empresa a la que pertenece este extracto. "
-                    "Opcional -- si no se asigna aplica a toda la empresa."),
+        help_text=_(
+            "Sede de la empresa a la que pertenece este extracto. "
+            "Opcional -- si no se asigna aplica a toda la empresa."
+        ),
         db_index=True,
     )
 
@@ -84,9 +108,15 @@ class ExtractoBancario(SintelTenantBaseModel):
     def __str__(self):
         return f"{self.cuenta.nombre} - {self.anio}/{self.mes:02d}"
 
+
 class TransaccionBancaria(SintelTenantBaseModel):
     uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
-    extracto = models.ForeignKey(ExtractoBancario, on_delete=models.CASCADE, related_name="transacciones", verbose_name=_("Extracto Bancario"))
+    extracto = models.ForeignKey(
+        ExtractoBancario,
+        on_delete=models.CASCADE,
+        related_name="transacciones",
+        verbose_name=_("Extracto Bancario"),
+    )
     fecha = models.DateField(verbose_name=_("Fecha"))
     descripcion = models.TextField(verbose_name=_("Descripcion"))
     sucursal = models.CharField(max_length=100, null=True, blank=True, verbose_name=_("Sucursal"))
@@ -96,17 +126,23 @@ class TransaccionBancaria(SintelTenantBaseModel):
 
     # Conciliacion bancaria: soft references, no FK directa cross-app.
     factura_uuid = models.UUIDField(
-        null=True, blank=True, db_index=True,
+        null=True,
+        blank=True,
+        db_index=True,
         verbose_name=_("UUID Factura"),
         help_text=_("Referencia soft a Factura asociada a esta transaccion."),
     )
     proveedor_uuid = models.UUIDField(
-        null=True, blank=True, db_index=True,
+        null=True,
+        blank=True,
+        db_index=True,
         verbose_name=_("UUID Proveedor"),
         help_text=_("Referencia soft a Proveedor asociado a esta transaccion."),
     )
     cliente_uuid = models.UUIDField(
-        null=True, blank=True, db_index=True,
+        null=True,
+        blank=True,
+        db_index=True,
         verbose_name=_("UUID Cliente"),
         help_text=_("Referencia soft a Cliente asociado a esta transaccion."),
     )
@@ -116,7 +152,8 @@ class TransaccionBancaria(SintelTenantBaseModel):
         help_text=_("True cuando la transaccion fue vinculada manualmente con un documento."),
     )
     notas_conciliacion = models.TextField(
-        null=True, blank=True,
+        null=True,
+        blank=True,
         verbose_name=_("Notas de Conciliacion"),
         help_text=_("Observaciones o comentarios sobre la conciliacion de esta transaccion."),
     )
@@ -124,7 +161,7 @@ class TransaccionBancaria(SintelTenantBaseModel):
     @property
     def tipo_movimiento(self):
         """DEBITO si valor < 0, CREDITO si valor >= 0."""
-        return 'DEBITO' if self.valor < Decimal('0') else 'CREDITO'
+        return "DEBITO" if self.valor < Decimal("0") else "CREDITO"
 
     @property
     def monto(self):
@@ -150,6 +187,7 @@ class TipoReferenciaAplicacion(models.TextChoices):
     un movimiento bancario. Lista ampliable -- OTRO/OTRO_INGRESO/OTRO_EGRESO
     existen deliberadamente para no bloquear el flujo cuando el concepto
     todavia no tiene un dominio propio integrado."""
+
     FACTURA_VENTA = "FACTURA_VENTA", _("Factura de Venta")
     FACTURA_COMPRA = "FACTURA_COMPRA", _("Factura de Compra")
     CARTERA = "CARTERA", _("Cartera (Cliente)")
@@ -189,40 +227,57 @@ class MovimientoBancarioAplicacion(SintelTenantBaseModel):
 
     uuid = models.UUIDField(default=uuid_module.uuid4, unique=True, db_index=True, editable=False)
     transaccion = models.ForeignKey(
-        TransaccionBancaria, on_delete=models.CASCADE, related_name="aplicaciones",
+        TransaccionBancaria,
+        on_delete=models.CASCADE,
+        related_name="aplicaciones",
         verbose_name=_("Transaccion Bancaria"),
     )
     tipo_referencia = models.CharField(
-        max_length=30, choices=TipoReferenciaAplicacion.choices,
+        max_length=30,
+        choices=TipoReferenciaAplicacion.choices,
         verbose_name=_("Tipo de Referencia"),
     )
     referencia_uuid = models.UUIDField(
-        null=True, blank=True, db_index=True,
+        null=True,
+        blank=True,
+        db_index=True,
         verbose_name=_("UUID Referencia"),
-        help_text=_("Soft ref al documento/concepto aplicado (Factura, Gasto, PeriodoNomina, etc.)."),
+        help_text=_(
+            "Soft ref al documento/concepto aplicado (Factura, Gasto, PeriodoNomina, etc.)."
+        ),
     )
     tercero_tipo = models.CharField(
-        max_length=20, null=True, blank=True,
+        max_length=20,
+        null=True,
+        blank=True,
         verbose_name=_("Tipo de Tercero"),
         help_text=_("CLIENTE | PROVEEDOR | EMPLEADO, cuando aplica."),
     )
     tercero_uuid = models.UUIDField(
-        null=True, blank=True, db_index=True,
+        null=True,
+        blank=True,
+        db_index=True,
         verbose_name=_("UUID Tercero"),
     )
     monto_aplicado = models.DecimalField(
-        max_digits=15, decimal_places=2,
+        max_digits=15,
+        decimal_places=2,
         validators=[MinValueValidator(Decimal("0.01"))],
         verbose_name=_("Monto Aplicado"),
     )
     fecha_aplicacion = models.DateField(verbose_name=_("Fecha de Aplicacion"))
     notas = models.TextField(null=True, blank=True, verbose_name=_("Notas"))
     origen_matching = models.CharField(
-        max_length=20, choices=OrigenMatchingAplicacion.choices,
-        default=OrigenMatchingAplicacion.MANUAL, verbose_name=_("Origen"),
+        max_length=20,
+        choices=OrigenMatchingAplicacion.choices,
+        default=OrigenMatchingAplicacion.MANUAL,
+        verbose_name=_("Origen"),
     )
     confianza = models.DecimalField(
-        max_digits=5, decimal_places=4, null=True, blank=True,
+        max_digits=5,
+        decimal_places=4,
+        null=True,
+        blank=True,
         verbose_name=_("Confianza del Matching"),
         help_text=_("Score 0-1 cuando origen_matching=SUGERIDO."),
     )

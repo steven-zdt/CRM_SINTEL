@@ -13,6 +13,7 @@ crear_preforma() en cada creacion de Cotizacion). Los casos de fallo
 fallo real y deterministico de renderizado HTML->PDF no es practico ni
 estable para un test automatizado.
 """
+
 import datetime
 from unittest.mock import patch
 
@@ -29,16 +30,22 @@ def _crear_cotizacion_borrador(empresa, cliente):
 
     ConfiguracionCotizacion.objects.get_or_create(
         empresa=empresa,
-        defaults={'dias_validez': 15, 'nombre_configuracion': 'Perfil General', 'es_activo': True},
+        defaults={"dias_validez": 15, "nombre_configuracion": "Perfil General", "es_activo": True},
     )
     payload = {
-        'cliente': cliente.id,
-        'fecha_emision': datetime.date(2026, 3, 30),
-        'items': [{
-            'tipo_item': 'PRODUCTO', 'descripcion': 'Item PDF test',
-            'cantidad': 1, 'costo_unitario': 100, 'porcentaje_utilidad': 10,
-            'unidad': 'UND', 'orden': 1,
-        }],
+        "cliente": cliente.id,
+        "fecha_emision": datetime.date(2026, 3, 30),
+        "items": [
+            {
+                "tipo_item": "PRODUCTO",
+                "descripcion": "Item PDF test",
+                "cantidad": 1,
+                "costo_unitario": 100,
+                "porcentaje_utilidad": 10,
+                "unidad": "UND",
+                "orden": 1,
+            }
+        ],
     }
     return CotizacionService.crear_preforma(empresa, payload)
 
@@ -81,12 +88,14 @@ def test_pdf_fallo_controlado_permanece_borrador(tenant, factory_empresa, factor
     with schema_context(tenant.schema_name):
         cotizacion = _crear_cotizacion_borrador(empresa, cliente)
 
-        with patch(
-            "apps.tenant.cotizaciones.services.business_service.CotizacionPDFExportService.generar_pdf_publico",
-            return_value=None,
+        with (
+            patch(
+                "apps.tenant.cotizaciones.services.business_service.CotizacionPDFExportService.generar_pdf_publico",
+                return_value=None,
+            ),
+            pytest.raises(ValidationError),
         ):
-            with pytest.raises(ValidationError):
-                CotizacionService.generar_pdf_y_enviar(cotizacion, empresa)
+            CotizacionService.generar_pdf_y_enviar(cotizacion, empresa)
 
         cotizacion.refresh_from_db()
         assert cotizacion.estado == Cotizacion.Estado.BORRADOR
@@ -103,12 +112,14 @@ def test_pdf_excepcion_no_controlada_permanece_borrador(tenant, factory_empresa,
     with schema_context(tenant.schema_name):
         cotizacion = _crear_cotizacion_borrador(empresa, cliente)
 
-        with patch(
-            "apps.tenant.cotizaciones.services.business_service.CotizacionPDFExportService.generar_pdf_publico",
-            side_effect=RuntimeError("fallo simulado de renderizado"),
+        with (
+            patch(
+                "apps.tenant.cotizaciones.services.business_service.CotizacionPDFExportService.generar_pdf_publico",
+                side_effect=RuntimeError("fallo simulado de renderizado"),
+            ),
+            pytest.raises(ValidationError),
         ):
-            with pytest.raises(ValidationError):
-                CotizacionService.generar_pdf_y_enviar(cotizacion, empresa)
+            CotizacionService.generar_pdf_y_enviar(cotizacion, empresa)
 
         cotizacion.refresh_from_db()
         assert cotizacion.estado == Cotizacion.Estado.BORRADOR
@@ -132,7 +143,9 @@ def test_pdf_repetido_no_altera_estado_ya_enviada(tenant, factory_empresa, facto
 
         assert actualizada.estado == Cotizacion.Estado.ENVIADA
         assert pdf_bytes  # sigue generando el PDF para descarga
-        assert CotizacionHistorialEstado.objects.filter(cotizacion=cotizacion).count() == filas_antes
+        assert (
+            CotizacionHistorialEstado.objects.filter(cotizacion=cotizacion).count() == filas_antes
+        )
 
 
 @pytest.mark.django_db

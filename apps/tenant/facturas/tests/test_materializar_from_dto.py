@@ -13,6 +13,7 @@ suelto -- siempre retornaba 400 "invalid_result" antes de llegar a ninguna
 logica real. Se envuelve cada DTO en `{"dto": ...}` para ejercitar el
 contrato real.
 """
+
 from django_tenants.test.cases import TenantTestCase
 
 from apps.tenant.empresa.models import Empresa
@@ -26,15 +27,10 @@ DTO_COMPRA = {
     "receptor": {"nit": "901123299", "razon_social": "SINTEL TECNOLOGY S A S"},
     "numero": "FE-10020298",  # Formato con prefijo para extraer consecutivo
     "fecha_emision": "2026-01-30T00:00:00-05:00",  # Formato datetime ISO
-    "totales": {
-        "subtotal": 10764.00,
-        "impuestos": 2045.16,
-        "total": 12809.16,
-        "moneda": "COP"
-    },
+    "totales": {"subtotal": 10764.00, "impuestos": 2045.16, "total": 12809.16, "moneda": "COP"},
     "identificadores": {"uuid": "CUFE-ABC"},
     "anexos": {"xml_raw": "<Invoice>...</Invoice>"},
-    "extras": {}
+    "extras": {},
 }
 
 # DTO de ejemplo (VENTA: emisor == empresa)
@@ -48,17 +44,17 @@ DTO_VENTA = {
         "subtotal": 1000000.00,
         "impuestos": 190000.00,
         "total": 1190000.00,
-        "moneda": "COP"
+        "moneda": "COP",
     },
     "identificadores": {"uuid": "CUFE-VENTA-001"},
     "anexos": {"xml_raw": "<Invoice>...</Invoice>"},
-    "extras": {}
+    "extras": {},
 }
 
 
 class MaterializarFromDTOTests(TenantTestCase):
     """Tests para materializar_factura_desde_result."""
-    
+
     def setUp(self):
         super().setUp()
         # Crear empresa SSoT para el tenant
@@ -69,35 +65,35 @@ class MaterializarFromDTOTests(TenantTestCase):
             direccion="Calle 123",
             telefono="3001234567",
         )
-    
+
     def test_compra_vs_ssot(self):
         """Test: Materializa factura COMPRA cuando emisor != empresa (SSoT)."""
         out, code = materializar_factura_desde_result({"dto": DTO_COMPRA})
-        
+
         self.assertIn(code, (200, 201))
         self.assertIn("id", out)
         self.assertIn("numero", out)
         self.assertEqual(out["numero"], "FE-10020298")
-        
+
         # Verificar que se creó la factura
         f = Factura.objects.get(numero="FE-10020298")
         self.assertEqual(f.naturaleza, Factura.Naturaleza.COMPRA)
         self.assertEqual(f.emisor_nit, "900298074")
         self.assertEqual(f.receptor_nit, "901123299")
-        
+
         # Verificar que se guardaron anexos
         self.assertTrue(FacturaAnexos.objects.filter(factura=f).exists())
         anexos = FacturaAnexos.objects.get(factura=f)
         self.assertIsNotNone(anexos.ubl_xml)
-    
+
     def test_venta_vs_ssot(self):
         """Test: Materializa factura VENTA cuando emisor == empresa (SSoT)."""
         out, code = materializar_factura_desde_result({"dto": DTO_VENTA})
-        
+
         self.assertIn(code, (200, 201))
         self.assertIn("id", out)
         self.assertEqual(out["numero"], "FV-001")
-        
+
         # Verificar que se creó la factura
         f = Factura.objects.get(numero="FV-001")
         self.assertEqual(f.naturaleza, Factura.Naturaleza.VENTA)
@@ -113,7 +109,7 @@ class MaterializarFromDTOTests(TenantTestCase):
         # materializar_desde_result(), no un bug.
         self.assertEqual(f.prefijo, "")
         self.assertEqual(f.consecutivo, 0)
-    
+
     def test_idempotencia_por_cufe(self):
         """Test: Idempotencia por CUFE (no duplica facturas)."""
         # Primera materialización
@@ -125,10 +121,10 @@ class MaterializarFromDTOTests(TenantTestCase):
         out2, code2 = materializar_factura_desde_result({"dto": DTO_COMPRA})
         self.assertEqual(code2, 200)
         self.assertFalse(out2.get("created"))
-        
+
         # Verificar que solo hay una factura
         self.assertEqual(Factura.objects.filter(numero="FE-10020298").count(), 1)
-    
+
     def test_idempotencia_por_numero(self):
         """
         F26-006 (corregido). Antes: sin CUFE, `guardar_desde_dto()` guardaba
@@ -175,18 +171,18 @@ class MaterializarFromDTOTests(TenantTestCase):
         self.assertEqual(code_a, 201)
         self.assertEqual(code_b, 201)
         self.assertEqual(Factura.objects.filter(cufe__isnull=True).count(), 2)
-    
+
     def test_sin_empresa_retorna_422(self):
         """Test: Retorna 422 si falta SSoT empresa."""
         # Eliminar empresa
         Empresa.objects.all().delete()
 
         out, code = materializar_factura_desde_result({"dto": DTO_COMPRA})
-        
+
         self.assertEqual(code, 422)
         self.assertIn("error", out)
         self.assertEqual(out["error"], "empresa_no_configurada")
-    
+
     def test_sin_anexos_en_dto_igual_crea_factura_anexos_vacio(self):
         """
         F26: TEST OBSOLETO actualizado con evidencia. El parametro

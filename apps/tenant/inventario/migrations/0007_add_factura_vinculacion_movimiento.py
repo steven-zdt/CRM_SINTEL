@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("tenant_inventario", "0006_movimientoinventario_activo_fijo_and_more"),
     ]

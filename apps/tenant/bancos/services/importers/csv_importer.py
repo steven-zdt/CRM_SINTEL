@@ -8,6 +8,7 @@ Soporta:
     - fechas comunes: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, D/M (sin año)
     - encabezados variables (alias FECHA/DESCRIPCION/VALOR/SALDO/DCTO/SUCURSAL)
 """
+
 import contextlib
 import csv
 import datetime
@@ -25,13 +26,26 @@ from apps.tenant.bancos.services.importers.base import (
 from apps.tenant.bancos.services.parsing.money import parse_money
 
 _HEADER_ALIASES = {
-    "fecha": "fecha", "date": "fecha",
-    "descripcion": "descripcion", "descripción": "descripcion", "detalle": "descripcion",
-    "concepto": "descripcion", "description": "descripcion",
-    "sucursal": "sucursal", "oficina": "sucursal", "agencia": "sucursal",
-    "dcto": "dcto", "dcto.": "dcto", "documento": "dcto", "referencia": "dcto",
-    "valor": "valor", "monto": "valor", "amount": "valor", "value": "valor",
-    "saldo": "saldo", "balance": "saldo",
+    "fecha": "fecha",
+    "date": "fecha",
+    "descripcion": "descripcion",
+    "descripción": "descripcion",
+    "detalle": "descripcion",
+    "concepto": "descripcion",
+    "description": "descripcion",
+    "sucursal": "sucursal",
+    "oficina": "sucursal",
+    "agencia": "sucursal",
+    "dcto": "dcto",
+    "dcto.": "dcto",
+    "documento": "dcto",
+    "referencia": "dcto",
+    "valor": "valor",
+    "monto": "valor",
+    "amount": "valor",
+    "value": "valor",
+    "saldo": "saldo",
+    "balance": "saldo",
 }
 
 _DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%Y/%m/%d")
@@ -40,7 +54,9 @@ _SHORT_DATE_RE = re.compile(r"^(\d{1,2})/(\d{1,2})$")
 
 def _norm(texto: str) -> str:
     texto = (texto or "").strip().lower()
-    return "".join(c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn")
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn"
+    )
 
 
 def _parse_fecha(texto: str):
@@ -139,6 +155,8 @@ class CSVBankStatementImporter(BankStatementImporter):
                 resultado.errores.append(f"Fila {fila_num}: {exc}")
 
         if not resultado.transactions:
-            raise StatementParsingError("No se encontraron transacciones validas en el archivo CSV.")
+            raise StatementParsingError(
+                "No se encontraron transacciones validas en el archivo CSV."
+            )
 
         return resultado

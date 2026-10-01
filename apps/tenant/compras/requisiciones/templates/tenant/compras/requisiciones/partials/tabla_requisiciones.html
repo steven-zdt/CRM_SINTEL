@@ -1,0 +1,22 @@
+{# tabla_requisiciones.html — DataTables 3.x, mismo patron que tabla_compras.html #}
+{# Esqueleto ESTATICO, poblado via ajax por requisiciones_list.js contra        #}
+{# POST /api/v1/compras/requisiciones/dt/. Indices de columna deben coincidir   #}
+{# 1:1 con fields_map/column_filters de RequisicionCompraViewSet.dt().          #}
+
+<div class="w-100" style="max-width:100%; overflow-x:auto;">
+  <table id="tabla-requisiciones-compra" class="table table-hover align-middle mb-0 w-100">
+    <thead>
+      <tr>
+        <th>Número</th>
+        <th>Fecha Solicitud</th>
+        <th>Fecha Necesidad</th>
+        <th>Solicitante</th>
+        <th>Proyecto</th>
+        <th>Total Estimado</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>

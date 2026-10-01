@@ -6,6 +6,7 @@ WARNING: PRINCIPIOS:
 - Reutiliza normalizers genéricos cuando es posible
 - Agrega lógica específica para catálogos de productos cuando es necesario
 """
+
 # Reutilizar normalizers genéricos
 from apps.services.document_parser.normalizers import (
     SemanticMapper,
@@ -15,8 +16,8 @@ from apps.services.document_parser.normalizers import (
 )
 
 __all__ = [
-    'normalize_excel_to_dataframe',
-    'sanitize_text',
-    'normalize_whitespace',
-    'SemanticMapper',
+    "normalize_excel_to_dataframe",
+    "sanitize_text",
+    "normalize_whitespace",
+    "SemanticMapper",
 ]

@@ -5,6 +5,7 @@ para el contexto transversal. Este archivo cierra el gap para `cotizaciones`:
 (1) alcance=SEDE sin sedes asignadas -> frozenset(), ve solo sin-sede; (2)
 alcance=SEDE con DOS sedes asignadas -> ve registros de ambas.
 """
+
 from rest_framework import status
 
 from apps.tenant.cotizaciones.models import Cotizacion
@@ -17,14 +18,19 @@ class CotizacionIsolationF14Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F14 Cotizaciones", nit="900000793", direccion="Calle 1",
+            razon_social="Empresa Test F14 Cotizaciones",
+            nit="900000793",
+            direccion="Calle 1",
         )
         self.sede_a = Sede.objects.create(empresa=self.empresa, nombre="Sede A F14 Cot")
         self.sede_b = Sede.objects.create(empresa=self.empresa, nombre="Sede B F14 Cot")
 
     def _crear(self, numero, sede=None):
         return Cotizacion.objects.create(
-            empresa=self.empresa, numero_cotizacion=numero, fecha_vencimiento="2026-12-31", sede=sede,
+            empresa=self.empresa,
+            numero_cotizacion=numero,
+            fecha_vencimiento="2026-12-31",
+            sede=sede,
         )
 
     def test_alcance_sede_sin_asignaciones_no_ve_ninguna_sede_solo_null_safe(self):
@@ -32,7 +38,10 @@ class CotizacionIsolationF14Tests(SintelTenantTestCase):
         c_a = self._crear("COT-F14-A", sede=self.sede_a)
 
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
 
         resp = self.api_client.get("/api/v1/cotizaciones/")
@@ -49,7 +58,10 @@ class CotizacionIsolationF14Tests(SintelTenantTestCase):
         c_c = self._crear("COT-F14-DOBLE-C", sede=sede_c)
 
         perfil = TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="OPERADOR", alcance="SEDE",
+            user=self.user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="SEDE",
         )
         perfil.sedes_asignadas.set([self.sede_a, self.sede_b])
 

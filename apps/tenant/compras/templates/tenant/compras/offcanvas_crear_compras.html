@@ -1,58 +1,10 @@
 {# offcanvas_crear_compras.html - Offcanvas para CREAR Orden de Compra v3.10.5 #}
-<style>
-  #offcanvas-compra-crear {
-    width: 800px !important;
-  }
-  #offcanvas-compra-crear .offcanvas-body {
-    padding: 1.5rem;
-  }
-  #offcanvas-compra-crear .section-divider {
-    margin-bottom: 1.75rem;
-  }
-  #offcanvas-compra-crear .form-label {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #495057;
-    margin-bottom: 0.3rem;
-    letter-spacing: 0.01em;
-  }
-  #offcanvas-compra-crear .form-control,
-  #offcanvas-compra-crear .form-select {
-    font-size: 0.875rem;
-    border-radius: 6px;
-    border-color: #dee2e6;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  }
-  #offcanvas-compra-crear .form-control:focus,
-  #offcanvas-compra-crear .form-select:focus {
-    border-color: #0d6efd;
-    box-shadow: 0 0 0 0.2rem rgba(13,110,253,.12);
-  }
-  #offcanvas-compra-crear .section-title {
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #0d6efd;
-    border-bottom: 2px solid #e9ecef;
-    padding-bottom: 0.5rem;
-    margin-bottom: 1rem;
-  }
-  #offcanvas-compra-crear .offcanvas-footer {
-    border-top: 1px solid #dee2e6;
-    padding: 1rem 1.5rem;
-    background: #f8f9fa;
-  }
-  #offcanvas-compra-crear .table-items th {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #6c757d;
-    text-transform: uppercase;
-    background-color: #f8f9fa;
-  }
-</style>
+{# Fase 11 (PLAN_OPTIMIZACION_COMPRAS...): estilos movidos a partial       #}
+{# compartido con offcanvas_editar_compras.html (antes ~54 lineas          #}
+{# identicas bajo IDs distintos).                                          #}
+{% include "tenant/compras/partials/formulario_estilos.html" %}
 
-<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvas-compra-crear" aria-labelledby="offcanvas-compra-crear-label">
+<div class="offcanvas offcanvas-end offcanvas-compra-form" tabindex="-1" id="offcanvas-compra-crear" aria-labelledby="offcanvas-compra-crear-label">
     <div class="offcanvas-header border-bottom py-3 px-4">
         <h5 class="offcanvas-title fw-semibold" id="offcanvas-compra-crear-label">
             <i class="bi bi-plus-circle text-primary me-2"></i>Nueva Orden de Compra
@@ -102,18 +54,69 @@
                     <i class="bi bi-person-badge me-1"></i>Asociaciones
                 </p>
                 <div class="row g-3">
-                    <div class="col-md-6">
-                        <label for="proveedor" class="form-label">Proveedor *</label>
-                        <select class="form-select" id="proveedor" name="proveedor" required>
-                            <option value="">Cargando proveedores...</option>
-                        </select>
+                    {# Fase 11: buscador Proveedor/Proyecto compartido con    #}
+                    {# offcanvas_editar_compras.html -- aqui sin `proveedor`/ #}
+                    {# `proyecto` (nada preseleccionado al crear).            #}
+                    {% include "tenant/compras/partials/buscador_proveedor_proyecto.html" %}
+                </div>
+                {# ── Requisiciones de origen -- SIEMPRE al menos una,        #}
+                {# obligatorias, sin excepcion posible (PLAN_CENTRO_          #}
+                {# APROBACIONES_DASHBOARD_COMPRAS.md #3). Buscar + vincular   #}
+                {# (una o varias) -- mismo widget/JS que se usa para agregar  #}
+                {# requisiciones a una Orden YA EXISTENTE (compras_list.js),  #}
+                {# aqui en modo "pendiente": la Orden aun no existe, se       #}
+                {# difiere hasta handleFormSubmit() (compras_editor.js), sin  #}
+                {# reutilizar una requisicion ya agregada ni duplicarla.      #}
+                <div class="row g-3 mt-1">
+                    <div class="col-md-12">
+                        <label class="form-label">Requisiciones de Origen *</label>
+                        <div id="compra-requisicion-widget" data-compra-uuid="">
+                            <div id="compra-requisicion-lista">
+                                <div class="text-muted small mb-2">Sin requisiciones agregadas.</div>
+                            </div>
+                            <div id="compra-requisicion-buscador">
+                                <button type="button" class="btn btn-outline-primary btn-sm mb-2" data-compra-requisicion-action="mostrar-buscador">
+                                    <i class="bi bi-search me-1"></i>Vincular requisición
+                                </button>
+                                <div id="compra-requisicion-buscador-panel" class="d-none border rounded p-2 bg-light">
+                                    <input type="text" class="form-control form-control-sm mb-2"
+                                           id="compra-requisicion-buscar-input"
+                                           placeholder="Buscar por numero de requisición...">
+                                    <div id="compra-requisicion-buscar-resultados" class="small"></div>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between flex-wrap gap-1 mt-1">
+                                <div class="form-text mb-0">Obligatorio, sin excepción. Solo Requisiciones Aprobadas o En Proceso de Compra con saldo disponible.</div>
+                                <div class="small fw-semibold" id="compra-requisicion-total-seleccionado">Total seleccionado: $0</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <label for="proyecto" class="form-label">Proyecto (Opcional)</label>
-                        <select class="form-select" id="proyecto" name="proyecto">
-                            <option value="">Cargando proyectos...</option>
-                        </select>
+                </div>
+            </div>
+
+            {# ── Sección: Factura de compra (opcional, PLAN_VINCULAR_FACTURA_ #}
+            {# COMPRA_COMPRAS Fase 28) -- mismo widget/JS que                  #}
+            {# offcanvas_detalle_compras.html (bindeado via delegacion sobre   #}
+            {# #offcanvas-container-compras en compras_list.js). La Orden aun #}
+            {# no existe: la vinculacion real se DIFIERE hasta que            #}
+            {# handleFormSubmit() la cree (compras_editor.js) -- nunca se     #}
+            {# llama vincular-factura con un uuid inexistente.                #}
+            <div class="section-divider" id="compra-factura-widget" data-compra-uuid="">
+                <p class="section-title"><i class="bi bi-receipt me-1"></i>Factura de Compra (Opcional)</p>
+
+                <div id="compra-factura-asociada" class="d-none"></div>
+
+                <div id="compra-factura-buscador">
+                    <button type="button" class="btn btn-outline-primary btn-sm mb-2" data-compra-factura-action="mostrar-buscador">
+                        <i class="bi bi-search me-1"></i>Buscar / Vincular Factura
+                    </button>
+                    <div id="compra-factura-buscador-panel" class="d-none border rounded p-2 bg-light">
+                        <input type="text" class="form-control form-control-sm mb-2"
+                               id="compra-factura-buscar-input"
+                               placeholder="Buscar por numero de factura o proveedor...">
+                        <div id="compra-factura-buscar-resultados" class="small"></div>
                     </div>
+                    <div class="form-text text-muted">Opcional. Si seleccionas una factura, se vinculará al crear esta orden.</div>
                 </div>
             </div>
 
@@ -123,23 +126,36 @@
                     <p class="section-title mb-0 border-0 pb-0">
                         <i class="bi bi-list-check me-1"></i>Detalle de Items
                     </p>
-                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-agregar-item">
-                        <i class="bi bi-plus-lg me-1"></i>Agregar Item
-                    </button>
+                    <div class="d-flex gap-2">
+                        {# Panel manual: busca entre las requisiciones ya      #}
+                        {# vinculadas (widget #compra-requisicion-widget de    #}
+                        {# arriba, "Asociaciones") y (re)sincroniza sus items   #}
+                        {# en esta misma tabla -- complementa la sincronizacion #}
+                        {# automatica al vincular, dando control explicito     #}
+                        {# desde la propia seccion de Items (compras_editor.js).#}
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-sincronizar-requisicion">
+                            <i class="bi bi-arrow-repeat me-1"></i>Sincronizar Requisición
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="btn-agregar-item">
+                            <i class="bi bi-plus-lg me-1"></i>Agregar Item
+                        </button>
+                    </div>
                 </div>
-                
+
+                <div id="sincronizar-requisicion-panel" class="d-none border rounded p-2 bg-light mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="small fw-semibold text-muted">Requisiciones vinculadas a esta orden</span>
+                        <button type="button" class="btn-close btn-sm" id="btn-cerrar-sincronizar-requisicion" aria-label="Cerrar"></button>
+                    </div>
+                    <input type="text" class="form-control form-control-sm mb-2"
+                           id="sincronizar-requisicion-buscar-input"
+                           placeholder="Buscar por número de requisición...">
+                    <div id="sincronizar-requisicion-lista" class="small"></div>
+                </div>
+
                 <div class="table-responsive">
                     <table class="table table-bordered table-sm align-middle table-items" id="tabla-items">
-                        <thead>
-                            <tr>
-                                <th style="width: 40%;">Descripción *</th>
-                                <th style="width: 15%;" class="text-end">Cantidad *</th>
-                                <th style="width: 20%;" class="text-end">Val. Unitario *</th>
-                                <th style="width: 10%;" class="text-end">IVA %</th>
-                                <th style="width: 15%;" class="text-end">Total</th>
-                                <th style="width: 50px;" class="text-center"></th>
-                            </tr>
-                        </thead>
+                        {% include "tenant/compras/partials/items_table_head.html" %}
                         <tbody id="items-tbody">
                             {# Las filas se agregarán dinámicamente vía JS #}
                         </tbody>
@@ -148,42 +164,9 @@
             </div>
 
             {# ── Sección: Totales y Observaciones ───────────────────── #}
-            <div class="section-divider">
-                <div class="row g-3">
-                    <div class="col-md-7">
-                        <label for="observaciones" class="form-label">Observaciones</label>
-                        <textarea class="form-control" id="observaciones" name="observaciones" rows="4" placeholder="Notas o términos de entrega..."></textarea>
-                    </div>
-                    <div class="col-md-5">
-                        <div class="card bg-light border-0 shadow-sm">
-                            <div class="card-body p-3">
-                                <div class="d-flex justify-content-between mb-2 small text-muted">
-                                    <span>Subtotal:</span>
-                                    <span id="resumen-subtotal">$0.00</span>
-                                </div>
-                                <div class="d-flex justify-content-between mb-2 small text-muted">
-                                    <span>Impuestos (IVA):</span>
-                                    <span id="resumen-impuestos">$0.00</span>
-                                </div>
-                                <hr class="my-2">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="fw-bold text-dark">Total Neto:</span>
-                                    <h4 class="mb-0 fw-bold text-primary" id="resumen-total">$0.00</h4>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            {% include "tenant/compras/partials/totales_observaciones.html" %}
         </form>
     </div>
 
-    <div class="offcanvas-footer">
-        <div class="d-flex justify-content-end gap-2">
-            <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="offcanvas">Cancelar</button>
-            <button type="submit" class="btn btn-primary btn-sm px-4" id="btn-guardar-compra" form="compra-crear-form">
-                <i class="bi bi-save me-1"></i>Crear Orden
-            </button>
-        </div>
-    </div>
+    {% include "tenant/compras/partials/acciones_footer.html" with form_id="compra-crear-form" boton_texto="Crear Orden" %}
 </div>

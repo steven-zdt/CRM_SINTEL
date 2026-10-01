@@ -11,10 +11,10 @@ Principios:
 
 Uso:
     from apps.services.perfil.perfil_service import obtener_o_crear_perfil, actualizar_configuracion_ui
-    
+
     # Obtener o crear perfil
     perfil = obtener_o_crear_perfil(user)
-    
+
     # Actualizar configuración de UI
     actualizar_configuracion_ui(user, 'modo_oscuro', True)
 """

@@ -204,9 +204,12 @@
 <script>
 (function() {
     function formatCurrency(val) {
-        return new Intl.NumberFormat('es-CO', {
+        // en-US agrupa con coma/punto (convencion real que este proyecto
+        // necesita); currency:'USD' es solo el simbolo "$", el valor sigue
+        // siendo COP real -- mismo truco documentado en dom-utils.js.
+        return new Intl.NumberFormat('en-US', {
             style: 'currency',
-            currency: 'COP',
+            currency: 'USD',
             minimumFractionDigits: 0
         }).format(val);
     }

@@ -9,6 +9,8 @@ Debe ir DESPUÉS de:
 - TenantMainMiddleware (para tener request.tenant)
 """
 
+import contextlib
+
 from django.http import HttpResponseNotFound
 from django_tenants.utils import get_public_schema_name
 
@@ -36,27 +38,34 @@ def block_public_routes_on_tenants(get_response):
         # Debug trace for test-time diagnosis
         try:
             import logging
+
             log = logging.getLogger(__name__)
-            log.debug("block_public_routes_on_tenants: incoming path=%s tenant=%s host=%s", path, getattr(tenant, 'schema_name', None), request.get_host())
+            log.debug(
+                "block_public_routes_on_tenants: incoming path=%s tenant=%s host=%s",
+                path,
+                getattr(tenant, "schema_name", None),
+                request.get_host(),
+            )
         except Exception:
             pass
 
         # Solo bloquear rutas públicas si el tenant existe Y NO es el esquema público
         if tenant:
             schema_name = getattr(tenant, "schema_name", "")
-            # Permitir rutas públicas solo en el esquema público
-            if schema_name != PUBLIC_SCHEMA_NAME:
-                # Bloquear /admin/, /console/ y /api/public/ en tenants privados
-                if (
-                    path.startswith("/admin/")
-                    or path.startswith("/console/")
-                    or path.startswith("/api/public/")
-                ):
-                    try:
-                        log.debug("block_public_routes_on_tenants: blocking public route %s for tenant %s", path, getattr(tenant, 'schema_name', None))
-                    except Exception:
-                        pass
-                    return HttpResponseNotFound("Not Found")
+            # Permitir rutas públicas solo en el esquema público; bloquear
+            # /admin/, /console/ y /api/public/ en tenants privados.
+            if schema_name != PUBLIC_SCHEMA_NAME and (
+                path.startswith("/admin/")
+                or path.startswith("/console/")
+                or path.startswith("/api/public/")
+            ):
+                with contextlib.suppress(Exception):
+                    log.debug(
+                        "block_public_routes_on_tenants: blocking public route %s for tenant %s",
+                        path,
+                        getattr(tenant, "schema_name", None),
+                    )
+                return HttpResponseNotFound("Not Found")
 
         return get_response(request)
 

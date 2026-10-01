@@ -244,9 +244,9 @@
             if (window.DOMUtils && typeof window.DOMUtils.formatCurrency === 'function') {
                 return window.DOMUtils.formatCurrency(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
             }
-            return new Intl.NumberFormat('es-CO', {
+            return new Intl.NumberFormat('en-US', {
                 style: 'currency',
-                currency: 'COP',
+                currency: 'USD',
                 maximumFractionDigits: 0
             }).format(value);
         }

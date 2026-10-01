@@ -5,14 +5,16 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from django.db import transaction
 from django.utils import timezone
 
-from ..models import Cotizacion
-from .crud_service import CotizacionCRUDService
 from apps.tenant.clientes.models import Cliente
 from apps.tenant.cotizaciones.configuracion.models import ConfiguracionCotizacion
-from .pdf_export_service import CotizacionPDFExportService
+
+from ..models import Cotizacion
+from .crud_service import CotizacionCRUDService
 from .item_service import CotizacionItemBusinessService
+from .pdf_export_service import CotizacionPDFExportService
 
 logger = logging.getLogger(__name__)
+
 
 def _generar_pdf_sincronizado(cotizacion, empresa):
     """Genera PDF de forma sincrona despues de guardar cotizacion."""
@@ -42,7 +44,9 @@ class CotizacionService:
     TRANSICIONES_VALIDAS = {
         Cotizacion.Estado.BORRADOR: {Cotizacion.Estado.ENVIADA},
         Cotizacion.Estado.ENVIADA: {
-            Cotizacion.Estado.BORRADOR, Cotizacion.Estado.APROBADA, Cotizacion.Estado.RECHAZADA,
+            Cotizacion.Estado.BORRADOR,
+            Cotizacion.Estado.APROBADA,
+            Cotizacion.Estado.RECHAZADA,
         },
         Cotizacion.Estado.APROBADA: {Cotizacion.Estado.ARCHIVADA},
         Cotizacion.Estado.RECHAZADA: {Cotizacion.Estado.ARCHIVADA},
@@ -77,9 +81,13 @@ class CotizacionService:
             return configuracion_input
 
         if not configuracion_input:
-            configuracion = ConfiguracionCotizacion.objects.filter(empresa_id=empresa_id, es_activo=True).first()
+            configuracion = ConfiguracionCotizacion.objects.filter(
+                empresa_id=empresa_id, es_activo=True
+            ).first()
             if not configuracion:
-                configuracion = ConfiguracionCotizacion.objects.filter(empresa_id=empresa_id).first()
+                configuracion = ConfiguracionCotizacion.objects.filter(
+                    empresa_id=empresa_id
+                ).first()
             if not configuracion:
                 configuracion = ConfiguracionCotizacion.objects.create(
                     empresa_id=empresa_id,
@@ -89,12 +97,14 @@ class CotizacionService:
                     prefijo_secuencia="COT-",
                     sufijo_secuencia="",
                     semilla_inicial=1,
-                    ultimo_numero=0
+                    ultimo_numero=0,
                 )
             return configuracion
 
         configuracion_id = int(configuracion_input)
-        configuracion = ConfiguracionCotizacion.objects.filter(id=configuracion_id, empresa_id=empresa_id).first()
+        configuracion = ConfiguracionCotizacion.objects.filter(
+            id=configuracion_id, empresa_id=empresa_id
+        ).first()
         if not configuracion:
             raise ValueError("configuracion not found for tenant empresa")
         return configuracion
@@ -122,15 +132,28 @@ class CotizacionService:
 
         tipo_default = getattr(configuracion, "tipo_cotizacion_default", "MIXTO")
         iva_default = getattr(configuracion, "iva_porcentaje_default", Decimal("19.00"))
-        
+
         return {
             "tipo_cotizacion": cls._get_payload_value(datos, "tipo_cotizacion", tipo_default),
             "fecha_emision": fecha_emision,
             "fecha_vencimiento": fecha_vencimiento,
-            "iva_porcentaje": cls._to_decimal(cls._get_payload_value(datos, "iva_porcentaje", iva_default)),
-            "porcentaje_aiu_admin": cls._to_decimal(datos.get("porcentaje_aiu_admin", getattr(configuracion, "aiu_admin_default", 0))),
-            "porcentaje_aiu_imprevistos": cls._to_decimal(datos.get("porcentaje_aiu_imprevistos", getattr(configuracion, "aiu_imprevistos_default", 0))),
-            "porcentaje_aiu_utilidad": cls._to_decimal(datos.get("porcentaje_aiu_utilidad", getattr(configuracion, "aiu_utilidad_default", 0))),
+            "iva_porcentaje": cls._to_decimal(
+                cls._get_payload_value(datos, "iva_porcentaje", iva_default)
+            ),
+            "porcentaje_aiu_admin": cls._to_decimal(
+                datos.get("porcentaje_aiu_admin", getattr(configuracion, "aiu_admin_default", 0))
+            ),
+            "porcentaje_aiu_imprevistos": cls._to_decimal(
+                datos.get(
+                    "porcentaje_aiu_imprevistos",
+                    getattr(configuracion, "aiu_imprevistos_default", 0),
+                )
+            ),
+            "porcentaje_aiu_utilidad": cls._to_decimal(
+                datos.get(
+                    "porcentaje_aiu_utilidad", getattr(configuracion, "aiu_utilidad_default", 0)
+                )
+            ),
             "dias_totales": int(datos.get("dias_totales") or 1),
             "dias_infraestructura": int(datos.get("dias_infraestructura") or 0),
             "dias_instalacion": int(datos.get("dias_instalacion") or 0),
@@ -157,10 +180,10 @@ class CotizacionService:
 
         # 2. Procesar payload
         for item_data in items_data:
-            item_data.pop('empresa', None)
+            item_data.pop("empresa", None)
 
-            item_uuid = str(item_data.get('uuid') or '')
-            item_id = item_data.get('id')
+            item_uuid = str(item_data.get("uuid") or "")
+            item_id = item_data.get("id")
 
             instance = None
             if item_uuid and item_uuid in existing_by_uuid:
@@ -170,10 +193,14 @@ class CotizacionService:
 
             if instance:
                 matched_pks.add(instance.pk)
-                CotizacionItemBusinessService.registrar(cotizacion.empresa_id, item_data, instance=instance, recalcular=False)
+                CotizacionItemBusinessService.registrar(
+                    cotizacion.empresa_id, item_data, instance=instance, recalcular=False
+                )
             else:
-                item_data['cotizacion'] = cotizacion
-                new_item = CotizacionItemBusinessService.registrar(cotizacion.empresa_id, item_data, recalcular=False)
+                item_data["cotizacion"] = cotizacion
+                new_item = CotizacionItemBusinessService.registrar(
+                    cotizacion.empresa_id, item_data, recalcular=False
+                )
                 matched_pks.add(new_item.pk)
 
         # 3. Eliminar remanentes (items que no vinieron en el payload)
@@ -198,7 +225,7 @@ class CotizacionService:
         codigo_unico = cls.generar_codigo_unico(configuracion.id, empresa.id)
         header_fields = cls._build_header_fields(configuracion, datos)
 
-        items_data = datos.pop('items', [])
+        items_data = datos.pop("items", [])
 
         cotizacion = CotizacionCRUDService.create_cotizacion(
             empresa=empresa,
@@ -225,7 +252,11 @@ class CotizacionService:
 
     @classmethod
     def generar_codigo_unico(cls, perfil_id, empresa_id):
-        configuracion = ConfiguracionCotizacion.objects.select_for_update().filter(id=perfil_id, empresa_id=empresa_id).first()
+        configuracion = (
+            ConfiguracionCotizacion.objects.select_for_update()
+            .filter(id=perfil_id, empresa_id=empresa_id)
+            .first()
+        )
         if not configuracion:
             raise ValueError("configuracion not found")
 
@@ -242,14 +273,20 @@ class CotizacionService:
         cotizacion = CotizacionCRUDService.get_cotizacion_for_totals(cotizacion_id, empresa_id)
         subtotal = CotizacionCRUDService.get_items_subtotal(cotizacion.id, empresa_id)
 
-        aiu_admin = subtotal * (Decimal(str(cotizacion.porcentaje_aiu_admin or 0)) / CotizacionService.HUNDRED)
-        aiu_imprevistos = subtotal * (Decimal(str(cotizacion.porcentaje_aiu_imprevistos or 0)) / CotizacionService.HUNDRED)
-        aiu_utilidad = subtotal * (Decimal(str(cotizacion.porcentaje_aiu_utilidad or 0)) / CotizacionService.HUNDRED)
+        aiu_admin = subtotal * (
+            Decimal(str(cotizacion.porcentaje_aiu_admin or 0)) / CotizacionService.HUNDRED
+        )
+        aiu_imprevistos = subtotal * (
+            Decimal(str(cotizacion.porcentaje_aiu_imprevistos or 0)) / CotizacionService.HUNDRED
+        )
+        aiu_utilidad = subtotal * (
+            Decimal(str(cotizacion.porcentaje_aiu_utilidad or 0)) / CotizacionService.HUNDRED
+        )
         aiu_total = aiu_admin + aiu_imprevistos + aiu_utilidad
 
         base_iva = subtotal + aiu_total
         iva = base_iva * (Decimal(str(cotizacion.iva_porcentaje or 0)) / CotizacionService.HUNDRED)
-        
+
         total_q = CotizacionService._q(subtotal + aiu_total + iva)
         cotizacion.total_con_impuestos = total_q
         cotizacion.save(update_fields=["total_con_impuestos"])
@@ -274,14 +311,16 @@ class CotizacionService:
         from rest_framework.exceptions import ValidationError
 
         if instance.estado != Cotizacion.Estado.BORRADOR:
-            raise ValidationError({
-                "estado": [
-                    f"Solo se puede editar una cotizacion en BORRADOR "
-                    f"(estado actual: {instance.estado})."
-                ]
-            })
+            raise ValidationError(
+                {
+                    "estado": [
+                        f"Solo se puede editar una cotizacion en BORRADOR "
+                        f"(estado actual: {instance.estado})."
+                    ]
+                }
+            )
 
-        items_data = datos.pop('items', None)
+        items_data = datos.pop("items", None)
 
         # COTIZACIONES-01: 'estado' NO es editable via PATCH generico -- la
         # unica via para transicionar es cambiar_estado() (accion de dominio
@@ -290,19 +329,28 @@ class CotizacionService:
         # validacion (deuda documentada en varias auditorias previas del
         # modulo, nunca cerrada hasta ahora).
         allowed_fields = [
-            'cliente', 'configuracion', 'tipo_cotizacion',
-            'fecha_emision', 'iva_porcentaje',
-            'porcentaje_aiu_admin', 'porcentaje_aiu_imprevistos', 'porcentaje_aiu_utilidad',
-            'dias_totales', 'dias_infraestructura', 'dias_instalacion', 'dias_configuracion', 'dias_pruebas'
+            "cliente",
+            "configuracion",
+            "tipo_cotizacion",
+            "fecha_emision",
+            "iva_porcentaje",
+            "porcentaje_aiu_admin",
+            "porcentaje_aiu_imprevistos",
+            "porcentaje_aiu_utilidad",
+            "dias_totales",
+            "dias_infraestructura",
+            "dias_instalacion",
+            "dias_configuracion",
+            "dias_pruebas",
         ]
 
         update_data = {}
         for field in allowed_fields:
             if field in datos:
                 val = datos[field]
-                if field == 'cliente':
+                if field == "cliente":
                     update_data[field] = cls.get_cliente_for_empresa(val, instance.empresa_id)
-                elif field == 'configuracion':
+                elif field == "configuracion":
                     update_data[field] = cls.get_configuracion_for_empresa(val, instance.empresa_id)
                 else:
                     update_data[field] = val
@@ -353,21 +401,26 @@ class CotizacionService:
         from apps.tenant.facturas.models import Factura
 
         if instance.estado not in (Cotizacion.Estado.BORRADOR, Cotizacion.Estado.ENVIADA):
-            raise ValidationError({
-                "estado": [
-                    f"No se puede eliminar una cotizacion en estado {instance.estado}. "
-                    f"Solo BORRADOR/ENVIADA admiten eliminacion (con trazabilidad intacta)."
-                ]
-            })
+            raise ValidationError(
+                {
+                    "estado": [
+                        f"No se puede eliminar una cotizacion en estado {instance.estado}. "
+                        f"Solo BORRADOR/ENVIADA admiten eliminacion (con trazabilidad intacta)."
+                    ]
+                }
+            )
 
         tiene_factura_vinculada = Factura.objects.filter(
-            empresa_id=instance.empresa_id, cotizacion_uuid=instance.uuid,
+            empresa_id=instance.empresa_id,
+            cotizacion_uuid=instance.uuid,
         ).exists()
         if tiene_factura_vinculada:
-            raise ValidationError({
-                "error": "cotizacion_vinculada",
-                "message": "Esta cotizacion ya fue vinculada a una factura y no puede eliminarse.",
-            })
+            raise ValidationError(
+                {
+                    "error": "cotizacion_vinculada",
+                    "message": "Esta cotizacion ya fue vinculada a una factura y no puede eliminarse.",
+                }
+            )
 
         CotizacionCRUDService.delete_cotizacion(instance)
 
@@ -401,6 +454,19 @@ class CotizacionService:
 
         from ..models import CotizacionHistorialEstado
 
+        # Bug real (2026-09-25, reportado en vivo: 500 en POST .../generar-pdf/,
+        # "AssertionError: Header names/values must be of type str (got
+        # Cotizacion.Estado.ENVIADA)"): algunos llamadores (generar_pdf_y_enviar(),
+        # los 4 endpoints de atajo en viewsets.py:309-321) pasan el miembro del
+        # enum TextChoices (ej. Cotizacion.Estado.ENVIADA) en vez de su valor
+        # string. TextChoices SI es subclase de str (nuevo_estado in
+        # Cotizacion.Estado.values funciona igual), pero wsgiref.headers exige
+        # type(value) is str exacto -- una subclase la rechaza. Normalizar aqui,
+        # en el unico punto de entrada real, evita que cualquier consumidor de
+        # cotizacion.estado despues de este metodo (headers HTTP, cache keys,
+        # etc.) vuelva a pisar el mismo problema.
+        nuevo_estado = str(nuevo_estado)
+
         if nuevo_estado not in Cotizacion.Estado.values:
             raise ValidationError({"estado": [f"Estado '{nuevo_estado}' invalido."]})
 
@@ -414,9 +480,9 @@ class CotizacionService:
 
         permitidos = cls.TRANSICIONES_VALIDAS.get(actual, set())
         if nuevo_estado not in permitidos:
-            raise ValidationError({
-                "estado": [f"Transicion no permitida: {actual} -> {nuevo_estado}."]
-            })
+            raise ValidationError(
+                {"estado": [f"Transicion no permitida: {actual} -> {nuevo_estado}."]}
+            )
 
         cotizacion.estado = nuevo_estado
         cotizacion.save(update_fields=["estado", "updated_at"])
@@ -432,7 +498,10 @@ class CotizacionService:
 
         logger.info(
             "[CotizacionService] estado %s -> %s (uuid=%s, usuario=%s)",
-            actual, nuevo_estado, cotizacion.uuid, getattr(usuario, "id", None),
+            actual,
+            nuevo_estado,
+            cotizacion.uuid,
+            getattr(usuario, "id", None),
         )
         return cotizacion
 
@@ -472,22 +541,29 @@ class CotizacionService:
             pdf_bytes = CotizacionPDFExportService.generar_pdf_publico(cotizacion, empresa)
         except Exception as exc:  # noqa: BLE001 -- clasificado abajo, nunca silenciado
             logger.error(
-                "[PDF] Error generando PDF para %s: %s", cotizacion.uuid, exc, exc_info=True,
+                "[PDF] Error generando PDF para %s: %s",
+                cotizacion.uuid,
+                exc,
+                exc_info=True,
             )
             pdf_bytes = None
 
         if not pdf_bytes:
             if cotizacion.estado == Cotizacion.Estado.BORRADOR:
                 logger.warning(
-                    "[CotizacionService] PDF fallo para %s -- permanece BORRADOR", cotizacion.uuid,
+                    "[CotizacionService] PDF fallo para %s -- permanece BORRADOR",
+                    cotizacion.uuid,
                 )
-            raise ValidationError({
-                "pdf": ["No se pudo generar el PDF. La cotizacion permanece en su estado actual."]
-            })
+            raise ValidationError(
+                {"pdf": ["No se pudo generar el PDF. La cotizacion permanece en su estado actual."]}
+            )
 
         if cotizacion.estado == Cotizacion.Estado.BORRADOR:
             cotizacion = cls.cambiar_estado(
-                cotizacion, Cotizacion.Estado.ENVIADA, usuario=usuario, motivo="PDF generado exitosamente",
+                cotizacion,
+                Cotizacion.Estado.ENVIADA,
+                usuario=usuario,
+                motivo="PDF generado exitosamente",
             )
 
         return cotizacion, pdf_bytes
@@ -529,23 +605,30 @@ class CotizacionService:
             raise ValidationError({"cotizacion": ["No encontrada."]})
 
         existente = Venta.objects.filter(
-            cotizacion_uuid=cotizacion.uuid, empresa_id=cotizacion.empresa_id,
+            cotizacion_uuid=cotizacion.uuid,
+            empresa_id=cotizacion.empresa_id,
         ).first()
         if existente:
             return existente
 
         if cotizacion.estado != Cotizacion.Estado.APROBADA:
-            raise ValidationError({
-                "estado": [
-                    f"Solo una cotizacion APROBADA puede convertirse en venta "
-                    f"(estado actual: {cotizacion.estado})."
-                ]
-            })
+            raise ValidationError(
+                {
+                    "estado": [
+                        f"Solo una cotizacion APROBADA puede convertirse en venta "
+                        f"(estado actual: {cotizacion.estado})."
+                    ]
+                }
+            )
 
         if not cotizacion.cliente_id:
-            raise ValidationError({
-                "cliente": ["La cotizacion debe tener un cliente asignado para convertirla en venta."]
-            })
+            raise ValidationError(
+                {
+                    "cliente": [
+                        "La cotizacion debe tener un cliente asignado para convertirla en venta."
+                    ]
+                }
+            )
 
         items = list(cotizacion.items.select_related("producto", "servicio").all())
         if not items:
@@ -561,12 +644,14 @@ class CotizacionService:
                     descripcion = item.servicio.nombre
                 else:
                     descripcion = "Item de cotizacion"
-            items_data.append({
-                "descripcion": descripcion,
-                "cantidad": item.cantidad,
-                "precio_unitario": item.precio_unitario_venta,
-                "porcentaje_iva": cotizacion.iva_porcentaje,
-            })
+            items_data.append(
+                {
+                    "descripcion": descripcion,
+                    "cantidad": item.cantidad,
+                    "precio_unitario": item.precio_unitario_venta,
+                    "porcentaje_iva": cotizacion.iva_porcentaje,
+                }
+            )
 
         venta = VentaCRUDService.crear_venta(
             empresa=cotizacion.empresa,
@@ -585,7 +670,8 @@ class CotizacionService:
 
         logger.info(
             "[CotizacionService] Venta uuid=%s creada desde Cotizacion uuid=%s",
-            venta.uuid, cotizacion.uuid,
+            venta.uuid,
+            cotizacion.uuid,
         )
         return venta
 
@@ -632,9 +718,13 @@ class CotizacionService:
             .first()
         )
         if not venta:
-            raise ValidationError({
-                "venta": ["Esta cotizacion no tiene una Venta asociada. Conviertala a venta primero."]
-            })
+            raise ValidationError(
+                {
+                    "venta": [
+                        "Esta cotizacion no tiene una Venta asociada. Conviertala a venta primero."
+                    ]
+                }
+            )
 
         # Misma reconstruccion de payload que VentaViewSet.procesar_facturar()
         # ya hace a partir de una Venta existente cuando el body no trae items
@@ -662,7 +752,11 @@ class CotizacionService:
             venta_existente=venta,
         )
         if not ok:
-            detalle = resultado.get("detail", "No se pudo facturar la venta.") if isinstance(resultado, dict) else str(resultado)
+            detalle = (
+                resultado.get("detail", "No se pudo facturar la venta.")
+                if isinstance(resultado, dict)
+                else str(resultado)
+            )
             raise ValidationError({"factura": [detalle]})
 
         return resultado, status_code
@@ -706,21 +800,29 @@ class CotizacionService:
             raise ValidationError({"cotizacion": ["No encontrada."]})
 
         if cotizacion.estado != Cotizacion.Estado.APROBADA:
-            raise ValidationError({
-                "estado": [
-                    f"Solo una cotizacion APROBADA puede asociarse a un proyecto "
-                    f"(estado actual: {cotizacion.estado})."
-                ]
-            })
+            raise ValidationError(
+                {
+                    "estado": [
+                        f"Solo una cotizacion APROBADA puede asociarse a un proyecto "
+                        f"(estado actual: {cotizacion.estado})."
+                    ]
+                }
+            )
 
         items_servicio = list(cotizacion.items.filter(tipo_item="SERVICIO"))
         if not items_servicio:
-            raise ValidationError({
-                "items": ["La cotizacion no tiene items de tipo SERVICIO -- no aplica crear un proyecto."]
-            })
+            raise ValidationError(
+                {
+                    "items": [
+                        "La cotizacion no tiene items de tipo SERVICIO -- no aplica crear un proyecto."
+                    ]
+                }
+            )
 
         codigo_derivado = f"PRJ-COT-{cotizacion.codigo_unico or cotizacion.numero_cotizacion}"
-        existente = Proyecto.objects.filter(empresa_id=cotizacion.empresa_id, codigo=codigo_derivado).first()
+        existente = Proyecto.objects.filter(
+            empresa_id=cotizacion.empresa_id, codigo=codigo_derivado
+        ).first()
         if existente:
             return existente
 
@@ -739,6 +841,7 @@ class CotizacionService:
 
         logger.info(
             "[CotizacionService] Proyecto uuid=%s creado desde Cotizacion uuid=%s",
-            proyecto.uuid, cotizacion.uuid,
+            proyecto.uuid,
+            cotizacion.uuid,
         )
         return proyecto

@@ -9,10 +9,10 @@ SintelDSVMixin - la misma SSoT que OrganizationalContext.resolve() duplica
 selector con sus propios .only(), que el context.filter() generico no
 replica.
 """
+
 from apps.tenant.bancos.api.viewsets import CuentaBancariaViewSet
 from apps.tenant.bancos.models import CuentaBancaria
 from apps.tenant.bancos.services.selectors import CuentaBancariaSelector
-from apps.tenant.core.services.organizational_context import OrganizationalContext
 from apps.tenant.perfil.models import TenantProfile
 from tests.tenant.base_test import SintelTenantTestCase
 
@@ -23,14 +23,24 @@ class BancosOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9 Bancos", nit="900000991", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9 Bancos",
+            nit="900000991",
+            direccion="Calle 1",
         )
         self.cuenta = CuentaBancaria.objects.create(
-            empresa=self.empresa, nombre="Cuenta Fase9", banco="BANCOLOMBIA", tipo="AHORROS", numero="123456",
+            empresa=self.empresa,
+            nombre="Cuenta Fase9",
+            banco="BANCOLOMBIA",
+            tipo="AHORROS",
+            numero="123456",
         )
 
-    def test_cuentabancariaviewset_get_organizational_context_matches_the_ssot_it_already_used(self):
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+    def test_cuentabancariaviewset_get_organizational_context_matches_the_ssot_it_already_used(
+        self,
+    ):
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         from rest_framework.test import APIRequestFactory
         from rest_framework_simplejwt.authentication import JWTAuthentication

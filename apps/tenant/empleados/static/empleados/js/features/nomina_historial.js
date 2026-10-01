@@ -18,8 +18,8 @@
         if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
             return w.DOMUtils.formatCurrency(n, { minimumFractionDigits: 0 });
         }
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency', currency: 'COP', minimumFractionDigits: 0
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency', currency: 'USD', minimumFractionDigits: 0
         }).format(n);
     };
     const monedaCelda = (cell) => COP(cell.getValue());

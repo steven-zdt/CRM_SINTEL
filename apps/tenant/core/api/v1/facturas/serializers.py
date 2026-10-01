@@ -20,6 +20,7 @@ class FacturaWorkspaceListSerializer(FacturaListSerializer):
     """
     # WARNING: v2.61.1: Serializer facade para listado de facturas en Core API.
     """
+
     class Meta(FacturaListSerializer.Meta):
         pass
 
@@ -28,6 +29,7 @@ class FacturaWorkspaceDetailSerializer(FacturaDetailSerializer):
     """
     # WARNING: v2.61.1: Serializer facade para detalle de factura en Core API.
     """
+
     class Meta(FacturaDetailSerializer.Meta):
         pass
 
@@ -36,6 +38,7 @@ class FacturaWorkspaceSerializer(FacturaWriteSerializer):
     """
     # WARNING: v2.61.1: Serializer facade para escritura de factura en Core API.
     """
+
     class Meta(FacturaWriteSerializer.Meta):
         pass
 
@@ -44,6 +47,7 @@ class ItemFacturaWorkspaceSerializer(ItemFacturaSerializer):
     """
     # WARNING: v2.61.1: Serializer facade para items de factura en Core API.
     """
+
     class Meta(ItemFacturaSerializer.Meta):
         pass
 
@@ -52,6 +56,7 @@ class NotaCreditoWorkspaceListSerializer(NotaCreditoListSerializer):
     """
     # WARNING: v2.61.1: Serializer facade para listado de notas crédito en Core API.
     """
+
     class Meta(NotaCreditoListSerializer.Meta):
         pass
 
@@ -60,5 +65,6 @@ class NotaCreditoWorkspaceDetailSerializer(NotaCreditoDetailSerializer):
     """
     # WARNING: v2.61.1: Serializer facade para detalle de nota crédito en Core API.
     """
+
     class Meta(NotaCreditoDetailSerializer.Meta):
         pass

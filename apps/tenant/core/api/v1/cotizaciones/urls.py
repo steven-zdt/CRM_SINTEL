@@ -18,8 +18,10 @@ from .viewsets import (
 router = DefaultRouter(trailing_slash=True)
 
 # Registrar ViewSets
-router.register(r'cotizaciones', CotizacionCoreViewSet, basename='core-cotizacion')
-router.register(r'items', CotizacionItemCoreViewSet, basename='core-cotizacion-item')
-router.register(r'configuracion', ConfiguracionCotizacionCoreViewSet, basename='core-cotizacion-configuracion')
+router.register(r"cotizaciones", CotizacionCoreViewSet, basename="core-cotizacion")
+router.register(r"items", CotizacionItemCoreViewSet, basename="core-cotizacion-item")
+router.register(
+    r"configuracion", ConfiguracionCotizacionCoreViewSet, basename="core-cotizacion-configuracion"
+)
 
 urlpatterns = router.urls

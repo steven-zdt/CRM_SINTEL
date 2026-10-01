@@ -80,13 +80,12 @@ def analizar_tenant(schema_name: str) -> dict:
             # Proyectos
             stats["proyectos"] = Proyecto.objects.filter(activo=True).count()
             ultimo_proyecto = Proyecto.objects.order_by("-updated_at").first()
-            if ultimo_proyecto and hasattr(ultimo_proyecto, "updated_at"):
-                if not stats[
-                    "ultima_actividad"
-                ] or ultimo_proyecto.updated_at > datetime.fromisoformat(
-                    stats["ultima_actividad"].replace("Z", "+00:00")
-                ):
-                    stats["ultima_actividad"] = ultimo_proyecto.updated_at.isoformat()
+            if (ultimo_proyecto and hasattr(ultimo_proyecto, "updated_at")) and (
+                not stats["ultima_actividad"]
+                or ultimo_proyecto.updated_at
+                > datetime.fromisoformat(stats["ultima_actividad"].replace("Z", "+00:00"))
+            ):
+                stats["ultima_actividad"] = ultimo_proyecto.updated_at.isoformat()
 
     except Exception as e:
         logger.error(f"[analizar_tenants_prueba] Error analizando tenant {schema_name}: {e}")

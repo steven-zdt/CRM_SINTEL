@@ -13,25 +13,25 @@ from .schemas import AttachmentDTO
 def extract_attachments(message: dict, *, max_mb: int = 50) -> list[AttachmentDTO]:
     """
     Extrae adjuntos de un mensaje validando tamaños.
-    
+
     WARNING: NOTA: Esta función es un wrapper que delega a inbox_client.get_attachments().
     La implementación real del parsing MIME está en RealIMAPClient.get_attachments().
-    
+
     Filtra tipos obvios no relevantes (imágenes, documentos ofimáticos sin XML, etc.)
     y valida que no excedan el límite de tamaño.
-    
+
     WARNING: LÍMITE: max_mb debe alinearse con el límite de ingesta (50MB por defecto).
-    
+
     Args:
         message: Dict con datos del mensaje (debe tener campo '_email_message' de email.message)
         max_mb: Límite máximo de tamaño por adjunto en MB (default: 50)
-        
+
     Returns:
         Lista de AttachmentDTO con adjuntos válidos
-        
+
     Raises:
         AttachmentTooLarge: Si algún adjunto excede max_mb
-        
+
     Ejemplo:
         message = {"id": "msg_1", "_email_message": email.message.Message(...)}
         attachments = extract_attachments(message, max_mb=50)
@@ -40,17 +40,14 @@ def extract_attachments(message: dict, *, max_mb: int = 50) -> list[AttachmentDT
     # WARNING: NOTA: La extracción real de adjuntos se hace en inbox_client.get_attachments()
     # Esta función es un wrapper para mantener compatibilidad con el código existente
     # Si el mensaje ya tiene adjuntos extraídos, usarlos directamente
-    
+
     max_bytes = max_mb * 1024 * 1024
-    
-    # Si el mensaje ya tiene adjuntos extraídos (por inbox_client), validarlos
-    if "_attachments" in message:
-        attachments = message["_attachments"]
-    else:
-        # Si no, el pipeline debe usar inbox_client.get_attachments() directamente
-        # Esta función no puede parsear MIME sin el cliente
-        attachments = []
-    
+
+    # Si el mensaje ya tiene adjuntos extraídos (por inbox_client), validarlos.
+    # Si no, el pipeline debe usar inbox_client.get_attachments() directamente
+    # (esta función no puede parsear MIME sin el cliente).
+    attachments = message.get("_attachments", [])
+
     # Filtrar y validar tamaños
     valid_attachments: list[AttachmentDTO] = []
     for att in attachments:
@@ -58,11 +55,11 @@ def extract_attachments(message: dict, *, max_mb: int = 50) -> list[AttachmentDT
         if size_bytes > max_bytes:
             # Saltar adjuntos muy grandes (no lanzar excepción para no romper el flujo)
             continue
-        
+
         # Filtrar tipos relevantes (XML, ZIP, RAR, 7z)
         content_type = att.get("content_type", "").lower()
         filename = att.get("filename", "").lower()
-        
+
         # Tipos relevantes para facturas
         relevant_types = [
             "application/xml",
@@ -72,14 +69,13 @@ def extract_attachments(message: dict, *, max_mb: int = 50) -> list[AttachmentDT
             "application/x-rar-compressed",
             "application/x-7z-compressed",
         ]
-        
+
         # Verificar si es tipo relevante o tiene extensión relevante
-        is_relevant = (
-            any(t in content_type for t in relevant_types) or
-            filename.endswith(('.xml', '.zip', '.rar', '.7z'))
+        is_relevant = any(t in content_type for t in relevant_types) or filename.endswith(
+            (".xml", ".zip", ".rar", ".7z")
         )
-        
+
         if is_relevant:
             valid_attachments.append(att)
-    
+
     return valid_attachments

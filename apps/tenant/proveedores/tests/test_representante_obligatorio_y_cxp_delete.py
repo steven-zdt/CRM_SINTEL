@@ -11,6 +11,7 @@
    listado unificado despues. DELETE respeta la politica: sin Factura +
    sin pagos -> permitido; con pagos o con Factura asociada -> rechazado.
 """
+
 from datetime import timedelta
 from decimal import Decimal
 
@@ -34,7 +35,9 @@ class ProveedorRepresentanteObligatorioTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test Rep Obligatorio", nit="900777888", direccion="Calle 1",
+            razon_social="Empresa Test Rep Obligatorio",
+            nit="900777888",
+            direccion="Calle 1",
         )
         self.service = ProveedorBusinessService()
         # TenantProfile real -- necesario para test_natural_autogenera_representante_
@@ -42,8 +45,10 @@ class ProveedorRepresentanteObligatorioTests(SintelTenantTestCase):
         # devuelve None via getattr() si no existe, y _construir_payload_representante()
         # correctamente omite el auto-relleno en ese caso).
         from apps.tenant.perfil.models import TenantProfile
+
         TenantProfile.objects.get_or_create(
-            user=self.user, empresa=self.empresa,
+            user=self.user,
+            empresa=self.empresa,
             defaults={"rol": "ADMIN", "alcance": "EMPRESA", "cargo": "Gerente de Compras"},
         )
 
@@ -52,8 +57,10 @@ class ProveedorRepresentanteObligatorioTests(SintelTenantTestCase):
             self.service.crear_proveedor(
                 empresa_id=self.empresa.id,
                 data={
-                    "tipo_persona": "JURIDICA", "tipo_documento": "NIT",
-                    "numero_documento": "800900901", "razon_social": "Proveedor SAS",
+                    "tipo_persona": "JURIDICA",
+                    "tipo_documento": "NIT",
+                    "numero_documento": "800900901",
+                    "razon_social": "Proveedor SAS",
                 },
             )
         self.assertFalse(Proveedor.objects.filter(numero_documento="800900901").exists())
@@ -64,8 +71,10 @@ class ProveedorRepresentanteObligatorioTests(SintelTenantTestCase):
             self.service.crear_proveedor(
                 empresa_id=self.empresa.id,
                 data={
-                    "tipo_persona": "JURIDICA", "tipo_documento": "NIT",
-                    "numero_documento": "800900902", "razon_social": "Proveedor SAS 2",
+                    "tipo_persona": "JURIDICA",
+                    "tipo_documento": "NIT",
+                    "numero_documento": "800900902",
+                    "razon_social": "Proveedor SAS 2",
                 },
                 representante_data={"numero_documento": "1010101010"},
             )
@@ -75,11 +84,14 @@ class ProveedorRepresentanteObligatorioTests(SintelTenantTestCase):
         proveedor = self.service.crear_proveedor(
             empresa_id=self.empresa.id,
             data={
-                "tipo_persona": "JURIDICA", "tipo_documento": "NIT",
-                "numero_documento": "800900903", "razon_social": "Proveedor SAS 3",
+                "tipo_persona": "JURIDICA",
+                "tipo_documento": "NIT",
+                "numero_documento": "800900903",
+                "razon_social": "Proveedor SAS 3",
             },
             representante_data={
-                "tipo_documento": "CC", "numero_documento": "2020202020",
+                "tipo_documento": "CC",
+                "numero_documento": "2020202020",
                 "nombre_completo": "Representante Legal Uno",
             },
         )
@@ -95,8 +107,10 @@ class ProveedorRepresentanteObligatorioTests(SintelTenantTestCase):
             self.service.crear_proveedor(
                 empresa_id=self.empresa.id,
                 data={
-                    "tipo_persona": "NATURAL", "tipo_documento": "CC",
-                    "numero_documento": "900900904", "razon_social": "Persona Natural Uno",
+                    "tipo_persona": "NATURAL",
+                    "tipo_documento": "CC",
+                    "numero_documento": "900900904",
+                    "razon_social": "Persona Natural Uno",
                 },
             )
         self.assertFalse(Proveedor.objects.filter(numero_documento="900900904").exists())
@@ -105,8 +119,10 @@ class ProveedorRepresentanteObligatorioTests(SintelTenantTestCase):
         proveedor = self.service.crear_proveedor(
             empresa_id=self.empresa.id,
             data={
-                "tipo_persona": "NATURAL", "tipo_documento": "CC",
-                "numero_documento": "900900905", "razon_social": "Persona Natural Dos",
+                "tipo_persona": "NATURAL",
+                "tipo_documento": "CC",
+                "numero_documento": "900900905",
+                "razon_social": "Persona Natural Dos",
             },
             representante_data={"tipo_documento": "CC", "numero_documento": "3030303030"},
             usuario=getattr(self.user, "tenant_profile", None),
@@ -141,26 +157,44 @@ class RepresentantePrincipalUnicoTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test Principal Unico", nit="900777889", direccion="Calle 1",
+            razon_social="Empresa Test Principal Unico",
+            nit="900777889",
+            direccion="Calle 1",
         )
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor Principal Unico",
-            numero_documento="800900907", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor Principal Unico",
+            numero_documento="800900907",
+            tipo_documento="NIT",
         )
         self.service = RepresentanteBusinessService()
 
     def test_crear_segundo_principal_degrada_al_primero(self):
         p1 = self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
-            data={"tipo_documento": "CC", "numero_documento": "4040404041", "nombre_completo": "P1", "es_principal": True},
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
+            data={
+                "tipo_documento": "CC",
+                "numero_documento": "4040404041",
+                "nombre_completo": "P1",
+                "es_principal": True,
+            },
         )
         self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
-            data={"tipo_documento": "CC", "numero_documento": "4040404042", "nombre_completo": "P2", "es_principal": True},
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
+            data={
+                "tipo_documento": "CC",
+                "numero_documento": "4040404042",
+                "nombre_completo": "P2",
+                "es_principal": True,
+            },
         )
         p1.refresh_from_db()
         principales = Representante.objects.filter(
-            empresa=self.empresa, proveedor=self.proveedor, es_principal=True,
+            empresa=self.empresa,
+            proveedor=self.proveedor,
+            es_principal=True,
         )
         self.assertFalse(p1.es_principal)
         self.assertEqual(principales.count(), 1)
@@ -168,15 +202,28 @@ class RepresentantePrincipalUnicoTests(SintelTenantTestCase):
 
     def test_actualizar_a_principal_degrada_al_anterior(self):
         p1 = self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
-            data={"tipo_documento": "CC", "numero_documento": "4040404043", "nombre_completo": "P1", "es_principal": True},
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
+            data={
+                "tipo_documento": "CC",
+                "numero_documento": "4040404043",
+                "nombre_completo": "P1",
+                "es_principal": True,
+            },
         )
         p2 = self.service.crear_representante(
-            empresa_id=self.empresa.id, proveedor_uuid=str(self.proveedor.uuid),
-            data={"tipo_documento": "CC", "numero_documento": "4040404044", "nombre_completo": "P2", "es_principal": False},
+            empresa_id=self.empresa.id,
+            proveedor_uuid=str(self.proveedor.uuid),
+            data={
+                "tipo_documento": "CC",
+                "numero_documento": "4040404044",
+                "nombre_completo": "P2",
+                "es_principal": False,
+            },
         )
         self.service.actualizar_representante(
-            empresa_id=self.empresa.id, representante_uuid=str(p2.uuid),
+            empresa_id=self.empresa.id,
+            representante_uuid=str(p2.uuid),
             data={"es_principal": True},
         )
         p1.refresh_from_db()
@@ -192,11 +239,15 @@ class CuentasPagarMaterializacionYDeleteTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test CxP Delete", nit="900777890", direccion="Calle 1",
+            razon_social="Empresa Test CxP Delete",
+            nit="900777890",
+            direccion="Calle 1",
         )
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor CxP Delete",
-            numero_documento="800900908", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor CxP Delete",
+            numero_documento="800900908",
+            tipo_documento="NIT",
         )
 
     def _crear_factura_compra(self, numero="FC-001", total="1000.00"):
@@ -204,11 +255,18 @@ class CuentasPagarMaterializacionYDeleteTests(SintelTenantTestCase):
 
         hoy = timezone.now()
         return Factura.objects.create(
-            empresa=self.empresa, numero=numero, consecutivo=1, fecha_emision=hoy,
-            emisor_nit=self.proveedor.numero_documento, emisor_razon_social=self.proveedor.razon_social,
-            receptor_nit="900000000", receptor_razon_social="Empresa Receptora",
-            naturaleza="COMPRA", proveedor_uuid=self.proveedor.uuid,
-            total=Decimal(total), payment_due_date=(hoy + timedelta(days=30)).date(),
+            empresa=self.empresa,
+            numero=numero,
+            consecutivo=1,
+            fecha_emision=hoy,
+            emisor_nit=self.proveedor.numero_documento,
+            emisor_razon_social=self.proveedor.razon_social,
+            receptor_nit="900000000",
+            receptor_razon_social="Empresa Receptora",
+            naturaleza="COMPRA",
+            proveedor_uuid=self.proveedor.uuid,
+            total=Decimal(total),
+            payment_due_date=(hoy + timedelta(days=30)).date(),
         )
 
     def test_abono_sobre_fila_origen_factura_materializa_y_persiste_en_listado(self):
@@ -223,8 +281,10 @@ class CuentasPagarMaterializacionYDeleteTests(SintelTenantTestCase):
         # 2. Abonar usando el UUID de la Factura (lo que envia el boton
         # "Abono" de la tabla) -- antes de este fix, esto fallaba 400.
         actualizada = CuentasPagarBusinessService.registrar_abono(
-            cuenta_pagar_uuid=str(factura.uuid), monto="400.00",
-            observaciones="primer abono", empresa_id=self.empresa.id,
+            cuenta_pagar_uuid=str(factura.uuid),
+            monto="400.00",
+            observaciones="primer abono",
+            empresa_id=self.empresa.id,
         )
         self.assertEqual(actualizada.valor_pagado, Decimal("400.00"))
         self.assertEqual(actualizada.factura_uuid, factura.uuid)
@@ -242,47 +302,62 @@ class CuentasPagarMaterializacionYDeleteTests(SintelTenantTestCase):
 
     def test_delete_cxp_manual_sin_pagos_permitido(self):
         cxp = CuentasPagar.objects.create(
-            empresa=self.empresa, proveedor=self.proveedor, numero_factura="OC-100",
-            valor_total=Decimal("500.00"), fecha_emision=timezone.now().date(),
+            empresa=self.empresa,
+            proveedor=self.proveedor,
+            numero_factura="OC-100",
+            valor_total=Decimal("500.00"),
+            fecha_emision=timezone.now().date(),
             fecha_vencimiento=timezone.now().date() + timedelta(days=15),
         )
         CuentasPagarBusinessService.eliminar_cuenta_pagar(
-            cuenta_pagar_uuid=str(cxp.uuid), empresa_id=self.empresa.id,
+            cuenta_pagar_uuid=str(cxp.uuid),
+            empresa_id=self.empresa.id,
         )
         self.assertFalse(CuentasPagar.objects.filter(uuid=cxp.uuid).exists())
 
     def test_delete_cxp_con_pagos_es_rechazado(self):
         cxp = CuentasPagar.objects.create(
-            empresa=self.empresa, proveedor=self.proveedor, numero_factura="OC-101",
-            valor_total=Decimal("500.00"), fecha_emision=timezone.now().date(),
+            empresa=self.empresa,
+            proveedor=self.proveedor,
+            numero_factura="OC-101",
+            valor_total=Decimal("500.00"),
+            fecha_emision=timezone.now().date(),
             fecha_vencimiento=timezone.now().date() + timedelta(days=15),
         )
         CuentasPagarBusinessService.registrar_abono(
-            cuenta_pagar_uuid=str(cxp.uuid), monto="100.00", observaciones="",
+            cuenta_pagar_uuid=str(cxp.uuid),
+            monto="100.00",
+            observaciones="",
             empresa_id=self.empresa.id,
         )
         with self.assertRaises(ValidationError):
             CuentasPagarBusinessService.eliminar_cuenta_pagar(
-                cuenta_pagar_uuid=str(cxp.uuid), empresa_id=self.empresa.id,
+                cuenta_pagar_uuid=str(cxp.uuid),
+                empresa_id=self.empresa.id,
             )
         self.assertTrue(CuentasPagar.objects.filter(uuid=cxp.uuid).exists())
 
     def test_delete_cxp_con_factura_asociada_es_rechazado(self):
         factura = self._crear_factura_compra(numero="FC-002")
         CuentasPagarBusinessService.registrar_abono(
-            cuenta_pagar_uuid=str(factura.uuid), monto="100.00", observaciones="",
+            cuenta_pagar_uuid=str(factura.uuid),
+            monto="100.00",
+            observaciones="",
             empresa_id=self.empresa.id,
         )
         cxp = CuentasPagar.objects.get(factura_uuid=factura.uuid)
         with self.assertRaises(ValidationError):
             CuentasPagarBusinessService.eliminar_cuenta_pagar(
-                cuenta_pagar_uuid=str(cxp.uuid), empresa_id=self.empresa.id,
+                cuenta_pagar_uuid=str(cxp.uuid),
+                empresa_id=self.empresa.id,
             )
         self.assertTrue(CuentasPagar.objects.filter(uuid=cxp.uuid).exists())
 
     def test_delete_cxp_inexistente_falla(self):
         import uuid as uuid_lib
+
         with self.assertRaises(ValidationError):
             CuentasPagarBusinessService.eliminar_cuenta_pagar(
-                cuenta_pagar_uuid=str(uuid_lib.uuid4()), empresa_id=self.empresa.id,
+                cuenta_pagar_uuid=str(uuid_lib.uuid4()),
+                empresa_id=self.empresa.id,
             )

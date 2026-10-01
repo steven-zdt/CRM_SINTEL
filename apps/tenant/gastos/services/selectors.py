@@ -6,11 +6,11 @@ WARNING: SINTEL v2.61.4: Arquitectura Service Layer Modular.
 - Todas las funciones son @staticmethod.
 - Usa .only() para cargar solo campos necesarios (Zero Waste).
 """
-from django.db.models import Max, Q, Sum, Count
+
+from django.db.models import Count, Max, Q, Sum
 from django.utils import timezone
 
-from apps.tenant.gastos.models import ResolucionDIAN, DocumentoSoporte
-
+from apps.tenant.gastos.models import DocumentoSoporte, ResolucionDIAN
 
 # ==============================================================================
 # CONSTANTES SSoT - Campos para consultas optimizadas
@@ -20,38 +20,80 @@ from apps.tenant.gastos.models import ResolucionDIAN, DocumentoSoporte
 # No GASTO_LIST_FIELDS needed, unified in DOCUMENTO
 
 RESOLUCION_LIST_FIELDS = (
-    'id', 'uuid', 'numero_resolucion', 'prefijo', 'vigente',
-    'rango_desde', 'rango_hasta', 'fecha_resolucion',
-    'fecha_inicio', 'fecha_fin', 'consecutivo',
-    'empresa_id'
+    "id",
+    "uuid",
+    "numero_resolucion",
+    "prefijo",
+    "vigente",
+    "rango_desde",
+    "rango_hasta",
+    "fecha_resolucion",
+    "fecha_inicio",
+    "fecha_fin",
+    "consecutivo",
+    "empresa_id",
 )
 
 DOCUMENTO_LIST_FIELDS = (
-    'id', 'uuid', 'consecutivo', 'subtotal',
-    'fecha', 'total', 'categoria_contable', 'descripcion',
-    'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
-    'movimiento_inventario_uuid',
-    'proyecto_uuid',  # GASTOS_PROYECTOS_01
-    'sede_id', 'sede__nombre',  # DT-SEDE-01: KPI por sede
+    "id",
+    "uuid",
+    "consecutivo",
+    "subtotal",
+    "fecha",
+    "total",
+    "categoria_contable",
+    "descripcion",
+    "activo",
+    "anulado",
+    "numero_documento_proveedor",
+    "empresa_id",
+    "movimiento_inventario_uuid",
+    "proyecto_uuid",  # GASTOS_PROYECTOS_01
+    "sede_id",
+    "sede__nombre",  # DT-SEDE-01: KPI por sede
 )
 
 # Campos completos para DETALLE (formularios de edicion)
 DOCUMENTO_DETAIL_FIELDS = (
-    'id', 'uuid', 'consecutivo', 'fecha', 'total', 'subtotal',
-    'categoria_contable', 'descripcion', 'observaciones',
-    'activo', 'anulado', 'numero_documento_proveedor', 'empresa_id',
-    'resolucion_dian_id', 'proveedor_id',
-    'movimiento_inventario_uuid',
-    'proyecto_uuid',  # GASTOS_PROYECTOS_01
-    'sede_id', 'sede__uuid', 'sede__nombre',  # DT-SEDE-01
-    'created_at', 'updated_at'
+    "id",
+    "uuid",
+    "consecutivo",
+    "fecha",
+    "total",
+    "subtotal",
+    "categoria_contable",
+    "descripcion",
+    "observaciones",
+    "activo",
+    "anulado",
+    "numero_documento_proveedor",
+    "empresa_id",
+    "resolucion_dian_id",
+    "proveedor_id",
+    "movimiento_inventario_uuid",
+    "proyecto_uuid",  # GASTOS_PROYECTOS_01
+    "sede_id",
+    "sede__uuid",
+    "sede__nombre",  # DT-SEDE-01
+    "created_at",
+    "updated_at",
 )
 
 RESOLUCION_DETAIL_FIELDS = (
-    'id', 'uuid', 'numero_resolucion', 'prefijo', 'vigente',
-    'rango_desde', 'rango_hasta', 'fecha_resolucion',
-    'fecha_inicio', 'fecha_fin', 'clave_tecnica',
-    'empresa_id', 'created_at', 'updated_at'
+    "id",
+    "uuid",
+    "numero_resolucion",
+    "prefijo",
+    "vigente",
+    "rango_desde",
+    "rango_hasta",
+    "fecha_resolucion",
+    "fecha_inicio",
+    "fecha_fin",
+    "clave_tecnica",
+    "empresa_id",
+    "created_at",
+    "updated_at",
 )
 
 
@@ -68,29 +110,24 @@ class ResolucionSelector:
     @staticmethod
     def get_list(empresa_id: int, search: str = None, solo_vigentes: bool = False):
         """QuerySet optimizado para LISTAR Resoluciones DIAN."""
-        qs = ResolucionDIAN.objects.filter(
-            empresa_id=empresa_id
-        ).annotate(
-            conteo_documentos=Count('documentos_soporte')
-        ).only(*RESOLUCION_LIST_FIELDS)
+        qs = (
+            ResolucionDIAN.objects.filter(empresa_id=empresa_id)
+            .annotate(conteo_documentos=Count("documentos_soporte"))
+            .only(*RESOLUCION_LIST_FIELDS)
+        )
 
         if solo_vigentes:
             qs = qs.filter(vigente=True)
 
         if search:
-            qs = qs.filter(
-                Q(numero_resolucion__icontains=search) |
-                Q(prefijo__icontains=search)
-            )
+            qs = qs.filter(Q(numero_resolucion__icontains=search) | Q(prefijo__icontains=search))
 
-        return qs.order_by('-vigente', '-fecha_resolucion')
+        return qs.order_by("-vigente", "-fecha_resolucion")
 
     @staticmethod
     def get_detail(empresa_id: int, resolucion_uuid=None):
         """QuerySet optimizado para DETALLE de ResolucionDIAN."""
-        qs = ResolucionDIAN.objects.filter(
-            empresa_id=empresa_id
-        ).only(*RESOLUCION_DETAIL_FIELDS)
+        qs = ResolucionDIAN.objects.filter(empresa_id=empresa_id).only(*RESOLUCION_DETAIL_FIELDS)
 
         if resolucion_uuid:
             return qs.filter(uuid=resolucion_uuid)
@@ -103,14 +140,12 @@ class ResolucionSelector:
         """
         from django.core.cache import cache
         from django.db import connection
+
         cache_key = f"resolucion_vigente:{connection.schema_name}:{empresa_id}"
         resolucion = cache.get(cache_key)
 
         if resolucion is None:
-            resolucion = ResolucionDIAN.objects.filter(
-                empresa_id=empresa_id,
-                vigente=True
-            ).first()
+            resolucion = ResolucionDIAN.objects.filter(empresa_id=empresa_id, vigente=True).first()
             if resolucion:
                 cache.set(cache_key, resolucion, timeout=3600)
 
@@ -132,18 +167,17 @@ class DocumentoSelector:
         registro sin sede queda visible para todos los alcances (filtro
         NULL-safe), para no ocultar datos existentes al activar el filtrado.
         """
-        qs = DocumentoSoporte.objects.filter(
-            empresa_id=empresa_id
-        ).select_related(
-            'resolucion_dian',
-            'proveedor'
-        ).only(
-            *DOCUMENTO_LIST_FIELDS,
-            'resolucion_dian_id',
-            'resolucion_dian__prefijo',
-            'resolucion_dian__consecutivo',
-            'proveedor__razon_social',
-            'proveedor_id'
+        qs = (
+            DocumentoSoporte.objects.filter(empresa_id=empresa_id)
+            .select_related("resolucion_dian", "proveedor")
+            .only(
+                *DOCUMENTO_LIST_FIELDS,
+                "resolucion_dian_id",
+                "resolucion_dian__prefijo",
+                "resolucion_dian__consecutivo",
+                "proveedor__razon_social",
+                "proveedor_id",
+            )
         )
 
         if sede_ids is not None:
@@ -154,13 +188,13 @@ class DocumentoSelector:
 
         if search:
             qs = qs.filter(
-                Q(descripcion__icontains=search) |
-                Q(numero_documento_proveedor__icontains=search) |
-                Q(proveedor__razon_social__icontains=search)
+                Q(descripcion__icontains=search)
+                | Q(numero_documento_proveedor__icontains=search)
+                | Q(proveedor__razon_social__icontains=search)
             )
 
         # Incluir TODOS los documentos (anulados y no anulados) para mantener consecutividad
-        return qs.order_by('-fecha', '-consecutivo')
+        return qs.order_by("-fecha", "-consecutivo")
 
     @staticmethod
     def get_detail(empresa_id: int, documento_uuid=None, sede_ids=None):
@@ -172,12 +206,8 @@ class DocumentoSelector:
         por empresa_id (via get_qs_detail() generico), sin ningun chequeo de
         sede - mismo gap que F11 encontro y corrigio en Facturas.
         """
-        qs = DocumentoSoporte.objects.filter(
-            empresa_id=empresa_id
-        ).select_related(
-            'resolucion_dian',
-            'proveedor',
-            'usuario_anulacion'
+        qs = DocumentoSoporte.objects.filter(empresa_id=empresa_id).select_related(
+            "resolucion_dian", "proveedor", "usuario_anulacion"
         )
         if sede_ids is not None:
             qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
@@ -186,7 +216,7 @@ class DocumentoSelector:
         return qs
 
     @staticmethod
-    def get_siguiente_numero_preview(resolucion: 'ResolucionDIAN') -> dict:
+    def get_siguiente_numero_preview(resolucion: "ResolucionDIAN") -> dict:
         """
         Vista previa del siguiente numero de Doc. Soporte para pre-llenar el formulario.
 
@@ -199,18 +229,18 @@ class DocumentoSelector:
           agotado     bool      True si el rango de la resolucion esta agotado
           disponibles int       Cantidad de consecutivos restantes en el rango
         """
-        ultimo = DocumentoSoporte.objects.filter(
-            resolucion_dian=resolucion
-        ).aggregate(max_val=Max('consecutivo'))['max_val']
+        ultimo = DocumentoSoporte.objects.filter(resolucion_dian=resolucion).aggregate(
+            max_val=Max("consecutivo")
+        )["max_val"]
 
         siguiente = (ultimo + 1) if ultimo is not None else resolucion.rango_desde
         agotado = siguiente > resolucion.rango_hasta
 
         return {
-            'numero': siguiente if not agotado else None,
-            'formateado': resolucion.formar_consecutivo(siguiente) if not agotado else '',
-            'agotado': agotado,
-            'disponibles': max(0, resolucion.rango_hasta - siguiente + 1) if not agotado else 0,
+            "numero": siguiente if not agotado else None,
+            "formateado": resolucion.formar_consecutivo(siguiente) if not agotado else "",
+            "agotado": agotado,
+            "disponibles": max(0, resolucion.rango_hasta - siguiente + 1) if not agotado else 0,
         }
 
     @staticmethod
@@ -222,19 +252,24 @@ class DocumentoSelector:
         No incluye anulados/inactivos: son los mismos gastos que participan
         en calcular_costo_gastos() de Proyectos (misma regla de inclusion).
         """
-        return DocumentoSoporte.objects.filter(
-            empresa_id=empresa_id,
-            proyecto_uuid=proyecto_uuid,
-            activo=True,
-            anulado=False,
-        ).select_related('proveedor', 'resolucion_dian').only(
-            *DOCUMENTO_LIST_FIELDS,
-            'resolucion_dian_id',
-            'resolucion_dian__prefijo',
-            'resolucion_dian__consecutivo',
-            'proveedor__razon_social',
-            'proveedor_id',
-        ).order_by('-fecha', '-consecutivo')
+        return (
+            DocumentoSoporte.objects.filter(
+                empresa_id=empresa_id,
+                proyecto_uuid=proyecto_uuid,
+                activo=True,
+                anulado=False,
+            )
+            .select_related("proveedor", "resolucion_dian")
+            .only(
+                *DOCUMENTO_LIST_FIELDS,
+                "resolucion_dian_id",
+                "resolucion_dian__prefijo",
+                "resolucion_dian__consecutivo",
+                "proveedor__razon_social",
+                "proveedor_id",
+            )
+            .order_by("-fecha", "-consecutivo")
+        )
 
     @staticmethod
     def get_summary(empresa_id: int):
@@ -244,23 +279,15 @@ class DocumentoSelector:
 
         # Solo documentos NO anulados para el summary financiero
         qs_mes = DocumentoSoporte.objects.filter(
-            empresa_id=empresa_id,
-            fecha__year=hoy.year,
-            fecha__month=hoy.month,
-            anulado=False
+            empresa_id=empresa_id, fecha__year=hoy.year, fecha__month=hoy.month, anulado=False
         )
 
         from decimal import Decimal
-        totales = qs_mes.aggregate(
-            total_gastado=Sum('total'),
-            count_documentos=Count('id')
-        )
+
+        totales = qs_mes.aggregate(total_gastado=Sum("total"), count_documentos=Count("id"))
 
         return {
-            "total_gastos_mes": str(totales['total_gastado'] or Decimal('0.00')),
-            "documentos_emitidos": totales['count_documentos'] or 0,
-            "periodo_actual": mes_actual
+            "total_gastos_mes": str(totales["total_gastado"] or Decimal("0.00")),
+            "documentos_emitidos": totales["count_documentos"] or 0,
+            "periodo_actual": mes_actual,
         }
-
-
-

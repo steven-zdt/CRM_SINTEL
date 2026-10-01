@@ -20,7 +20,8 @@ from __future__ import annotations
 import logging
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 
 from .embedding_base import AIEmbeddingProvider, EmbeddingProviderError, EmbeddingResult
 
@@ -47,8 +48,7 @@ class FastEmbedProvider(AIEmbeddingProvider):
     ):
         self.model = model or os.environ.get("AI_EMBEDDING_MODEL", DEFAULT_MODEL)
         self.dimension = int(
-            dimension
-            or os.environ.get("AI_EMBEDDING_DIMENSION", DEFAULT_DIMENSION)
+            dimension or os.environ.get("AI_EMBEDDING_DIMENSION", DEFAULT_DIMENSION)
         )
         self.timeout_s = float(
             timeout_s or os.environ.get("AI_EMBEDDING_TIMEOUT_S", DEFAULT_TIMEOUT_S)

@@ -16,6 +16,7 @@ Por eso `handle()` retorna REQUIRES_REVIEW en vez de fingir un SUCCESS que
 no persiste nada -- mismo principio de FASE 2 (nunca reportar exito falso)
 aplicado a un handler nuevo, no solo al pipeline de mail original.
 """
+
 from __future__ import annotations
 
 from apps.services.document_intake.contracts import (

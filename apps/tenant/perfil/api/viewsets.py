@@ -21,11 +21,10 @@ completamente en PerfilServiceMixin (Service Layer). Expone:
 import logging
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from rest_framework import status, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.renderers import JSONRenderer, TemplateHTMLRenderer
+from rest_framework.renderers import TemplateHTMLRenderer
 from rest_framework.response import Response
 
 from apps.config.api.pagination import StandardResultsSetPagination
@@ -36,13 +35,14 @@ from apps.tenant.empresa.models import Area, Empresa, Sede
 from apps.tenant.perfil.models import Departamento, RolTenant
 from apps.tenant.perfil.services.business_service import PerfilBusinessService
 from apps.tenant.perfil.services.selectors import DEPARTAMENTO_LIST_FIELDS
+
 from .mixins import PerfilServiceMixin
-from .permissions import IsTenantProfileAdmin, IsTenantProfileOperadorOrAdmin
+from .permissions import IsTenantProfileAdmin
 from .serializers import (
     DepartamentoDetailSerializer,
     DepartamentoListSerializer,
-    TenantProfileSerializer,
     TenantProfileRolSerializer,
+    TenantProfileSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,7 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
     TenantProfile, a diferencia de OrganizationalContext.resolve(). Mismo
     hallazgo que en empresa/api/viewsets.py (Fase 9, app 1/14) - no se
     repite el razonamiento completo aqui, se referencia."""
+
     permission_classes = [IsTenantMember]
     serializer_class = TenantProfileSerializer
     pagination_class = StandardResultsSetPagination
@@ -73,10 +74,13 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
         # We need to get the Empresa singleton from the current schema.
         empresa = Empresa.objects.only("id").first()
         if not empresa:
-            return Response({
-                "empresa": "No se encontraron datos de Empresa en el tenant actual.",
-                "detail_code": "invalid"
-            }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            return Response(
+                {
+                    "empresa": "No se encontraron datos de Empresa en el tenant actual.",
+                    "detail_code": "invalid",
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
 
         queryset = self.perfil_service.list_profiles(empresa)
         page = self.paginate_queryset(queryset)
@@ -95,26 +99,29 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
         """
         # [RULE 15] Guard: solo ADMIN puede crear perfiles
         if not IsTenantProfileAdmin().has_permission(request, self):
-            raise PermissionDenied(
-                "Se requiere rol ADMIN en este tenant para crear perfiles."
-            )
+            raise PermissionDenied("Se requiere rol ADMIN en este tenant para crear perfiles.")
 
         empresa = Empresa.objects.only("id").first()
         if not empresa:
-            return Response({
-                "error": "empresa_no_encontrada",
-                "message": "No se encontraron datos de Empresa en el tenant actual."
-            }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            return Response(
+                {
+                    "error": "empresa_no_encontrada",
+                    "message": "No se encontraron datos de Empresa en el tenant actual.",
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
 
         # [RULE 5.2] El ViewSet actua SOLO como enrutador: pasa el payload crudo al
         # business service que realiza validacion semantica completa (DSV + idempotencia).
         # No usar PerfilCreateSerializer aqui ya que los campos de User (email, first_name)
         # no pertenecen al modelo TenantProfile y son manejados internamente por el service.
-        data = request.data.dict() if hasattr(request.data, 'dict') else dict(request.data)
+        data = request.data.dict() if hasattr(request.data, "dict") else dict(request.data)
 
         # Normalizar listas M2M: pueden venir como lista JSON o como multiples valores form
-        for field in ('sedes_uuids', 'areas_uuids'):
-            raw = request.data.getlist(field) if hasattr(request.data, 'getlist') else data.get(field)
+        for field in ("sedes_uuids", "areas_uuids"):
+            raw = (
+                request.data.getlist(field) if hasattr(request.data, "getlist") else data.get(field)
+            )
             if raw is not None:
                 data[field] = raw if isinstance(raw, list) else [raw]
 
@@ -128,20 +135,18 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
         except Exception as e:
             logger.error("[perfil:create] Error creando colaborador: %s", str(e))
             error_msg = str(e)
-            if isinstance(e, DjangoValidationError) and hasattr(e, 'messages'):
+            if isinstance(e, DjangoValidationError) and hasattr(e, "messages"):
                 error_msg = e.messages[0] if e.messages else str(e)
-            return Response({
-                "error": "error_creacion",
-                "message": error_msg
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-
+            return Response(
+                {"error": "error_creacion", "message": error_msg},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     @action(
         detail=False,
-        methods=['get'],
+        methods=["get"],
         renderer_classes=[TemplateHTMLRenderer],
-        url_path='render-offcanvas/crear'
+        url_path="render-offcanvas/crear",
     )
     def render_offcanvas_crear(self, request):
         """GET - Renderiza el offcanvas de creacion de perfil (HTMX).
@@ -149,37 +154,39 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
         Inyecta la lista de empresas del tenant en el contexto para poblar
         el selector de empresa con datos reales (Zero Waste).
         """
-        empresas = Empresa.objects.only(
-            'id', 'razon_social', 'nit'
-        ).order_by('razon_social')
+        empresas = Empresa.objects.only("id", "razon_social", "nit").order_by("razon_social")
 
         departamentos = (
             Departamento.objects.filter(activo=True)
-            .order_by('nombre')
-            .only('uuid', 'nombre', 'empresa_id')
+            .order_by("nombre")
+            .only("uuid", "nombre", "empresa_id")
         )
 
         # Zero Waste queries
-        sedes = Sede.objects.only('uuid', 'nombre', 'empresa_id').order_by('nombre')
-        areas = Area.objects.select_related('sede').only('uuid', 'nombre', 'sede__uuid', 'sede__nombre', 'empresa_id').order_by('nombre')
+        sedes = Sede.objects.only("uuid", "nombre", "empresa_id").order_by("nombre")
+        areas = (
+            Area.objects.select_related("sede")
+            .only("uuid", "nombre", "sede__uuid", "sede__nombre", "empresa_id")
+            .order_by("nombre")
+        )
 
         context = {
-            'empresas': empresas,
-            'rol_choices': RolTenant.choices,
-            'departamentos': departamentos,
-            'sedes': sedes,
-            'areas': areas,
+            "empresas": empresas,
+            "rol_choices": RolTenant.choices,
+            "departamentos": departamentos,
+            "sedes": sedes,
+            "areas": areas,
         }
-        return Response(
-            context,
-            template_name='tenant/perfil/offcanvas_crear_perfil.html'
-        )
+        return Response(context, template_name="tenant/perfil/offcanvas_crear_perfil.html")
 
     def retrieve(self, request, pk=None):
         """GET /api/v1/perfil/perfiles/<id>/ - Detalles de un perfil."""
         empresa = Empresa.objects.only("id").first()
         if not empresa:
-            return Response({"error": "No se encontraron datos de Empresa en el tenant actual."}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            return Response(
+                {"error": "No se encontraron datos de Empresa en el tenant actual."},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
 
         try:
             profile = self.perfil_service.get_profile(pk, empresa)
@@ -199,22 +206,25 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
     def _update_profile(self, request, pk, partial=False):
         # [SEG-2] Guard: solo ADMIN puede editar perfiles de otros usuarios
         if not IsTenantProfileAdmin().has_permission(request, self):
-            raise PermissionDenied(
-                "Se requiere rol ADMIN en este tenant para editar perfiles."
-            )
+            raise PermissionDenied("Se requiere rol ADMIN en este tenant para editar perfiles.")
 
         empresa = Empresa.objects.only("id").first()
         if not empresa:
-            return Response({"error": "No se encontraron datos de Empresa en el tenant actual."}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            return Response(
+                {"error": "No se encontraron datos de Empresa en el tenant actual."},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
 
         try:
             # Primero validamos payload con el serializer
             profile = self.perfil_service.get_profile(pk, empresa)
             serializer = self.get_serializer(profile, data=request.data, partial=partial)
             serializer.is_valid(raise_exception=True)
-            
+
             # Pasamos validated data a business layer
-            updated = self.perfil_service.update_profile_by_id(pk, empresa, serializer.validated_data)
+            updated = self.perfil_service.update_profile_by_id(
+                pk, empresa, serializer.validated_data
+            )
             result = self.get_serializer(updated)
             return Response(result.data)
         except Exception as e:
@@ -228,13 +238,14 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
         """
         # [RULE 15] Guard: solo ADMIN puede eliminar perfiles
         if not IsTenantProfileAdmin().has_permission(request, self):
-            raise PermissionDenied(
-                "Se requiere rol ADMIN en este tenant para eliminar perfiles."
-            )
+            raise PermissionDenied("Se requiere rol ADMIN en este tenant para eliminar perfiles.")
 
         empresa = Empresa.objects.only("id").first()
         if not empresa:
-            return Response({"error": "No se encontraron datos de Empresa en el tenant actual."}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            return Response(
+                {"error": "No se encontraron datos de Empresa en el tenant actual."},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
 
         # [SEG-5] Resolver el perfil destino antes de borrarlo para aplicar guards
         try:
@@ -264,9 +275,9 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
 
     @action(
         detail=True,
-        methods=['get'],
+        methods=["get"],
         renderer_classes=[TemplateHTMLRenderer],
-        url_path='render-offcanvas/editar'
+        url_path="render-offcanvas/editar",
     )
     def render_offcanvas_editar(self, request, pk=None):
         empresa = Empresa.objects.only("id", "razon_social", "nit").first()
@@ -276,68 +287,78 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
         try:
             departamentos = (
                 Departamento.objects.filter(empresa=empresa, activo=True)
-                .order_by('nombre')
-                .only('uuid', 'nombre')
+                .order_by("nombre")
+                .only("uuid", "nombre")
             )
             profile = self.perfil_service.get_profile(pk, empresa)
-            requester_profile = getattr(request.user, 'tenant_profile', None)
-            is_admin = bool(
-                requester_profile and requester_profile.rol == RolTenant.ADMIN
-            )
+            requester_profile = getattr(request.user, "tenant_profile", None)
+            is_admin = bool(requester_profile and requester_profile.rol == RolTenant.ADMIN)
 
             # Zero Waste queries
-            sedes = Sede.objects.filter(empresa=empresa).order_by('nombre').only('uuid', 'nombre')
-            areas = Area.objects.filter(empresa=empresa).select_related('sede').order_by('nombre').only('uuid', 'nombre', 'sede__uuid', 'sede__nombre')
+            sedes = Sede.objects.filter(empresa=empresa).order_by("nombre").only("uuid", "nombre")
+            areas = (
+                Area.objects.filter(empresa=empresa)
+                .select_related("sede")
+                .order_by("nombre")
+                .only("uuid", "nombre", "sede__uuid", "sede__nombre")
+            )
 
-            assigned_sedes_uuids = [str(u) for u in profile.sedes_asignadas.values_list('uuid', flat=True)]
-            assigned_areas_uuids = [str(u) for u in profile.areas_asignadas.values_list('uuid', flat=True)]
+            assigned_sedes_uuids = [
+                str(u) for u in profile.sedes_asignadas.values_list("uuid", flat=True)
+            ]
+            assigned_areas_uuids = [
+                str(u) for u in profile.areas_asignadas.values_list("uuid", flat=True)
+            ]
 
             context = {
-                'profile': profile,
-                'empresa': empresa,
-                'is_admin': is_admin,
-                'rol_choices': RolTenant.choices,
-                'departamentos': departamentos,
-                'sedes': sedes,
-                'areas': areas,
-                'assigned_sedes_uuids': assigned_sedes_uuids,
-                'assigned_areas_uuids': assigned_areas_uuids,
+                "profile": profile,
+                "empresa": empresa,
+                "is_admin": is_admin,
+                "rol_choices": RolTenant.choices,
+                "departamentos": departamentos,
+                "sedes": sedes,
+                "areas": areas,
+                "assigned_sedes_uuids": assigned_sedes_uuids,
+                "assigned_areas_uuids": assigned_areas_uuids,
             }
-            return Response(context, template_name='tenant/perfil/offcanvas_editar_perfil.html')
+            return Response(context, template_name="tenant/perfil/offcanvas_editar_perfil.html")
         except Exception as e:
             return Response({"error": str(e)}, status=404)
 
     @action(
         detail=True,
-        methods=['get'],
+        methods=["get"],
         renderer_classes=[TemplateHTMLRenderer],
-        url_path='render-offcanvas/detalle'
+        url_path="render-offcanvas/detalle",
     )
     def render_offcanvas_detalle(self, request, pk=None):
         empresa = Empresa.objects.only("id").first()
         try:
             profile = self.perfil_service.get_profile(pk, empresa)
-            context = {'profile': profile}
-            return Response(context, template_name='tenant/perfil/offcanvas_detalle_perfil.html')
+            context = {"profile": profile}
+            return Response(context, template_name="tenant/perfil/offcanvas_detalle_perfil.html")
         except Exception as e:
             return Response({"error": str(e)}, status=404)
 
-    @action(detail=False, methods=['get', 'patch'], url_path='me')
+    @action(detail=False, methods=["get", "patch"], url_path="me")
     def me(self, request):
         """GET/PATCH /api/v1/perfil/perfiles/me/ - Perfil del usuario actual."""
         empresa = Empresa.objects.only("id").first()
         if not empresa:
-            return Response({
-                "empresa": "No se encontraron datos de Empresa en el tenant actual.",
-                "detail_code": "invalid"
-            }, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            return Response(
+                {
+                    "empresa": "No se encontraron datos de Empresa en el tenant actual.",
+                    "detail_code": "invalid",
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
 
-        if request.method == 'GET':
+        if request.method == "GET":
             profile = self.perfil_service.get_or_initialize_profile(request.user, empresa)
             serializer = self.get_serializer(profile)
             return Response(serializer.data)
 
-        if request.method == 'PATCH':
+        if request.method == "PATCH":
             serializer = self.get_serializer(data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             updated_profile = self.perfil_service.update_user_profile(
@@ -348,9 +369,9 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
 
     @action(
         detail=True,
-        methods=['patch'],
-        url_path='assign-rol',
-        url_name='assign-rol',
+        methods=["patch"],
+        url_path="assign-rol",
+        url_name="assign-rol",
     )
     def assign_rol(self, request, pk=None):
         """PATCH /api/v1/perfil/perfiles/<id>/assign-rol/ - Asigna un rol al perfil.
@@ -365,14 +386,12 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
         """
         # [RULE 15] Guard
         if not IsTenantProfileAdmin().has_permission(request, self):
-            raise PermissionDenied(
-                "Se requiere rol ADMIN en este tenant para asignar roles."
-            )
+            raise PermissionDenied("Se requiere rol ADMIN en este tenant para asignar roles.")
 
         # Validar payload via serializer dedicado
         rol_serializer = TenantProfileRolSerializer(data=request.data)
         rol_serializer.is_valid(raise_exception=True)
-        new_rol = rol_serializer.validated_data['rol']
+        new_rol = rol_serializer.validated_data["rol"]
 
         # Resolver empresa del tenant activo
         empresa = Empresa.objects.only("id").first()
@@ -390,7 +409,7 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
             )
         except Exception as exc:
             logger.error("[perfil:assign_rol] pk=%s error=%s", pk, str(exc))
-            if isinstance(exc, DjangoValidationError) and hasattr(exc, 'messages'):
+            if isinstance(exc, DjangoValidationError) and hasattr(exc, "messages"):
                 detail = exc.messages[0] if exc.messages else str(exc)
             else:
                 detail = str(exc)
@@ -407,6 +426,7 @@ class DepartamentoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     Fase 9 (OCF): OrganizationalContextMixin adoptado de forma aditiva.
     get_queryset()/perform_* no migrados - misma razon que PerfilViewSet.
     """
+
     # WARNING: [SEC-A4] IsTenantMember agregado -- IsTenantAdminOrReadOnly solo no
     # valida membresia en SAFE_METHODS (permite lectura a cualquier autenticado de
     # cualquier tenant).
@@ -414,7 +434,7 @@ class DepartamentoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     queryset = Departamento.objects.none()
 
     def get_serializer_class(self):
-        if self.action in ['retrieve', 'update', 'partial_update']:
+        if self.action in ["retrieve", "update", "partial_update"]:
             return DepartamentoDetailSerializer
         return DepartamentoListSerializer
 
@@ -434,7 +454,9 @@ class DepartamentoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
             serializer.instance = instance
         except Exception as e:
             if isinstance(e, DjangoValidationError):
-                raise serializers.ValidationError(e.message_dict if hasattr(e, 'message_dict') else e.messages)
+                raise serializers.ValidationError(
+                    e.message_dict if hasattr(e, "message_dict") else e.messages
+                ) from e
             raise e
 
     def perform_update(self, serializer):
@@ -443,11 +465,15 @@ class DepartamentoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
             raise DjangoValidationError("No se encontró la empresa del tenant.")
         perfil_service = PerfilBusinessService()
         try:
-            instance = perfil_service.update_departamento(self.get_object().uuid, empresa, serializer.validated_data)
+            instance = perfil_service.update_departamento(
+                self.get_object().uuid, empresa, serializer.validated_data
+            )
             serializer.instance = instance
         except Exception as e:
             if isinstance(e, DjangoValidationError):
-                raise serializers.ValidationError(e.message_dict if hasattr(e, 'message_dict') else e.messages)
+                raise serializers.ValidationError(
+                    e.message_dict if hasattr(e, "message_dict") else e.messages
+                ) from e
             raise e
 
     def perform_destroy(self, instance):
@@ -459,5 +485,7 @@ class DepartamentoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
             perfil_service.delete_departamento(instance.uuid, empresa)
         except Exception as e:
             if isinstance(e, DjangoValidationError):
-                raise serializers.ValidationError(e.message_dict if hasattr(e, 'message_dict') else e.messages)
+                raise serializers.ValidationError(
+                    e.message_dict if hasattr(e, "message_dict") else e.messages
+                ) from e
             raise e

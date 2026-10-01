@@ -15,6 +15,7 @@ metodo efectivamente usa select_for_update() -- la misma barra de evidencia
 que el resto de generadores de numeracion de este proyecto (cotizaciones/
 compras/ventas/empleados) ya aceptan sin tests de concurrencia real propios.
 """
+
 from apps.config.tests.base_tenant import TenantAPITestCase
 from apps.tenant.contabilidad.models import TipoComprobante
 from apps.tenant.empresa.models import Empresa
@@ -24,10 +25,14 @@ class TipoComprobanteNumeracionP0_04Tests(TenantAPITestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            nombre='Empresa P0-04', nit='900000794',
+            nombre="Empresa P0-04",
+            nit="900000794",
         )
         self.tipo = TipoComprobante.objects.create(
-            empresa=self.empresa, codigo='CP4', nombre='Comprobante P0-04', prefijo='CP4',
+            empresa=self.empresa,
+            codigo="CP4",
+            nombre="Comprobante P0-04",
+            prefijo="CP4",
             consecutivo_actual=1,
         )
 
@@ -47,5 +52,6 @@ class TipoComprobanteNumeracionP0_04Tests(TenantAPITestCase):
         """Confirma que la correccion real (select_for_update) esta en el
         codigo, no solo que el resultado final coincide por casualidad."""
         import inspect
+
         codigo_fuente = inspect.getsource(TipoComprobante.obtener_siguiente_numero)
-        self.assertIn('select_for_update', codigo_fuente)
+        self.assertIn("select_for_update", codigo_fuente)

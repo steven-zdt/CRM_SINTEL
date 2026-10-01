@@ -4,23 +4,22 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('facturas', '0011_factura_uuid'),
-        ('contabilidad', '0007_migrate_retenciones_from_facturas'),
+        ("facturas", "0011_factura_uuid"),
+        ("contabilidad", "0007_migrate_retenciones_from_facturas"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='factura',
-            name='retefuente',
+            model_name="factura",
+            name="retefuente",
         ),
         migrations.RemoveField(
-            model_name='factura',
-            name='reteica',
+            model_name="factura",
+            name="reteica",
         ),
         migrations.RemoveField(
-            model_name='factura',
-            name='reteiva',
+            model_name="factura",
+            name="reteiva",
         ),
     ]

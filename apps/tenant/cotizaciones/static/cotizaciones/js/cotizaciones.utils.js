@@ -19,9 +19,9 @@
       if (w.DOMUtils && typeof w.DOMUtils.formatCurrency === 'function') {
         return w.DOMUtils.formatCurrency(num, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
       }
-      return new Intl.NumberFormat('es-CO', {
+      return new Intl.NumberFormat('en-US', {
         style: 'currency',
-        currency: 'COP',
+        currency: 'USD',
         minimumFractionDigits: 0,
         maximumFractionDigits: 0
       }).format(num);

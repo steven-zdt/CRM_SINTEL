@@ -2,14 +2,15 @@
 Data Transfer Objects (DTOs) para Dashboard v3.9.4
 Contratos inmutables entre dashboard y apps de dominio (Pull Model).
 """
+
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import List, Optional
 
 
 @dataclass(frozen=True)
 class WidgetFacturasDTO:
     """DTO para métricas de Facturas."""
+
     total_facturas: int
     facturas_pendientes: int
     facturas_vencidas: int
@@ -20,6 +21,7 @@ class WidgetFacturasDTO:
 @dataclass(frozen=True)
 class WidgetInventarioDTO:
     """DTO para métricas de Inventario (Kardex)."""
+
     total_productos: int
     productos_bajo_stock: int
     movimientos_mes: int
@@ -30,6 +32,7 @@ class WidgetInventarioDTO:
 @dataclass(frozen=True)
 class WidgetEmpleadosDTO:
     """DTO para métricas de Empleados."""
+
     total_empleados: int
     empleados_activos: int
     nominas_pendientes: int
@@ -39,6 +42,7 @@ class WidgetEmpleadosDTO:
 @dataclass(frozen=True)
 class WidgetGastosDTO:
     """DTO para métricas de Gastos."""
+
     total_gastos_mes: Decimal
     gastos_pendientes: int
     # REM P3-03 (docs/remediation/REM-P3-03.md): antes se llamaba
@@ -53,6 +57,7 @@ class WidgetGastosDTO:
 @dataclass(frozen=True)
 class WidgetProveedoresDTO:
     """DTO para métricas de Proveedores."""
+
     total_provedores: int
     total_gastos: Decimal
     cartera_pendiente: Decimal
@@ -61,6 +66,7 @@ class WidgetProveedoresDTO:
 @dataclass(frozen=True)
 class WidgetProyectosDTO:
     """DTO para métricas de Proyectos."""
+
     total_proyectos: int
     proyectos_activos: int
     tareas_pendientes: int
@@ -70,6 +76,7 @@ class WidgetProyectosDTO:
 @dataclass(frozen=True)
 class WidgetClientesDTO:
     """DTO para métricas de Clientes."""
+
     total_clientes: int
     clientes_activos: int
     nuevos_mes: int
@@ -80,7 +87,8 @@ class WidgetClientesDTO:
 @dataclass(frozen=True)
 class KpiSedeDTO:
     """DTO para indicadores transversales por sede."""
-    sede_uuid: Optional[str]
+
+    sede_uuid: str | None
     sede_nombre: str
     gastos_total: Decimal
     ingresos_total: Decimal
@@ -93,13 +101,14 @@ class KpiSedeDTO:
 @dataclass(frozen=True)
 class DashboardMetricasDTO:
     """DTO principal que consolida todas las métricas del dashboard."""
+
     empresa_nombre: str
     empresa_nit: str
     fecha_actualizacion: str
     facturas: WidgetFacturasDTO
     inventario: WidgetInventarioDTO
     empleados: WidgetEmpleadosDTO
-    gastos: Optional[WidgetGastosDTO] = None
-    proveedores: Optional[WidgetProveedoresDTO] = None
-    proyectos: Optional[WidgetProyectosDTO] = None
-    clientes: Optional[WidgetClientesDTO] = None
+    gastos: WidgetGastosDTO | None = None
+    proveedores: WidgetProveedoresDTO | None = None
+    proyectos: WidgetProyectosDTO | None = None
+    clientes: WidgetClientesDTO | None = None

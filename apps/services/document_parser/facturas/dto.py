@@ -6,6 +6,7 @@ WARNING: PRINCIPIOS:
 - Reutiliza DTOs genéricos cuando es posible
 - Agrega estructuras específicas para facturas cuando es necesario
 """
+
 from typing import Literal
 
 # Reutilizar DTOs genéricos
@@ -24,8 +25,8 @@ FacturaDocumentType = Literal[
 ]
 
 __all__ = [
-    'IdentificadoresDTO',
-    'PartyDTO',
-    'TotalesDTO',
-    'FacturaDocumentType',
+    "IdentificadoresDTO",
+    "PartyDTO",
+    "TotalesDTO",
+    "FacturaDocumentType",
 ]

@@ -24,7 +24,10 @@ redis>=5.0,<6.0
 python-dotenv>=1.0,<2.0
 requests>=2.31,<3.0  # Para integraciones externas (DIAN, bancos, etc.)
 zeep>=4.2,<5.0  # Cliente SOAP -- FISCAL-02, DIANAdapter (webservice DIAN, no verificado, ver docs/fiscal/)
-cryptography>=42.0,<44.0  # Firma XAdES-EPES (XadesSignerService) -- ya se importaba, faltaba pineado aqui
+cryptography>=45.0.1,<51.0  # Firma XAdES-EPES (XadesSignerService, hazmat primitives estables) +
+# requerido por google-adk via authlib. Subido desde <44.0 (2026-09-22, decision explicita del
+# usuario): no se generan/firman facturas nuevas en este momento (solo se importan XML ya
+# firmados por su emisor, lectura de CUFE) -- ver docs/adk/ADK_BASELINE.md "Adenda Fase 4".
 django-cors-headers>=4.3,<5.0  # CORS para subdominios dinámicos (sintel.net.co)
 Pillow>=10.4.0,<12.0  # Para ImageField en modelos Django (soporte Python 3.13 wheels)
 
@@ -40,6 +43,17 @@ xhtml2pdf>=0.2.11,<0.3  # Generación de PDF desde HTML (ligero, sin dependencia
 
 # IA — Asistente Contable
 anthropic>=0.40.0,<1.0  # Claude API para sugerencia automática de líneas de asiento
+
+# IA — Orquestador de agentes (Fase 4-5, docs/adk/ADK_STATUS.md)
+google-adk==2.9.2  # Google Agent Development Kit -- orquestador de agentes para el Asistente IA.
+# Instalado en el mismo entorno que Django (decision explicita del usuario, 2026-09-22): sin
+# servicio/imagen aparte.
+litellm>=1.102,<2.0  # Adaptador de modelo (google.adk.models.lite_llm.LiteLlm) -- habla con LM
+# Studio local (OpenAI-compatible, http://host.docker.internal:1234/v1) sin acoplar el agente a
+# un proveedor especifico. Deliberadamente NO se instala via `google-adk[extensions]` -- ese extra
+# arrastra langchain/langgraph/llama-index/boto3/kubernetes/docker-sdk (80+ paquetes) que no hacen
+# falta solo para hablar con un endpoint OpenAI-compatible; litellm solo (~14 paquetes) es lo unico
+# que LiteLlm necesita importable.
 
 # IA — Vector/Retrieval Layer (POC pgvector, docs/ai/AI_VECTOR_POC_EXECUTION.md)
 pgvector>=0.5,<0.6  # VectorField/HnswIndex para Django + psycopg3 (AI-VECTOR-03). La

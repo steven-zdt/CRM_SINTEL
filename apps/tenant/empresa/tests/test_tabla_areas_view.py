@@ -8,6 +8,7 @@ Verifica:
 4. No se expone ninguna columna "Responsable" (campo huerfano que no existe
    en el modelo Area ni en ningun serializer -- ver nota en tables.py).
 """
+
 import pytest
 from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context
@@ -22,10 +23,14 @@ User = get_user_model()
 @pytest.fixture
 def _admin_con_areas(tenant):
     with schema_context(tenant.schema_name):
-        empresa = Empresa.objects.only('id').first()
-        sede = Sede.objects.create(empresa=empresa, nombre='Sede Principal')
-        Area.objects.create(empresa=empresa, sede=sede, nombre='Contabilidad', codigo_funcionamiento='CTB-01')
-        Area.objects.create(empresa=empresa, sede=sede, nombre='Recursos Humanos', codigo_funcionamiento='RRHH-01')
+        empresa = Empresa.objects.only("id").first()
+        sede = Sede.objects.create(empresa=empresa, nombre="Sede Principal")
+        Area.objects.create(
+            empresa=empresa, sede=sede, nombre="Contabilidad", codigo_funcionamiento="CTB-01"
+        )
+        Area.objects.create(
+            empresa=empresa, sede=sede, nombre="Recursos Humanos", codigo_funcionamiento="RRHH-01"
+        )
 
         admin_user = User.objects.create(username="admin_area", email="admin_area@example.com")
         TenantProfile.objects.create(user=admin_user, empresa=empresa, rol="ADMIN")
@@ -55,7 +60,9 @@ def test_tabla_areas_busqueda(client, tenant, _admin_con_areas):
     with schema_context(tenant.schema_name):
         client.force_login(_admin_con_areas)
 
-    r = client.get("/ui/empresa/areas/tabla/?q=Contabilidad", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co")
+    r = client.get(
+        "/ui/empresa/areas/tabla/?q=Contabilidad", HTTP_HOST=f"{tenant.schema_name}.sintel.net.co"
+    )
 
     assert r.status_code == 200
     html = r.content.decode("utf-8")

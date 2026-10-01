@@ -9,6 +9,20 @@ from .empleados_tools import BuscarEmpleadoTool
 from .facturas_tools import ConsultarFacturaTool
 from .gastos_tools import ConsultarGastoTool, ValidarGastoTool
 from .inventario_tools import BuscarProductoTool, ValidarProductoTool
+from .platform_audit_tools import (
+    ApiInventoryTool,
+    AuditDomainTool,
+    BusinessRuleInventoryTool,
+    DjangoCheckTool,
+    DomainInventoryTool,
+    GovernanceAuditTool,
+    InspectDependenciesTool,
+    InspectModelTool,
+    MigrationCheckTool,
+    ProductionReadinessTool,
+    ProjectInventoryTool,
+    TenantContextTool,
+)
 from .proveedores_tools import BuscarProveedorTool, ValidarProveedorTool
 from .proyectos_tools import ConsultarProyectoTool
 from .registry import get_tool, list_tools, register_tool, tool_metadata
@@ -19,6 +33,18 @@ from .ventas_tools import ConsultarVentaTool
 # para el resto de dominios (diseñados, no implementados todavia).
 register_tool(BuscarClienteTool())
 register_tool(ProjectMapTool())
+register_tool(ProjectInventoryTool())
+register_tool(GovernanceAuditTool())
+register_tool(ProductionReadinessTool())
+register_tool(InspectDependenciesTool())
+register_tool(BusinessRuleInventoryTool())
+register_tool(TenantContextTool())
+register_tool(DomainInventoryTool())
+register_tool(AuditDomainTool())
+register_tool(InspectModelTool())
+register_tool(ApiInventoryTool())
+register_tool(DjangoCheckTool())
+register_tool(MigrationCheckTool())
 register_tool(BuscarProductoTool())
 register_tool(BuscarProveedorTool())
 register_tool(ConsultarVentaTool())

@@ -7,6 +7,7 @@ Mismo hallazgo que en empresa/clientes: estos ViewSets resuelven la empresa
 via resolve_tenant_empresa(), que no exige TenantProfile, mientras
 OrganizationalContext.resolve() si lo exige.
 """
+
 from apps.tenant.core.services.organizational_context import (
     OrganizationalContext,
     OrganizationalContextError,
@@ -24,14 +25,21 @@ class ProveedorOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9 Proveedores", nit="900000996", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9 Proveedores",
+            nit="900000996",
+            direccion="Calle 1",
         )
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor Fase9", numero_documento="321", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor Fase9",
+            numero_documento="321",
+            tipo_documento="NIT",
         )
 
     def test_proveedorviewset_exposes_get_organizational_context_with_a_real_profile(self):
-        TenantProfile.objects.create(user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA")
+        TenantProfile.objects.create(
+            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA"
+        )
 
         from rest_framework.test import APIRequestFactory
         from rest_framework_simplejwt.authentication import JWTAuthentication

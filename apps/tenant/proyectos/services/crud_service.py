@@ -6,9 +6,10 @@ WARNING: SINTEL v3.5: Capa de Persistencia Pura
 - Zero Trust: Validacion de empresa_id
 - Aislamiento: Sin logica de negocio compleja, solo persistencia
 """
-from django.db import transaction, IntegrityError
+
+from django.db import IntegrityError, transaction
 from rest_framework.exceptions import ValidationError
-from ..models import Proyecto, AsignacionPersonal, PedidoProyecto, TareaCorta
+
 
 @transaction.atomic
 def save_proyecto(proyecto, update_fields=None):
@@ -20,12 +21,17 @@ def save_proyecto(proyecto, update_fields=None):
         proyecto.save(update_fields=update_fields)
     except IntegrityError as e:
         # Si es un error de unicidad del codigo, lanzar error de validacion descriptivo
-        if 'uniq_proyecto_codigo_empresa' in str(e):
-            raise ValidationError({'codigo': f'El codigo "{proyecto.codigo}" ya esta en uso para otro proyecto.'})
+        if "uniq_proyecto_codigo_empresa" in str(e):
+            raise ValidationError(
+                {"codigo": f'El codigo "{proyecto.codigo}" ya esta en uso para otro proyecto.'}
+            ) from e
         # Otros errores de integridad
-        raise ValidationError({'detail': f'Error de integridad al guardar el proyecto: {str(e)}'})
-    
+        raise ValidationError(
+            {"detail": f"Error de integridad al guardar el proyecto: {str(e)}"}
+        ) from e
+
     return proyecto
+
 
 @transaction.atomic
 def delete_proyecto(proyecto):
@@ -35,6 +41,7 @@ def delete_proyecto(proyecto):
     proyecto.delete()
     return True
 
+
 @transaction.atomic
 def save_asignacion(asignacion):
     """
@@ -42,6 +49,7 @@ def save_asignacion(asignacion):
     """
     asignacion.save()
     return asignacion
+
 
 @transaction.atomic
 def delete_asignacion(asignacion):
@@ -51,6 +59,7 @@ def delete_asignacion(asignacion):
     asignacion.delete()
     return True
 
+
 @transaction.atomic
 def save_pedido(pedido):
     """
@@ -58,6 +67,7 @@ def save_pedido(pedido):
     """
     pedido.save()
     return pedido
+
 
 @transaction.atomic
 def delete_pedido(pedido):
@@ -67,6 +77,7 @@ def delete_pedido(pedido):
     pedido.delete()
     return True
 
+
 @transaction.atomic
 def save_tarea_corta(tarea_corta):
     """
@@ -74,6 +85,7 @@ def save_tarea_corta(tarea_corta):
     """
     tarea_corta.save()
     return tarea_corta
+
 
 @transaction.atomic
 def delete_tarea_corta(tarea_corta):

@@ -1,4 +1,5 @@
 import logging
+
 from django.conf import settings
 from rest_framework.routers import DefaultRouter
 
@@ -12,14 +13,18 @@ try:
         TransaccionBancariaViewSet,
     )
 except ImportError as e:
-    logger.error(f"ERROR: No se pudo importar ViewSets en api/urls.py de bancos: {e}", exc_info=True)
+    logger.error(
+        f"ERROR: No se pudo importar ViewSets en api/urls.py de bancos: {e}", exc_info=True
+    )
     raise
 
 router = DefaultRouter()
 router.register(r"cuentas", CuentaBancariaViewSet, basename="bancos-cuentas")
 router.register(r"extractos", ExtractoBancarioViewSet, basename="bancos-extractos")
 router.register(r"transacciones", TransaccionBancariaViewSet, basename="bancos-transacciones")
-router.register(r"aplicaciones", MovimientoBancarioAplicacionViewSet, basename="bancos-aplicaciones")
+router.register(
+    r"aplicaciones", MovimientoBancarioAplicacionViewSet, basename="bancos-aplicaciones"
+)
 
 urlpatterns = router.urls
 

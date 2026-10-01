@@ -22,6 +22,8 @@ urlpatterns = [
     ),  # Mantiene lógica HTMX
     # Usuarios (API-First: DataTables consume /api/admin/v1/console/dt/users/)
     path("users/", views.UsersListView.as_view(), name="users-list"),
+    # LLM Provider Hub (Fase 8, PLAN_MAESTRO_LLM_PROVIDER_HUB_SINTEL_CONSOLE_20260924.md)
+    path("llm/providers/", views.LLMProvidersView.as_view(), name="llm-providers"),
     # Impuestos
     path("impuestos/", views.ImpuestosIndexView.as_view(), name="impuestos-index"),
     path("impuestos/catalogo/", views.ImpuestosCatalogoView.as_view(), name="impuestos-catalogo"),

@@ -1,17 +1,20 @@
 """
 F31.6 -- Migracion de grillas de Inventario (Tabulator -> django-tables2 + HTMX).
 
-Verifica las 4 vistas server-rendered ya wireadas en urls.py (categoria-tabla,
-producto-tabla, servicio-tabla, activo-tabla) que reemplazan la
-inicializacion de Tabulator en categorias_list.js/productos_list.js/
-servicios_list.js/activos_list.js. "movimientos" (Kardex) queda fuera de
-alcance -- ver docstring de apps/tenant/inventario/tables.py.
+Productos, Servicios y Activos Fijos migraron despues a DataTables 3.x (ver
+docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md) -- categoria-tabla sigue
+siendo la vista HTML completa (django-tables2); producto-tabla/activo-tabla
+ahora solo sirven KPIs (kpis_productos.html/kpis_activos.html), el listado
+real se verifica via POST /api/v1/inventario/{productos,servicios,activos}/dt/;
+servicio-tabla (sin KPIs) se retiro por completo. "movimientos" (Kardex)
+queda fuera de alcance -- ver docstring de apps/tenant/inventario/tables.py.
 
 No existia cobertura previa para estas vistas (el backend -- tables.py/
 views.py -- se habia comiteado sin tests en un pase anterior, commit
 60d8a33). FALTA COBERTURA CRITICA -> CREAR (regla de F31: reutilizar >
 corregir > consolidar > crear).
 """
+
 from django.urls import reverse
 
 from apps.tenant.empresa.models import Empresa
@@ -24,10 +27,13 @@ class InventarioTablasHtmxTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test F31 Inventario", nit="900000996", direccion="Calle 1",
+            razon_social="Empresa Test F31 Inventario",
+            nit="900000996",
+            direccion="Calle 1",
         )
         TenantProfile.objects.get_or_create(
-            user=self.user, defaults={"empresa": self.empresa, "rol": "ADMIN", "alcance": "EMPRESA"},
+            user=self.user,
+            defaults={"empresa": self.empresa, "rol": "ADMIN", "alcance": "EMPRESA"},
         )
 
     def test_categoria_tabla_renderiza_categoria_existente(self):
@@ -55,37 +61,115 @@ class InventarioTablasHtmxTests(SintelTenantTestCase):
 
         self.assertContains(response, f'data-uuid="{cat.uuid}"')
 
-    def test_producto_tabla_renderiza_producto_y_kpis(self):
+    def test_producto_tabla_renderiza_kpis(self):
+        """Producto migro a DataTables (ver
+        docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md) -- esta vista ya
+        solo sirve los KPIs (kpis_productos.html); el listado real se
+        verifica en test_dt_producto_contrato_basico (POST /api/v1/inventario/productos/dt/)."""
         Producto.objects.create(
-            empresa=self.empresa, codigo="SKU-F31", nombre="Producto F31 Test",
-            stock_actual=10, stock_minimo=2, precio_venta=1000, costo_promedio=500,
+            empresa=self.empresa,
+            codigo="SKU-F31",
+            nombre="Producto F31 Test",
+            stock_actual=10,
+            stock_minimo=2,
+            precio_venta=1000,
+            costo_promedio=500,
         )
 
         response = self.client.get(reverse("inventario:producto-tabla"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Producto F31 Test")
         self.assertContains(response, "SKUs")
-        self.assertContains(response, "btn-ver-kardex")
 
-    def test_servicio_tabla_renderiza_servicio_existente(self):
-        Servicio.objects.create(empresa=self.empresa, codigo="SRV-F31", nombre="Servicio F31 Test")
+    def test_dt_producto_contrato_basico(self):
+        Producto.objects.create(
+            empresa=self.empresa,
+            codigo="SKU-F31",
+            nombre="Producto F31 Test",
+            stock_actual=10,
+            stock_minimo=2,
+            precio_venta=1000,
+            costo_promedio=500,
+        )
 
-        response = self.client.get(reverse("inventario:servicio-tabla"))
+        payload = {
+            "draw": 1,
+            "start": 0,
+            "length": 10,
+            "search": {"value": ""},
+            "order": [],
+            "columns": [],
+        }
+        response = self.client.post(
+            "/api/v1/inventario/productos/dt/", data=payload, content_type="application/json"
+        )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Servicio F31 Test")
+        body = response.json()
+        nombres = [row["nombre"] for row in body["data"]]
+        self.assertIn("Producto F31 Test", nombres)
+        # id (uuid) presente para las acciones de fila (btn-ver-kardex/editar/eliminar)
+        self.assertTrue(all(row.get("id") for row in body["data"]))
 
-    def test_activo_tabla_renderiza_activo_y_kpis(self):
+    def test_dt_servicio_contrato_basico(self):
+        Servicio.objects.create(empresa=self.empresa, codigo="SRV-F31", nombre="Servicio F31 Test")
+
+        payload = {
+            "draw": 1,
+            "start": 0,
+            "length": 10,
+            "search": {"value": ""},
+            "order": [],
+            "columns": [],
+        }
+        response = self.client.post(
+            "/api/v1/inventario/servicios/dt/", data=payload, content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        nombres = [row["nombre"] for row in response.json()["data"]]
+        self.assertIn("Servicio F31 Test", nombres)
+
+    def test_activo_tabla_renderiza_kpis(self):
+        """Activo Fijo migro a DataTables (ver
+        docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md) -- esta vista ya
+        solo sirve los KPIs (kpis_activos.html); el listado real se verifica
+        en test_dt_activo_contrato_basico (POST /api/v1/inventario/activos/dt/)."""
         ActivoFijo.objects.create(
-            empresa=self.empresa, codigo="ACT-F31", nombre="Activo F31 Test", estado="ACTIVO",
+            empresa=self.empresa,
+            codigo="ACT-F31",
+            nombre="Activo F31 Test",
+            estado="ACTIVO",
         )
 
         response = self.client.get(reverse("inventario:activo-tabla"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Activo F31 Test")
         self.assertContains(response, "En Uso")
+
+    def test_dt_activo_contrato_basico(self):
+        ActivoFijo.objects.create(
+            empresa=self.empresa,
+            codigo="ACT-F31",
+            nombre="Activo F31 Test",
+            estado="ACTIVO",
+        )
+
+        payload = {
+            "draw": 1,
+            "start": 0,
+            "length": 10,
+            "search": {"value": ""},
+            "order": [],
+            "columns": [],
+        }
+        response = self.client.post(
+            "/api/v1/inventario/activos/dt/", data=payload, content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        nombres = [row["nombre"] for row in response.json()["data"]]
+        self.assertIn("Activo F31 Test", nombres)
 
     def test_categoria_tabla_filtra_por_busqueda(self):
         CategoriaItem.objects.create(empresa=self.empresa, nombre="Electrodomesticos")

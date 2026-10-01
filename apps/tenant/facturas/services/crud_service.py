@@ -11,14 +11,12 @@ Reglas SINTEL v3.5:
 """
 
 import logging
-from typing import Any, Iterable
+from typing import Any
 
-from django.db import transaction, IntegrityError
-from django.db.models import ProtectedError
-from django.utils import timezone
+from django.db import transaction
 
 from apps.tenant.empresa.models import Empresa
-from apps.tenant.facturas.models import Factura, FacturaAnexos, ItemFactura
+from apps.tenant.facturas.models import Factura, FacturaAnexos
 from apps.tenant.facturas.services.selectors import FacturaSelectors
 
 logger = logging.getLogger(__name__)
@@ -55,10 +53,7 @@ class FacturaCRUDService:
         if anexos_data:
             FacturaAnexos.objects.update_or_create(
                 factura=factura,
-                defaults={
-                    "empresa": factura.empresa,
-                    **anexos_data
-                },
+                defaults={"empresa": factura.empresa, **anexos_data},
             )
 
         return factura
@@ -71,7 +66,7 @@ class FacturaCRUDService:
         """
         # Eliminar nota de crédito asociada primero (OneToOne PROTECT workaround)
         # Usar la relación inversa "nota_credito" definida en el modelo
-        if hasattr(factura, 'nota_credito') and factura.nota_credito:
+        if hasattr(factura, "nota_credito") and factura.nota_credito:
             try:
                 factura.nota_credito.delete()
             except Exception as e:
@@ -93,18 +88,16 @@ class FacturaCRUDService:
     def actualizar(factura: Factura, update_data: dict[str, Any]) -> Factura:
         """
         Actualiza campos específicos de una factura.
-        
+
         # WARNING: SINTEL v3.5: Persistencia transaccional.
         """
         for field, value in update_data.items():
             setattr(factura, field, value)
-        
+
         # SINTEL v3.5: Forzar timestamp de actualización
-        if hasattr(factura, 'updated_at'):
-            factura.save(update_fields=list(update_data.keys()) + ['updated_at'])
+        if hasattr(factura, "updated_at"):
+            factura.save(update_fields=list(update_data.keys()) + ["updated_at"])
         else:
             factura.save(update_fields=list(update_data.keys()))
-            
+
         return factura
-
-

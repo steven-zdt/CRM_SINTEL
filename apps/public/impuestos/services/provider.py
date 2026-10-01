@@ -321,11 +321,8 @@ def get_empresa_form_metadata() -> dict[str, Any]:
                 obj = ContribuyenteTipo.objects.filter(
                     clase="PN", segmento_dian=codigo, activo=True
                 ).first()
-                if obj:
-                    nombre = obj.get_segmento_dian_display()
-                else:
-                    # Fallback: usar el código si no se encuentra
-                    nombre = codigo
+                # Fallback: usar el código si no se encuentra
+                nombre = obj.get_segmento_dian_display() if obj else codigo
             except Exception:
                 nombre = codigo
             segmentos_pn_unicos[codigo] = nombre
@@ -338,10 +335,7 @@ def get_empresa_form_metadata() -> dict[str, Any]:
                 obj = ContribuyenteTipo.objects.filter(
                     clase="PJ", segmento_dian=codigo, activo=True
                 ).first()
-                if obj:
-                    nombre = obj.get_segmento_dian_display()
-                else:
-                    nombre = codigo
+                nombre = obj.get_segmento_dian_display() if obj else codigo
             except Exception:
                 nombre = codigo
             segmentos_pj_unicos[codigo] = nombre

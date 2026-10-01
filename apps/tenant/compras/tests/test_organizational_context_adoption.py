@@ -11,10 +11,10 @@ divergencia), y que get_queryset() sigue sin migrarse por una razon
 distinta: get_qs_list() ya hace un filtro sede-aware mas especifico
 (alcance SEDE/AREA) que el generico context.filter().
 """
+
 from apps.tenant.compras.api.viewsets import OrdenCompraViewSet
 from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra
 from apps.tenant.compras.services.selectors import OrdenCompraSelector
-from apps.tenant.core.services.organizational_context import OrganizationalContext
 from apps.tenant.empresa.models import Sede
 from apps.tenant.perfil.models import TenantProfile
 from apps.tenant.proveedores.models import Proveedor
@@ -27,19 +27,33 @@ class ComprasOrganizationalContextAdoptionTests(SintelTenantTestCase):
         from apps.tenant.empresa.models import Empresa
 
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test OCF Fase9 Compras", nit="900000993", direccion="Calle 1",
+            razon_social="Empresa Test OCF Fase9 Compras",
+            nit="900000993",
+            direccion="Calle 1",
         )
         self.sede = Sede.objects.create(empresa=self.empresa, nombre="Principal Fase9 Compras")
         self.proveedor = Proveedor.objects.create(
-            empresa=self.empresa, razon_social="Proveedor Fase9 Compras", numero_documento="777", tipo_documento="NIT",
+            empresa=self.empresa,
+            razon_social="Proveedor Fase9 Compras",
+            numero_documento="777",
+            tipo_documento="NIT",
         )
         self.plantilla = PlantillaOrdenCompra.objects.create(
-            empresa=self.empresa, nombre="Plantilla Fase9", prefijo="OCF9",
-            rango_desde=1, rango_hasta=100, consecutivo_actual=1, vigente=True,
+            empresa=self.empresa,
+            nombre="Plantilla Fase9",
+            prefijo="OCF9",
+            rango_desde=1,
+            rango_hasta=100,
+            consecutivo_actual=1,
+            vigente=True,
         )
         self.orden = OrdenCompra.objects.create(
-            empresa=self.empresa, sede=self.sede, proveedor=self.proveedor,
-            plantilla=self.plantilla, fecha="2026-06-01", consecutivo=1,
+            empresa=self.empresa,
+            sede=self.sede,
+            proveedor=self.proveedor,
+            plantilla=self.plantilla,
+            fecha="2026-06-01",
+            consecutivo=1,
         )
 
     def test_ordencompraviewset_get_organizational_context_matches_the_ssot_it_already_used(self):
@@ -48,7 +62,10 @@ class ComprasOrganizationalContextAdoptionTests(SintelTenantTestCase):
         SintelDSVMixin.get_empresa_id()/get_sede_id() (ADR-003), la misma
         SSoT que OrganizationalContext.resolve() duplica intencionalmente."""
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
         )
 
         from rest_framework.test import APIRequestFactory

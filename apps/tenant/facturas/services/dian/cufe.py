@@ -27,8 +27,9 @@ Donde:
   ClTecn  -- Clave tecnica (64 hex chars) de la resolucion DIAN
   TipAmb  -- "1" produccion, "2" habilitacion/pruebas
 """
+
 import hashlib
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 
 class CufeService:
@@ -128,9 +129,8 @@ class CufeService:
 
         nit_ofe = dto["emisor"]["nit"]
         num_adq = dto["receptor"]["nit"]
-        cl_tecn = (
-            dto.get("dian_software", {}).get("cl_tecn")
-            or getattr(settings, "DIAN_CL_TECN", "")
+        cl_tecn = dto.get("dian_software", {}).get("cl_tecn") or getattr(
+            settings, "DIAN_CL_TECN", ""
         )
         tip_amb = dto.get("tip_amb", getattr(settings, "DIAN_TIP_AMB", "2"))
 

@@ -66,14 +66,17 @@ class MovimientoContableWorkspaceDetailSerializer(MovimientoContableDetailSerial
 # CATÁLOGO MAESTRO NIIF - Facade Serializers (v2.61)
 # ═══════════════════════════════════════════════════════════════
 
+
 class CatalogoMaestroNIIFWorkspaceListSerializer(CatalogoMaestroNIIFListSerializer):
     """Facade para listado del Catálogo Maestro NIIF."""
+
     class Meta(CatalogoMaestroNIIFListSerializer.Meta):
         pass
 
 
 class CatalogoMaestroNIIFWorkspaceDetailSerializer(CatalogoMaestroNIIFDetailSerializer):
     """Facade para detalle del Catálogo Maestro NIIF."""
+
     class Meta(CatalogoMaestroNIIFDetailSerializer.Meta):
         pass
 
@@ -82,13 +85,16 @@ class CatalogoMaestroNIIFWorkspaceDetailSerializer(CatalogoMaestroNIIFDetailSeri
 # PERIODOS CONTABLES - Facade Serializers (v2.61)
 # ═══════════════════════════════════════════════════════════════
 
+
 class PeriodoContableWorkspaceListSerializer(PeriodoContableListSerializer):
     """Facade para listado de Periodos Contables."""
+
     class Meta(PeriodoContableListSerializer.Meta):
         pass
 
 
 class PeriodoContableWorkspaceDetailSerializer(PeriodoContableDetailSerializer):
     """Facade para detalle de Periodo Contable."""
+
     class Meta(PeriodoContableDetailSerializer.Meta):
         pass

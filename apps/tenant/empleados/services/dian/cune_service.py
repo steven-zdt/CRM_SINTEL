@@ -43,8 +43,9 @@ Donde:
   ClTec             -- Clave tecnica de la resolucion DIAN (ResolucionDIAN.clave_tecnica)
   TipAmb            -- "1" produccion, "2" habilitacion/pruebas
 """
+
 import hashlib
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 
 class CuneService:

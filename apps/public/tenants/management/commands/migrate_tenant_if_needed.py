@@ -44,7 +44,7 @@ class Command(BaseCommand):
                     self.style.SUCCESS("OK: Migraciones aplicadas a todos los tenants.")
                 )
             except Exception as e:
-                raise CommandError(f"Error aplicando migraciones a todos los tenants: {e}")
+                raise CommandError(f"Error aplicando migraciones a todos los tenants: {e}") from e
         else:
             # Validar que el schema existe
             public_schema = get_public_schema_name()
@@ -68,7 +68,7 @@ class Command(BaseCommand):
                 )
 
             except Exception as e:
-                raise CommandError(f"Error aplicando migraciones al tenant '{schema}': {e}")
+                raise CommandError(f"Error aplicando migraciones al tenant '{schema}': {e}") from e
 
             finally:
                 # Restaurar el esquema original

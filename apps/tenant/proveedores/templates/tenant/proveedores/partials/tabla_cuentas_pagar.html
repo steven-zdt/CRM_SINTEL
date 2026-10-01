@@ -1,5 +1,25 @@
-{% load django_tables2 %}
-{# Fragmento HTMX: tabla de Cuentas por Pagar. Reemplaza #cuentas-pagar-panel completo. #}
+{# tabla_cuentas_pagar.html — DataTables 3.x (docs/ux/TABLES_FORMS_RELEASE_GATE.md) #}
+{# Esqueleto ESTATICO: ya no se sirve via HTMX/django-tables2 -- se incluye  #}
+{# una sola vez en proveedores_list.html y cuentas_pagar_list.js puebla     #}
+{# <tbody> via ajax contra POST /api/v1/proveedores/cuentas-pagar/dt/       #}
+{# (CuentasPagarViewSet.dt() -- endpoint MANUAL, no via DataTableServer,    #}
+{# porque la fuente es una lista Python, no un QuerySet -- ver docstring de #}
+{# CuentasPagarSelector.qs_list_unificado()). Indices de columna deben      #}
+{# coincidir 1:1 con ORDER_FIELDS de CuentasPagarViewSet.dt().              #}
+
 <div class="w-100" style="max-width:100%; overflow-x:auto;">
-  {% render_table table %}
+  <table id="tabla-cuentas-pagar" class="table table-hover align-middle mb-0 w-100">
+    <thead>
+      <tr>
+        <th>Factura</th>
+        <th>Proveedor</th>
+        <th>Monto Total</th>
+        <th>Saldo Pendiente</th>
+        <th>Vencimiento</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 </div>

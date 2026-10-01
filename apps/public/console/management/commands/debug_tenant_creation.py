@@ -349,7 +349,7 @@ class Command(BaseCommand):
             registered = inspect.registered()
             if registered:
                 all_tasks = set()
-                for worker, tasks in registered.items():
+                for _worker, tasks in registered.items():
                     all_tasks.update(tasks)
 
                 task_name = "apps.public.tenants.tasks.onboard_tenant_task"
@@ -432,7 +432,7 @@ class Command(BaseCommand):
                 try:
                     current_app.control.revoke(task_id, terminate=True)
                     self.print_info("Tarea cancelada")
-                except:
+                except Exception:
                     pass
 
                 return False

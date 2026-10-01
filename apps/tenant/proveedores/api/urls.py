@@ -4,11 +4,12 @@ URLs de la API de proveedores (DRF Router) v3.5.
 Alineado con arquitectura API-First.
 Se incluye en config/api_urls.py bajo /api/v1/proveedores/
 """
+
 import logging
 
 from rest_framework.routers import DefaultRouter
 
-from .viewsets import ProveedorViewSet, CuentasPagarViewSet, RepresentanteViewSet
+from .viewsets import CuentasPagarViewSet, ProveedorViewSet, RepresentanteViewSet
 
 logger = logging.getLogger(__name__)
 

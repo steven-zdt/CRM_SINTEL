@@ -10,13 +10,14 @@ get_available_actions() (SSoT en apps/tenant/perfil/api/permissions.py) para
 el rol del solicitante, y aplica el guard [SEG-5] que prohibe mostrar el
 boton de eliminar sobre la propia fila del usuario autenticado.
 """
+
 import django_tables2 as tables
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-_SIN_DATO = mark_safe('<span class="text-muted">-</span>')
-
 from apps.tenant.perfil.models import TenantProfile
+
+_SIN_DATO = mark_safe('<span class="text-muted">-</span>')
 
 _ROL_BADGE_MAP = {
     "ADMIN": "bg-danger",
@@ -32,7 +33,12 @@ class PerfilTable(tables.Table):
     # placeholder generico de la libreria en vez de "-" / el texto propio.
     usuario = tables.Column(accessor="user", verbose_name="Usuario", orderable=False)
     cargo = tables.Column(verbose_name="Cargo", empty_values=())
-    departamento = tables.Column(accessor="departamento__nombre", verbose_name="Departamento", order_by=("departamento__nombre",), empty_values=())
+    departamento = tables.Column(
+        accessor="departamento__nombre",
+        verbose_name="Departamento",
+        order_by=("departamento__nombre",),
+        empty_values=(),
+    )
     telefono_corporativo = tables.Column(verbose_name="Teléfono", empty_values=())
     rol = tables.Column(verbose_name="Rol", empty_values=())
     avatar = tables.Column(empty_values=(), orderable=False, verbose_name="Avatar")
@@ -41,7 +47,15 @@ class PerfilTable(tables.Table):
     class Meta:
         model = TenantProfile
         fields = ()
-        sequence = ("usuario", "cargo", "departamento", "telefono_corporativo", "rol", "avatar", "acciones")
+        sequence = (
+            "usuario",
+            "cargo",
+            "departamento",
+            "telefono_corporativo",
+            "rol",
+            "avatar",
+            "acciones",
+        )
         attrs = {"class": "table table-hover align-middle mb-0", "id": "tabla-perfiles"}
         empty_text = "No hay perfiles registrados"
         order_by = "user__first_name"
@@ -52,11 +66,15 @@ class PerfilTable(tables.Table):
         super().__init__(*args, **kwargs)
 
     def render_usuario(self, record):
-        nombre = (f"{record.user.first_name} {record.user.last_name}".strip()
-                  or record.user.username or record.user.email or "—")
+        nombre = (
+            f"{record.user.first_name} {record.user.last_name}".strip()
+            or record.user.username
+            or record.user.email
+            or "—"
+        )
         email = record.user.email or ""
         return format_html(
-            '<div><strong>{}</strong>{}</div>',
+            "<div><strong>{}</strong>{}</div>",
             nombre,
             format_html('<br><small class="text-muted">{}</small>', email) if email else "",
         )

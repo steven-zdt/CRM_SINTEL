@@ -23,6 +23,7 @@ Este test es puramente de serializer (sin DB, sin creacion de schema
 real) -- rapido y dirigido, evita duplicar la cobertura de integracion
 completa ya existente en otros archivos de tests/public/tenants/.
 """
+
 from apps.public.tenants.api.serializers import OnboardTenantWithOwnerSerializer
 
 

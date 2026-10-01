@@ -5,6 +5,7 @@ This module re-exports the project test base `SintelTenantTestCase` so older
 imports like `from apps.tenant.core.tests import SintelTenantTestCase`
 continue to work after refactors.
 """
+
 try:
     # Preferred source: central tests helper
     from tests.tenant.base_test import SintelTenantTestCase, TenantTestCase
@@ -14,6 +15,8 @@ except Exception:
 
     class SintelTenantTestCase(TenantTestCase):
         """Minimal shim for environments where project test helpers are missing."""
+
         pass
+
 
 __all__ = ["SintelTenantTestCase", "TenantTestCase"]

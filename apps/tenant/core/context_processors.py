@@ -2,6 +2,7 @@
 Context processors globales del workspace tenant (ver config/settings.py's
 TEMPLATES['OPTIONS']['context_processors']).
 """
+
 from django.db import connection
 from django_tenants.utils import get_public_schema_name
 
@@ -29,20 +30,22 @@ def contexto_organizacional(request):
     if connection.schema_name == get_public_schema_name():
         return {}
 
-    user = getattr(request, 'user', None)
+    user = getattr(request, "user", None)
     if not user or not user.is_authenticated:
         return {}
 
-    perfil = getattr(user, 'tenant_profile', None)
+    perfil = getattr(user, "tenant_profile", None)
     if perfil is None:
         return {}
 
     from apps.tenant.empresa.models import Sede
 
-    if perfil.alcance == 'EMPRESA':
-        sedes_disponibles = list(Sede.objects.filter(empresa_id=perfil.empresa_id).order_by('nombre'))
+    if perfil.alcance == "EMPRESA":
+        sedes_disponibles = list(
+            Sede.objects.filter(empresa_id=perfil.empresa_id).order_by("nombre")
+        )
     else:
-        sedes_disponibles = list(perfil.sedes_asignadas.order_by('nombre'))
+        sedes_disponibles = list(perfil.sedes_asignadas.order_by("nombre"))
 
     sede_activa_id = resolve_sede_activa_id(request, perfil.empresa_id, perfil)
     sede_activa = next((s for s in sedes_disponibles if s.id == sede_activa_id), None)
@@ -50,11 +53,11 @@ def contexto_organizacional(request):
         sede_activa = Sede.objects.filter(id=sede_activa_id).first()
 
     return {
-        'sede_activa': sede_activa,
-        'sedes_disponibles': sedes_disponibles,
+        "sede_activa": sede_activa,
+        "sedes_disponibles": sedes_disponibles,
         # Access Context (mision 2026-08-21): perfil/empresa ya estaban resueltos
         # arriba para calcular sedes_disponibles -- se exponen aqui tambien para
         # que el header pueda mostrar rol/empresa sin ninguna consulta nueva.
-        'perfil_actual': perfil,
-        'empresa_actual': perfil.empresa,
+        "perfil_actual": perfil,
+        "empresa_actual": perfil.empresa,
     }

@@ -1,0 +1,2128 @@
+# AUDITORÍA TÉCNICA INTEGRAL
+
+## CRM_SINTEL
+
+**Repositorio:** `steven-zdt/CRM_SINTEL`
+**Branch auditada:** `main`
+**Fecha:** 25 de septiembre de 2026
+**Tipo:** Auditoría estática de arquitectura, seguridad, multitenancy, backend, IA, CI/CD, dependencias y DevOps.
+
+---
+
+## 1. Alcance
+
+La auditoría cubrió:
+
+1. Arquitectura Django.
+2. `django-tenants`.
+3. Separación public/tenant.
+4. Configuración de seguridad.
+5. Autenticación/autorización.
+6. APIs DRF.
+7. Service Layer.
+8. Signals.
+9. PostgreSQL.
+10. Redis/Celery.
+11. Docker.
+12. GitHub Actions.
+13. Dependencias Python.
+14. Testing.
+15. IA / Tool Registry / AI Engine.
+16. MCP.
+17. Logging.
+18. Organización del repositorio.
+19. Mantenibilidad.
+20. Preparación para producción.
+
+La revisión se contrastó principalmente con documentación oficial de Django 5.2, PostgreSQL 16, GitHub Actions y OWASP ASVS 5.0.
+
+---
+
+# 2. Arquitectura actual observada
+
+El proyecto presenta una arquitectura considerablemente más madura que un Django monolítico tradicional.
+
+La separación principal observada es:
+
+```text
+apps/
+├── public/
+│   ├── accounts/
+│   ├── console/
+│   ├── core/
+│   ├── impuestos/
+│   └── tenants/
+│
+├── tenant/
+│   ├── bancos/
+│   ├── clientes/
+│   ├── compras/
+│   ├── contabilidad/
+│   ├── cotizaciones/
+│   ├── dashboard/
+│   ├── empleados/
+│   ├── empresa/
+│   ├── facturas/
+│   ├── gastos/
+│   ├── inventario/
+│   ├── landing/
+│   ├── perfil/
+│   ├── proveedores/
+│   ├── proyectos/
+│   └── ventas/
+│
+├── services/
+│   ├── ai/
+│   ├── document_ingest/
+│   ├── document_parser/
+│   ├── integrations/
+│   ├── maildigester/
+│   ├── onboarding/
+│   ├── reporting/
+│   └── security/
+│
+└── shared/
+```
+
+Esta separación es conceptualmente correcta para un SaaS multitenant.
+
+La principal recomendación es ahora **reducir excepciones y caminos alternativos**, no seguir agregando capas.
+
+---
+
+# 3. Hallazgo P0-01 — Drift de versión de Django
+
+## Evidencia
+
+`requirements.txt` actualmente establece:
+
+```text
+Django>=5.0,<5.1
+```
+
+Sin embargo, la documentación oficial actual mantiene Django 5.2 como serie LTS y publica sus correspondientes releases de seguridad y mantenimiento.
+
+Django 5.2 es LTS y tiene soporte de seguridad prolongado.
+
+## Problema
+
+El proyecto tiene documentación, comentarios y decisiones arquitectónicas que hacen referencia a Django 5.2, pero el archivo efectivo de dependencias todavía bloquea el proyecto en Django 5.0.x.
+
+Esto crea:
+
+```text
+DOCUMENTACIÓN
+      ↓
+Django 5.2
+
+CÓDIGO / REQUIREMENTS
+      ↓
+Django 5.0.x
+```
+
+Es un problema de Single Source of Truth.
+
+## Recomendación
+
+Definir explícitamente una política:
+
+```text
+Python 3.12
+Django 5.2.x
+django-tenants compatible con Django 5.2
+DRF compatible
+```
+
+Y migrar:
+
+```text
+Django>=5.2,<5.3
+```
+
+preferiblemente a una versión exacta/pinned mediante lockfile.
+
+No recomiendo mantener `>=` para el framework principal.
+
+---
+
+# 4. Hallazgo P0-02 — CI no es realmente un Quality Gate
+
+Actualmente:
+
+```yaml
+- name: Ruff
+  continue-on-error: true
+
+- name: Bandit
+  continue-on-error: true
+
+- name: pip-audit
+  continue-on-error: true
+```
+
+Esto significa que el pipeline puede terminar correctamente aunque:
+
+```text
+Ruff       ❌
+Bandit     ❌
+pip-audit  ❌
+```
+
+## Impacto
+
+El workflow se llama:
+
+```text
+Pytest + Django Check + Ruff + Bandit
+```
+
+pero solamente algunas partes son realmente bloqueantes.
+
+## Recomendación
+
+Migrar progresivamente a:
+
+```text
+Fase 1
+pytest                 BLOCKING
+django check           BLOCKING
+migration check        BLOCKING
+
+Fase 2
+ruff                   BLOCKING
+bandit                 BLOCKING
+
+Fase 3
+pip-audit               BLOCKING
+dependency review       BLOCKING
+
+Fase 4
+architecture tests      BLOCKING
+multitenant isolation   BLOCKING
+security regression     BLOCKING
+```
+
+La excepción temporal puede mantenerse únicamente mientras se limpia el backlog inicial.
+
+Después:
+
+```yaml
+continue-on-error: false
+```
+
+o simplemente eliminar la propiedad.
+
+---
+
+# 5. Hallazgo P0-03 — GitHub Actions sin pinning SHA
+
+Actualmente aparecen referencias como:
+
+```yaml
+actions/checkout@v4
+actions/setup-python@v5
+actions/upload-artifact@v4
+```
+
+GitHub recomienda fijar Actions a un SHA completo para obtener una referencia inmutable y reducir riesgo de supply-chain.
+
+## Recomendación
+
+En lugar de:
+
+```yaml
+uses: actions/checkout@v4
+```
+
+usar:
+
+```yaml
+uses: actions/checkout@<FULL_COMMIT_SHA>
+```
+
+y establecer una política de repository:
+
+```text
+Require actions to be pinned to full-length commit SHA
+```
+
+GitHub soporta explícitamente esta política.
+
+---
+
+# 6. Hallazgo P0-04 — Falta `permissions:` explícito en workflows
+
+Los workflows deberían definir el mínimo privilegio necesario.
+
+Recomendación:
+
+```yaml
+permissions:
+  contents: read
+```
+
+y solamente elevar permisos en jobs específicos que realmente los necesiten.
+
+GitHub recomienda declarar explícitamente permisos mínimos porque el `GITHUB_TOKEN` puede recibir permisos más amplios de los necesarios.
+
+---
+
+# 7. Hallazgo P0-05 — Proxy / Host Header
+
+La configuración contiene:
+
+```python
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = (
+    "HTTP_X_FORWARDED_PROTO",
+    "https",
+)
+```
+
+Esto puede ser correcto detrás de Cloudflare/Nginx/Traefik, pero solamente si el proxy elimina o sobrescribe correctamente los headers externos.
+
+## Riesgo
+
+Si una aplicación acepta directamente:
+
+```text
+X-Forwarded-Host
+X-Forwarded-Proto
+```
+
+desde clientes no confiables, se puede romper la confianza en:
+
+```text
+request.get_host()
+build_absolute_uri()
+CSRF
+tenant resolution
+redirects
+URLs generadas
+```
+
+## Recomendación
+
+Definir formalmente:
+
+```text
+Internet
+   ↓
+Cloudflare
+   ↓
+Tunnel / Proxy
+   ↓
+Nginx / ingress
+   ↓
+Django
+```
+
+y garantizar:
+
+```text
+Cliente NO controla X-Forwarded-Host
+Cliente NO controla X-Forwarded-Proto
+Proxy sobrescribe ambos
+```
+
+Además crear pruebas de regresión.
+
+---
+
+# 8. Hallazgo P0-06 — HTTPS depende totalmente del proxy
+
+Actualmente:
+
+```python
+SECURE_SSL_REDIRECT = False
+```
+
+Esto puede ser una decisión válida si Cloudflare/Nginx fuerza HTTPS.
+
+Pero debe existir una garantía verificable:
+
+```text
+HTTP
+ ↓
+Cloudflare/Nginx
+ ↓
+301/308
+ ↓
+HTTPS
+```
+
+La configuración Django debería tener una política explícita para producción.
+
+Revisar también:
+
+```python
+SECURE_HSTS_SECONDS
+SECURE_HSTS_INCLUDE_SUBDOMAINS
+SECURE_HSTS_PRELOAD
+SESSION_COOKIE_SECURE
+CSRF_COOKIE_SECURE
+SECURE_CONTENT_TYPE_NOSNIFF
+SECURE_REFERRER_POLICY
+```
+
+Django considera HTTPS, cookies seguras, Host validation, CSRF, clickjacking y session security como componentes de su modelo de seguridad.
+
+---
+
+# 9. Hallazgo P0-07 — Middleware personalizado alrededor de django-tenants
+
+El proyecto modifica deliberadamente el orden tradicional de `TenantMainMiddleware`.
+
+Esto no necesariamente está mal, pero aumenta el riesgo porque:
+
+```text
+Host validation
+      ↓
+normalización de host
+      ↓
+tenant resolution
+      ↓
+tenant authorization
+      ↓
+authentication
+```
+
+queda repartido entre varios middlewares propios.
+
+Actualmente aparecen:
+
+```text
+SecurityMiddleware
+WhiteNoise
+CORS
+SessionMiddleware
+ValidateALLOWED_HOSTS
+ForceNoPortMiddleware
+TenantMainMiddleware
+SintelExceptionMiddleware
+TenantSecurityAndURLConfMiddleware
+TenantSecurityMiddleware
+CSRFTrustedOriginMiddleware
+CommonMiddleware
+DebugNoCSRFMiddleware
+CsrfViewMiddleware
+AuthenticationMiddleware
+require_tenant_membership
+...
+```
+
+## Recomendación
+
+Crear un documento arquitectónico formal:
+
+```text
+docs/security/MIDDLEWARE_SECURITY_ORDER.md
+```
+
+que documente para cada middleware:
+
+```text
+Entrada
+↓
+qué confianza tiene
+↓
+qué datos modifica
+↓
+qué seguridad depende de él
+↓
+qué sucede si falla
+```
+
+Y crear tests que garanticen el orden.
+
+---
+
+# 10. Hallazgo P0-08 — CORS dinámico con credenciales
+
+Existe:
+
+```python
+CORS_ALLOW_CREDENTIALS = True
+```
+
+y regex para subdominios.
+
+Esto exige mucho cuidado porque se combinan:
+
+```text
+wildcard-like tenant origins
++
+cookies
++
+multi-tenancy
++
+authentication
+```
+
+## Recomendación
+
+Preferir una allowlist derivada de una fuente confiable:
+
+```text
+Tenant domain
++
+validated protocol
++
+validated domain ownership
+```
+
+en lugar de aceptar genéricamente cualquier subdominio sin una segunda validación.
+
+Crear pruebas:
+
+```text
+tenant-a.sintel.net.co → allowed
+tenant-b.sintel.net.co → allowed
+evil.com                → denied
+evil.sintel.net.co     → depends on tenant registration
+Origin spoof            → denied
+```
+
+---
+
+# 11. Hallazgo P0-09 — PostgreSQL search_path debe tratarse como frontera de seguridad
+
+PostgreSQL advierte que el `search_path` determina qué objetos son visibles y que esquemas donde usuarios no confiables tengan capacidad de creación pueden permitir shadowing de objetos.
+
+Esto es especialmente importante en un SaaS:
+
+```text
+public
+tenant_a
+tenant_b
+tenant_c
+```
+
+La arquitectura debe impedir cualquier posibilidad de que un tenant controle objetos de otro schema.
+
+## Recomendación
+
+Auditar:
+
+```text
+search_path
+database role
+CREATE privilege
+schema ownership
+USAGE privilege
+tenant creation
+SECURITY DEFINER
+raw SQL
+database functions
+```
+
+y establecer tests de:
+
+```text
+tenant A → nunca puede leer tenant B
+tenant A → nunca puede insertar en tenant B
+tenant A → nunca puede modificar public
+tenant A → nunca puede modificar otro schema
+```
+
+PostgreSQL proporciona además Row Level Security como mecanismo complementario cuando sea apropiado.
+
+---
+
+# 12. Hallazgo P0-10 — AI Provider abstraction todavía es insuficiente
+
+El proyecto tiene:
+
+```python
+class AIProvider(ABC):
+    def complete(...)
+```
+
+Esto es una buena base, pero no cubre el objetivo arquitectónico que has definido para SINTEL:
+
+```text
+Ollama
+LM Studio
+OpenAI
+Gemini
+Anthropic
+REST
+OpenAI-compatible API
+MCP
+modelos locales
+modelos remotos
+```
+
+El contrato actual solamente abstrae:
+
+```text
+text → completion
+```
+
+## Falta abstraer
+
+```text
+chat
+streaming
+structured output
+tool calling
+embeddings
+vision
+multimodal
+model capabilities
+timeouts
+retry
+token accounting
+provider health
+authentication
+endpoint
+```
+
+## Arquitectura recomendada
+
+```text
+AIProviderRegistry
+        │
+        ├── OllamaProvider
+        ├── OpenAICompatibleProvider
+        ├── AnthropicProvider
+        ├── GeminiProvider
+        ├── RESTProvider
+        └── MCPProvider
+```
+
+con:
+
+```text
+ProviderConfig
+----------------
+name
+type
+base_url
+api_key
+model
+timeout
+capabilities
+enabled
+priority
+tenant_scope
+```
+
+Y el sistema debe resolver:
+
+```text
+LLM seleccionado
+      ↓
+Provider Registry
+      ↓
+Adapter
+      ↓
+AI Engine
+      ↓
+Tool Registry
+```
+
+Nunca:
+
+```text
+View → Anthropic SDK
+```
+
+---
+
+# 13. Hallazgo P0-11 — MCP requiere una frontera de seguridad propia
+
+El proyecto tiene:
+
+```python
+DJANGORESTFRAMEWORK_MCP = {
+    'RETURN_200_FOR_ERRORS': True,
+    'BYPASS_VIEWSET_AUTHENTICATION': False,
+    'BYPASS_VIEWSET_PERMISSIONS': False,
+}
+```
+
+Es positivo que:
+
+```text
+authentication = False bypass
+permissions = False bypass
+```
+
+pero MCP debe tratarse como una superficie de ataque independiente.
+
+## Recomendación
+
+Agregar:
+
+```text
+MCP Authentication
+MCP authorization
+MCP tool allowlist
+MCP tenant context
+MCP audit log
+MCP rate limiting
+MCP request size limits
+MCP timeout
+MCP tool risk classification
+MCP approval workflow
+```
+
+Especialmente:
+
+```text
+READ
+SUGGEST
+VALIDATE
+WRITE
+DESTRUCTIVE
+```
+
+La arquitectura existente del `AIEngine` ya tiene una base correcta para esto.
+
+---
+
+# 14. Hallazgo P1-01 — Signals contradicen la arquitectura declarada
+
+El proyecto declara:
+
+```text
+CERO SIGNALS
+```
+
+pero existe:
+
+```text
+apps/public/accounts/signals.py
+```
+
+con:
+
+```python
+global_user_hard_deleting = Signal()
+```
+
+Aunque no sea un receiver tradicional, arquitectónicamente sigue siendo un mecanismo de eventos implícitos.
+
+## Recomendación
+
+Migrar a:
+
+```text
+UserDeletionService
+        ↓
+TenantCleanupService
+        ↓
+AuditService
+```
+
+y eliminar completamente la dependencia de Django Signals.
+
+Django soporta signals, pero para este sistema el Service Layer explícito es más coherente con la gobernanza que ya has definido.
+
+---
+
+# 15. Hallazgo P1-02 — Logging demasiado detallado
+
+`SintelExceptionMiddleware` registra:
+
+```text
+tenant
+tenant id
+usuario
+user id
+path
+method
+exception
+traceback
+```
+
+Esto es útil para diagnóstico, pero debe existir una política formal de:
+
+```text
+PII
+credentials
+tokens
+authorization headers
+request bodies
+financial information
+DIAN data
+customer data
+```
+
+## Recomendación
+
+Implementar:
+
+```text
+Correlation ID
+Request ID
+Tenant ID
+User ID pseudonymized
+Exception ID
+```
+
+y evitar registrar directamente:
+
+```text
+password
+JWT
+Authorization
+API keys
+SMTP password
+payment secrets
+request body
+```
+
+El cliente debería recibir:
+
+```json
+{
+  "status": 500,
+  "code": "INTERNAL_SERVER_ERROR",
+  "message": "Error interno del servidor",
+  "request_id": "..."
+}
+```
+
+y nunca información interna.
+
+---
+
+# 16. Hallazgo P1-03 — Dependencias demasiado abiertas
+
+Actualmente existen patrones como:
+
+```text
+Django>=5.0,<5.1
+requests>=2.31,<3
+Pillow>=10.4,<12
+anthropic>=0.40,<1
+neo4j>=5.24,<6
+```
+
+Esto permite que una reconstrucción futura cambie versiones sin modificar Git.
+
+## Recomendación
+
+Separar:
+
+```text
+requirements.in
+requirements.txt
+```
+
+o utilizar un lockfile reproducible.
+
+Ejemplo:
+
+```text
+requirements.in
+      ↓
+resolver
+      ↓
+requirements.lock
+```
+
+La producción debe instalar versiones reproducibles.
+
+---
+
+# 17. Hallazgo P1-04 — Repositorio público
+
+El repositorio es:
+
+```text
+PUBLIC
+```
+
+y contiene una gran cantidad de:
+
+```text
+architecture docs
+agent instructions
+developer workflows
+internal paths
+implementation details
+security documentation
+```
+
+No encontré evidencia en la auditoría realizada de una API key productiva expuesta en los archivos revisados.
+
+Sin embargo, el repositorio contiene:
+
+```text
+.claude/
+.agents/
+.antigravity/
+```
+
+y `.claude/settings.local.json` aparece dentro del árbol del repositorio.
+
+Aunque `.gitignore` intenta excluirlo, si ya está versionado el `.gitignore` no elimina el archivo histórico.
+
+## Recomendación
+
+Auditar inmediatamente:
+
+```bash
+git ls-files .claude
+git ls-files .agents
+git ls-files .antigravity
+```
+
+y ejecutar secret scanning histórico.
+
+---
+
+# 18. Hallazgo P1-05 — Docker development expone servicios
+
+El compose de desarrollo publica puertos de:
+
+```text
+PostgreSQL
+Redis
+Neo4j
+Django
+```
+
+Esto puede ser correcto para desarrollo, pero debería quedar explícitamente separado:
+
+```text
+development
+    ↓
+ports abiertos
+
+production
+    ↓
+solo proxy público
+```
+
+El override de producción ya elimina varios `ports`, lo cual es correcto.
+
+La recomendación es agregar una prueba automática que compruebe:
+
+```text
+prod compose
+Postgres → no public port
+Redis    → no public port
+Neo4j    → no public port
+```
+
+---
+
+# 19. Hallazgo P1-06 — Falta health model uniforme
+
+Hay healthchecks Docker, pero conviene diferenciar:
+
+```text
+/liveness
+/readiness
+/health
+```
+
+### Liveness
+
+```text
+¿Django está vivo?
+```
+
+### Readiness
+
+```text
+¿PostgreSQL disponible?
+¿Redis disponible?
+¿migraciones correctas?
+```
+
+### Dependency health
+
+```text
+PostgreSQL
+Redis
+Neo4j
+OpenSearch
+```
+
+No recomiendo que `/health` haga consultas pesadas.
+
+---
+
+# 20. Hallazgo P1-07 — Arquitectura demasiado grande
+
+El proyecto tiene una cantidad importante de módulos:
+
+```text
+tenant/
+public/
+services/
+core/
+api/
+views/
+viewsets/
+services/
+selectors/
+tables/
+tasks/
+```
+
+Esto es funcional, pero aumenta la posibilidad de duplicación.
+
+Se observan simultáneamente patrones como:
+
+```text
+api/viewsets.py
+views.py
+views_ui.py
+services/
+services/api_mixins.py
+services/business_service.py
+services/crud_service.py
+services/selectors.py
+```
+
+## Recomendación
+
+Establecer una arquitectura canónica:
+
+```text
+domain/
+application/
+infrastructure/
+api/
+ui/
+```
+
+o mantener la estructura actual pero imponer:
+
+```text
+ViewSet
+    ↓
+Serializer
+    ↓
+Service
+    ↓
+Selector / Repository
+    ↓
+Model
+```
+
+Nunca:
+
+```text
+ViewSet
+    ↓
+Model.objects.create()
+```
+
+para operaciones de negocio complejas.
+
+---
+
+# 21. Hallazgo P1-08 — Service Layer debe ser realmente único
+
+La existencia de:
+
+```text
+business_service.py
+crud_service.py
+api_mixins.py
+selectors.py
+services.py
+```
+
+por aplicación puede terminar creando múltiples Service Layers.
+
+Recomendación:
+
+```text
+services/
+    cliente_service.py
+    cliente_selector.py
+    cliente_policy.py
+```
+
+evitando:
+
+```text
+crud_service
+business_service
+services
+api_mixins
+```
+
+si hacen responsabilidades solapadas.
+
+---
+
+# 22. Hallazgo P1-09 — Transacciones
+
+El repositorio ya muestra un esfuerzo correcto alrededor de:
+
+```text
+transaction.atomic
+```
+
+y pruebas para:
+
+```text
+concurrencia
+contabilidad
+recepciones
+numeración
+retenciones
+```
+
+Esto es una fortaleza.
+
+Debe consolidarse como regla:
+
+```text
+Service Layer
+    ↓
+transaction.atomic()
+    ↓
+domain mutation
+    ↓
+audit event
+```
+
+Nunca:
+
+```text
+serializer.save()
+serializer.save()
+serializer.save()
+```
+
+para operaciones que deban ser atómicas.
+
+---
+
+# 23. Hallazgo P1-10 — Numeración contable
+
+Las pruebas existentes relacionadas con:
+
+```text
+P0-04
+numeración concurrente
+```
+
+son una muy buena decisión.
+
+Debe mantenerse la garantía a nivel de DB, no únicamente:
+
+```python
+last_number + 1
+```
+
+Debe existir:
+
+```text
+DB constraint
++
+transaction
++
+row lock / sequence strategy
++
+retry
+```
+
+La numeración fiscal/contable nunca debe depender exclusivamente de lógica Python.
+
+---
+
+# 24. Hallazgo P1-11 — AI Tool Registry
+
+Esta parte está bien planteada:
+
+```python
+_REGISTRY: dict[str, BaseTool] = {}
+```
+
+y:
+
+```text
+READ
+SUGGEST
+VALIDATE
+WRITE
+```
+
+Además:
+
+```text
+confirmation_required
+idempotent
+risk
+```
+
+son conceptos correctos.
+
+## Mejora
+
+Agregar:
+
+```text
+tenant_scope
+required_permissions
+required_role
+data_classification
+audit_level
+rate_limit
+timeout
+side_effects
+approval_policy
+rollback_strategy
+```
+
+Ejemplo conceptual:
+
+```json
+{
+  "name": "crear_factura",
+  "kind": "WRITE",
+  "risk": "HIGH",
+  "confirmation_required": true,
+  "idempotent": true,
+  "tenant_scoped": true,
+  "required_roles": ["ADMIN", "CONTADOR"],
+  "audit_level": "FULL",
+  "approval": "HUMAN"
+}
+```
+
+Esto encaja directamente con la arquitectura ADK/Agent que estás construyendo.
+
+---
+
+# 25. Hallazgo P1-12 — Provider Registry
+
+El proyecto debería evolucionar de:
+
+```text
+AIProvider
+```
+
+a:
+
+```text
+AIProviderRegistry
+```
+
+con selección dinámica.
+
+Ejemplo:
+
+```text
+POST /api/v1/ai/providers
+```
+
+Configuración:
+
+```text
+Proveedor:
+    Ollama
+
+URL:
+    http://127.0.0.1:11434
+
+Modelo:
+    qwen...
+
+Tipo:
+    local
+
+API key:
+    opcional
+
+Capabilities:
+    chat
+    tools
+    vision
+```
+
+Otro:
+
+```text
+Proveedor:
+    OpenAI-compatible
+
+URL:
+    http://127.0.0.1:8420/v1
+
+API key:
+    ********
+
+Modelo:
+    ...
+```
+
+Otro:
+
+```text
+Proveedor:
+    Gemini
+
+API key:
+    ********
+```
+
+El dominio de SINTEL no debería conocer ninguna de esas implementaciones.
+
+---
+
+# 26. Hallazgo P1-13 — Configuración de IA debe ser persistente y segura
+
+Para el objetivo actual del proyecto, recomiendo:
+
+```text
+AIProvider
+AIModel
+AITenantConfiguration
+AIProviderCredential
+AIModelCapability
+AIUsageRecord
+```
+
+Separando:
+
+```text
+configuración
+```
+
+de:
+
+```text
+secretos
+```
+
+Nunca almacenar directamente API keys en texto plano en modelos.
+
+Usar:
+
+```text
+encrypted-at-rest
+```
+
+y una capa:
+
+```text
+CredentialService
+```
+
+---
+
+# 27. Hallazgo P1-14 — RAG / pgvector
+
+La decisión de utilizar PostgreSQL + pgvector en lugar de Chroma es coherente con la arquitectura.
+
+Debe mantenerse:
+
+```text
+PostgreSQL
+├── relational data
+├── tenant schemas
+└── vectors
+```
+
+pero debe definirse claramente:
+
+```text
+embedding model
+embedding dimension
+distance metric
+index
+tenant isolation
+reindex strategy
+document version
+chunk version
+embedding version
+```
+
+Especialmente:
+
+```text
+embedding_model_version
+```
+
+porque cambiar el modelo de embeddings requiere reindexación.
+
+---
+
+# 28. Hallazgo P1-15 — OpenSearch + pgvector + Neo4j
+
+Actualmente conviven:
+
+```text
+PostgreSQL
+pgvector
+OpenSearch
+Neo4j
+```
+
+Esto es potente, pero aumenta significativamente la complejidad operacional.
+
+Debe definirse formalmente:
+
+```text
+PostgreSQL
+    = source of truth
+
+pgvector
+    = semantic retrieval
+
+OpenSearch
+    = lexical / document search
+
+Neo4j
+    = architecture / knowledge graph
+```
+
+Nunca permitir que:
+
+```text
+OpenSearch
+Neo4j
+vector DB
+```
+
+se conviertan accidentalmente en fuentes primarias.
+
+---
+
+# 29. Hallazgo P1-16 — Testing multitenant
+
+Esta es una de las mejores partes del proyecto.
+
+Existen pruebas explícitas como:
+
+```text
+test_cross_tenant_isolation.py
+test_multitenant_isolation.py
+test_scope_isolation
+test_organizational_context
+test_organizational_permissions
+```
+
+Debe elevarse esto a una suite obligatoria:
+
+```text
+SECURITY MULTITENANT GATE
+```
+
+con pruebas parametrizadas:
+
+```text
+tenant A
+tenant B
+
+GET A → A only
+GET B → B only
+
+POST A → A only
+PATCH A → A only
+DELETE A → A only
+```
+
+y especialmente:
+
+```text
+foreign object UUID
+```
+
+porque un UUID aleatorio no garantiza aislamiento si el queryset no está correctamente scoped.
+
+---
+
+# 30. Hallazgo P1-17 — Object-level authorization
+
+La arquitectura tiene varias capas de permisos.
+
+Recomendación:
+
+```text
+Authentication
+      ↓
+Tenant membership
+      ↓
+Organization scope
+      ↓
+Role
+      ↓
+Object ownership
+      ↓
+Action permission
+```
+
+No debe existir ningún endpoint que dependa solamente de:
+
+```python
+IsAuthenticated
+```
+
+para datos tenant-sensitive.
+
+---
+
+# 31. Hallazgo P1-18 — API versioning
+
+Existe:
+
+```text
+/api/v1/
+```
+
+y:
+
+```python
+NamespaceVersioning
+```
+
+Correcto.
+
+Recomiendo formalizar:
+
+```text
+v1
+    ↓
+stable
+
+v2
+    ↓
+breaking changes
+```
+
+y documentar:
+
+```text
+deprecation policy
+sunset period
+migration guide
+```
+
+---
+
+# 32. Hallazgo P1-19 — OpenAPI
+
+Existe:
+
+```text
+drf-spectacular
+```
+
+Esto es correcto.
+
+Debe agregarse un gate:
+
+```text
+generate OpenAPI
+↓
+validate schema
+↓
+diff against previous schema
+```
+
+Así una modificación accidental de un serializer no rompe clientes móviles/API.
+
+---
+
+# 33. Hallazgo P1-20 — CI debe agregar migraciones
+
+Además de:
+
+```text
+manage.py check
+pytest
+ruff
+bandit
+pip-audit
+```
+
+agregar:
+
+```bash
+python manage.py makemigrations --check --dry-run
+```
+
+para evitar cambios de modelos sin migración.
+
+Y para multitenancy:
+
+```text
+migrate_schemas --shared
+migrate_schemas
+```
+
+en un entorno de CI controlado.
+
+---
+
+# 34. Hallazgo P1-21 — Backup / restore
+
+El proyecto contiene comandos de:
+
+```text
+backup tenant
+backup all
+restore tenant
+```
+
+Esto es positivo.
+
+Pero backup no debe considerarse terminado hasta comprobar:
+
+```text
+backup
+ ↓
+restore
+ ↓
+integrity check
+ ↓
+tenant accessible
+ ↓
+data count
+ ↓
+foreign keys
+ ↓
+application smoke test
+```
+
+Recomiendo un:
+
+```text
+monthly restore drill
+```
+
+automatizado.
+
+---
+
+# 35. Hallazgo P1-22 — Observabilidad
+
+La arquitectura debería evolucionar hacia:
+
+```text
+Request ID
+Tenant ID
+User ID
+Task ID
+Correlation ID
+AI execution ID
+Tool execution ID
+```
+
+Ejemplo:
+
+```text
+request_id:
+req_01...
+
+tenant:
+cliente_xyz
+
+ai_execution:
+ai_01...
+
+tool_execution:
+tool_01...
+```
+
+Esto permitirá seguir:
+
+```text
+Usuario
+ ↓
+HTTP
+ ↓
+AI
+ ↓
+Tool
+ ↓
+Service
+ ↓
+DB
+ ↓
+Celery
+```
+
+---
+
+# 36. Hallazgo P1-23 — Celery
+
+La configuración actual contiene buenas prácticas:
+
+```text
+JSON serializer
+timeouts
+queues
+priority
+```
+
+Recomiendo agregar:
+
+```text
+task idempotency
+retry policy
+exponential backoff
+dead-letter strategy
+task correlation ID
+tenant context validation
+```
+
+Especialmente para:
+
+```text
+DIAN
+email
+WhatsApp
+document ingestion
+AI
+payments
+```
+
+---
+
+# 37. Hallazgo P1-24 — Document ingestion
+
+El pipeline:
+
+```text
+document_intake
+document_ingest
+document_parser
+validations
+```
+
+está correctamente separado conceptualmente.
+
+Debe mantenerse como:
+
+```text
+Upload
+ ↓
+Hash
+ ↓
+Malware/type validation
+ ↓
+Detector
+ ↓
+Parser
+ ↓
+Normalizer
+ ↓
+Validator
+ ↓
+Domain Service
+ ↓
+Persistence
+```
+
+y nunca ejecutar directamente contenido externo.
+
+---
+
+# 38. Hallazgo P1-25 — Archivos subidos
+
+Debe auditarse especialmente:
+
+```text
+PDF
+XML
+XLS
+XLSX
+CSV
+TXT
+HTML
+images
+```
+
+Aplicar:
+
+```text
+MIME validation
+extension validation
+magic bytes
+size limits
+filename normalization
+path traversal protection
+virus/malware scanning
+storage outside executable paths
+```
+
+Django documenta explícitamente consideraciones de seguridad para archivos subidos.
+
+---
+
+# 39. Hallazgo P2 — Repository hygiene
+
+Existe una cantidad importante de documentación interna dentro de:
+
+```text
+.agents/
+.antigravity/
+.claude/
+documentacion/
+```
+
+Además hay archivos extremadamente grandes dentro del árbol.
+
+Recomendación:
+
+```text
+docs/
+    architecture/
+    security/
+    operations/
+    ai/
+    adr/
+```
+
+y mover conocimiento específico de agentes a:
+
+```text
+.agent-docs/
+```
+
+o a un repositorio separado si no necesita formar parte del producto.
+
+---
+
+# 40. Arquitectura objetivo recomendada
+
+La evolución recomendada sería:
+
+```text
+                         ┌──────────────────────┐
+                         │      CLIENTES        │
+                         │ Web / Android / API  │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ Edge / Cloudflare    │
+                         │ TLS / WAF / Rate     │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ Django Gateway       │
+                         │ Host / Tenant        │
+                         │ Auth / CSRF          │
+                         └──────────┬───────────┘
+                                    │
+                 ┌──────────────────┼──────────────────┐
+                 │                  │                  │
+                 ▼                  ▼                  ▼
+              Public             Tenant              MCP
+                 │                  │                  │
+                 │                  ▼                  │
+                 │           Authorization            │
+                 │                  │                  │
+                 │                  ▼                  │
+                 │           API / UI                 │
+                 │                  │                  │
+                 │                  ▼                  │
+                 │            Service Layer            │
+                 │                  │                  │
+                 └──────────────────┼──────────────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ Domain Services      │
+                         │ Transactions         │
+                         │ Policies              │
+                         └──────────┬───────────┘
+                                    │
+             ┌──────────────────────┼──────────────────────┐
+             │                      │                      │
+             ▼                      ▼                      ▼
+        PostgreSQL              Redis/Celery          Integrations
+        + pgvector              async jobs            DIAN/Wompi/etc.
+             │
+             ├── public schema
+             ├── tenant A
+             ├── tenant B
+             └── tenant N
+
+AI:
+
+UI/API
+  ↓
+AI Gateway
+  ↓
+Provider Registry
+  ↓
+┌────────────┬──────────────┬────────────┬────────────┐
+│ Ollama     │ LM Studio    │ OpenAI API │ Gemini     │
+│ Local      │ Local        │ REST       │ REST       │
+└────────────┴──────────────┴────────────┴────────────┘
+  ↓
+AI Engine
+  ↓
+Tool Registry
+  ↓
+Service Layer
+```
+
+---
+
+# 41. Roadmap recomendado
+
+## FASE 0 — Seguridad inmediata
+
+Prioridad:
+
+```text
+1. Secret scan histórico
+2. GitHub Actions SHA pinning
+3. permissions mínimo
+4. CI blocking
+5. revisar proxy headers
+6. revisar HTTPS
+7. revisar CORS
+8. revisar MCP exposure
+```
+
+---
+
+## FASE 1 — Versiones
+
+```text
+Django 5.2 LTS
+Python 3.12
+requirements lock
+dependency audit
+```
+
+Validar compatibilidad de:
+
+```text
+django-tenants
+DRF
+SimpleJWT
+django-filter
+django-tables2
+drf-spectacular
+MCP
+```
+
+---
+
+## FASE 2 — Multitenancy Security Gate
+
+Crear:
+
+```text
+tests/security/
+    test_tenant_isolation.py
+    test_public_isolation.py
+    test_cross_tenant_uuid.py
+    test_cross_tenant_write.py
+    test_cross_tenant_delete.py
+    test_schema_context.py
+```
+
+---
+
+## FASE 3 — Service Layer consolidation
+
+Normalizar:
+
+```text
+API
+ ↓
+Serializer
+ ↓
+Service
+ ↓
+Selector
+ ↓
+Model
+```
+
+Eliminar caminos alternativos.
+
+---
+
+## FASE 4 — AI Provider Architecture
+
+Implementar:
+
+```text
+ProviderRegistry
+ProviderConfig
+CredentialService
+CapabilityRegistry
+ModelRegistry
+AIExecution
+AIUsage
+```
+
+con adapters:
+
+```text
+Ollama
+LM Studio
+OpenAI-compatible
+Anthropic
+Gemini
+REST
+MCP
+```
+
+---
+
+## FASE 5 — AI Governance
+
+Crear:
+
+```text
+ToolPolicy
+ToolRisk
+ToolApproval
+ToolAudit
+ToolExecution
+```
+
+Flujo:
+
+```text
+LLM
+ ↓
+Tool selection
+ ↓
+Policy
+ ↓
+Permission
+ ↓
+Tenant scope
+ ↓
+Risk
+ ↓
+Approval
+ ↓
+Execution
+ ↓
+Audit
+```
+
+---
+
+## FASE 6 — Observability
+
+Agregar:
+
+```text
+request_id
+correlation_id
+tenant_id
+user_id
+task_id
+ai_execution_id
+tool_execution_id
+```
+
+---
+
+## FASE 7 — Production hardening
+
+Validar:
+
+```text
+HTTPS
+HSTS
+Cookies
+CSRF
+CORS
+Proxy headers
+Host validation
+File uploads
+Secrets
+Backups
+Restore
+Monitoring
+Alerts
+```
+
+---
+
+# 42. Criterio de aceptación final
+
+No considerar la auditoría cerrada hasta que:
+
+```text
+[ ] Django 5.2 LTS validado
+[ ] requirements reproducibles
+[ ] CI blocking
+[ ] Ruff blocking
+[ ] Bandit blocking
+[ ] pip-audit blocking
+[ ] Actions SHA pinned
+[ ] permissions mínimos
+[ ] migrations check
+[ ] multitenant isolation suite
+[ ] cross-tenant UUID tests
+[ ] proxy header tests
+[ ] HTTPS verification
+[ ] CORS tests
+[ ] MCP security tests
+[ ] secrets scan
+[ ] backup restore test
+[ ] OpenAPI validation
+[ ] Service Layer consolidation
+[ ] AI Provider Registry
+[ ] encrypted AI credentials
+[ ] AI tool approval
+[ ] audit trail
+[ ] correlation IDs
+[ ] production compose validation
+```
+
+---
+
+# 43. Conclusión técnica
+
+CRM_SINTEL ya tiene una base arquitectónica sólida para evolucionar hacia un ERP/CRM SaaS multitenant con capacidades de IA.
+
+El siguiente paso no debería ser añadir más módulos indiscriminadamente.
+
+Debe ser:
+
+```text
+ESTABILIZAR
+    ↓
+ENDURECER
+    ↓
+NORMALIZAR
+    ↓
+AUTOMATIZAR TESTS
+    ↓
+CONVERTIR CI EN GATE
+    ↓
+CONSOLIDAR SERVICE LAYER
+    ↓
+CONSOLIDAR AI PROVIDER REGISTRY
+    ↓
+PRODUCTION HARDENING
+```
+
+La prioridad técnica más importante es eliminar la diferencia entre:
+
+```text
+"la arquitectura dice que esto está protegido"
+```
+
+y:
+
+```text
+"el código + test + CI demuestran que está protegido".
+```
+
+La documentación oficial de Django enfatiza precisamente que la seguridad debe abordarse de forma multicapa y que las configuraciones de producción deben revisarse explícitamente.
+
+Para PostgreSQL, la revisión de `search_path`, privilegios y aislamiento de schemas debe ser considerada una frontera de seguridad real en este SaaS multitenant.
+
+Para GitHub Actions, el siguiente endurecimiento debe incluir permisos mínimos y pinning de Actions a SHA completo.
+
+OWASP ASVS 5.0 puede utilizarse como matriz adicional de verificación para convertir estos controles en requisitos verificables de seguridad.

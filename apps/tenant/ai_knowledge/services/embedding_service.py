@@ -125,7 +125,7 @@ class EmbeddingService:
         embedded = 0
         if chunks:
             result = self._provider.embed_documents([c.content for c in chunks])
-            for chunk, vector in zip(chunks, result.vectors):
+            for chunk, vector in zip(chunks, result.vectors, strict=False):
                 AIKnowledgeCRUDService.set_chunk_embedding(
                     chunk=chunk,
                     embedding=vector,

@@ -5,9 +5,12 @@ SINTEL v3.10.1: Arquitectura Service Layer Modular.
 - Hereda de BaseServiceMixin (canonical, consolidado)
 - Mantiene solo métodos service_* específicos de ConfiguracionCotizacion
 """
+
 from apps.tenant.api.mixins import BaseServiceMixin
-from .selectors import ConfiguracionSelector
+
 from .business_service import ConfiguracionBusinessService
+from .selectors import ConfiguracionSelector
+
 
 class ConfiguracionServiceMixin(BaseServiceMixin):
     selector_class = ConfiguracionSelector

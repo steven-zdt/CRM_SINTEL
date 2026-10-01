@@ -1,5 +1,24 @@
-{% load django_tables2 %}
-{# Fragmento HTMX: tabla de Cuentas Contables. Reemplaza #contabilidad-cuentas-panel completo. #}
+{# tabla_cuentas.html — DataTables 3.x (mismo patron ya validado en       #}
+{# Ventas/Bancos/Facturas/Clientes/Proveedores/Compras/Gastos/Empleados/  #}
+{# Proyectos/Inventario, ver                                              #}
+{# docs/remediation/DATATABLES_PILOT_VENTAS_STATUS.md). Esqueleto         #}
+{# ESTATICO, poblado via ajax por cuenta_list.js (contabilidad) contra    #}
+{# POST /api/v1/contabilidad/cuentas-contables/dt/. Indices de columna    #}
+{# deben coincidir 1:1 con fields_map/column_filters de                  #}
+{# CuentaContableViewSet.dt().                                           #}
+
 <div class="w-100" style="max-width:100%; overflow-x:auto;">
-  {% render_table table %}
+  <table id="tabla-cuentas" class="table table-hover align-middle mb-0 w-100">
+    <thead>
+      <tr>
+        <th>Código</th>
+        <th>Nombre</th>
+        <th>Tipo</th>
+        <th>Estado</th>
+        <th>Creado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 </div>

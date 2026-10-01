@@ -6,6 +6,7 @@ Contabilidad. Corregido: FacturaBusinessService.eliminar_factura() bloquea
 el DELETE fuera de BORRADOR -- la via sancionada para el resto es anulacion
 (cambiar_estado -> ANULADA), no DELETE fisico.
 """
+
 from rest_framework import status
 
 from apps.tenant.empresa.models import Empresa
@@ -18,18 +19,27 @@ class FacturaDeleteGuardP0_01Tests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test P0-01", nit="900000790", direccion="Calle 1",
+            razon_social="Empresa Test P0-01",
+            nit="900000790",
+            direccion="Calle 1",
         )
         TenantProfile.objects.create(
-            user=self.user, empresa=self.empresa, rol="ADMIN", alcance="EMPRESA",
+            user=self.user,
+            empresa=self.empresa,
+            rol="ADMIN",
+            alcance="EMPRESA",
         )
 
     def _crear_factura(self, numero, estado):
         return Factura.objects.create(
-            empresa=self.empresa, numero=numero, consecutivo=1,
+            empresa=self.empresa,
+            numero=numero,
+            consecutivo=1,
             fecha_emision="2026-06-01T00:00:00Z",
-            emisor_nit=self.empresa.nit, emisor_razon_social=self.empresa.razon_social,
-            receptor_nit="123", receptor_razon_social="Cliente P0-01",
+            emisor_nit=self.empresa.nit,
+            emisor_razon_social=self.empresa.razon_social,
+            receptor_nit="123",
+            receptor_razon_social="Cliente P0-01",
             estado=estado,
         )
 
@@ -70,7 +80,8 @@ class FacturaDeleteGuardP0_01Tests(SintelTenantTestCase):
         factura = self._crear_factura("FA-P001-ANULA-VIA", Factura.Estado.ACEPTADA)
         resp = self.api_client.post(
             f"/api/v1/facturas/{factura.uuid}/cambiar-estado/",
-            {"estado": "ANULADA"}, format="json",
+            {"estado": "ANULADA"},
+            format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content)
         factura.refresh_from_db()

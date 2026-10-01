@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('tenant_proyectos', '0021_tareadiariaproyecto_avance_and_more'),
+        ("tenant_proyectos", "0021_tareadiariaproyecto_avance_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='proyecto',
-            name='costo_gastos_real',
-            field=models.DecimalField(decimal_places=2, default=0, help_text='Calculado por services.py -- suma de DocumentoSoporte.subtotal asociados (GASTOS_PROYECTOS_01)', max_digits=15),
+            model_name="proyecto",
+            name="costo_gastos_real",
+            field=models.DecimalField(
+                decimal_places=2,
+                default=0,
+                help_text="Calculado por services.py -- suma de DocumentoSoporte.subtotal asociados (GASTOS_PROYECTOS_01)",
+                max_digits=15,
+            ),
         ),
     ]

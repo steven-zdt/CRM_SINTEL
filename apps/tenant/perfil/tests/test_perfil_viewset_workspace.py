@@ -15,6 +15,7 @@ mision): PerfilViewSet no hereda BaseTenantViewSet y su lookup acepta tanto
 UUID como ID entero crudo (viola la regla "UUID lookup, not PK" de
 CLAUDE.md). Estos tests usan UUID deliberadamente (el camino correcto).
 """
+
 from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context
 from rest_framework import status
@@ -31,23 +32,35 @@ class PerfilViewSetWorkspaceTests(SintelTenantTestCase):
     def setUp(self):
         super().setUp()
         self.empresa = Empresa.objects.first() or Empresa.objects.create(
-            razon_social="Empresa Test Perfil CRUD", nit="900555666", direccion="Calle 1",
+            razon_social="Empresa Test Perfil CRUD",
+            nit="900555666",
+            direccion="Calle 1",
         )
         # self.user ya es ADMIN + is_primary_admin=True (SintelTenantTestCase.setup_membership()).
         self.perfil_propio, _ = TenantProfile.objects.get_or_create(
-            user=self.user, empresa=self.empresa, defaults={"rol": "ADMIN", "alcance": "EMPRESA"},
+            user=self.user,
+            empresa=self.empresa,
+            defaults={"rol": "ADMIN", "alcance": "EMPRESA"},
         )
 
         # Segundo usuario/perfil: NO admin, NO admin primario -- el caso "normal" a eliminar.
         with schema_context("public"):
             self.otro_user = User.objects.create_user(
-                email="otro-perfil@test.local", username="otro-perfil", password="testpass123",
+                email="otro-perfil@test.local",
+                username="otro-perfil",
+                password="testpass123",
             )
             TenantMembership.objects.create(
-                client=self.tenant, user=self.otro_user, rol="OPERADOR", is_primary_admin=False,
+                client=self.tenant,
+                user=self.otro_user,
+                rol="OPERADOR",
+                is_primary_admin=False,
             )
         self.perfil_ajeno = TenantProfile.objects.create(
-            user=self.otro_user, empresa=self.empresa, rol="OPERADOR", alcance="EMPRESA",
+            user=self.otro_user,
+            empresa=self.empresa,
+            rol="OPERADOR",
+            alcance="EMPRESA",
         )
 
     def test_me_patch_autoedicion(self):

@@ -6,12 +6,12 @@ _determinar_naturaleza(), que nunca antes de esta mision pudo retornar
 None/"Revisar"). No requieren base de datos ni tenant (funcion estatica
 pura).
 """
+
 from django.test import SimpleTestCase
 
 from apps.tenant.facturas.models import Factura
 from apps.tenant.facturas.services.business_service import (
     FacturaBusinessService,
-    clean_nit,
     same_business_name,
     same_nit,
 )
@@ -95,8 +95,12 @@ class ResolverNaturalezaMatrixTests(SimpleTestCase):
         self.assertEqual(_resolver(emisor_nit=EMPRESA_NIT, receptor_nit=""), VENTA)
 
     def test_empresa_sin_nit_configurado_es_revisar(self):
-        self.assertIsNone(_resolver(emisor_nit="900123456", receptor_nit=EMPRESA_NIT, empresa_nit=""))
-        self.assertIsNone(_resolver(emisor_nit="900123456", receptor_nit=EMPRESA_NIT, empresa_nit=None))
+        self.assertIsNone(
+            _resolver(emisor_nit="900123456", receptor_nit=EMPRESA_NIT, empresa_nit="")
+        )
+        self.assertIsNone(
+            _resolver(emisor_nit="900123456", receptor_nit=EMPRESA_NIT, empresa_nit=None)
+        )
 
     def test_ambos_nit_vacios_es_revisar(self):
         self.assertIsNone(_resolver(emisor_nit="", receptor_nit=""))
@@ -104,9 +108,7 @@ class ResolverNaturalezaMatrixTests(SimpleTestCase):
     def test_prioridad_nit_ignora_dv_con_guion(self):
         """FASE 18 'Prioridad NIT': NIT coincide (aunque el XML traiga el
         DV con guion) -> VENTA, sin importar el formato."""
-        self.assertEqual(
-            _resolver(emisor_nit=f"{EMPRESA_NIT}-1", receptor_nit="900123456"), VENTA
-        )
+        self.assertEqual(_resolver(emisor_nit=f"{EMPRESA_NIT}-1", receptor_nit="900123456"), VENTA)
 
     def test_nombre_nunca_decide_la_clasificacion(self):
         """FASE 18 'Nombre insuficiente': _resolver_naturaleza ni siquiera

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('tenant_cotizaciones', '0005_cotizacion_sede'),
+        ("tenant_cotizaciones", "0005_cotizacion_sede"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='cotizacion',
-            name='fecha_emision',
+            model_name="cotizacion",
+            name="fecha_emision",
             field=models.DateField(),
         ),
     ]

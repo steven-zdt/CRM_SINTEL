@@ -11,6 +11,7 @@ Uso:
     a estos helpers desde setUp(). Los fixtures pytest estan disponibles
     para suites que usen pytest-django directamente.
 """
+
 import pytest
 from django.contrib.auth import get_user_model
 
@@ -19,6 +20,7 @@ User = get_user_model()
 # ---------------------------------------------------------------------------
 # Helpers de creacion (usados desde setUp() en TestCase)
 # ---------------------------------------------------------------------------
+
 
 def make_normal_user(
     email: str = "normal@console.test",
@@ -105,6 +107,7 @@ def make_console_action_log(
 # ---------------------------------------------------------------------------
 # Fixtures pytest (para suites que usen pytest-django directamente)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def normal_user(db):

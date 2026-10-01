@@ -122,6 +122,25 @@ class UsersListView(ConsoleTemplateView):
         return context
 
 
+class LLMProvidersView(ConsoleTemplateView):
+    """
+    Consola del LLM Provider Hub (Fase 8,
+    PLAN_MAESTRO_LLM_PROVIDER_HUB_SINTEL_CONSOLE_20260924.md).
+
+    Solo renderiza el template -- toda la data (providers/modelos/activo/
+    audit log) se carga via fetch a apps/public/console/api/views_llm_providers.py
+    (API-First, mismo patron que Usuarios/Tenants).
+    """
+
+    template_name = "console/pages/llm/providers.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_title"] = "Proveedores LLM - Consola de Administración"
+        context["user"] = self.request.user
+        return context
+
+
 class ImpuestosCatalogoView(ConsoleTemplateView):
     """Catálogo de impuestos DIAN."""
 

@@ -1,43 +1,47 @@
-import pytest
 import datetime
 from decimal import Decimal
+
+import pytest
 from django.db import IntegrityError
 from django_tenants.utils import schema_context
-from apps.tenant.cotizaciones.services import CotizacionService
+
 from apps.tenant.cotizaciones.models import Cotizacion
+from apps.tenant.cotizaciones.services import CotizacionService
+
 
 @pytest.mark.django_db
 def test_crear_cotizacion_valida(tenant, factory_empresa, factory_cliente):
     empresa = factory_empresa()
     cliente = factory_cliente(empresa=empresa)
-    
+
     payload = {
-        'cliente': cliente.id,
-        'fecha_emision': datetime.date(2026, 3, 30),
-        'items': [
+        "cliente": cliente.id,
+        "fecha_emision": datetime.date(2026, 3, 30),
+        "items": [
             {
-                'tipo_item': 'PRODUCTO',
-                'descripcion': 'Equipo de prueba',
-                'cantidad': 2,
-                'costo_unitario': 500,
-                'porcentaje_utilidad': 10,
-                'unidad': 'UND',
-                'orden': 1
+                "tipo_item": "PRODUCTO",
+                "descripcion": "Equipo de prueba",
+                "cantidad": 2,
+                "costo_unitario": 500,
+                "porcentaje_utilidad": 10,
+                "unidad": "UND",
+                "orden": 1,
             }
-        ]
+        ],
     }
     with schema_context(tenant.schema_name):
         # We need to make sure there's a configuration for the company as well
         from apps.tenant.cotizaciones.configuracion.models import ConfiguracionCotizacion
+
         ConfiguracionCotizacion.objects.get_or_create(
             empresa=empresa,
             defaults={
-                'dias_validez': 15,
-                'nombre_configuracion': 'Perfil General',
-                'es_activo': True
-            }
+                "dias_validez": 15,
+                "nombre_configuracion": "Perfil General",
+                "es_activo": True,
+            },
         )
-        
+
         cotizacion = CotizacionService.crear_preforma(empresa, payload)
         assert cotizacion.empresa_id == empresa.id
         assert cotizacion.cliente_id == cliente.id
@@ -50,7 +54,9 @@ def test_crear_cotizacion_valida(tenant, factory_empresa, factory_cliente):
         # explicita en el payload (2026-03-30) pero nunca la aseveraba --
         # por eso el bug nunca se detecto.
         assert cotizacion.fecha_emision == datetime.date(2026, 3, 30)
-        assert cotizacion.fecha_vencimiento == datetime.date(2026, 3, 30) + datetime.timedelta(days=15)
+        assert cotizacion.fecha_vencimiento == datetime.date(2026, 3, 30) + datetime.timedelta(
+            days=15
+        )
 
 
 @pytest.mark.django_db
@@ -86,7 +92,9 @@ def test_configuracion_de_otra_empresa_es_rechazada(tenant, factory_empresa):
     empresa = factory_empresa()
     with schema_context(tenant.schema_name):
         configuracion = ConfiguracionCotizacion.objects.create(
-            empresa=empresa, nombre_configuracion="Perfil Ajeno Test", dias_validez=15,
+            empresa=empresa,
+            nombre_configuracion="Perfil Ajeno Test",
+            dias_validez=15,
         )
         otra_empresa_id = empresa.id + 999999
 
@@ -112,9 +120,13 @@ def test_configuracion_nombre_duplicado_viola_constraint_de_bd(tenant, factory_e
     empresa = factory_empresa()
     with schema_context(tenant.schema_name):
         ConfiguracionCotizacion.objects.create(
-            empresa=empresa, nombre_configuracion="Perfil Duplicado Test", dias_validez=15,
+            empresa=empresa,
+            nombre_configuracion="Perfil Duplicado Test",
+            dias_validez=15,
         )
         with pytest.raises(IntegrityError):
             ConfiguracionCotizacion.objects.create(
-                empresa=empresa, nombre_configuracion="Perfil Duplicado Test", dias_validez=20,
+                empresa=empresa,
+                nombre_configuracion="Perfil Duplicado Test",
+                dias_validez=20,
             )

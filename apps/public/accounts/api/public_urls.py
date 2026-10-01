@@ -1,4 +1,5 @@
 """Public API urls for accounts (users exposed under /api/public/v1/users/)."""
+
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 

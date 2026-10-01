@@ -7,21 +7,19 @@ Flujo:
 
 Este módulo usa `apps.public.tenants.services.crear_tenant_con_owner` para crear el tenant.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import uuid
-from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 import redis
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-
-import importlib.util
-from pathlib import Path
 
 _TENANTS_DIR = Path(__file__).resolve().parents[1]
 
@@ -37,7 +35,12 @@ def _get_redis_client() -> redis.Redis:
     return redis.from_url(getattr(settings, "REDIS_URL", "redis://redis:6379/0"))
 
 
-def create_onboarding_ott(company_name: str, admin_email: str, schema_name: str | None = None, ttl_seconds: int = DEFAULT_OTT_TTL_SECONDS) -> dict[str, Any]:
+def create_onboarding_ott(
+    company_name: str,
+    admin_email: str,
+    schema_name: str | None = None,
+    ttl_seconds: int = DEFAULT_OTT_TTL_SECONDS,
+) -> dict[str, Any]:
     """Crea tenant + admin user (si no existe) y devuelve una URL con OTT.
 
     Retorna dict con keys: `ott`, `redirect_url` (absolute tenant URL with ott query param),
@@ -58,23 +61,24 @@ def create_onboarding_ott(company_name: str, admin_email: str, schema_name: str 
     # 2. Crear tenant usando servicio existente
     try:
         # Usar el servicio centralizado de onboarding (apps.services.onboarding.empresa_service)
-        from apps.services.onboarding.empresa_service import crear_tenant_con_owner as crear_tenant_service
+        from apps.services.onboarding.empresa_service import (
+            crear_tenant_con_owner as crear_tenant_service,
+        )
 
         # La función en apps.services.onboarding espera kwargs: nombre, schema_name, owner_email/admin_user_id
         payload_kwargs = {
-            'nombre': company_name,
-            'schema_name': schema_name or company_name.replace(' ', '_').lower(),
-            'owner_email': admin_email,
+            "nombre": company_name,
+            "schema_name": schema_name or company_name.replace(" ", "_").lower(),
+            "owner_email": admin_email,
         }
         result = crear_tenant_service(**payload_kwargs)
         # El servicio retorna un dict con client_id, domain, membership_id, login_url
         # Recuperar client and domain info desde el modelo público
         from apps.public.tenants.models import Client, Domain
 
-        client = Client.objects.get(schema_name=payload_kwargs['schema_name'])
+        client = Client.objects.get(schema_name=payload_kwargs["schema_name"])
         domain = Domain.objects.filter(tenant=client, is_primary=True).first()
-        membership = None
-        login_url = result.get('login_url') if isinstance(result, dict) else None
+        result.get("login_url") if isinstance(result, dict) else None
     except ValidationError as ve:
         # Propagar validación para que la API lo maneje
         logger.error("Onboarding: error creando tenant: %s", ve)
@@ -98,7 +102,11 @@ def create_onboarding_ott(company_name: str, admin_email: str, schema_name: str 
     else:
         domain_with_port = domain.domain
 
-    protocol = "https" if (not settings.DEBUG and getattr(settings, "SECURE_SSL_REDIRECT", False)) else "http"
+    protocol = (
+        "https"
+        if (not settings.DEBUG and getattr(settings, "SECURE_SSL_REDIRECT", False))
+        else "http"
+    )
     # Redirigir al asset estático onboard.html dentro de core
     redirect_url = f"{protocol}://{domain_with_port}/static/core/onboard.html?ott={ott}"
 
@@ -159,7 +167,8 @@ def consume_onboarding_ott(ott: str) -> dict[str, Any] | None:
                 logger.info(
                     "consume_onboarding_ott: user_id=%s ya tiene contrasena usable "
                     "(schema=%s) — omitiendo flujo de activacion",
-                    user_id, data.get("schema_name"),
+                    user_id,
+                    data.get("schema_name"),
                 )
         except Exception as exc:
             logger.warning("consume_onboarding_ott: error verificando user_id=%s: %s", user_id, exc)

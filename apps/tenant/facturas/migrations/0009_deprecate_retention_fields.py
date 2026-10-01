@@ -9,154 +9,154 @@ se marcan como deprecated con:
 Esta migración prepara los datos para la completa eliminación en v3.8+.
 """
 
-from django.db import migrations, models
-import django.core.validators
 from decimal import Decimal
+
+import django.core.validators
+from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('facturas', '0008_add_reteiva_fields'),
+        ("facturas", "0008_add_reteiva_fields"),
     ]
 
     operations = [
         # Factura: Deprecate retefuente
         migrations.AlterField(
-            model_name='factura',
-            name='retefuente',
+            model_name="factura",
+            name="retefuente",
             field=models.DecimalField(
                 blank=True,
-                default=Decimal('0.00'),
+                default=Decimal("0.00"),
                 decimal_places=2,
                 editable=False,
                 max_digits=15,
                 null=True,
-                validators=[django.core.validators.MinValueValidator(Decimal('0.00'))],
-                verbose_name='Retención en la Fuente [DEPRECATED v3.7.1]',
-                help_text='[DEPRECATED v3.7.1] Leer desde Contabilidad.Retencion. Campo mantenido solo para backward compatibility.'
+                validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                verbose_name="Retención en la Fuente [DEPRECATED v3.7.1]",
+                help_text="[DEPRECATED v3.7.1] Leer desde Contabilidad.Retencion. Campo mantenido solo para backward compatibility.",
             ),
         ),
         # Factura: Deprecate reteica
         migrations.AlterField(
-            model_name='factura',
-            name='reteica',
+            model_name="factura",
+            name="reteica",
             field=models.DecimalField(
                 blank=True,
-                default=Decimal('0.00'),
+                default=Decimal("0.00"),
                 decimal_places=2,
                 editable=False,
                 max_digits=15,
                 null=True,
-                validators=[django.core.validators.MinValueValidator(Decimal('0.00'))],
-                verbose_name='ReteICA [DEPRECATED v3.7.1]',
-                help_text='[DEPRECATED v3.7.1] Leer desde Contabilidad.Retencion. Campo mantenido solo para backward compatibility.'
+                validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                verbose_name="ReteICA [DEPRECATED v3.7.1]",
+                help_text="[DEPRECATED v3.7.1] Leer desde Contabilidad.Retencion. Campo mantenido solo para backward compatibility.",
             ),
         ),
         # Factura: Deprecate reteiva
         migrations.AlterField(
-            model_name='factura',
-            name='reteiva',
+            model_name="factura",
+            name="reteiva",
             field=models.DecimalField(
                 blank=True,
-                default=Decimal('0.00'),
+                default=Decimal("0.00"),
                 decimal_places=2,
                 editable=False,
                 max_digits=15,
                 null=True,
-                validators=[django.core.validators.MinValueValidator(Decimal('0.00'))],
-                verbose_name='ReteIVA [DEPRECATED v3.7.1]',
-                help_text='[DEPRECATED v3.7.1] Leer desde Contabilidad.Retencion. Campo mantenido solo para backward compatibility.'
+                validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                verbose_name="ReteIVA [DEPRECATED v3.7.1]",
+                help_text="[DEPRECATED v3.7.1] Leer desde Contabilidad.Retencion. Campo mantenido solo para backward compatibility.",
             ),
         ),
         # ItemFactura: Deprecate porcentaje_retefuente
         migrations.AlterField(
-            model_name='itemfactura',
-            name='porcentaje_retefuente',
+            model_name="itemfactura",
+            name="porcentaje_retefuente",
             field=models.DecimalField(
                 blank=True,
-                default=Decimal('0.00'),
+                default=Decimal("0.00"),
                 decimal_places=2,
                 editable=False,
                 max_digits=5,
                 null=True,
-                validators=[django.core.validators.MinValueValidator(Decimal('0.00'))],
-                verbose_name='% Retención Fuente [DEPRECATED v3.7.1]',
+                validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                verbose_name="% Retención Fuente [DEPRECATED v3.7.1]",
             ),
         ),
         # ItemFactura: Deprecate valor_retefuente
         migrations.AlterField(
-            model_name='itemfactura',
-            name='valor_retefuente',
+            model_name="itemfactura",
+            name="valor_retefuente",
             field=models.DecimalField(
                 blank=True,
-                default=Decimal('0.00'),
+                default=Decimal("0.00"),
                 decimal_places=2,
                 editable=False,
                 max_digits=15,
                 null=True,
-                validators=[django.core.validators.MinValueValidator(Decimal('0.00'))],
-                verbose_name='Valor Retención Fuente [DEPRECATED v3.7.1]',
+                validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                verbose_name="Valor Retención Fuente [DEPRECATED v3.7.1]",
             ),
         ),
         # ItemFactura: Deprecate porcentaje_reteiva
         migrations.AlterField(
-            model_name='itemfactura',
-            name='porcentaje_reteiva',
+            model_name="itemfactura",
+            name="porcentaje_reteiva",
             field=models.DecimalField(
                 blank=True,
-                default=Decimal('0.00'),
+                default=Decimal("0.00"),
                 decimal_places=2,
                 editable=False,
                 max_digits=5,
                 null=True,
-                validators=[django.core.validators.MinValueValidator(Decimal('0.00'))],
-                verbose_name='% ReteIVA [DEPRECATED v3.7.1]',
+                validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                verbose_name="% ReteIVA [DEPRECATED v3.7.1]",
             ),
         ),
         # ItemFactura: Deprecate valor_reteiva
         migrations.AlterField(
-            model_name='itemfactura',
-            name='valor_reteiva',
+            model_name="itemfactura",
+            name="valor_reteiva",
             field=models.DecimalField(
                 blank=True,
-                default=Decimal('0.00'),
+                default=Decimal("0.00"),
                 decimal_places=2,
                 editable=False,
                 max_digits=15,
                 null=True,
-                validators=[django.core.validators.MinValueValidator(Decimal('0.00'))],
-                verbose_name='Valor ReteIVA [DEPRECATED v3.7.1]',
+                validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                verbose_name="Valor ReteIVA [DEPRECATED v3.7.1]",
             ),
         ),
         # ItemFactura: Deprecate porcentaje_reteica
         migrations.AlterField(
-            model_name='itemfactura',
-            name='porcentaje_reteica',
+            model_name="itemfactura",
+            name="porcentaje_reteica",
             field=models.DecimalField(
                 blank=True,
-                default=Decimal('0.00'),
+                default=Decimal("0.00"),
                 decimal_places=2,
                 editable=False,
                 max_digits=5,
                 null=True,
-                validators=[django.core.validators.MinValueValidator(Decimal('0.00'))],
-                verbose_name='% ReteICA [DEPRECATED v3.7.1]',
+                validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                verbose_name="% ReteICA [DEPRECATED v3.7.1]",
             ),
         ),
         # ItemFactura: Deprecate valor_reteica
         migrations.AlterField(
-            model_name='itemfactura',
-            name='valor_reteica',
+            model_name="itemfactura",
+            name="valor_reteica",
             field=models.DecimalField(
                 blank=True,
-                default=Decimal('0.00'),
+                default=Decimal("0.00"),
                 decimal_places=2,
                 editable=False,
                 max_digits=15,
                 null=True,
-                validators=[django.core.validators.MinValueValidator(Decimal('0.00'))],
-                verbose_name='Valor ReteICA [DEPRECATED v3.7.1]',
+                validators=[django.core.validators.MinValueValidator(Decimal("0.00"))],
+                verbose_name="Valor ReteICA [DEPRECATED v3.7.1]",
             ),
         ),
     ]

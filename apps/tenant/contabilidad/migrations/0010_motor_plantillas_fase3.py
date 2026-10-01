@@ -11,14 +11,15 @@ Cambios:
    activa por tipo de documento VENTA/COMPRA/GASTO/NOMINA).
 5. LineaPlantilla: nuevo modelo que define las lineas de partida doble.
 """
+
+from decimal import Decimal
+
 import django.core.validators
 import django.db.models.deletion
-from decimal import Decimal
 from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("contabilidad", "0009_retencion_naturaleza"),
         ("empresa", "0009_sedes_areas_explicit_fk"),
@@ -61,7 +62,6 @@ class Migration(migrations.Migration):
                 verbose_name="Codigo Cuenta Credito",
             ),
         ),
-
         # --- PlantillaContable: nuevos campos Motor Fase 3 ---
         migrations.AddField(
             model_name="plantillacontable",
@@ -91,7 +91,6 @@ class Migration(migrations.Migration):
                 verbose_name="Tipo de Transaccion",
             ),
         ),
-
         # --- PlantillaContable: actualizar constraints ---
         # Eliminar constraint original (condicion no incluia regla__isnull=False)
         migrations.RemoveConstraint(
@@ -116,7 +115,6 @@ class Migration(migrations.Migration):
                 name="plantillacontable_unique_tipo_transaccion_activo",
             ),
         ),
-
         # --- LineaPlantilla: nuevo modelo ---
         migrations.CreateModel(
             name="LineaPlantilla",
@@ -181,9 +179,7 @@ class Migration(migrations.Migration):
                         default=Decimal("100.00"),
                         help_text="100 = valor completo, 50 = la mitad del componente",
                         max_digits=5,
-                        validators=[
-                            django.core.validators.MinValueValidator(Decimal("0.01"))
-                        ],
+                        validators=[django.core.validators.MinValueValidator(Decimal("0.01"))],
                         verbose_name="Porcentaje a Aplicar",
                     ),
                 ),
@@ -240,9 +236,7 @@ class Migration(migrations.Migration):
                 "ordering": ["plantilla", "orden"],
                 "abstract": False,
                 "indexes": [
-                    models.Index(
-                        fields=["empresa"], name="contabilida_empresa_lp001_idx"
-                    ),
+                    models.Index(fields=["empresa"], name="contabilida_empresa_lp001_idx"),
                     models.Index(
                         fields=["empresa", "-created_at"],
                         name="contabilida_empresa_lp002_idx",

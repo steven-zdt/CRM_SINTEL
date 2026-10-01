@@ -1,4 +1,5 @@
 """Fase AI-03.4: dominio `ventas`, envuelve VentaSelector ya existente."""
+
 from __future__ import annotations
 
 from apps.services.ai.context import AIContext
@@ -19,14 +20,18 @@ class ConsultarVentaTool(BaseTool):
     confirmation_required = False
     idempotent = True
 
-    def run(self, context: AIContext, *, search: str = "", estado: str = "", limit: int = 10) -> ToolResult:
+    def run(
+        self, context: AIContext, *, search: str = "", estado: str = "", limit: int = 10
+    ) -> ToolResult:
         if limit < 1 or limit > 50:
             return ToolResult(status="VALIDATION_ERROR", message="limit debe estar entre 1 y 50.")
 
         from apps.tenant.ventas.services.selectors import VentaSelector
 
         qs = VentaSelector.get_list(
-            empresa_id=context.empresa_id, search=search or None, estado=estado or None,
+            empresa_id=context.empresa_id,
+            search=search or None,
+            estado=estado or None,
         )[:limit]
 
         ventas = [

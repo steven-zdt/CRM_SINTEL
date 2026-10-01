@@ -32,8 +32,10 @@ completo de diagnostico. Verificar tambien que SERVER_IP (default abajo) siga si
 real de la maquina -- el DHCP puede reasignarla (confirmado: cambio de 192.168.2.15 a
 192.168.2.200 en este entorno sin que ningun archivo de config se actualizara).
 """
+
 import logging
 import subprocess
+
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
@@ -48,11 +50,16 @@ def _dns_record_exists(subdomain: str, zone: str) -> bool:
     try:
         result = subprocess.run(
             [
-                "powershell", "-NoProfile", "-NonInteractive", "-Command",
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
                 f"Get-DnsServerResourceRecord -ZoneName '{zone}' -Name '{subdomain}'"
                 f" -RRType A -ErrorAction SilentlyContinue",
             ],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         return bool(result.stdout.strip())
     except Exception as exc:
@@ -65,11 +72,16 @@ def _add_dns_record(subdomain: str, zone: str, ip: str) -> bool:
     try:
         result = subprocess.run(
             [
-                "powershell", "-NoProfile", "-NonInteractive", "-Command",
+                "powershell",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
                 f"Add-DnsServerResourceRecordA -ZoneName '{zone}' -Name '{subdomain}'"
                 f" -IPv4Address '{ip}' -TimeToLive 01:00:00 -ErrorAction Stop",
             ],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         if result.returncode != 0:
             logger.error("DNS add failed %s.%s: %s", subdomain, zone, result.stderr)
@@ -85,20 +97,26 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--dry-run", action="store_true",
+            "--dry-run",
+            action="store_true",
             help="Mostrar que se crearia sin ejecutar nada",
         )
         parser.add_argument(
-            "--schema", type=str, default=None,
+            "--schema",
+            type=str,
+            default=None,
             help="Procesar solo el tenant con este schema_name. "
-                 "Omitir para procesar todos los tenants activos.",
+            "Omitir para procesar todos los tenants activos.",
         )
         parser.add_argument(
-            "--ip", type=str, default=None,
+            "--ip",
+            type=str,
+            default=None,
             help=f"IP destino del A record (default: {SERVER_IP})",
         )
         parser.add_argument(
-            "--force", action="store_true",
+            "--force",
+            action="store_true",
             help="Agregar aunque el registro ya exista",
         )
 
@@ -125,10 +143,14 @@ class Command(BaseCommand):
         compose_hints = []
 
         for client in qs:
-            domains = Domain.objects.filter(tenant=client, is_primary=True).values_list("domain", flat=True)
+            domains = Domain.objects.filter(tenant=client, is_primary=True).values_list(
+                "domain", flat=True
+            )
             for fqdn in domains:
                 if not fqdn.endswith(f".{DNS_ZONE}"):
-                    self.stdout.write(self.style.WARNING(f"  SKIP {fqdn} — no es subdominio de {DNS_ZONE}"))
+                    self.stdout.write(
+                        self.style.WARNING(f"  SKIP {fqdn} — no es subdominio de {DNS_ZONE}")
+                    )
                     continue
 
                 subdomain = fqdn[: -(len(DNS_ZONE) + 1)]
@@ -159,9 +181,9 @@ class Command(BaseCommand):
         )
 
         if compose_hints:
-            self.stdout.write(self.style.WARNING(
-                "\nAgregar en docker-compose.yaml extra_hosts y reiniciar:"
-            ))
+            self.stdout.write(
+                self.style.WARNING("\nAgregar en docker-compose.yaml extra_hosts y reiniciar:")
+            )
             for fqdn in compose_hints:
                 self.stdout.write(f'    - "{fqdn}:{target_ip}"')
             self.stdout.write("Luego: docker compose restart web celery")

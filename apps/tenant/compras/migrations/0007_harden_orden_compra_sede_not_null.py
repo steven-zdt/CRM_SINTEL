@@ -9,16 +9,17 @@ y accionable si algun tenant llega aqui sin haber corrido el backfill
 primero (en vez del error generico de Postgres "column contains null
 values").
 """
+
 import django.db.models.deletion
 from django.db import migrations, models
 
 
 def check_no_null_sede(apps, schema_editor):
-    OrdenCompra = apps.get_model('tenant_compras', 'OrdenCompra')
+    OrdenCompra = apps.get_model("tenant_compras", "OrdenCompra")
     huerfanas = OrdenCompra.objects.filter(sede__isnull=True)
     count = huerfanas.count()
     if count:
-        ids = list(huerfanas.values_list('id', flat=True)[:10])
+        ids = list(huerfanas.values_list("id", flat=True)[:10])
         raise RuntimeError(
             f"No se puede endurecer OrdenCompra.sede a NOT NULL: {count} orden(es) "
             f"sin sede_id (ids de ejemplo: {ids}). Corra "
@@ -28,23 +29,22 @@ def check_no_null_sede(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('tenant_compras', '0006_backfill_orden_compra_sede'),
+        ("tenant_compras", "0006_backfill_orden_compra_sede"),
     ]
 
     operations = [
         migrations.RunPython(check_no_null_sede, migrations.RunPython.noop),
         migrations.AlterField(
-            model_name='ordencompra',
-            name='sede',
+            model_name="ordencompra",
+            name="sede",
             field=models.ForeignKey(
-                help_text='Sede propietaria del registro (Contexto Organizacional). Obligatoria para nuevos registros.',
+                help_text="Sede propietaria del registro (Contexto Organizacional). Obligatoria para nuevos registros.",
                 null=False,
                 on_delete=django.db.models.deletion.PROTECT,
-                related_name='%(app_label)s_%(class)s_related',
-                to='empresa.sede',
-                verbose_name='Sede',
+                related_name="%(app_label)s_%(class)s_related",
+                to="empresa.sede",
+                verbose_name="Sede",
             ),
         ),
     ]

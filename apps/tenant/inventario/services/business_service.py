@@ -22,24 +22,14 @@ from django.utils import timezone
 
 from apps.tenant.inventario.models import (
     ActivoFijo,
-    CategoriaItem,
-    HistorialServicio,
     MovimientoInventario,
     Producto,
-    Servicio,
-)
-from apps.tenant.inventario.services.selectors import (
-    MOVIMIENTO_LIST_FIELDS,
-    ActivoFijoSelector,
-    CategoriaItemSelector,
-    MovimientoInventarioSelector,
-    ProductoSelector,
-    ServicioSelector,
 )
 
 # ==============================================================================
 # 1. MOTOR DE KARDEX (Stock Calculation Engine)
 # ==============================================================================
+
 
 class KardexService:
     """Motor transaccional append-only para movimientos y stock de productos."""
@@ -65,7 +55,7 @@ class KardexService:
     @staticmethod
     def calcular_stock(producto_id: int, empresa_id: int) -> Decimal:
         """Calcula entradas menos salidas para un producto del tenant."""
-        if not Producto.objects.filter(pk=producto_id, empresa_id=empresa_id).only('id').exists():
+        if not Producto.objects.filter(pk=producto_id, empresa_id=empresa_id).only("id").exists():
             return Decimal("0")
 
         suma_entradas = MovimientoInventario.objects.filter(
@@ -88,14 +78,13 @@ class KardexService:
         Recalcula `stock_actual` bajo lock de fila para evitar carreras concurrentes.
         """
         producto = (
-            Producto.objects
-            .select_for_update()
-            .only('id', 'empresa_id', 'stock_actual')
+            Producto.objects.select_for_update()
+            .only("id", "empresa_id", "stock_actual")
             .get(id=producto_id, empresa_id=empresa_id)
         )
         nuevo_stock = KardexService.calcular_stock(producto.id, empresa_id)
         producto.stock_actual = nuevo_stock
-        producto.save(update_fields=['stock_actual', 'updated_at'])
+        producto.save(update_fields=["stock_actual", "updated_at"])
         return nuevo_stock
 
     @staticmethod
@@ -140,16 +129,19 @@ class KardexService:
                 return existente
 
         producto = (
-            Producto.objects
-            .select_for_update()
-            .only('id', 'empresa_id', 'stock_actual')
+            Producto.objects.select_for_update()
+            .only("id", "empresa_id", "stock_actual")
             .filter(pk=producto_id, empresa_id=empresa_id, activo=True)
             .first()
         )
         if not producto:
-            raise ValidationError("El producto no existe, esta inactivo o no pertenece a este tenant.")
+            raise ValidationError(
+                "El producto no existe, esta inactivo o no pertenece a este tenant."
+            )
 
-        tipos_validos = KardexService.TIPOS_ENTRADA + KardexService.TIPOS_SALIDA + KardexService.TIPOS_TRASLADO
+        tipos_validos = (
+            KardexService.TIPOS_ENTRADA + KardexService.TIPOS_SALIDA + KardexService.TIPOS_TRASLADO
+        )
         if tipo not in tipos_validos:
             raise ValidationError(f"Tipo de movimiento invalido: {tipo}")
 
@@ -177,7 +169,7 @@ class KardexService:
                     documento_origen_id=documento_origen_id,
                 )
         except IntegrityError as exc:
-            if 'uniq_movimiento_documento_origen_tipo' in str(exc):
+            if "uniq_movimiento_documento_origen_tipo" in str(exc):
                 return MovimientoInventario.objects.get(
                     empresa_id=empresa_id,
                     documento_origen_app=documento_origen_app,
@@ -222,9 +214,8 @@ class KardexService:
             raise ValidationError(f"Tipo de movimiento no valido para Activo Fijo: {tipo}")
 
         activo = (
-            ActivoFijo.objects
-            .select_for_update()
-            .only('id', 'empresa_id', 'estado')
+            ActivoFijo.objects.select_for_update()
+            .only("id", "empresa_id", "estado")
             .filter(pk=activo_fijo_id, empresa_id=empresa_id)
             .first()
         )
@@ -245,7 +236,7 @@ class KardexService:
         nuevo_estado = KardexService._TRANSICION_ESTADO_ACTIVO.get(tipo)
         if nuevo_estado:
             activo.estado = nuevo_estado
-            activo.save(update_fields=['estado', 'updated_at'])
+            activo.save(update_fields=["estado", "updated_at"])
 
         return movimiento
 
@@ -253,14 +244,14 @@ class KardexService:
     @transaction.atomic
     def actualizar_movimiento(
         *,
-        movimiento: 'MovimientoInventario',
+        movimiento: "MovimientoInventario",
         empresa_id: int,
         nueva_cantidad: Decimal = None,
         nuevo_tipo: str = None,
         nuevo_costo: Decimal = None,
         nuevo_origen: str = None,
         nuevas_observaciones: str = None,
-    ) -> 'MovimientoInventario':
+    ) -> "MovimientoInventario":
         """
         Actualiza un movimiento de Producto y recalcula stock atomicamente.
         select_for_update() en recalcular_stock_producto previene carreras concurrentes.
@@ -303,7 +294,7 @@ class KardexService:
     @transaction.atomic
     def eliminar_movimiento(
         *,
-        movimiento: 'MovimientoInventario',
+        movimiento: "MovimientoInventario",
         empresa_id: int,
     ) -> None:
         """
@@ -344,7 +335,7 @@ class TrasladoInventarioService:
         usuario_id: int,
         area_origen_id: int = None,
         area_destino_id: int = None,
-        motivo: str = '',
+        motivo: str = "",
     ):
         """Crea el TrasladoInventario en estado SOLICITADO. Sin efecto en stock todavia."""
         if sede_origen_id == sede_destino_id:
@@ -355,21 +346,28 @@ class TrasladoInventarioService:
             raise ValidationError("La cantidad a trasladar debe ser positiva.")
 
         producto = (
-            Producto.objects
-            .filter(pk=producto_id, empresa_id=empresa_id, activo=True)
-            .only('id')
+            Producto.objects.filter(pk=producto_id, empresa_id=empresa_id, activo=True)
+            .only("id")
             .first()
         )
         if not producto:
-            raise ValidationError("El producto no existe, esta inactivo o no pertenece a este tenant.")
+            raise ValidationError(
+                "El producto no existe, esta inactivo o no pertenece a este tenant."
+            )
 
         from apps.tenant.empresa.models import Sede
-        sede_origen = Sede.objects.filter(pk=sede_origen_id, empresa_id=empresa_id).only('id').first()
-        sede_destino = Sede.objects.filter(pk=sede_destino_id, empresa_id=empresa_id).only('id').first()
+
+        sede_origen = (
+            Sede.objects.filter(pk=sede_origen_id, empresa_id=empresa_id).only("id").first()
+        )
+        sede_destino = (
+            Sede.objects.filter(pk=sede_destino_id, empresa_id=empresa_id).only("id").first()
+        )
         if not sede_origen or not sede_destino:
             raise ValidationError("La sede de origen o de destino no pertenece a esta empresa.")
 
         from apps.tenant.inventario.models import TrasladoInventario
+
         traslado = TrasladoInventario.objects.create(
             empresa_id=empresa_id,
             producto=producto,
@@ -389,6 +387,7 @@ class TrasladoInventarioService:
     @transaction.atomic
     def aprobar(*, traslado_uuid: str, empresa_id: int, usuario_id: int):
         from apps.tenant.inventario.models import TrasladoInventario
+
         traslado = (
             TrasladoInventario.objects.select_for_update()
             .filter(uuid=traslado_uuid, empresa_id=empresa_id)
@@ -403,7 +402,7 @@ class TrasladoInventarioService:
         traslado.estado = TrasladoInventario.Estado.APROBADO
         traslado.usuario_aprueba_id = usuario_id
         traslado.fecha_aprobacion = timezone.now()
-        traslado.save(update_fields=['estado', 'usuario_aprueba', 'fecha_aprobacion'])
+        traslado.save(update_fields=["estado", "usuario_aprueba", "fecha_aprobacion"])
         return traslado
 
     @staticmethod
@@ -447,13 +446,13 @@ class TrasladoInventarioService:
             cantidad=traslado.cantidad,
             sede_id=traslado.sede_origen_id,
             origen_referencia=f"Traslado #{traslado.id} -> sede {traslado.sede_destino_id}",
-            documento_origen_app='inventario',
-            documento_origen_modelo='TrasladoInventario',
+            documento_origen_app="inventario",
+            documento_origen_modelo="TrasladoInventario",
             documento_origen_id=traslado.id,
         )
         traslado.estado = TrasladoInventario.Estado.EN_TRANSITO
         traslado.fecha_envio = timezone.now()
-        traslado.save(update_fields=['estado', 'fecha_envio'])
+        traslado.save(update_fields=["estado", "fecha_envio"])
         return traslado
 
     @staticmethod
@@ -486,14 +485,14 @@ class TrasladoInventarioService:
             cantidad=traslado.cantidad,
             sede_id=traslado.sede_destino_id,
             origen_referencia=f"Traslado #{traslado.id} <- sede {traslado.sede_origen_id}",
-            documento_origen_app='inventario',
-            documento_origen_modelo='TrasladoInventario',
+            documento_origen_app="inventario",
+            documento_origen_modelo="TrasladoInventario",
             documento_origen_id=traslado.id,
         )
         traslado.estado = TrasladoInventario.Estado.RECIBIDO
         traslado.usuario_recibe_id = usuario_id
         traslado.fecha_recepcion = timezone.now()
-        traslado.save(update_fields=['estado', 'usuario_recibe', 'fecha_recepcion'])
+        traslado.save(update_fields=["estado", "usuario_recibe", "fecha_recepcion"])
         return traslado
 
     @staticmethod
@@ -515,12 +514,11 @@ class TrasladoInventarioService:
         )
         if not traslado:
             raise ValidationError("El traslado no existe o no pertenece a esta empresa.")
-        if traslado.estado in (TrasladoInventario.Estado.EN_TRANSITO, TrasladoInventario.Estado.RECIBIDO):
+        if traslado.estado in (
+            TrasladoInventario.Estado.EN_TRANSITO,
+            TrasladoInventario.Estado.RECIBIDO,
+        ):
             raise ValidationError(f"No se puede cancelar un traslado en estado {traslado.estado}.")
         traslado.estado = TrasladoInventario.Estado.CANCELADO
-        traslado.save(update_fields=['estado'])
+        traslado.save(update_fields=["estado"])
         return traslado
-
-
-
-
