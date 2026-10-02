@@ -196,3 +196,35 @@ el usuario confirme el alcance — mismo criterio que el propio AI Engine
 aplicó en su construcción original (`AI_ENGINE_ARCHITECTURE.md`:
 "implementar las 66 fases con calidad real en una sola pasada no es
 honesto").
+
+---
+
+## Addendum (2026-10-02) — Gates del protocolo MCP real (`ADR-MCP-002`)
+
+> Pista **separada** de los gates LOOP 0-1 de arriba (dominio `platform`/
+> `AIToolRegistry`, sin cambios). Estos gates miden
+> `PLAN_MCP_OPERACIONAL_PRIVADO_SINTEL_ERP.md` sobre `/mcp/` real.
+
+```
+[x] MCP-R00 Auditoria AI-07 real          = VERIFIED -- bug confirmado leyendo site-packages, no asumido (request.method=None en vivo)
+[x] MCP-R01 Decision de reabrir el ADR    = VERIFIED (2026-10-02) -- ADR-MCP-002.md, decision explicita del usuario (AskUserQuestion)
+[x] MCP-R02 MCP Gateway (SintelMCPView)   = VERIFIED -- apps/services/mcp/gateway.py, fix AI-07 + auth obligatoria
+[x] MCP-R03 Autenticacion obligatoria     = VERIFIED -- initialize/tools-list sin credencial -> Unauthorized (probado en vivo)
+[x] MCP-R04 Tenant isolation              = VERIFIED -- UUID real de otro tenant via host correcto -> "no encontrado", sin fuga
+[x] MCP-R05 Organizational scope          = VERIFIED (heredado) -- HasOrganizationalScope de OrdenCompraViewSet sin cambios, no bypaseado
+[x] MCP-R06 Permisos reutilizados         = VERIFIED -- IsTenantMember/IsTenantAdminOrReadOnly reales, sin RBAC paralelo
+[x] MCP-R07 3 apps piloto READ-ONLY       = VERIFIED -- proyectos/compras/clientes, list+retrieve, datos reales confirmados (ver MCP_TOOL_COVERAGE.md)
+[ ] MCP-R08 Auditoria persistente         = DEFERRED -- solo logging estructurado (logger.info/warning), sin modelo MCPAuditEvent (Fase 18 del plan)
+[ ] MCP-R09 Rate limiting                 = NO INICIADO (Fase 21 del plan)
+[ ] MCP-R10 CREATE/UPDATE (Wave 2)        = NO INICIADO -- requiere matriz de politica CRUD por rol (Fase 3 del plan) primero
+[ ] MCP-R11 Acciones de dominio (Wave 3)  = NO INICIADO (Fase 8-11 del plan)
+[ ] MCP-R12 DELETE/anulacion (Wave 4)     = NO INICIADO -- requiere modelo CONFIRM_REQUIRED (Fase 7 del plan)
+[ ] MCP-R13 Bulk operations               = NO INICIADO (Fase 15 del plan)
+[ ] MCP-R14 Observabilidad (metricas)     = NO INICIADO (Fase 19 del plan)
+[ ] MCP-R15 Cliente MCP externo validado  = NO INICIADO -- verificado solo via APIClient interno (rest_framework.test), no contra un cliente mcp-remote/Claude Desktop/Cursor real todavia
+```
+
+**`MCP_PROTOCOLO_REAL = VERIFIED` requeriría todos los `[x]` arriba** —
+hoy es `PARCIAL`: Wave 1 (read-only, 3 apps) completa y verificada en
+vivo; Waves 2-4 explícitamente no iniciadas, no se fabricó código para
+simular progreso en ellas.

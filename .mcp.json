@@ -3,6 +3,13 @@
     "gemini-api-docs-mcp": {
       "type": "http",
       "url": "https://gemini-api-docs-mcp.dev"
+    },
+    "sintel-erp": {
+      "type": "http",
+      "url": "http://home.sintel.net.co/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${SINTEL_MCP_JWT}"
+      }
     }
   }
 }

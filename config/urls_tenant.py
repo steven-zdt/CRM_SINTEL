@@ -209,10 +209,14 @@ urlpatterns = [
     path(
         "api/v1/landing/", include("apps.tenant.landing.api.urls", namespace="tenant_landing_api")
     ),
-    # MCP endpoint (django-rest-framework-mcp): expone ViewSets anotados como herramientas MCP
-    # Accesible en: http://<tenant>/mcp/
-    # Conectar desde Antigravity via mcp-remote apuntando a esta URL con Bearer token
-    path("mcp/", include("djangorestframework_mcp.urls")),
+    # MCP endpoint (django-rest-framework-mcp, gobernado por SintelMCPView):
+    # expone ViewSets anotados como herramientas MCP. Accesible en:
+    # http://<tenant>/mcp/ . Conectar desde Antigravity/Claude Desktop/Cursor
+    # via mcp-remote apuntando a esta URL con Bearer token (JWT).
+    # NUNCA montar directo `djangorestframework_mcp.urls` -- ver
+    # apps/services/mcp/gateway.py (auth + fix AI-07) y
+    # docs/mcp/ADR-MCP-002.md.
+    path("mcp/", include("apps.services.mcp.urls")),
     # UI Routes (partials HTML sin datos, API-First)
     # Workspace compositor
     path("", include("apps.tenant.core.urls_ui")),

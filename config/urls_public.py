@@ -29,6 +29,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.public.core.api.views import LoggedTokenVerifyView, SafeTokenRefreshView
 from apps.public.core.views import PublicIndexView
+from apps.services.mcp.gateway import SintelMCPView
 from config.well_known import chrome_devtools
 
 
@@ -109,8 +110,12 @@ urlpatterns = [
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
-    # MCP server: expone ViewSets anotados como herramientas MCP
-    path("mcp/", include("djangorestframework_mcp.urls")),
+    # MCP endpoint (esquema public, gobernado por SintelMCPView): sin
+    # ViewSets piloto registrados aqui (los 3 pilotos son apps TENANT) --
+    # solo cierra el gap de acceso anonimo en initialize/tools/list (Fase 2
+    # del plan, docs/mcp/ADR-MCP-002.md). NUNCA montar
+    # `djangorestframework_mcp.urls` directo.
+    path("mcp/", SintelMCPView.as_view(), name="mcp-endpoint-public"),
 ]
 
 # Add a deterministic explicit users create endpoint at the top-level so

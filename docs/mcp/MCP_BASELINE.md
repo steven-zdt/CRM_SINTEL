@@ -268,6 +268,20 @@ No se crearon modelos, migraciones, tools, ViewSets decorados con
 `@mcp_viewset`, ni se modificó ninguna regla de negocio. Los únicos
 archivos nuevos de esta pasada son los de `docs/mcp/`.
 
+## Addendum (2026-10-02) — ADR-MCP-002 reabre el protocolo MCP real
+
+Este LOOP 0 (y la decisión de §7.1 que llevó a `ADR-MCP-001.md`) quedan
+**intactos como registro histórico** del estado hasta 2026-09-25. El
+usuario, vía `PLAN_MCP_OPERACIONAL_PRIVADO_SINTEL_ERP.md`, pidió
+explícitamente clientes MCP externos reales (Claude Desktop/Cursor/
+Antigravity) — algo que `AIToolRegistry` no puede servir sin protocolo
+MCP real. `ADR-MCP-002.md` reabre esa vía: AI-07 **corregido** (no
+rodeado) en `apps/services/mcp/gateway.py::SintelMCPView.execute_tool()`,
+auth obligatoria agregada, 3 ViewSets piloto registrados read-only. Ver
+`ADR-MCP-002.md` y `MCP_TOOL_COVERAGE.md` para el detalle y la evidencia
+verificada. El dominio `platform`/`AIToolRegistry` de este documento y de
+`ADR-MCP-001.md` sigue vigente sin cambios — ambas superficies coexisten.
+
 ## 9. Entregable
 
 Este documento cumple `docs/mcp/MCP_BASELINE.md` (§88). Los demás
