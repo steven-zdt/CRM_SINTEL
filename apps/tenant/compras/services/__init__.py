@@ -16,6 +16,7 @@ from .crud_service import (
     PlantillaOrdenCompraCRUDService,
     RecepcionCompraCRUDService,
 )
+from .project_assignment_service import ProjectOrderAssignmentService
 from .selectors import (
     ORDEN_COMPRA_DETAIL_FIELDS,
     ORDEN_COMPRA_LIST_FIELDS,
@@ -35,6 +36,7 @@ __all__ = [
     "RecepcionCompraCRUDService",
     "OrdenCompraBusinessService",
     "RecepcionCompraBusinessService",
+    "ProjectOrderAssignmentService",
     "OrdenCompraServiceMixin",
     "PlantillaOrdenCompraServiceMixin",
     "RecepcionCompraServiceMixin",

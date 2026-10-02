@@ -1,6 +1,8 @@
-from django.db.models import Max, Q
+from decimal import Decimal
 
-from apps.tenant.compras.models import OrdenCompra, PlantillaOrdenCompra, RecepcionCompra
+from django.db.models import DecimalField, ExpressionWrapper, F, Max, Q, Sum
+
+from apps.tenant.compras.models import ItemOrdenCompra, OrdenCompra, PlantillaOrdenCompra, RecepcionCompra
 from apps.tenant.core.services.organizational_filters import filter_by_scope
 
 PLANTILLA_LIST_FIELDS = (
@@ -87,6 +89,25 @@ _DOCUMENTO_SOPORTE_TRAVERSALS = ("documento_soporte__numero_documento_proveedor"
 _SEDE_TRAVERSALS = ("sede__nombre",)
 
 _AREA_TRAVERSALS = ("area__nombre",)
+
+
+def _expr_valor_recibido(prefix: str = ""):
+    """
+    Expresion SQL SSoT (PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_
+    OPCIONAL.md #16.4: "calcular indicadores con agregaciones SQL, no
+    iterando cada Orden en Python") del valor recibido de un item de Orden
+    de Compra: cantidad_recibida * valor_unitario, incluyendo IVA
+    proporcional -- misma formula que `_calcular_item()` en crud_service.py,
+    sin reimplementarla. `prefix` permite reutilizarla tanto agregando
+    directo sobre ItemOrdenCompra ("") como vía join reverso desde
+    OrdenCompra ("items__").
+    """
+    return ExpressionWrapper(
+        F(f"{prefix}valor_unitario")
+        * F(f"{prefix}cantidad_recibida")
+        * (Decimal("1.00") + F(f"{prefix}porcentaje_iva") / Decimal("100.00")),
+        output_field=DecimalField(max_digits=15, decimal_places=2),
+    )
 
 
 class PlantillaOrdenCompraSelector:
@@ -204,6 +225,86 @@ class OrdenCompraSelector:
         )["max_val"]
 
         return (max_consecutivo + 1) if max_consecutivo is not None else 1
+
+    @staticmethod
+    def get_disponibles_para_proyecto(
+        empresa_id: int, search: str = None, sede_ids=None, area_ids=None
+    ):
+        """
+        Ordenes elegibles para el flujo 'Proyecto -> Agregar Orden de Compra'
+        (PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_OPCIONAL.md Paso
+        7.4): empresa + estado APROBADA + sin proyecto asignado + alcance
+        organizacional. Nunca descarga todas las Ordenes al navegador.
+        """
+        qs = (
+            filter_by_scope(
+                OrdenCompra.objects.filter(estado="APROBADA", proyecto__isnull=True),
+                empresa_id,
+                sede_ids=sede_ids,
+                area_ids=area_ids,
+            )
+            .select_related("proveedor", "sede")
+            .only(*ORDEN_COMPRA_LIST_FIELDS, *_PROVEEDOR_TRAVERSALS, *_SEDE_TRAVERSALS)
+        )
+        if search:
+            qs = qs.filter(
+                Q(numero_documento__icontains=search)
+                | Q(proveedor__razon_social__icontains=search)
+            )
+        return qs.order_by("-fecha", "-consecutivo")
+
+    @staticmethod
+    def get_by_proyecto(empresa_id: int, proyecto_uuid: str):
+        """
+        Ordenes de Compra ya asociadas a un Proyecto (Paso 7.5 del plan),
+        para el bloque "Ordenes de Compra del Proyecto". Anota
+        `valor_recibido` via agregacion SQL -- nunca iterando en Python.
+        """
+        qs = (
+            OrdenCompra.objects.filter(empresa_id=empresa_id, proyecto__uuid=proyecto_uuid)
+            .select_related("proveedor")
+            .only(*ORDEN_COMPRA_LIST_FIELDS, *_PROVEEDOR_TRAVERSALS)
+            .annotate(valor_recibido=Sum(_expr_valor_recibido("items__")))
+        )
+        return qs.order_by("-fecha", "-consecutivo")
+
+    @staticmethod
+    def get_resumen_proyecto(empresa_id: int, proyecto_uuid: str) -> dict:
+        """
+        Agregacion SQL de los indicadores de compras de un Proyecto (#16.4
+        del plan: cantidad, comprometido, recibido, pendiente). Excluye
+        ANULADA del compromiso -- unico estado terminal negativo real (ver
+        ESTADOS_ORDEN_ACTIVA en budget_control_service.py).
+        """
+        ordenes_qs = OrdenCompra.objects.filter(
+            empresa_id=empresa_id, proyecto__uuid=proyecto_uuid
+        ).exclude(estado="ANULADA")
+
+        _CENTS = Decimal("0.01")
+
+        cantidad = ordenes_qs.count()
+        comprometido = (
+            ordenes_qs.aggregate(total=Sum("total"))["total"] or Decimal("0.00")
+        ).quantize(_CENTS)
+
+        # [SHIELD] la expresion de valor recibido involucra division (IVA/100)
+        # -- Postgres/Decimal pueden devolver una escala con muchos decimales
+        # (ej. Decimal('0E-24')) aun siendo numericamente cero/exacto.
+        # quantize() normaliza siempre a 2 decimales antes de salir del
+        # selector, nunca se expone la escala interna a la API/UI.
+        recibido = (
+            ItemOrdenCompra.objects.filter(orden_compra__in=ordenes_qs).aggregate(
+                total=Sum(_expr_valor_recibido())
+            )["total"]
+            or Decimal("0.00")
+        ).quantize(_CENTS)
+
+        return {
+            "cantidad_ordenes": cantidad,
+            "comprometido": comprometido,
+            "recibido": recibido,
+            "pendiente": comprometido - recibido,
+        }
 
 
 RECEPCION_LIST_FIELDS = (

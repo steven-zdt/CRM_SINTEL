@@ -674,3 +674,29 @@ verificación visual en navegador real en esta pasada (sin acceso a browser inte
 3. **No usar `if settings.DEBUG: return []`** en `get_permissions()` — rompe el aislamiento multi-tenant en desarrollo.
 4. **Assets** cargados UNICAMENTE en `workspace.html extra_js` — no incluir `assets_compras.html` en templates de listado.
 5. **`ajaxParams` como funcion** si se agrega filtro por estado al grid (ver patron en ventas: `function() { return _filtroEstado ? {estado: _filtroEstado} : {}; }`).
+
+## 13. Integracion con Proyectos (2026-10-02)
+
+`PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_OPCIONAL.md`: `OrdenCompra.proyecto`
+(FK ya existente, ver `models.py`) ahora se asigna EXCLUSIVAMENTE via
+`ProjectOrderAssignmentService.asociar_orden_a_proyecto()`
+(`services/project_assignment_service.py`) cuando el flujo viene desde el
+bloque "Ordenes de Compra" del detalle de Proyecto. Reglas: Orden debe estar
+`APROBADA`, Proyecto debe estar en fase `BORRADOR`, idempotente si ya esta
+asociada al mismo Proyecto, rechazada (nunca sobrescrita) si ya pertenece a
+otro Proyecto. Direccion de dependencia: compras -> proyectos (el servicio
+vive aqui, Proyecto solo consulta via import local — nunca al reves).
+
+La edicion directa del campo `proyecto` en `OrdenCompraBusinessService.
+crear_orden_compra()`/`actualizar_orden_compra()` (DSV de solo
+empresa_id, sin las reglas de estado/fase arriba) se mantiene intacta para no
+romper el flujo existente de asignacion manual desde el formulario de
+Compras — es una via distinta y mas permisiva, deliberadamente no unificada
+en esta fase (el plan la señala como mejora futura opcional, Paso 12.2).
+
+Selectores nuevos en `OrdenCompraSelector`: `get_disponibles_para_proyecto()`
+(APROBADA + sin proyecto + alcance organizacional), `get_by_proyecto()`
+(anota `valor_recibido` via SQL) y `get_resumen_proyecto()` (agregacion
+cantidad/comprometido/recibido/pendiente). Consumidos desde
+`apps/tenant/proyectos/api/viewsets.py::ProyectoViewSet` (`ordenes_compra`,
+`ordenes_compra_disponibles`, `ordenes_compra_asociar`).

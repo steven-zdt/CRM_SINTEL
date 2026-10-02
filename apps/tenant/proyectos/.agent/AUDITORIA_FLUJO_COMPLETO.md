@@ -622,5 +622,34 @@ entorno limpio. Recordatorio: `make migrate-tenants`/`migrate_schemas` debe corr
 | v3.10.3 | 2026-05-25 | Imports globales: crud_service (IntegrityError+ValidationError), business_service (date + 5 cross-app models via try/except guards), viewsets (logging + 6 cross-app), serializers (sys + FacturaInterAppAPI); models.py lazy stays justified (Django app loading) |
 | **v3.10.4** | **2026-05-28** | **TareaCorta.cliente FK PROTECT → SET_NULL** (mig 0018). Permite eliminar clientes inactivos aunque tengan TareaCortas vinculadas. FK → NULL preserva snapshot `cliente_nombre`. `crud_service.delete_cliente()` captura `ProtectedError` residual con mensaje 400. |
 | **v3.10.5** | **2026-08-05** | **Fix `dependencies` migracion 0020**: usaba `('proyectos', ...)` (nombre de carpeta) en vez de `('tenant_proyectos', ...)` (app_label real), bloqueando el arranque completo del proyecto (`NodeNotFoundError` en `migrate_schemas`). Ver FIX v3.10.5 arriba para causa raiz y como evitarlo. |
+| **v3.11.0** | **2026-10-02** | **Integracion Compras-Proyectos** (`PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_OPCIONAL.md`): Proyecto pasa a ser el eje de consulta/asociacion de Ordenes de Compra en fase BORRADOR, sin agregar ninguna FK nueva (`OrdenCompra.proyecto` ya existia). Ver seccion nueva mas abajo. |
+
+---
+
+## Integracion Compras-Proyectos (2026-10-02)
+
+`Proyecto` sigue sin FK hacia `OrdenCompra` (Zero-Coupling intacto) — la
+asociacion es 100% lectura/escritura via la FK existente `OrdenCompra.
+proyecto`, orquestada por `ProjectOrderAssignmentService`
+(`apps/tenant/compras/services/project_assignment_service.py`, vive en
+Compras porque la FK es suya). `ProyectoViewSet` (`api/viewsets.py`) expone
+3 acciones nuevas que hacen import LOCAL de Compras (mismo patron Bridge que
+ya usaba `gastos()` con `apps.tenant.gastos.services.selectors`):
+
+- `GET /api/v1/proyectos/{uuid}/ordenes-compra/` — Ordenes asociadas +
+  resumen (comprometido/recibido/pendiente), via `OrdenCompraSelector.
+  get_by_proyecto()`/`get_resumen_proyecto()`.
+- `GET /api/v1/proyectos/{uuid}/ordenes-compra/disponibles/?search=` —
+  buscador server-side de Ordenes `APROBADA` sin Proyecto (vacio si el
+  Proyecto no esta en `BORRADOR`, mismo criterio que oculta el boton en la
+  UI). Via `OrdenCompraSelector.get_disponibles_para_proyecto()`.
+- `POST /api/v1/proyectos/{uuid}/ordenes-compra/asociar/` — delega
+  integramente a `ProjectOrderAssignmentService.asociar_orden_a_proyecto()`.
+
+UI: bloque "Ordenes de Compra del Proyecto" en `pane-step-0` de
+`offcanvas_form.html` (fase Borrador), modulo JS `w.Sintel.
+ProyectosOrdenesCompra` en `proyectos_editor.js` (mismo patron que
+`ProyectosGastos`). Venta sigue siendo opcional — ningun paso de este flujo
+la requiere.
 
 *Auditoría actualizada el 2026-08-05 | SINTEL v3.10.5 — Status: PRODUCTION READY ✅*

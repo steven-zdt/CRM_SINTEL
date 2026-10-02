@@ -619,6 +619,11 @@
             w.Sintel.ProyectosGastos.init(currentProyecto.uuid);
         }
 
+        // 1.75. Ordenes de Compra del Proyecto (PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_OPCIONAL - Fase 0 Borrador)
+        if (currentProyecto?.uuid) {
+            w.Sintel.ProyectosOrdenesCompra.init(currentProyecto.uuid, currentProyecto.fase_actual);
+        }
+
         // 2. Equipo de Trabajo (Fase 3)
         const equipoList = d.querySelector('#equipo-trabajo-list');
         if (equipoList) {
@@ -1719,6 +1724,154 @@
 
     // ============================================================================
     // FIN MÓDULO GASTOS DEL PROYECTO
+    // ============================================================================
+
+    // ============================================================================
+    // MÓDULO ÓRDENES DE COMPRA DEL PROYECTO
+    // (PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_OPCIONAL)
+    // ============================================================================
+
+    const ProyectosOrdenesCompra = {
+        _proyectoUuid: null,
+
+        async init(proyectoUuid, faseActual) {
+            if (!proyectoUuid) return;
+            this._proyectoUuid = proyectoUuid;
+
+            // El bloque siempre existe en el DOM (mismo patron que Gastos);
+            // un proyecto NUEVO guardado dentro de la misma apertura del
+            // offcanvas pasa aqui de "sin guardar" a "contenido real" sin
+            // necesidad de reabrir el offcanvas.
+            d.getElementById('ordenes-compra-sin-guardar')?.classList.add('d-none');
+            d.getElementById('ordenes-compra-contenido')?.classList.remove('d-none');
+
+            this._bindSearch();
+
+            // Regla B / FASE 6 del plan: el botón solo aparece en fase BORRADOR
+            // -- el backend (ordenes_compra_disponibles/asociar) rechaza igual
+            // la operación fuera de esa fase, esto es solo UX.
+            const btnToggle = d.getElementById('btn-agregar-orden-compra');
+            if (btnToggle) {
+                btnToggle.classList.toggle('d-none', faseActual !== 'BORRADOR');
+            }
+
+            const resp = await w.proyectosAPI.ordenesCompra.list(proyectoUuid);
+            if (!resp.ok) {
+                console.error(`${MOD} Error al cargar ordenes de compra del proyecto:`, resp);
+                this._render({ ordenes: [] });
+                return;
+            }
+            this._render(resp.data || {});
+        },
+
+        _render(data) {
+            const items = data.ordenes || [];
+            const tbody = d.getElementById('tbody-ordenes-compra-proyecto');
+            if (tbody) {
+                if (items.length === 0) {
+                    tbody.innerHTML = `
+                        <tr><td colspan="7" class="text-center text-muted py-3">
+                            <small><i class="bi bi-info-circle me-1"></i>Sin órdenes de compra asociadas a este proyecto.</small>
+                        </td></tr>`;
+                } else {
+                    tbody.innerHTML = items.map(o => `
+                        <tr data-uuid="${o.uuid}">
+                            <td><small>${o.numero_documento || '—'}</small></td>
+                            <td><small>${o.proveedor || '—'}</small></td>
+                            <td><small>${o.fecha || '—'}</small></td>
+                            <td><span class="badge bg-secondary">${o.estado || '—'}</span></td>
+                            <td class="text-end"><small>${w.proyectosAPI.formatCurrency(o.total)}</small></td>
+                            <td class="text-end"><small>${w.proyectosAPI.formatCurrency(o.total_recibido)}</small></td>
+                            <td class="text-end"><small>${w.proyectosAPI.formatCurrency(o.saldo_pendiente)}</small></td>
+                        </tr>`).join('');
+                }
+            }
+
+            const setEl = (id, value) => {
+                const el = d.getElementById(id);
+                if (el) el.textContent = w.proyectosAPI.formatCurrency(value);
+            };
+            setEl('ordenes-compra-comprometido', data.comprometido);
+            setEl('ordenes-compra-recibido', data.recibido);
+            setEl('ordenes-compra-pendiente', data.pendiente);
+        },
+
+        _bindSearch() {
+            const btnToggle = d.getElementById('btn-agregar-orden-compra');
+            const buscador = d.getElementById('orden-compra-buscador');
+            const searchInput = d.getElementById('orden-compra-search');
+            const suggestions = d.getElementById('orden-compra-suggestions');
+            if (!btnToggle || !buscador || !searchInput || !suggestions) return;
+            if (searchInput.dataset.ordenesCompraBound === 'true') return;
+            searchInput.dataset.ordenesCompraBound = 'true';
+
+            btnToggle.addEventListener('click', async () => {
+                buscador.classList.toggle('d-none');
+                if (!buscador.classList.contains('d-none')) {
+                    searchInput.focus();
+                    await this._buscar('');
+                }
+            });
+
+            let debounceTimer;
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(debounceTimer);
+                const query = e.target.value.trim();
+                debounceTimer = setTimeout(() => this._buscar(query), 300);
+            });
+
+            d.addEventListener('click', (e) => {
+                if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                    suggestions.classList.add('d-none');
+                }
+            });
+        },
+
+        async _buscar(query) {
+            const suggestions = d.getElementById('orden-compra-suggestions');
+            if (!suggestions) return;
+            const resp = await w.proyectosAPI.ordenesCompra.disponibles(this._proyectoUuid, query);
+            const items = resp.ok ? (resp.data.ordenes || []) : [];
+            this._renderSuggestions(items, suggestions);
+        },
+
+        _renderSuggestions(items, container) {
+            if (items.length === 0) {
+                container.innerHTML = '<div class="list-group-item small text-muted">No se encontraron órdenes de compra aprobadas disponibles</div>';
+            } else {
+                container.innerHTML = items.map(o => `
+                    <button type="button" class="list-group-item list-group-item-action small py-2" data-uuid="${o.uuid}">
+                        <div class="d-flex justify-content-between">
+                            <span><strong>${o.numero_documento || ''}</strong> — ${o.proveedor || ''}</span>
+                            <span>${w.proyectosAPI.formatCurrency(o.total)}</span>
+                        </div>
+                        <small class="text-muted">Fecha: ${o.fecha || '—'}</small>
+                    </button>`).join('');
+            }
+            container.classList.remove('d-none');
+            container.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', () => this.asociar(btn.dataset.uuid));
+            });
+        },
+
+        async asociar(ordenUuid) {
+            const resp = await w.proyectosAPI.ordenesCompra.asociar(this._proyectoUuid, ordenUuid);
+            if (!resp.ok) {
+                w.UIManager?.handleError(resp, 'Error al asociar la orden de compra al proyecto');
+                return;
+            }
+            w.SintelFeedback?.success('Orden de compra asociada correctamente al proyecto.');
+            d.getElementById('orden-compra-buscador')?.classList.add('d-none');
+            const searchInput = d.getElementById('orden-compra-search');
+            if (searchInput) searchInput.value = '';
+            await this.init(this._proyectoUuid, currentProyecto?.fase_actual);
+        }
+    };
+
+    w.Sintel.ProyectosOrdenesCompra = ProyectosOrdenesCompra;
+
+    // ============================================================================
+    // FIN MÓDULO ÓRDENES DE COMPRA DEL PROYECTO
     // ============================================================================
 
     // ============================================================================

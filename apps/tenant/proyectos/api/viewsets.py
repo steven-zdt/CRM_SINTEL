@@ -8,6 +8,7 @@ WARNING: SINTEL v3.5: API-First & Zero-Coupling
 """
 
 import logging
+from decimal import Decimal
 
 from django.db.models import Q
 from django.http import FileResponse
@@ -471,6 +472,162 @@ class ProyectoViewSet(
                 "costo_gastos_real": str(proyecto.costo_gastos_real),
                 "results": items,
             }
+        )
+
+    @action(detail=True, methods=["get"], url_path="ordenes-compra")
+    def ordenes_compra(self, request, uuid=None):
+        """
+        GET /api/v1/proyectos/{uuid}/ordenes-compra/ -- bloque "Compras del
+        Proyecto" (PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_OPCIONAL.md
+        Paso 8.2 / FASE 5): Ordenes de Compra asociadas + resumen financiero
+        (comprometido/recibido/pendiente). Import local de Compras (Bridge,
+        mismo patron que gastos() arriba) -- la direccion de dependencia real
+        es compras -> proyectos (OrdenCompra.proyecto); Proyecto solo
+        CONSULTA, nunca importa Compras a nivel de modulo.
+        """
+        proyecto = self.get_object()
+        from apps.tenant.compras.services.selectors import OrdenCompraSelector
+
+        resumen = OrdenCompraSelector.get_resumen_proyecto(proyecto.empresa_id, proyecto.uuid)
+        ordenes_qs = OrdenCompraSelector.get_by_proyecto(proyecto.empresa_id, proyecto.uuid)
+
+        ordenes = []
+        for orden in ordenes_qs:
+            # [SHIELD] valor_recibido viene de una expresion con division
+            # (IVA/100) via join -- Postgres/Decimal pueden normalizarla a
+            # una escala rara (ej. Decimal('0E-24')) aun siendo cero exacto;
+            # quantize() antes de usarla en aritmetica o de serializarla.
+            recibido = (orden.valor_recibido or Decimal("0.00")).quantize(Decimal("0.01"))
+            ordenes.append(
+                {
+                    "uuid": str(orden.uuid),
+                    "numero_documento": orden.numero_documento or f"OC-{orden.consecutivo}",
+                    "proveedor": orden.proveedor.razon_social if orden.proveedor_id else None,
+                    "fecha": orden.fecha.isoformat() if orden.fecha else None,
+                    "fecha_entrega": orden.fecha_entrega.isoformat() if orden.fecha_entrega else None,
+                    "estado": orden.estado,
+                    "subtotal": str(orden.subtotal),
+                    "impuestos": str(orden.impuestos),
+                    "total": str(orden.total),
+                    "total_recibido": str(recibido),
+                    "saldo_pendiente": str(orden.total - recibido),
+                }
+            )
+
+        return Response(
+            {
+                "cantidad_ordenes": resumen["cantidad_ordenes"],
+                "comprometido": str(resumen["comprometido"]),
+                "recibido": str(resumen["recibido"]),
+                "pendiente": str(resumen["pendiente"]),
+                "ordenes": ordenes,
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="ordenes-compra/disponibles")
+    def ordenes_compra_disponibles(self, request, uuid=None):
+        """
+        GET /api/v1/proyectos/{uuid}/ordenes-compra/disponibles/?search=... --
+        buscador server-side (FASE 5 del plan) de Ordenes APROBADAS sin
+        Proyecto, dentro del alcance organizacional del usuario. Solo
+        devuelve resultados mientras el Proyecto esta en BORRADOR (Regla B /
+        FASE 6) -- el backend protege la misma regla que oculta el boton
+        "Agregar Orden de Compra" en la UI.
+        """
+        proyecto = self.get_object()
+        if proyecto.fase_actual != "BORRADOR":
+            return Response(
+                {
+                    "cantidad": 0,
+                    "ordenes": [],
+                    "detail": (
+                        "Solo se pueden agregar ordenes de compra mientras el "
+                        "proyecto esta en fase Borrador."
+                    ),
+                }
+            )
+
+        from apps.tenant.compras.services.selectors import OrdenCompraSelector
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+
+        try:
+            scope = OrganizationalScope.resolve(request)
+            sede_ids, area_ids = scope.sede_ids, scope.area_ids
+        except OrganizationalScopeError:
+            sede_ids, area_ids = None, None
+
+        search = request.query_params.get("search")
+        ordenes_qs = OrdenCompraSelector.get_disponibles_para_proyecto(
+            proyecto.empresa_id, search=search, sede_ids=sede_ids, area_ids=area_ids
+        )[:50]
+
+        ordenes = [
+            {
+                "uuid": str(orden.uuid),
+                "numero_documento": orden.numero_documento or f"OC-{orden.consecutivo}",
+                "proveedor": orden.proveedor.razon_social if orden.proveedor_id else None,
+                "fecha": orden.fecha.isoformat() if orden.fecha else None,
+                "total": str(orden.total),
+                "estado": orden.estado,
+            }
+            for orden in ordenes_qs
+        ]
+        return Response({"cantidad": len(ordenes), "ordenes": ordenes})
+
+    @action(detail=True, methods=["post"], url_path="ordenes-compra/asociar")
+    def ordenes_compra_asociar(self, request, uuid=None):
+        """
+        POST /api/v1/proyectos/{uuid}/ordenes-compra/asociar/ -- unico punto
+        de entrada para incorporar una Orden de Compra APROBADA al Proyecto
+        mientras este esta en BORRADOR (Paso 7.3 del plan). Delega
+        integramente a ProjectOrderAssignmentService (Compras) -- Proyecto
+        nunca reimplementa esta regla (Paso 12.3: "evitar doble fuente de
+        verdad").
+
+        Body: { "orden_compra_uuid": "..." }
+        """
+        proyecto = self.get_object()
+        orden_uuid = request.data.get("orden_compra_uuid")
+        if not orden_uuid:
+            return Response(
+                {"detail": "El campo 'orden_compra_uuid' es requerido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from apps.tenant.compras.services.project_assignment_service import (
+            ProjectOrderAssignmentService,
+        )
+
+        ok, result, status_code = ProjectOrderAssignmentService.asociar_orden_a_proyecto(
+            orden_uuid=orden_uuid,
+            proyecto_uuid=proyecto.uuid,
+            empresa_id=proyecto.empresa_id,
+            request=request,
+        )
+        if not ok:
+            return Response(result, status=status_code)
+
+        from apps.tenant.compras.services.selectors import OrdenCompraSelector
+
+        resumen = OrdenCompraSelector.get_resumen_proyecto(proyecto.empresa_id, proyecto.uuid)
+        return Response(
+            {
+                "detail": (
+                    f"Orden de compra {result.numero_documento or result.consecutivo} "
+                    f"asociada al proyecto."
+                ),
+                "orden_compra_uuid": str(result.uuid),
+                "resumen": {
+                    "cantidad_ordenes": resumen["cantidad_ordenes"],
+                    "comprometido": str(resumen["comprometido"]),
+                    "recibido": str(resumen["recibido"]),
+                    "pendiente": str(resumen["pendiente"]),
+                },
+            },
+            status=status_code,
         )
 
     @action(

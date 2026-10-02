@@ -158,6 +158,30 @@
       }
     },
 
+    ordenesCompra: {
+      /** GET /api/v1/proyectos/{uuid}/ordenes-compra/ -- PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_OPCIONAL */
+      list: async (proyectoUuid) => {
+        console.log(`[${MOD}] ordenesCompra.list(${proyectoUuid})`);
+        if (!proyectoUuid) return { ok: false, status: 400, data: { detail: 'proyecto_uuid requerido' } };
+        return w.Sintel.Core.Http.request('GET', `${API_BASE}/${proyectoUuid}/ordenes-compra/`);
+      },
+
+      /** GET /api/v1/proyectos/{uuid}/ordenes-compra/disponibles/?search=<q> */
+      disponibles: async (proyectoUuid, search = '') => {
+        console.log(`[${MOD}] ordenesCompra.disponibles(${proyectoUuid})`);
+        if (!proyectoUuid) return { ok: false, status: 400, data: { detail: 'proyecto_uuid requerido' } };
+        const url = buildUrlWithParams(`${API_BASE}/${proyectoUuid}/ordenes-compra/disponibles/`, { search });
+        return w.Sintel.Core.Http.request('GET', url);
+      },
+
+      /** POST /api/v1/proyectos/{uuid}/ordenes-compra/asociar/ */
+      asociar: async (proyectoUuid, ordenCompraUuid) => {
+        console.log(`[${MOD}] ordenesCompra.asociar(${proyectoUuid}, ${ordenCompraUuid})`);
+        if (!proyectoUuid || !ordenCompraUuid) return { ok: false, status: 400, data: { detail: 'proyecto y orden de compra requeridos' } };
+        return w.Sintel.Core.Http.request('POST', `${API_BASE}/${proyectoUuid}/ordenes-compra/asociar/`, { orden_compra_uuid: ordenCompraUuid });
+      }
+    },
+
     tareasDiarias: {
       /** GET /api/v1/proyectos/tareas-diarias/?proyecto_uuid=<uuid> */
       list: async (proyectoUuid, fechaInicio, fechaFin) => {
