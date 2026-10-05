@@ -86,9 +86,22 @@ DETAIL_FIELDS = LIST_FIELDS + [
     "cronograma_archivo",
     "acta_entrega_archivo",
     "informe_final_archivo",
+    "cotizacion_id",
 ]
 
 _SEDE_DETAIL_TRAVERSALS = ("sede__nombre", "sede__uuid")
+
+# PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_PRESUPUESTO: campos minimos para
+# que ProyectoDetailSerializer.get_cotizacion*() (campos ligeros, no el
+# resumen de recursos -- ese hace su propia consulta con .only() propio en
+# ProyectoCotizacionPlaneacionService.obtener_resumen_cotizacion()) no
+# dispare carga diferida sobre el select_related('cotizacion') de arriba.
+_COTIZACION_DETAIL_TRAVERSALS = (
+    "cotizacion__uuid",
+    "cotizacion__numero_cotizacion",
+    "cotizacion__estado",
+    "cotizacion__fecha_emision",
+)
 
 TAREA_CORTA_FIELDS = [
     "id",
@@ -202,10 +215,11 @@ def qs_detail(empresa_id, uuid, sede_ids=None):
     """
     qs = (
         Proyecto.objects.filter(empresa_id=empresa_id, uuid=uuid)
-        .select_related("factura_costo", "servicio_asociado", "sede")
+        .select_related("factura_costo", "servicio_asociado", "sede", "cotizacion")
         .only(
             *DETAIL_FIELDS,
             *_SEDE_DETAIL_TRAVERSALS,
+            *_COTIZACION_DETAIL_TRAVERSALS,
         )
         .prefetch_related("equipo_trabajo", "pedidos", "pedidos__items", "items_presupuesto")
     )

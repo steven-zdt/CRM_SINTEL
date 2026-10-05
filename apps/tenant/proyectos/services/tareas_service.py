@@ -11,6 +11,8 @@ Validaciones criticas:
 - DSV: empresa_id DEBE coincidir con proyecto.empresa_id
 """
 
+from datetime import date
+
 from django.db import models, transaction
 from rest_framework.exceptions import ValidationError
 
@@ -126,6 +128,29 @@ class TareasDiariasBusinessService:
             raise ValidationError(
                 "La empresa de la tarea no coincide con la empresa del proyecto (DSV fallo)"
             )
+
+    @staticmethod
+    def esta_atrasada(tarea):
+        """
+        Deteccion de tareas atrasadas (PLAN_PROYECTOS_FASE_3_EJECUCION_
+        TIEMPOS_GASTOS_NO_FACTURABLES, Seccion 23). SSoT unica -- vive aqui,
+        el serializer solo expone el resultado, nunca se duplica en
+        JavaScript. Criterio: fecha_fin < hoy AND estado NOT IN (COMPLETADA,
+        CANCELADA).
+        """
+        if tarea.estado in (
+            TareaDiariaProyecto.Estado.COMPLETADA,
+            TareaDiariaProyecto.Estado.CANCELADA,
+        ):
+            return False
+        return tarea.fecha_fin < date.today()
+
+    @staticmethod
+    def dias_atraso(tarea):
+        """Dias transcurridos desde `fecha_fin` cuando la tarea esta atrasada; 0 si no."""
+        if not TareasDiariasBusinessService.esta_atrasada(tarea):
+            return 0
+        return (date.today() - tarea.fecha_fin).days
 
     @staticmethod
     def crear_tarea(

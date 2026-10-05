@@ -39,3 +39,9 @@ class ProyectoServiceMixin:
     def proyecto_documentos_service(self):
         """Expediente documental (DocumentoProyecto) - Ciclo de Vida Controlado v4.0."""
         return services.documentos_service
+
+    @property
+    def proyecto_cotizacion_planeacion_service(self):
+        """Vinculo Proyecto<->Cotizacion y sincronizacion de Presupuesto
+        (PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_PRESUPUESTO)."""
+        return services.ProyectoCotizacionPlaneacionService

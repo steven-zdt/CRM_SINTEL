@@ -1,7 +1,131 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.72.0
-**Ultima actualizacion:** 2026-09-26 (DOC-M65) — **Fases 8-13: PLAN_CENTRO_
+**Version:** 3.74.0
+**Ultima actualizacion:** 2026-10-02 (DOC-M67) — **PLAN_PROYECTOS_FASE_2_
+COTIZACION_RECURSOS_PRESUPUESTO + PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_
+GASTOS_NO_FACTURABLES completos.** Fase 2: `Proyecto` gana FK real
+`cotizacion` (`unique=True`, `on_delete=PROTECT`) a
+`tenant_cotizaciones.Cotizacion` -- reemplaza como SSoT de Planeacion el
+vinculo indirecto historico `Proyecto -> factura_costo -> Factura.
+cotizacion_uuid` (se conserva solo por compatibilidad).
+`ProyectoCotizacionPlaneacionService` (`services/cotizacion_planeacion_
+service.py`) orquesta `vincular_cotizacion()`/`desvincular_cotizacion()`/
+`sincronizar_costos()`; `ItemPresupuestoProyecto` gana `origen` (MANUAL/
+COTIZACION) + `cotizacion_item_uuid` para upsert diferencial sin duplicar
+costos manuales. Backfill de datos historicos via `manage.py
+backfill_proyecto_cotizacion_desde_factura` (`--dry-run` disponible).
+Fase 3: `DocumentoSoporte.facturable` (Gastos) distingue costos internos de
+los facturables al cliente; `GastosProyectoService` (nuevo, solo lectura)
+alimenta el bloque "Gastos No Facturables" de la Fase 3 (Ejecucion) via
+`GET .../gastos-no-facturables/`; panel financiero viejo (Valor Contrato/
+utilidad/margen) retirado de `pane-step-3`, reemplazado por "Control de
+Tiempo" (`dias_restantes` sobre `fecha_fin_estimada`). Ver
+`apps/tenant/proyectos/.agent/AUDITORIA_FLUJO_COMPLETO.md` para el detalle
+de endpoints y flujos.
+
+**Correcciones de deuda tecnica en la misma sesion (sin ejecutar pytest)**:
+`ItemPresupuestoViewSet.update()`, `TareaDiariaViewSet.perform_update()` y
+`TareaCortaViewSet.perform_update()` (`apps/tenant/proyectos/api/
+viewsets.py`) no reasignaban `serializer.instance` al objeto devuelto por
+el service -- el cambio si quedaba persistido en BD, pero la respuesta HTTP
+del PATCH devolvia la version vieja. Los 3 corregidos al mismo patron. Se
+elimino tambien un `prompt()` nativo del navegador en el cambio de estado
+de Tareas Diarias (`proyectos_editor.js::mostrarMenuEstado`), reemplazado
+por un dropdown Bootstrap que llama `cambiarEstado()` directo.
+
+**Actualizacion previa:** 2026-10-01 (DOC-M66) — **PLAN_OPTIMIZACION_COMPRAS_
+Y_BASE_NUEVA_REQUISICION_TAREA_1 completo + limpieza general de lint/bugs
+reales en todo el repo.** Compras: Fase 1 (numeracion) y Fase 2 (selectors)
+ya estaban resueltas por el trabajo previo de Requisiciones+Aprobaciones
+(DOC-M56..65) -- sin cambios. Fase 3: KPIs de `OrdenCompraKpisView`
+consolidados de 4 queries a un unico `aggregate()` con `Count`/`Sum`
+condicionados. Fase 4: proveedor/proyecto/cotizacion pasan de `<select>` con
+catalogo completo precargado a buscador bajo demanda (`?search=`, 3+
+caracteres, debounce 300ms, `compras.utils.js::initBuscadorAsync`). **Bug
+real encontrado, no solo optimizacion**: sin `?search=` el combo no
+descargaba "todo" el catalogo como asumia el plan -- al no pasar el
+parametro, `StandardResultsSetPagination` recortaba silenciosamente a los
+primeros 20 resultados de la empresa, haciendo literalmente imposible
+seleccionar cualquier proveedor/proyecto/cotizacion fuera de esa primera
+pagina. El mismo bug se repetia en 3 sitios mas de `requisiciones/`
+(buscador de Proyecto en el formulario, `<select>` de Proveedor en el panel
+"Generar Orden de Compra", `<select>` de Cotizacion en el panel "Vincular
+Cotizacion") -- los 4 corregidos al mismo patron. El widget modal de
+Cotizaciones en "Nueva Requisicion" se audito y se dejo intacto a proposito:
+ya usa un endpoint dedicado pre-filtrado por el backend
+(`cotizacionesDisponibles()`), no el patron defectuoso. Fase 5: unico
+transporte HTTP (`Sintel.Core.Http`, mismo motor que `compras.api.js::_fetch`)
+-- `compras.utils.js` y `requisiciones_list.js` migrados desde
+`fetch()+getHeaders()`; `getHeaders()` retirado tras confirmar cero
+consumidores. Fase 6: sincronizacion diferencial de items por UUID en
+`OrdenCompraCRUDService.actualizar_orden()` y `RequisicionCompraCRUDService.
+actualizar_requisicion()` (UPDATE/INSERT/DELETE por diferencia, ya no
+`items.all().delete()` + `bulk_create()` total) -- preserva
+`requisicion_item_uuid`/`cantidad_aprobada`/`cantidad_ordenada`/
+`cantidad_cancelada` de items existentes, que antes se perdian en cada
+edicion de cabecera. `ItemOrdenCompraSerializer.uuid`/
+`RequisicionCompraItemSerializer.uuid` pasan de `read_only` a opcionales en
+escritura para permitirlo. Fase 7: `crear_orden()`/`crear_requisicion()`
+calculan subtotal/IVA/total ANTES de crear la cabecera -- un solo `save()`,
+sin el segundo `save(update_fields=[...])` posterior. Fase 9: `calcularItem()`
+unico en `compras_editor.js` (antes duplicado en
+`actualizarFilaTotal()`/`actualizarTotales()`). Fase 10: texto de preview de
+numeracion corregido ("Próximo número estimado", no "Número a asignar") en
+`compras_editor.js` y `requisiciones_editor.js` -- ninguno refleja una
+reserva transaccional real. Fase 11: partials compartidos extraidos para
+`offcanvas_crear_compras.html`/`offcanvas_editar_compras.html`
+(`partials/formulario_estilos.html`, `buscador_proveedor_proyecto.html`,
+`items_table_head.html`, `totales_observaciones.html`,
+`acciones_footer.html`); la seccion "Informacion General" se dejo sin
+unificar a proposito (Plantilla+preview vs. Consecutivo readonly son
+genuinamente distintos entre crear/editar). Fase 8 (full_clean en loop)
+revisada, SIN CAMBIOS: `ItemOrdenCompra` no tiene `CheckConstraint` de BD
+equivalente a sus `MinValueValidator`, retirar `full_clean()` reduciria
+integridad real. Fase 14: codigo muerto retirado con consumidores
+verificados en cero (`getHeaders()`, `loadProveedoresSelect`/
+`loadProyectosSelect`/`loadCotizacionesSelect`, `OrdenCompraCRUDService.
+_obtener_siguiente_consecutivo()`); se mantiene intencionalmente
+`get_siguiente_consecutivo()` (selector+mixin+endpoint, sin consumidor en
+frontend pero con test dedicado, no se asumio el riesgo de tocarlo sin poder
+correr pytest). Ver `apps/tenant/compras/.agent/AUDITORIA_FLUJO_COMPRAS.md`
+§"2026-10-01" para el detalle completo.
+
+Ademas, pedido aparte del usuario en la misma sesion ("corrige de forma
+general"): limpieza de `ruff` (`make ruff`) en **todo** `apps/`+`config/`,
+no solo Compras -- de 1464 hallazgos iniciales (922 autofix + 158 autofix
+inseguro) a 41 restantes, todos documentados como intencionales (migraciones
+congeladas, `django.setup()` antes de importar apps, Celery Beat Schedule
+antes de `AppRegistryNotReady`, imports opcionales en try/except, 1 test ya
+marcado `pytest.mark.skip` por migracion pendiente). En el camino,
+corrigio **7 `NameError` reales** que crasheaban en produccion al ejecutarse
+esa linea (imports faltantes nunca detectados sin este barrido): `GET
+/api/v1/landing/info/` (`get_public_info` sin importar en
+`landing/api/viewsets.py`); reset de password legacy
+(`validate_token()`/`confirm_reset()` en `core/services/password_reset.py`,
+`force_str`/`urlsafe_base64_decode`/`default_token_generator` sin importar);
+`ValidationError` referenciado sin el alias correcto en
+`empleados/api/viewsets.py` (creacion/edicion de Contratos); `serializers`
+sin importar en `perfil/api/viewsets.py` (3 sitios, CRUD de Departamento);
+`Decimal`/`InvalidOperation`/`datetime` sin importar en
+`document_ingest/validators.py` (validacion de totales/fechas de
+documentos); `TenantMembership` sin importar en `landing/api/serializers.py`;
+typo `_conn`->`connection` en `perfil/services/business_service.py`. Tambien
+**1 metodo HTMX duplicado e inalcanzable**:
+`DevengoViewSet.render_offcanvas_crear` tenia dos definiciones con el
+mismo `url_path="render-offcanvas/crear"` -- la segunda sobrescribia
+silenciosamente a la primera (nunca ejecutada), retirada. Resuelve
+mecanicamente `B904` (118 sitios, `raise` sin `from` dentro de `except`),
+`F401` (79, casi todos re-exports intencionales en `services/__init__.py`
+de facturas/inventario/proyectos -- documentados con `__all__` explicito en
+vez de borrados), `F811` (6, imports/metodos duplicados), `E722` (17 bare
+`except:` -> `except Exception:`), `SIM102/105/108/117/401`,
+`B007/017/023/026/028`, `E741`. Sin cambios en modelos ni migraciones.
+`manage.py check` verificado limpio despues de cada lote; **sin ejecutar
+pytest en ningun momento** (regla explicita de ambas misiones). Commiteado y
+pusheado a `feat/onboarding-cookie` (`8bd59c1e`). Posterior a DOC-M65
+(2026-09-26).
+
+**Actualizacion previa:** 2026-09-26 (DOC-M65) — **Fases 8-13: PLAN_CENTRO_
 APROBACIONES_DASHBOARD_COMPRAS.md COMPLETO.** Fase 8: banner + 6 KPIs +
 bandeja server-side (DataTables 3.x) del Centro de Aprobaciones en Dashboard,
 con prioridad/riesgo real calculado y congelado en el snapshot al enviar

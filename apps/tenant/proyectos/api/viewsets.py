@@ -474,6 +474,23 @@ class ProyectoViewSet(
             }
         )
 
+    @action(detail=True, methods=["get"], url_path="gastos-no-facturables")
+    def gastos_no_facturables(self, request, uuid=None):
+        """
+        GET /api/v1/proyectos/{uuid}/gastos-no-facturables/ -- bloque de
+        solo lectura "Gastos No Facturables" de la Fase 3 (Ejecucion)
+        (PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES,
+        Seccion 42). Distinto del endpoint `gastos()` arriba: este filtra
+        por `facturable=False` y no expone `costo_gastos_real` (ese KPI
+        sigue siendo el costo TOTAL de gastos, cualquier valor de
+        `facturable`). Solo lectura -- no hay crear/editar/eliminar aqui.
+        """
+        proyecto = self.get_object()
+        from ..services import GastosProyectoService
+
+        resumen = GastosProyectoService.get_resumen_gastos_no_facturables(proyecto)
+        return Response(resumen)
+
     @action(detail=True, methods=["get"], url_path="ordenes-compra")
     def ordenes_compra(self, request, uuid=None):
         """
@@ -629,6 +646,92 @@ class ProyectoViewSet(
             },
             status=status_code,
         )
+
+    @action(detail=True, methods=["get"], url_path="cotizacion-planeacion")
+    def cotizacion_planeacion(self, request, uuid=None):
+        """
+        GET /api/v1/proyectos/{uuid}/cotizacion-planeacion/ -- Fase 5 del
+        plan: cotizacion vinculada + resumen de recursos (Mano de Obra/
+        Materiales/Equipos) + detalle de items, todo antes de IVA. `null`
+        (HTTP 200, `{"cotizacion": null}`) si el proyecto no tiene cotizacion
+        vinculada -- estado valido "Sin cotizacion" de la UI (Fase 21), no
+        un error.
+        """
+        proyecto = self.get_object()
+        resumen = self.proyecto_cotizacion_planeacion_service.obtener_resumen_cotizacion(proyecto)
+        if resumen is None:
+            return Response({"cotizacion": None, "resumen": None, "items": []})
+        return Response(resumen)
+
+    @action(detail=True, methods=["post"], url_path="vincular-cotizacion")
+    def vincular_cotizacion(self, request, uuid=None):
+        """
+        POST /api/v1/proyectos/{uuid}/vincular-cotizacion/ -- unico punto de
+        entrada para vincular una Cotizacion APROBADA como fuente de
+        recursos/presupuesto de la Fase 2 (Planeacion). Delega integramente
+        a ProyectoCotizacionPlaneacionService -- Proyecto nunca reimplementa
+        esta regla (Fase 36).
+
+        Body: { "cotizacion_uuid": "...", "confirmar_reemplazo": false }
+        """
+        proyecto = self.get_object()
+        cotizacion_uuid = request.data.get("cotizacion_uuid")
+        confirmar_reemplazo = bool(request.data.get("confirmar_reemplazo", False))
+
+        ok, result, status_code = self.proyecto_cotizacion_planeacion_service.vincular_cotizacion(
+            proyecto=proyecto,
+            cotizacion_uuid=cotizacion_uuid,
+            empresa_id=proyecto.empresa_id,
+            request=request,
+            confirmar_reemplazo=confirmar_reemplazo,
+        )
+        if not ok:
+            return Response(result, status=status_code)
+
+        resumen = self.proyecto_cotizacion_planeacion_service.obtener_resumen_cotizacion(result)
+        return Response(
+            {
+                "detail": f"Cotizacion {result.cotizacion.numero_cotizacion} vinculada al proyecto.",
+                "cotizacion_uuid": str(result.cotizacion.uuid),
+                **resumen,
+            },
+            status=status_code,
+        )
+
+    @action(detail=True, methods=["post"], url_path="desvincular-cotizacion")
+    def desvincular_cotizacion(self, request, uuid=None):
+        """
+        POST /api/v1/proyectos/{uuid}/desvincular-cotizacion/ -- Fase 18:
+        retira el vinculo sin borrar la Cotizacion ni los items de
+        presupuesto origen=COTIZACION (quedan como historico).
+        """
+        proyecto = self.get_object()
+        ok, result, status_code = self.proyecto_cotizacion_planeacion_service.desvincular_cotizacion(
+            proyecto=proyecto
+        )
+        if not ok:
+            return Response(result, status=status_code)
+
+        return Response({"detail": "Cotizacion desvinculada del proyecto."}, status=status_code)
+
+    @action(detail=True, methods=["post"], url_path="sincronizar-costos-cotizacion")
+    def sincronizar_costos_cotizacion(self, request, uuid=None):
+        """
+        POST /api/v1/proyectos/{uuid}/sincronizar-costos-cotizacion/ --
+        Fase 16: sincronizacion idempotente de los items origen=COTIZACION
+        del Presupuesto Planeado, nunca automatica (Fase 11: accion
+        explicita del usuario).
+        """
+        proyecto = self.get_object()
+        empresa = self.get_empresa()
+
+        ok, result, status_code = self.proyecto_cotizacion_planeacion_service.sincronizar_costos(
+            proyecto=proyecto, empresa=empresa
+        )
+        if not ok:
+            return Response(result, status=status_code)
+
+        return Response({"success": True, **result}, status=status_code)
 
     @action(
         detail=False,
@@ -907,8 +1010,20 @@ class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         """
         Actualiza un item de presupuesto.
         Delegacion al service para validacion y calculo.
+
+        [FIX] `serializer.instance` debe reasignarse al objeto que devuelve
+        el service -- sin esto, `UpdateModelMixin.update()` (DRF) responde
+        con `serializer.data` del `instance` ORIGINAL que el propio DRF ya
+        habia obtenido ANTES de llamar a este metodo (antes de la
+        mutacion), mientras el service actualiza una instancia DISTINTA
+        obtenida con un `self.get_object()` propio. El cambio SI quedaba
+        persistido en BD (dos consultas al mismo registro, ambas validas),
+        pero el cliente HTTP recibia la version vieja en la respuesta --
+        confirmado en vivo al verificar que PATCH sobre un item de
+        presupuesto reflejara el cambio (PLAN_PROYECTOS_FASE_2_COTIZACION_
+        RECURSOS_PRESUPUESTO, verificacion post-implementacion).
         """
-        PresupuestoBusinessService.actualizar_item(
+        serializer.instance = PresupuestoBusinessService.actualizar_item(
             item=self.get_object(), data=serializer.validated_data
         )
 
@@ -1031,8 +1146,13 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         """
         Actualiza una tarea diaria.
         Delegacion al service para validaciones.
+
+        [FIX] `serializer.instance` debe reasignarse al objeto que devuelve
+        el service -- mismo patron que ItemPresupuestoViewSet.update(), sin
+        esto el cliente HTTP recibia la version vieja en la respuesta aunque
+        el cambio si quedaba persistido en BD.
         """
-        TareasDiariasBusinessService.actualizar_tarea(
+        serializer.instance = TareasDiariasBusinessService.actualizar_tarea(
             tarea=self.get_object(), data=serializer.validated_data
         )
 
@@ -1130,7 +1250,13 @@ class TareaCortaViewSet(OrganizationalContextMixin, TareaCortaServiceMixin, Base
         )
 
     def perform_update(self, serializer):
-        TareasCortasBusinessService.actualizar_tarea_corta(
+        """
+        [FIX] `serializer.instance` debe reasignarse al objeto que devuelve
+        el service -- mismo patron que ItemPresupuestoViewSet.update(), sin
+        esto el cliente HTTP recibia la version vieja en la respuesta aunque
+        el cambio si quedaba persistido en BD.
+        """
+        serializer.instance = TareasCortasBusinessService.actualizar_tarea_corta(
             tarea_corta=self.get_object(), data=serializer.validated_data
         )
 

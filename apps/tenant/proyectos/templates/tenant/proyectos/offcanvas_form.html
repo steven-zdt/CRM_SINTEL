@@ -464,20 +464,82 @@
           </h5>
           
           <div class="row g-3">
+            <!-- Cotizacion del Proyecto (PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_PRESUPUESTO)
+                 Reemplaza "Responsable Tecnico (Nomina)" como primer bloque de esta fase
+                 (Fase 22 del plan: eliminado del formulario -- el campo backend se mantiene
+                 por compatibilidad historica, solo deja de enviarse desde aqui). -->
             <div class="col-md-12">
-              <label for="proyecto-responsable-tecnico-select" class="form-label fw-bold">Responsable Técnico (Nómina)</label>
-              <select class="form-select border-primary" id="proyecto-responsable-tecnico-select">
-                <option value="">-- Seleccionar Responsable --</option>
-                {% for empleado in empleados %}
-                  <option value="{{ empleado.id }}" {% if proyecto and proyecto.responsable_tecnico_id == empleado.id %}selected{% endif %}>
-                    {{ empleado.primer_nombre }} {{ empleado.primer_apellido }}
-                  </option>
-                {% endfor %}
-              </select>
-              <input type="hidden" id="proyecto-responsable-tecnico-id"     name="responsable_tecnico_id"     value="{% if proyecto %}{{ proyecto.responsable_tecnico_id }}{% endif %}">
-              <input type="hidden" id="proyecto-responsable-tecnico-nombre" name="responsable_tecnico_nombre" value="{% if proyecto %}{{ proyecto.responsable_tecnico_nombre }}{% endif %}">
+              <h6 class="text-primary mb-3"><i class="bi bi-file-earmark-check me-2"></i>Cotización del Proyecto</h6>
+
+              <div id="cotizacion-sin-vincular">
+                <div class="d-flex justify-content-between align-items-center p-2 bg-light border rounded">
+                  <small class="text-muted" id="cotizacion-sin-vincular-msg"><i class="bi bi-info-circle me-1"></i>No hay cotización vinculada.</small>
+                  <button type="button" id="btn-vincular-cotizacion" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-search"></i> Buscar cotización aprobada
+                  </button>
+                </div>
+                <div id="cotizacion-buscador" class="d-none mt-2 p-2 bg-light border rounded position-relative">
+                  <input type="text" id="cotizacion-search" class="form-control form-control-sm"
+                         placeholder="Buscar por número o cliente..." autocomplete="off">
+                  <div id="cotizacion-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1050; top: 100%; left: 0;"></div>
+                </div>
+              </div>
+
+              <div id="cotizacion-vinculada" class="d-none">
+                <div class="d-flex justify-content-between align-items-start p-2 bg-info-subtle border border-info-subtle rounded">
+                  <div>
+                    <div class="fw-bold" id="cot-plan-numero">—</div>
+                    <div class="small text-muted" id="cot-plan-cliente">Cliente: —</div>
+                    <div class="small text-muted">
+                      Estado: <span id="cot-plan-estado" class="badge bg-success">APROBADA</span>
+                      · <span id="cot-plan-fecha"></span>
+                    </div>
+                  </div>
+                  <div class="text-end">
+                    <div class="small text-muted">Valor antes de IVA</div>
+                    <div class="fw-bold" id="cot-plan-valor-antes-iva">$ 0</div>
+                    <button type="button" id="btn-desvincular-cotizacion" class="btn btn-sm btn-outline-danger mt-1">
+                      <i class="bi bi-x-circle"></i> Desvincular
+                    </button>
+                  </div>
+                </div>
+
+                <div class="table-responsive border rounded mt-2 mb-2">
+                  <table class="table table-sm mb-0" style="font-size:0.85rem;">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Recursos disponibles</th>
+                        <th class="text-end">Cotizado (antes de IVA)</th>
+                        <th class="text-end">Costo base (antes de IVA)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Mano de Obra</td>
+                        <td class="text-end" id="cot-plan-mo-cotizado">$ 0</td>
+                        <td class="text-end" id="cot-plan-mo-costobase">$ 0</td>
+                      </tr>
+                      <tr>
+                        <td>Materiales</td>
+                        <td class="text-end" id="cot-plan-mat-cotizado">$ 0</td>
+                        <td class="text-end" id="cot-plan-mat-costobase">$ 0</td>
+                      </tr>
+                      <tr>
+                        <td>Equipos</td>
+                        <td class="text-end" id="cot-plan-eq-cotizado">$ 0</td>
+                        <td class="text-end" id="cot-plan-eq-costobase">$ 0</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <button type="button" id="btn-sincronizar-cotizacion" class="btn btn-sm btn-outline-secondary mb-2">
+                  <i class="bi bi-arrow-repeat"></i> Sincronizar costos de cotización
+                </button>
+                <div class="small text-muted mb-2" id="cot-plan-ultima-sync"></div>
+              </div>
             </div>
-            
+
             <div class="col-md-6 mt-3">
               <label for="proyecto-fecha-inicio" class="form-label fw-bold">Fecha de Inicio Real</label>
               <input type="date" class="form-control" id="proyecto-fecha-inicio" name="fecha_inicio"
@@ -533,10 +595,11 @@
                 <table id="tabla-presupuesto" class="table table-sm table-striped mb-0">
                   <thead class="table-light">
                     <tr>
-                      <th style="width: 25%;">Categoría</th>
-                      <th style="width: 30%;">Descripción</th>
-                      <th style="width: 12%; text-align: center;">Cantidad</th>
-                      <th style="width: 18%; text-align: right;">Valor Unit.</th>
+                      <th style="width: 10%;">Origen</th>
+                      <th style="width: 20%;">Categoría</th>
+                      <th style="width: 25%;">Descripción</th>
+                      <th style="width: 10%; text-align: center;">Cantidad</th>
+                      <th style="width: 15%; text-align: right;">Valor Unit.</th>
                       <th style="width: 12%; text-align: right;">Subtotal</th>
                       <th style="width: 3%;"></th>
                     </tr>
@@ -645,48 +708,52 @@
               <input type="hidden" id="proyecto-responsable-operativo-nombre" name="responsable_operativo_nombre" value="{% if proyecto %}{{ proyecto.responsable_operativo_nombre }}{% endif %}">
             </div>
             
-            <!-- Panel Indicadores Financieros Reales (Fase 3)
-                 IDs fin-* son actualizados por populateStepDetails() desde indicadores_financieros.real
-                 BASE: valor_contrato_proyectado
-                 costo_real = costo_mano_obra_real + costo_materiales_real
-                 utilidad_real = BASE - costo_real
-                 margen_real % = utilidad_real / BASE * 100
-            -->
+            <!-- Control de Tiempo (PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_
+                 GASTOS_NO_FACTURABLES, Seccion 16/40). Reemplaza el panel
+                 financiero anterior (fin-*) en esta Fase 3 -- esos campos
+                 del modelo (valor_contrato_proyectado, costo_mano_obra_real,
+                 etc.) y calcular_indicadores_financieros() NO se eliminaron,
+                 solo se dejaron de renderizar aqui. Todo lo que ve este
+                 bloque viene de `ejecucion_tiempo` del serializer, nunca
+                 calculado en JS. -->
             <div class="col-md-12 mt-2 mb-2">
               <div class="rounded-3 border overflow-hidden">
                 <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-primary bg-opacity-10 border-bottom">
                   <span class="fw-semibold text-primary small">
-                    <i class="bi bi-file-earmark-text me-1"></i>Valor del Contrato (base)
+                    <i class="bi bi-calendar-range me-1"></i>Control de Tiempo
                   </span>
-                  <span class="fw-bold font-monospace text-primary small" id="fin-valor-contrato">$ 0</span>
+                  <span class="badge" id="et-estado-cronograma">--</span>
                 </div>
                 <div class="px-3 py-2 bg-white">
                   <div class="d-flex justify-content-between py-1">
-                    <span class="text-secondary small"><i class="bi bi-person-workspace me-1 text-warning"></i>Mano de Obra (real)</span>
-                    <span class="font-monospace small" id="fin-costo-personal">$ 0</span>
+                    <span class="text-secondary small"><i class="bi bi-calendar-check me-1 text-primary"></i>Inicio real</span>
+                    <span class="font-monospace small" id="et-fecha-inicio">--</span>
                   </div>
                   <div class="d-flex justify-content-between py-1">
-                    <span class="text-secondary small"><i class="bi bi-box-seam me-1 text-warning"></i>Materiales (real)</span>
-                    <span class="font-monospace small" id="fin-costo-materiales">$ 0</span>
+                    <span class="text-secondary small"><i class="bi bi-calendar-x me-1 text-primary"></i>Fecha fin estimada</span>
+                    <span class="font-monospace small" id="et-fecha-fin">--</span>
                   </div>
                   <div class="d-flex justify-content-between py-1">
-                    <span class="text-secondary small"><i class="bi bi-receipt me-1 text-warning"></i>Gastos (real)</span>
-                    <span class="font-monospace small" id="fin-costo-gastos">$ 0</span>
+                    <span class="text-secondary small"><i class="bi bi-hourglass me-1 text-warning"></i>Días planificados</span>
+                    <span class="font-monospace small" id="et-dias-planificados">--</span>
+                  </div>
+                  <div class="d-flex justify-content-between py-1">
+                    <span class="text-secondary small"><i class="bi bi-hourglass-split me-1 text-warning"></i>Días transcurridos</span>
+                    <span class="font-monospace small" id="et-dias-transcurridos">--</span>
+                  </div>
+                  <div class="d-flex justify-content-between py-1">
+                    <span class="text-secondary small"><i class="bi bi-hourglass-bottom me-1 text-warning"></i>Días restantes</span>
+                    <span class="font-monospace small" id="et-dias-restantes">--</span>
                   </div>
                 </div>
-                <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-danger bg-opacity-10 border-top border-bottom">
-                  <span class="fw-semibold text-danger small"><i class="bi bi-calculator me-1"></i>Total Costos Reales</span>
-                  <span class="fw-bold font-monospace text-danger small" id="fin-costo-total">$ 0</span>
-                </div>
-                <div class="d-flex justify-content-between align-items-center px-3 py-2">
-                  <span class="fw-bold text-dark small"><i class="bi bi-piggy-bank me-1 text-success"></i>Utilidad Estimada</span>
-                  <div class="text-end">
-                    <div class="fw-bold font-monospace small" id="fin-utilidad-neta">$ 0</div>
+                <div class="px-3 py-2 bg-light border-top">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="text-muted small">% avance del proyecto</span>
+                    <span class="fw-bold small" id="et-porcentaje-avance-label">0%</span>
                   </div>
-                </div>
-                <div class="d-flex justify-content-between align-items-center px-3 py-1 bg-light border-top">
-                  <span class="text-muted small"><i class="bi bi-percent me-1"></i>Margen Rentabilidad</span>
-                  <span class="badge bg-secondary" id="fin-margen-rentabilidad">0%</span>
+                  <div class="progress" style="height: 8px;">
+                    <div class="progress-bar" id="et-porcentaje-avance-bar" role="progressbar" style="width: 0%;"></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -703,7 +770,7 @@
                 </div>
               </div>
             </div>
-            
+
             <!-- Pedidos y materiales -->
             <div class="col-md-12 mt-4">
               <h6 class="border-bottom pb-2 mb-2 text-dark">
@@ -764,6 +831,40 @@
               </div>
             </div>
 
+            <!-- Gastos No Facturables (PLAN_PROYECTOS_FASE_3_EJECUCION_
+                 TIEMPOS_GASTOS_NO_FACTURABLES, Seccion 10/42). Solo lectura
+                 -- distinto del bloque "Gastos del Proyecto" de arriba (que
+                 SÍ permite asociar/desvincular cualquier gasto). Este solo
+                 filtra facturable=False y se oculta por completo si no hay
+                 ninguno (nunca muestra una tabla vacia). -->
+            <div class="col-md-12 mt-4 d-none" id="gastos-no-facturables-wrapper">
+              <h6 class="border-bottom pb-2 mb-2 text-dark">
+                <i class="bi bi-receipt me-2"></i>Gastos No Facturables
+              </h6>
+              <div class="table-responsive border rounded mb-2">
+                <table class="table table-sm table-striped mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Documento</th>
+                      <th>Proveedor</th>
+                      <th>Descripción</th>
+                      <th class="text-end">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-gastos-no-facturables"></tbody>
+                </table>
+              </div>
+              <div class="d-flex justify-content-end">
+                <div class="card bg-secondary bg-opacity-10 border-0" style="min-width: 220px;">
+                  <div class="card-body p-2 d-flex justify-content-between align-items-center">
+                    <small class="text-muted">Total no facturable:</small>
+                    <span class="fw-bold" id="gastos-no-facturables-total">$ 0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Seguimiento de Tareas Diarias (v3.5.3) -->
             <div class="col-md-12 mt-4 pt-3 border-top">
               <h6 class="text-primary mb-3">
@@ -775,6 +876,48 @@
                 <div class="col-auto">
                   <small class="text-muted">Período del Proyecto:</small>
                   <div class="fw-bold" id="tareas-periodo-display">--</div>
+                </div>
+              </div>
+
+              <!-- Filtros (PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_
+                   NO_FACTURABLES Seccion 21: Estado/Prioridad/Periodo, sobre
+                   el dataset ya cargado -- sin endpoint nuevo) + resumen +
+                   avance de tareas (Seccion 22) -->
+              <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+                <div class="btn-group btn-group-sm" role="group" id="tareas-filtro-estado">
+                  <button type="button" class="btn btn-outline-secondary active" data-filtro="TODAS">Todas</button>
+                  <button type="button" class="btn btn-outline-secondary" data-filtro="PENDIENTE">Pendientes</button>
+                  <button type="button" class="btn btn-outline-secondary" data-filtro="EN_PROCESO">En proceso</button>
+                  <button type="button" class="btn btn-outline-secondary" data-filtro="COMPLETADA">Completadas</button>
+                  <button type="button" class="btn btn-outline-secondary" data-filtro="CANCELADA">Canceladas</button>
+                </div>
+                <div class="text-end">
+                  <small class="text-muted d-block">Avance de tareas</small>
+                  <span class="fw-bold" id="tareas-avance-pct">0%</span>
+                </div>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-md-3">
+                  <label for="tareas-filtro-prioridad" class="form-label form-label-sm small text-muted mb-0">Prioridad</label>
+                  <select id="tareas-filtro-prioridad" class="form-select form-select-sm">
+                    <option value="TODAS">Todas</option>
+                    <option value="ALTA">Alta</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="BAJA">Baja</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label for="tareas-filtro-periodo-desde" class="form-label form-label-sm small text-muted mb-0">Desde</label>
+                  <input type="date" id="tareas-filtro-periodo-desde" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-3">
+                  <label for="tareas-filtro-periodo-hasta" class="form-label form-label-sm small text-muted mb-0">Hasta</label>
+                  <input type="date" id="tareas-filtro-periodo-hasta" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                  <button type="button" id="btn-limpiar-filtros-tareas" class="btn btn-sm btn-outline-secondary w-100">
+                    <i class="bi bi-x-circle me-1"></i>Limpiar filtros
+                  </button>
                 </div>
               </div>
 

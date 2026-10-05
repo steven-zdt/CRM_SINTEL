@@ -1,8 +1,8 @@
 # AUDITORIA_FLUJO_COMPLETO.md — Proyectos
 
-## Fecha: 2026-08-05 (actualizado 2026-09-12)
+## Fecha: 2026-08-05 (actualizado 2026-10-05)
 ## Modulo: tenant/proyectos
-## Version: v3.10.5 (fix dependencies migracion 0020) | Base: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2 | Fix P-1 2026-09-12
+## Version: v3.12.0 (Fase 2 Cotizacion + Fase 3 Ejecucion + fixes serializer.instance) | Base: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2 | Fix P-1 2026-09-12
 
 ---
 
@@ -623,6 +623,7 @@ entorno limpio. Recordatorio: `make migrate-tenants`/`migrate_schemas` debe corr
 | **v3.10.4** | **2026-05-28** | **TareaCorta.cliente FK PROTECT → SET_NULL** (mig 0018). Permite eliminar clientes inactivos aunque tengan TareaCortas vinculadas. FK → NULL preserva snapshot `cliente_nombre`. `crud_service.delete_cliente()` captura `ProtectedError` residual con mensaje 400. |
 | **v3.10.5** | **2026-08-05** | **Fix `dependencies` migracion 0020**: usaba `('proyectos', ...)` (nombre de carpeta) en vez de `('tenant_proyectos', ...)` (app_label real), bloqueando el arranque completo del proyecto (`NodeNotFoundError` en `migrate_schemas`). Ver FIX v3.10.5 arriba para causa raiz y como evitarlo. |
 | **v3.11.0** | **2026-10-02** | **Integracion Compras-Proyectos** (`PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_OPCIONAL.md`): Proyecto pasa a ser el eje de consulta/asociacion de Ordenes de Compra en fase BORRADOR, sin agregar ninguna FK nueva (`OrdenCompra.proyecto` ya existia). Ver seccion nueva mas abajo. |
+| **v3.12.0** | **2026-10-05** | **Fase 3 Ejecucion completa** (`PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES.md`): bloque "Gastos No Facturables" + "Control de Tiempo" + deteccion de tareas atrasadas + filtros/avance de tareas. **3 bugs reales corregidos**: `serializer.instance` obsoleto en `ItemPresupuestoViewSet`/`TareaDiariaViewSet`/`TareaCortaViewSet` (el PATCH devolvia la version vieja aunque la escritura en BD si era correcta) y un `prompt()` nativo en cambio de estado de Tareas Diarias. Ver seccion nueva mas abajo. |
 
 ---
 
@@ -652,4 +653,118 @@ ProyectosOrdenesCompra` en `proyectos_editor.js` (mismo patron que
 `ProyectosGastos`). Venta sigue siendo opcional — ningun paso de este flujo
 la requiere.
 
-*Auditoría actualizada el 2026-08-05 | SINTEL v3.10.5 — Status: PRODUCTION READY ✅*
+## Cotización de Planeación (2026-10-02)
+
+`PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_PRESUPUESTO.md`: `Proyecto`
+gana una FK real `cotizacion` (`unique=True`, `on_delete=PROTECT`) a
+`tenant_cotizaciones.Cotizacion` — vinculo DIRECTO, reemplaza como SSoT de
+Planeacion al vinculo indirecto historico `Proyecto -> factura_costo ->
+Factura.cotizacion_uuid` (ese se conserva intacto, solo por compatibilidad;
+`cotizacion_info` en el serializer lo sigue resolviendo). Excepcion
+deliberada y documentada al principio Zero-Coupling del header de
+`models.py`.
+
+`ProyectoCotizacionPlaneacionService` (`services/cotizacion_planeacion_
+service.py`) es la unica orquestacion: `vincular_cotizacion()` (solo
+`Cotizacion.Estado.APROBADA` — ese es el estado real tras COTIZACIONES-02,
+el plan lo llama "ACEPTADA" conceptualmente pero no existe ese valor en el
+enum), `desvincular_cotizacion()`, `obtener_resumen_cotizacion()` (Mano de
+Obra/Materiales/Equipos, SIEMPRE antes de IVA — nunca `total_con_impuestos`)
+y `sincronizar_costos()`. El mapeo `CotizacionItem.tipo_item -> categoria`
+(PRODUCTO→EQUIPOS, MATERIAL→MATERIALES, SERVICIO→MANO_OBRA) vive en
+`mapear_tipo_item_a_recurso()`, SSoT unica reutilizada por el resumen y la
+sincronizacion.
+
+`ItemPresupuestoProyecto` gana `origen` (MANUAL/COTIZACION) +
+`cotizacion_item_uuid` (soft reference, `UniqueConstraint` condicional por
+proyecto). `PresupuestoBusinessService.sincronizar_desde_cotizacion()`
+(extiende el servicio existente, no crea un segundo motor) hace upsert
+diferencial por `cotizacion_item_uuid` — nunca borra-todo-e-inserta-todo,
+nunca toca `origen=MANUAL`.
+
+**Correccion (2026-10-02, pedido explicito del usuario):** el Desglose de
+Costos Planeados es editable/borrable libremente de forma MANUAL por
+defecto, sin importar `origen` — se retiro la restriccion original
+("item de cotizacion = solo sincronizable", Fase 33 del plan) que
+bloqueaba editar/eliminar items `origen=COTIZACION`
+(`_bloquear_edicion_item_cotizacion()`, eliminado del service). "Sincronizar
+costos de cotizacion" sigue siendo una conveniencia 100% opcional, nunca la
+unica via de cambio: si se borra una linea `origen=COTIZACION` y se vuelve
+a sincronizar, se re-crea desde la cotizacion (esperado, no es un bug).
+
+3 acciones nuevas en `ProyectoViewSet`: `vincular-cotizacion` (acepta
+`confirmar_reemplazo` — reemplazar una cotizacion ya vinculada nunca es
+silencioso), `desvincular-cotizacion`, `sincronizar-costos-cotizacion`, mas
+`GET cotizacion-planeacion` de solo lectura. El buscador de cotizaciones
+reutiliza el endpoint generico `/api/v1/cotizaciones/?estado=APROBADA&
+search=` — sin selector nuevo (la Fase 4 del plan ya lo permitia si la
+arquitectura existente alcanzaba).
+
+"Responsable Técnico (Nómina)" se retiro del formulario de Editar Proyecto
+(UI + payload) — `responsable_tecnico_id/_nombre` se mantienen en el
+modelo/backend por compatibilidad historica, simplemente ya no se envian
+desde `proyectos_editor.js`.
+
+Migracion de datos historicos: `manage.py backfill_proyecto_cotizacion_
+desde_factura` (`--dry-run` disponible) resuelve `Proyecto.cotizacion`
+desde `factura_costo.cotizacion_uuid` para Proyectos existentes. Ejecutado
+real contra los 3 tenants: 1 migrado (`admin`), 1 omitido con motivo
+explicito (`home`, Factura sin cotizacion vinculada) — nunca corrige
+silenciosamente un caso no migrable.
+
+## Ejecucion (Fase 3): Gastos No Facturables, Control de Tiempo y Tareas (2026-10-05)
+
+`PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES.md`: `pane-
+step-3` deja de mostrar el panel financiero (Valor Contrato/utilidad/
+margen -- ese bloque sigue existiendo, pero se retiro de la vista
+operativa de Ejecucion; permanece intacto en `pane-step-4` Cierre, que es
+donde si corresponde). En su lugar:
+
+- **Control de Tiempo**: `calcular_ejecucion_tiempo()` (`services/
+  business_service.py`) deriva `dias_planificados`/`dias_transcurridos`/
+  `dias_restantes`/`estado_cronograma` (`SIN_FECHAS`/`FINALIZADO`/
+  `ATRASADO`/`POR_VENCER`/`EN_FECHA`) de `fecha_inicio`/
+  `fecha_fin_estimada` -- SSoT unica, sin campos de fecha nuevos, sin
+  duplicar en JS.
+- **Gastos No Facturables**: `DocumentoSoporte.facturable` (nuevo campo en
+  Gastos, migracion `0024_documentosoporte_facturable`, `default=False`
+  deliberado -- el historico no se puede inferir retroactivamente).
+  `GastosProyectoService` (`services/gastos_proyecto_service.py`, solo
+  lectura, Pull Model puro) alimenta `GET .../gastos-no-facturables/`
+  filtrando `DocumentoSelector.get_by_proyecto(facturable=False)`. El
+  bloque se oculta por completo cuando no hay registros (`visible:
+  count > 0`), nunca muestra una tabla vacia.
+- **Deteccion de tareas atrasadas**: `TareasDiariasBusinessService.
+  esta_atrasada()`/`dias_atraso()` (`services/tareas_service.py`) es la
+  SSoT unica del criterio `fecha_fin < hoy AND estado NOT IN (COMPLETADA,
+  CANCELADA)`. `TareaDiariaSerializer` expone `atrasada`/`dias_atraso`
+  (read-only, calculados); el frontend (`proyectos_editor.js`) solo pinta
+  el badge "⚠ ATRASADA · vencio hace N dias", nunca recalcula la regla.
+- **Filtros de tareas + avance**: filtro client-side (dataset ya cargado,
+  sin endpoint nuevo) por Estado/Prioridad/Periodo en el timeline de
+  Tareas Diarias. El indicador "Avance de tareas" (`COMPLETADAS /
+  tareas_activas(≠CANCELADA) * 100`, 0% si no hay activas) es un
+  indicador operativo aparte -- no reemplaza `Proyecto.porcentaje_avance`.
+  El markup de estos controles (botones de Estado + badge de avance) ya
+  existia en `offcanvas_form.html` de una iteracion previa sin JS que los
+  conectara -- deuda encontrada y cerrada en la misma mision.
+
+**Bugs reales corregidos en la misma sesion** (sin ejecutar pytest, solo
+`py_compile`/`node --check` + revision manual de los services que
+retornan la instancia):
+
+- `ItemPresupuestoViewSet.update()`, `TareaDiariaViewSet.perform_update()`
+  y `TareaCortaViewSet.perform_update()` (`api/viewsets.py`) no
+  reasignaban `serializer.instance` al objeto que devuelve el service.
+  El cambio si quedaba persistido en BD (el service hace su propio
+  `self.get_object()` y `.save()`), pero `UpdateModelMixin.update()` (DRF)
+  serializaba la instancia ORIGINAL -- el cliente HTTP recibia el PATCH
+  con los datos viejos. Los 3 corregidos al mismo patron:
+  `serializer.instance = Service.actualizar_x(...)`.
+- `prompt()` nativo del navegador en `proyectos_editor.js::
+  mostrarMenuEstado()` (cambio de estado de Tareas Diarias) --
+  reemplazado por un dropdown Bootstrap que llama `cambiarEstado()`
+  directo contra `POST .../cambiar-estado/` (SSoT de transicion sin
+  cambios).
+
+*Auditoría actualizada el 2026-10-05 | SINTEL v3.12.0 — Status: PRODUCTION READY ✅*

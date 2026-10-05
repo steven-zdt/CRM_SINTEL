@@ -67,9 +67,13 @@
 
         // Phase-based field cleanup: remove responsable fields that are empty
         // (prevents "invalid integer" validation errors for unselected responsables)
+        // PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_PRESUPUESTO Fase 22/23:
+        // responsable_tecnico_* ya no tiene input en el formulario -- FormData
+        // simplemente no lo incluye (no hace falta borrarlo explicitamente),
+        // pero se retira de esta lista por higiene (el backend lo conserva
+        // por compatibilidad historica, solo deja de enviarse desde aqui).
         const responsableFields = [
             'responsable_comercial_id', 'responsable_comercial_nombre',
-            'responsable_tecnico_id', 'responsable_tecnico_nombre',
             'responsable_operativo_id', 'responsable_operativo_nombre',
             'responsable_administrativo_id', 'responsable_administrativo_nombre',
         ];
@@ -293,13 +297,11 @@
         if (stepIdx === 0 && !currentProyecto) {
             const responsableSelects = [
                 'proyecto-responsable-comercial-select',
-                'proyecto-responsable-tecnico-select',
                 'proyecto-responsable-operativo-select',
                 'proyecto-responsable-administrativo-select',
             ];
             const responsableFields = [
                 'proyecto-responsable-comercial-id', 'proyecto-responsable-comercial-nombre',
-                'proyecto-responsable-tecnico-id', 'proyecto-responsable-tecnico-nombre',
                 'proyecto-responsable-operativo-id', 'proyecto-responsable-operativo-nombre',
                 'proyecto-responsable-administrativo-id', 'proyecto-responsable-administrativo-nombre',
             ];
@@ -606,6 +608,11 @@
         if (currentProyecto?.uuid) {
             const enCierre = currentProyecto.fase_actual === 'CIERRE';
             w.Sintel.ProyectosPresupuesto.init(currentProyecto.uuid, enCierre);
+        }
+
+        // 1.55. Cotización de Planeación (PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_PRESUPUESTO - Fase 2)
+        if (currentProyecto?.uuid) {
+            w.Sintel.ProyectosCotizacionPlaneacion.init(currentProyecto.uuid);
         }
 
         // 1.6. Tareas Diarias (v3.5.3 - Fase 3)
@@ -945,7 +952,6 @@
 
         syncSelectInitial('proyecto-cliente-select', currentProyecto.cliente_id);
         syncSelectInitial('proyecto-responsable-comercial-select', currentProyecto.responsable_comercial_id);
-        syncSelectInitial('proyecto-responsable-tecnico-select', currentProyecto.responsable_tecnico_id);
         syncSelectInitial('proyecto-responsable-operativo-select', currentProyecto.responsable_operativo_id);
         syncSelectInitial('proyecto-responsable-administrativo-select', currentProyecto.responsable_administrativo_id);
 
@@ -1097,7 +1103,6 @@
 
         // Responsables por fases
         setupSelectorSync('proyecto-responsable-comercial-select', 'proyecto-responsable-comercial-id', 'proyecto-responsable-comercial-nombre');
-        setupSelectorSync('proyecto-responsable-tecnico-select', 'proyecto-responsable-tecnico-id', 'proyecto-responsable-tecnico-nombre');
         setupSelectorSync('proyecto-responsable-operativo-select', 'proyecto-responsable-operativo-id', 'proyecto-responsable-operativo-nombre');
         setupSelectorSync('proyecto-responsable-administrativo-select', 'proyecto-responsable-administrativo-id', 'proyecto-responsable-administrativo-nombre');
 
@@ -1256,8 +1261,14 @@
         const offcanvasEl = d.querySelector('#offcanvas-proyecto');
         if (offcanvasEl && !presupuestoListenersInitialized) {
             // Click delegado: Presupuesto agregar botón (ejecuta solo UNA VEZ globalmente)
+            // [FIX] el boton solo contiene un <i> (icono bi-plus) -- un click
+            // sobre el icono (100% del area visible del boton) pone
+            // e.target = <i>, nunca el <button> con el id, asi que
+            // `e.target?.id === ...` nunca coincidia (bug real reportado:
+            // el "+" no agregaba nada). `.closest()` matchea el click tanto
+            // sobre el boton como sobre cualquier hijo suyo (el icono).
             offcanvasEl.addEventListener('click', (e) => {
-                if (e.target?.id === 'btn-agregar-presupuesto') {
+                if (e.target?.closest?.('#btn-agregar-presupuesto')) {
                     e.preventDefault();
                     e.stopImmediatePropagation();
                     w.Sintel.ProyectosPresupuesto.agregar();
@@ -1273,8 +1284,11 @@
             });
 
             // Click delegado: Tareas Diarias agregar botón
+            // [FIX] mismo bug que btn-agregar-presupuesto arriba -- el
+            // icono <i class="bi bi-plus"> dentro del boton hacia que un
+            // click sobre el icono nunca coincidiera con el id exacto.
             offcanvasEl.addEventListener('click', (e) => {
-                if (e.target?.id === 'btn-agregar-tarea') {
+                if (e.target?.closest?.('#btn-agregar-tarea')) {
                     e.preventDefault();
                     e.stopImmediatePropagation();
                     w.Sintel.TareasDiarias.agregar();
@@ -1438,7 +1452,7 @@
             if (this._items.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-3">
+                        <td colspan="7" class="text-center text-muted py-3">
                             <small><i class="bi bi-info-circle me-1"></i>Sin ítems aún. Agrega costos planeados.</small>
                         </td>
                     </tr>
@@ -1449,6 +1463,18 @@
             let html = '';
             this._items.forEach(item => {
                 const categDisplay = item.categoria_display || item.categoria;
+                // El Desglose de Costos Planeados es editable/borrable
+                // libremente de forma manual por defecto, sin importar el
+                // origen (MANUAL o COTIZACION) -- decision explicita del
+                // usuario, reemplaza la restriccion original de "item de
+                // cotización = solo sincronizable". "Sincronizar costos de
+                // cotización" sigue siendo solo una conveniencia opcional:
+                // si se borra una línea sincronizada y se vuelve a
+                // sincronizar, se re-crea desde la cotización (esperado).
+                const esCotizacion = item.origen === 'COTIZACION';
+                const origenBadge = esCotizacion
+                    ? '<span class="badge bg-info-subtle text-info-emphasis" title="Creado por Sincronizar costos de cotización"><i class="bi bi-arrow-repeat"></i> Cotización</span>'
+                    : '<span class="badge bg-secondary-subtle text-secondary-emphasis">Manual</span>';
                 const btnEliminar = enCierre ? '' : `
                     <button type="button" class="btn btn-xs btn-outline-danger"
                             onclick="window.Sintel.ProyectosPresupuesto.eliminar('${item.uuid}')"
@@ -1458,6 +1484,7 @@
                 `;
                 html += `
                     <tr data-uuid="${item.uuid}">
+                        <td>${origenBadge}</td>
                         <td>${categDisplay}</td>
                         <td><small>${item.descripcion || '—'}</small></td>
                         <td style="text-align: center;"><small>${item.cantidad}</small></td>
@@ -1554,6 +1581,200 @@
 
     // ============================================================================
     // FIN MÓDULO PRESUPUESTO
+    // ============================================================================
+
+    // ============================================================================
+    // MÓDULO: Cotización de Planeación
+    // (PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_PRESUPUESTO)
+    // ============================================================================
+    const ProyectosCotizacionPlaneacion = {
+        _proyectoUuid: null,
+
+        async init(proyectoUuid) {
+            if (!proyectoUuid) return;
+            this._proyectoUuid = proyectoUuid;
+            this._bindEvents();
+
+            const resp = await w.proyectosAPI.cotizacionPlaneacion.get(proyectoUuid);
+            if (!resp.ok) {
+                console.error(`${MOD} Error al cargar cotizacion de planeacion:`, resp);
+                this._render(null);
+                return;
+            }
+            this._render(resp.data);
+        },
+
+        _render(data) {
+            const sinVincular = d.getElementById('cotizacion-sin-vincular');
+            const vinculada = d.getElementById('cotizacion-vinculada');
+            if (!sinVincular || !vinculada) return;
+
+            if (!data || !data.cotizacion) {
+                sinVincular.classList.remove('d-none');
+                vinculada.classList.add('d-none');
+                return;
+            }
+
+            sinVincular.classList.add('d-none');
+            vinculada.classList.remove('d-none');
+
+            const cot = data.cotizacion;
+            const setText = (id, text) => { const el = d.getElementById(id); if (el) el.textContent = text; };
+            setText('cot-plan-numero', cot.numero || '—');
+            setText('cot-plan-cliente', `Cliente: ${cot.cliente || '—'}`);
+            setText('cot-plan-estado', cot.estado || '—');
+            setText('cot-plan-fecha', cot.fecha_emision ? `Fecha: ${cot.fecha_emision}` : '');
+            setText('cot-plan-valor-antes-iva', w.proyectosAPI.formatCurrency(cot.valor_antes_iva));
+
+            const r = data.resumen || {};
+            setText('cot-plan-mo-cotizado', w.proyectosAPI.formatCurrency(r.mano_obra && r.mano_obra.cotizado));
+            setText('cot-plan-mo-costobase', w.proyectosAPI.formatCurrency(r.mano_obra && r.mano_obra.costo_base));
+            setText('cot-plan-mat-cotizado', w.proyectosAPI.formatCurrency(r.materiales && r.materiales.cotizado));
+            setText('cot-plan-mat-costobase', w.proyectosAPI.formatCurrency(r.materiales && r.materiales.costo_base));
+            setText('cot-plan-eq-cotizado', w.proyectosAPI.formatCurrency(r.equipos && r.equipos.cotizado));
+            setText('cot-plan-eq-costobase', w.proyectosAPI.formatCurrency(r.equipos && r.equipos.costo_base));
+        },
+
+        _bindEvents() {
+            const btnToggle = d.getElementById('btn-vincular-cotizacion');
+            const buscador = d.getElementById('cotizacion-buscador');
+            const searchInput = d.getElementById('cotizacion-search');
+            const suggestions = d.getElementById('cotizacion-suggestions');
+            const btnDesvincular = d.getElementById('btn-desvincular-cotizacion');
+            const btnSincronizar = d.getElementById('btn-sincronizar-cotizacion');
+
+            if (btnToggle && buscador && searchInput && suggestions && !searchInput.dataset.cotPlanBound) {
+                searchInput.dataset.cotPlanBound = 'true';
+
+                btnToggle.addEventListener('click', async () => {
+                    buscador.classList.toggle('d-none');
+                    if (!buscador.classList.contains('d-none')) {
+                        searchInput.focus();
+                        await this._buscar('');
+                    }
+                });
+
+                let debounceTimer;
+                searchInput.addEventListener('input', (e) => {
+                    clearTimeout(debounceTimer);
+                    const query = e.target.value.trim();
+                    debounceTimer = setTimeout(() => this._buscar(query), 300);
+                });
+
+                d.addEventListener('click', (e) => {
+                    if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) {
+                        suggestions.classList.add('d-none');
+                    }
+                });
+            }
+
+            if (btnDesvincular && !btnDesvincular.dataset.cotPlanBound) {
+                btnDesvincular.dataset.cotPlanBound = 'true';
+                btnDesvincular.addEventListener('click', () => this.desvincular());
+            }
+
+            if (btnSincronizar && !btnSincronizar.dataset.cotPlanBound) {
+                btnSincronizar.dataset.cotPlanBound = 'true';
+                btnSincronizar.addEventListener('click', () => this.sincronizar());
+            }
+        },
+
+        async _buscar(query) {
+            const suggestions = d.getElementById('cotizacion-suggestions');
+            if (!suggestions) return;
+            const url = w.proyectosAPI.cotizacionPlaneacion.buscarAprobadas(query);
+            const resp = await w.Sintel.Core.Http.request('GET', url);
+            const items = resp.ok ? (resp.data.results || resp.data || []) : [];
+            this._renderSuggestions(items, suggestions);
+        },
+
+        _renderSuggestions(items, container) {
+            if (items.length === 0) {
+                container.innerHTML = '<div class="list-group-item small text-muted">No se encontraron cotizaciones aprobadas</div>';
+            } else {
+                container.innerHTML = items.map(c => `
+                    <button type="button" class="list-group-item list-group-item-action small py-2" data-uuid="${c.uuid}">
+                        <div class="d-flex justify-content-between">
+                            <span><strong>${c.numero_cotizacion || ''}</strong> — ${c.cliente_razon_social || ''}</span>
+                            <span>${w.proyectosAPI.formatCurrency(c.total_con_impuestos)}</span>
+                        </div>
+                        <small class="text-muted">Fecha: ${c.fecha_emision || '—'}</small>
+                    </button>`).join('');
+            }
+            container.classList.remove('d-none');
+            container.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', () => this.vincular(btn.dataset.uuid));
+            });
+        },
+
+        async vincular(cotizacionUuid, confirmarReemplazo = false) {
+            const resp = await w.proyectosAPI.cotizacionPlaneacion.vincular(this._proyectoUuid, cotizacionUuid, confirmarReemplazo);
+            if (!resp.ok) {
+                // Fase 19 del plan: reemplazar una cotizacion ya vinculada
+                // exige confirmacion explicita del usuario, nunca silenciosa.
+                if (resp.data && resp.data.error === 'requiere_confirmacion_reemplazo') {
+                    const confirmar = await w.UIManager?.confirm(resp.data.message);
+                    if (confirmar) {
+                        await this.vincular(cotizacionUuid, true);
+                    }
+                    return;
+                }
+                w.UIManager?.handleError(resp, 'Error al vincular la cotización');
+                return;
+            }
+            w.SintelFeedback?.success('Cotización vinculada correctamente al proyecto.');
+            d.getElementById('cotizacion-buscador')?.classList.add('d-none');
+            const searchInput = d.getElementById('cotizacion-search');
+            if (searchInput) searchInput.value = '';
+            // El vinculo NUNCA sincroniza automaticamente (Fase 11 del plan)
+            // -- solo refresca el panel de cotizacion/recursos; el
+            // presupuesto se actualiza al pulsar "Sincronizar costos de
+            // cotización" explicitamente.
+            await this.init(this._proyectoUuid);
+        },
+
+        async desvincular() {
+            if (!(await w.UIManager?.confirm('¿Desvincular la cotización de este proyecto? El presupuesto ya sincronizado se conserva como histórico.'))) return;
+            const resp = await w.proyectosAPI.cotizacionPlaneacion.desvincular(this._proyectoUuid);
+            if (!resp.ok) {
+                w.UIManager?.handleError(resp, 'Error al desvincular la cotización');
+                return;
+            }
+            w.SintelFeedback?.success('Cotización desvinculada del proyecto.');
+            await this.init(this._proyectoUuid);
+        },
+
+        async sincronizar() {
+            const resp = await w.proyectosAPI.cotizacionPlaneacion.sincronizar(this._proyectoUuid);
+            if (!resp.ok) {
+                w.UIManager?.handleError(resp, 'Error al sincronizar los costos de la cotización');
+                return;
+            }
+            const r = resp.data;
+            w.SintelFeedback?.success(
+                `Sincronizado: ${r.items_creados} creados, ${r.items_actualizados} actualizados, ${r.items_eliminados} eliminados ` +
+                `(${r.items_manuales_preservados} ítems manuales preservados).`
+            );
+            const ultimaSync = d.getElementById('cot-plan-ultima-sync');
+            if (ultimaSync) {
+                const ahora = new Date().toLocaleString('es-CO');
+                ultimaSync.textContent =
+                    `Última sincronización: ${ahora} — ${r.items_creados + r.items_actualizados} líneas sincronizadas, ` +
+                    `${r.items_manuales_preservados} manuales preservadas.`;
+            }
+            // Refrescar presupuesto (tabla + resumen) y el proyecto completo
+            // (KPIs costo_planeado_total/utilidad_planeada/margen_planeado,
+            // Fase 31: JavaScript nunca recalcula estos, solo presenta lo
+            // que ya devolvio el backend).
+            await w.Sintel.ProyectosPresupuesto.init(this._proyectoUuid, currentProyecto && currentProyecto.fase_actual === 'CIERRE');
+            await refrescarProyectoActual();
+        }
+    };
+
+    w.Sintel.ProyectosCotizacionPlaneacion = ProyectosCotizacionPlaneacion;
+
+    // ============================================================================
+    // FIN MÓDULO Cotización de Planeación
     // ============================================================================
 
     // ============================================================================
@@ -1881,10 +2102,17 @@
     const TareasDiarias = {
         _tareas: [],
         _proyectoUuid: null,
+        _enCierre: false,
+        // PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES
+        // Seccion 21: filtros sobre el dataset ya cargado, sin tocar el
+        // contrato de la API (misma lista que devuelve tareasDiarias.list()).
+        _filtros: { estado: 'TODAS', prioridad: 'TODAS', desde: '', hasta: '' },
+        _filtrosInicializados: false,
 
         async init(proyectoUuid, proyecto, enCierre) {
             if (!proyectoUuid || !proyecto) return;
             this._proyectoUuid = proyectoUuid;
+            this._enCierre = !!enCierre;
 
             // Mostrar período del proyecto
             const periodoEl = d.getElementById('tareas-periodo-display');
@@ -1903,13 +2131,89 @@
                 this._tareas = resp.data.results || resp.data || [];
             }
 
-            this._render(enCierre);
+            this._bindFiltros();
+            this._render(this._enCierre);
             this._refreshResumen();
+            this._actualizarAvance();
+        },
+
+        // Seccion 21: filtros Estado/Prioridad/Periodo -- se enlazan una sola
+        // vez (flag), mismo patron anti-doble-listener que ProyectosPresupuesto.
+        _bindFiltros() {
+            if (this._filtrosInicializados) return;
+            this._filtrosInicializados = true;
+
+            const grupoEstado = d.getElementById('tareas-filtro-estado');
+            grupoEstado?.addEventListener('click', (ev) => {
+                const btn = ev.target.closest('button[data-filtro]');
+                if (!btn) return;
+                grupoEstado.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this._filtros.estado = btn.dataset.filtro;
+                this._render(this._enCierre);
+            });
+
+            d.getElementById('tareas-filtro-prioridad')?.addEventListener('change', (ev) => {
+                this._filtros.prioridad = ev.target.value;
+                this._render(this._enCierre);
+            });
+
+            d.getElementById('tareas-filtro-periodo-desde')?.addEventListener('change', (ev) => {
+                this._filtros.desde = ev.target.value;
+                this._render(this._enCierre);
+            });
+
+            d.getElementById('tareas-filtro-periodo-hasta')?.addEventListener('change', (ev) => {
+                this._filtros.hasta = ev.target.value;
+                this._render(this._enCierre);
+            });
+
+            d.getElementById('btn-limpiar-filtros-tareas')?.addEventListener('click', () => {
+                this._filtros = { estado: 'TODAS', prioridad: 'TODAS', desde: '', hasta: '' };
+                grupoEstado?.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.filtro === 'TODAS'));
+                const selPrioridad = d.getElementById('tareas-filtro-prioridad');
+                if (selPrioridad) selPrioridad.value = 'TODAS';
+                const inpDesde = d.getElementById('tareas-filtro-periodo-desde');
+                if (inpDesde) inpDesde.value = '';
+                const inpHasta = d.getElementById('tareas-filtro-periodo-hasta');
+                if (inpHasta) inpHasta.value = '';
+                this._render(this._enCierre);
+            });
+        },
+
+        _aplicarFiltros() {
+            const { estado, prioridad, desde, hasta } = this._filtros;
+            return this._tareas.filter(tarea => {
+                if (estado !== 'TODAS' && tarea.estado !== estado) return false;
+                if (prioridad !== 'TODAS' && tarea.prioridad !== prioridad) return false;
+                // Periodo: la tarea coincide si su rango [fecha_inicio, fecha_fin]
+                // se superpone con el rango filtrado [desde, hasta].
+                if (desde && tarea.fecha_fin < desde) return false;
+                if (hasta && tarea.fecha_inicio > hasta) return false;
+                return true;
+            });
+        },
+
+        // Seccion 22: indicador operativo, siempre sobre el total de tareas
+        // (no se ve afectado por los filtros visuales) -- no reemplaza
+        // Proyecto.porcentaje_avance.
+        _actualizarAvance() {
+            const el = d.getElementById('tareas-avance-pct');
+            if (!el) return;
+            const activas = this._tareas.filter(t => t.estado !== 'CANCELADA');
+            if (activas.length === 0) {
+                el.textContent = '0%';
+                return;
+            }
+            const completadas = activas.filter(t => t.estado === 'COMPLETADA').length;
+            el.textContent = `${Math.round((completadas / activas.length) * 100)}%`;
         },
 
         _render(enCierre = false) {
             const container = d.getElementById('tareas-timeline-container');
             if (!container) return;
+
+            const tareasFiltradas = this._aplicarFiltros();
 
             if (this._tareas.length === 0) {
                 container.innerHTML = `
@@ -1921,9 +2225,19 @@
                 return;
             }
 
+            if (tareasFiltradas.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-funnel me-2"></i>
+                        <small>Ninguna tarea coincide con los filtros aplicados.</small>
+                    </div>
+                `;
+                return;
+            }
+
             // Agrupar por fecha_inicio
             const tareasAgrupadas = {};
-            this._tareas.forEach(tarea => {
+            tareasFiltradas.forEach(tarea => {
                 if (!tareasAgrupadas[tarea.fecha_inicio]) {
                     tareasAgrupadas[tarea.fecha_inicio] = [];
                 }
@@ -1944,11 +2258,20 @@
                     const estadoBadge = this._getEstadoBadge(tarea.estado);
                     const prioridadClase = this._getPrioridadClase(tarea.prioridad);
                     const btnCambiarEstado = enCierre ? '' : `
-                        <button type="button" class="btn btn-xs btn-outline-secondary"
-                                onclick="window.Sintel.TareasDiarias.mostrarMenuEstado('${tarea.uuid}')"
-                                title="Cambiar estado">
-                            <i class="bi bi-arrow-repeat"></i>
-                        </button>
+                        <div class="dropdown d-inline-block">
+                            <button type="button" class="btn btn-xs btn-outline-secondary dropdown-toggle"
+                                    data-bs-toggle="dropdown" aria-expanded="false" title="Cambiar estado">
+                                <i class="bi bi-arrow-repeat"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                ${['PENDIENTE', 'EN_PROCESO', 'COMPLETADA', 'CANCELADA'].map(estadoOpcion => `
+                                    <li><a class="dropdown-item" href="#"
+                                            onclick="window.Sintel.TareasDiarias.cambiarEstado('${tarea.uuid}', '${estadoOpcion}'); return false;">
+                                        ${this._getEstadoLabel(estadoOpcion)}
+                                    </a></li>
+                                `).join('')}
+                            </ul>
+                        </div>
                     `;
                     const btnEliminar = enCierre ? '' : `
                         <button type="button" class="btn btn-xs btn-outline-danger"
@@ -1961,6 +2284,14 @@
                     const rango = tarea.fecha_fin !== tarea.fecha_inicio
                         ? `${tarea.fecha_inicio} — ${tarea.fecha_fin}`
                         : tarea.fecha_inicio;
+                    // Seccion 23: `atrasada`/`dias_atraso` vienen calculados del
+                    // backend (TareasDiariasBusinessService.esta_atrasada) --
+                    // el frontend solo los pinta, nunca recalcula el criterio.
+                    const badgeAtrasada = tarea.atrasada
+                        ? `<span class="badge bg-danger-subtle text-danger border border-danger d-block mt-1">
+                               <i class="bi bi-exclamation-triangle-fill me-1"></i>ATRASADA · venció hace ${tarea.dias_atraso} día${tarea.dias_atraso === 1 ? '' : 's'}
+                           </span>`
+                        : '';
 
                     html += `
                         <div class="card mb-2 border-${prioridadClase} border-opacity-25" data-tarea-uuid="${tarea.uuid}">
@@ -1973,6 +2304,7 @@
                                         <small class="text-muted d-block mt-1">
                                             ${tarea.asignado_a ? `Asignado: ${tarea.asignado_a}` : 'Sin asignar'}
                                         </small>
+                                        ${badgeAtrasada}
                                     </div>
                                     <div class="text-end">
                                         ${estadoBadge}
@@ -2005,6 +2337,16 @@
             return badges[estado] || '<span class="badge bg-light text-dark">Desconocido</span>';
         },
 
+        _getEstadoLabel(estado) {
+            const labels = {
+                'PENDIENTE': 'Pendiente',
+                'EN_PROCESO': 'En Proceso',
+                'COMPLETADA': 'Completada',
+                'CANCELADA': 'Cancelada'
+            };
+            return labels[estado] || estado;
+        },
+
         _getPrioridadClase(prioridad) {
             const clases = {
                 'BAJA': 'info',
@@ -2012,16 +2354,6 @@
                 'ALTA': 'danger'
             };
             return clases[prioridad] || 'secondary';
-        },
-
-        mostrarMenuEstado(tareaId) {
-            const estados = ['PENDIENTE', 'EN_PROCESO', 'COMPLETADA', 'CANCELADA'];
-            const nuevoEstado = prompt('Nuevo estado:\n' + estados.join(', '), 'EN_PROCESO');
-            if (nuevoEstado && estados.includes(nuevoEstado)) {
-                this.cambiarEstado(tareaId, nuevoEstado);
-            } else if (nuevoEstado) {
-                w.SintelFeedback?.error('Estado inválido. Opciones: ' + estados.join(', '));
-            }
         },
 
         async cambiarEstado(tareaId, nuevoEstado) {

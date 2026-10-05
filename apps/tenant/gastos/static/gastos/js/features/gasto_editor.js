@@ -321,6 +321,7 @@
             total: parseFloat(form.querySelector('#total')?.value) || 0,
             movimiento_inventario_uuid: form.querySelector('#movimiento_inventario_uuid')?.value || null,
             proyecto_uuid: form.querySelector('#proyecto_uuid')?.value || null,
+            facturable: form.querySelector('#facturable')?.checked || false,
         };
     }
 

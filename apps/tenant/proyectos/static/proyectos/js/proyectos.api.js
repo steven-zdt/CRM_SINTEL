@@ -158,6 +158,44 @@
       }
     },
 
+    cotizacionPlaneacion: {
+      /** GET /api/v1/cotizaciones/?estado=APROBADA&search=<q> -- PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_PRESUPUESTO Fase 4/28.
+       *  Reutiliza el endpoint generico de Cotizaciones (ya soporta estado/search/cliente+paginacion) -- sin selector nuevo. */
+      buscarAprobadas: (q = '', limit = 20) => buildUrlWithParams('/api/v1/cotizaciones/', {
+        estado: 'APROBADA', search: q, page_size: limit
+      }),
+
+      /** GET /api/v1/proyectos/{uuid}/cotizacion-planeacion/ */
+      get: async (proyectoUuid) => {
+        console.log(`[${MOD}] cotizacionPlaneacion.get(${proyectoUuid})`);
+        if (!proyectoUuid) return { ok: false, status: 400, data: { detail: 'proyecto_uuid requerido' } };
+        return w.Sintel.Core.Http.request('GET', `${API_BASE}/${proyectoUuid}/cotizacion-planeacion/`);
+      },
+
+      /** POST /api/v1/proyectos/{uuid}/vincular-cotizacion/ */
+      vincular: async (proyectoUuid, cotizacionUuid, confirmarReemplazo = false) => {
+        console.log(`[${MOD}] cotizacionPlaneacion.vincular(${proyectoUuid}, ${cotizacionUuid})`);
+        if (!proyectoUuid || !cotizacionUuid) return { ok: false, status: 400, data: { detail: 'proyecto y cotizacion requeridos' } };
+        return w.Sintel.Core.Http.request('POST', `${API_BASE}/${proyectoUuid}/vincular-cotizacion/`, {
+          cotizacion_uuid: cotizacionUuid, confirmar_reemplazo: confirmarReemplazo
+        });
+      },
+
+      /** POST /api/v1/proyectos/{uuid}/desvincular-cotizacion/ */
+      desvincular: async (proyectoUuid) => {
+        console.log(`[${MOD}] cotizacionPlaneacion.desvincular(${proyectoUuid})`);
+        if (!proyectoUuid) return { ok: false, status: 400, data: { detail: 'proyecto_uuid requerido' } };
+        return w.Sintel.Core.Http.request('POST', `${API_BASE}/${proyectoUuid}/desvincular-cotizacion/`);
+      },
+
+      /** POST /api/v1/proyectos/{uuid}/sincronizar-costos-cotizacion/ */
+      sincronizar: async (proyectoUuid) => {
+        console.log(`[${MOD}] cotizacionPlaneacion.sincronizar(${proyectoUuid})`);
+        if (!proyectoUuid) return { ok: false, status: 400, data: { detail: 'proyecto_uuid requerido' } };
+        return w.Sintel.Core.Http.request('POST', `${API_BASE}/${proyectoUuid}/sincronizar-costos-cotizacion/`);
+      }
+    },
+
     ordenesCompra: {
       /** GET /api/v1/proyectos/{uuid}/ordenes-compra/ -- PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_OPCIONAL */
       list: async (proyectoUuid) => {

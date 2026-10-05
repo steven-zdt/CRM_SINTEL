@@ -49,6 +49,7 @@ DOCUMENTO_LIST_FIELDS = (
     "empresa_id",
     "movimiento_inventario_uuid",
     "proyecto_uuid",  # GASTOS_PROYECTOS_01
+    "facturable",  # PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES
     "sede_id",
     "sede__nombre",  # DT-SEDE-01: KPI por sede
 )
@@ -72,6 +73,7 @@ DOCUMENTO_DETAIL_FIELDS = (
     "proveedor_id",
     "movimiento_inventario_uuid",
     "proyecto_uuid",  # GASTOS_PROYECTOS_01
+    "facturable",  # PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES
     "sede_id",
     "sede__uuid",
     "sede__nombre",  # DT-SEDE-01
@@ -244,22 +246,30 @@ class DocumentoSelector:
         }
 
     @staticmethod
-    def get_by_proyecto(empresa_id: int, proyecto_uuid):
+    def get_by_proyecto(empresa_id: int, proyecto_uuid, facturable: bool = None):
         """
         Lista los DocumentoSoporte activos y no anulados asociados a un
         proyecto (GASTOS_PROYECTOS_01, Pull Model via UUID opaco).
 
         No incluye anulados/inactivos: son los mismos gastos que participan
         en calcular_costo_gastos() de Proyectos (misma regla de inclusion).
+
+        `facturable=None` (default) no filtra por el campo (comportamiento
+        historico, usado por el widget "Gastos del Proyecto"). Pasar
+        `facturable=False` es lo que usa el bloque de solo-lectura "Gastos No
+        Facturables" (PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_
+        FACTURABLES) para no duplicar query logic.
         """
+        qs = DocumentoSoporte.objects.filter(
+            empresa_id=empresa_id,
+            proyecto_uuid=proyecto_uuid,
+            activo=True,
+            anulado=False,
+        )
+        if facturable is not None:
+            qs = qs.filter(facturable=facturable)
         return (
-            DocumentoSoporte.objects.filter(
-                empresa_id=empresa_id,
-                proyecto_uuid=proyecto_uuid,
-                activo=True,
-                anulado=False,
-            )
-            .select_related("proveedor", "resolucion_dian")
+            qs.select_related("proveedor", "resolucion_dian")
             .only(
                 *DOCUMENTO_LIST_FIELDS,
                 "resolucion_dian_id",

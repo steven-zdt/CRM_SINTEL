@@ -9,6 +9,14 @@ ARQUITECTURA V2.40 (Zero-Coupling con otras apps de negocio):
 - [OK] Modelo Anemico: Solo estructura de datos. Toda validacion de IDs
      y calculos financieros viviran en services.py.
 -------------------------------------------------------------------
+NOTA (PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_PRESUPUESTO): el "unica
+dependencia externa" de arriba ya no es literal -- `factura_costo` y
+`servicio_asociado` son FKs reales preexistentes, y esta mision agrega
+`cotizacion` (FK real a tenant_cotizaciones.Cotizacion) como excepcion
+deliberada, documentada en el campo mismo. El principio de "no snapshot
+para todo" se mantiene para los demas vinculos (cliente, proveedor,
+responsables), que siguen siendo soft-reference.
+-------------------------------------------------------------------
 """
 
 import uuid as uuid_module
@@ -118,6 +126,32 @@ class Proyecto(SintelTenantBaseModel):
         max_length=50,
         blank=True,
         help_text=_("Snapshot del numero de la factura para evitar FK en listados"),
+    )
+
+    # --- COTIZACION (PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_PRESUPUESTO,
+    # Decision A): vinculo DIRECTO Proyecto -> Cotizacion, reemplaza como SSoT
+    # de Planeacion el vinculo indirecto historico Proyecto -> Factura ->
+    # cotizacion_uuid (factura_costo arriba, que se conserva solo por
+    # compatibilidad). Excepcion deliberada al principio Zero-Coupling del
+    # encabezado de este archivo -- el plan la pide explicitamente como FK
+    # real, no como soft-reference, por la misma razon que OrdenCompra.
+    # proyecto es FK real desde Compras: PROTECT evita que una Cotizacion
+    # usada como base de Planeacion se elimine por accidente. `unique=True`
+    # impone la regla "una Cotizacion APROBADA no puede ser la cotizacion
+    # principal de mas de un Proyecto" (Fase 1 del plan).
+    cotizacion = models.ForeignKey(
+        "tenant_cotizaciones.Cotizacion",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        unique=True,
+        related_name="proyecto_asociado",
+        verbose_name=_("Cotizacion"),
+        help_text=_(
+            "Cotizacion APROBADA vinculada como fuente de recursos/presupuesto "
+            "de la fase de Planeacion. Solo se asigna via las acciones "
+            "vincular-cotizacion/desvincular-cotizacion (nunca PATCH directo)."
+        ),
     )
 
     # --- ViNCULO CON INVENTARIO (Pull Model / DSV) ---
@@ -729,6 +763,35 @@ class ItemPresupuestoProyecto(SintelTenantBaseModel):
         help_text=_("cantidad x valor_unitario (calculado en service layer)"),
     )
 
+    # --- Trazabilidad de origen (PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_
+    # PRESUPUESTO, Fase 12/18): un item puede venir de captura manual o de
+    # la sincronizacion con la Cotizacion vinculada al Proyecto. Nunca se
+    # mezclan en el mismo registro -- `sincronizar_desde_cotizacion()`
+    # (presupuesto_service.py) hace upsert SOLO sobre origen=COTIZACION,
+    # dejando origen=MANUAL siempre intacto.
+    class Origen(models.TextChoices):
+        MANUAL = "MANUAL", _("Manual")
+        COTIZACION = "COTIZACION", _("Cotizacion")
+
+    origen = models.CharField(
+        _("Origen"),
+        max_length=20,
+        choices=Origen.choices,
+        default=Origen.MANUAL,
+        db_index=True,
+        help_text=_("MANUAL (captura directa) o COTIZACION (sincronizado)."),
+    )
+    # Soft reference (sin FK, mismo patron que requisicion_item_uuid en
+    # compras) al CotizacionItem origen -- solo tiene valor cuando
+    # origen=COTIZACION. Permite upsert idempotente por linea en la
+    # sincronizacion sin acoplar este modelo a CotizacionItem.
+    cotizacion_item_uuid = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=_("UUID del CotizacionItem origen cuando origen=COTIZACION."),
+    )
+
     class Meta:
         verbose_name = _("Item de Presupuesto")
         verbose_name_plural = _("items de Presupuesto")
@@ -737,6 +800,19 @@ class ItemPresupuestoProyecto(SintelTenantBaseModel):
             models.Index(fields=["proyecto"]),
             models.Index(fields=["empresa"]),
             models.Index(fields=["categoria"]),
+            models.Index(fields=["proyecto", "origen"]),
+        ]
+        constraints = [
+            # Idempotencia de la sincronizacion (Fase 13/19 del plan): nunca
+            # puede haber 2 items de presupuesto apuntando al mismo
+            # CotizacionItem dentro del mismo proyecto -- el upsert de
+            # sincronizar_desde_cotizacion() depende de esta unicidad para
+            # decidir UPDATE vs INSERT sin condicion de carrera.
+            models.UniqueConstraint(
+                fields=["proyecto", "cotizacion_item_uuid"],
+                condition=models.Q(cotizacion_item_uuid__isnull=False),
+                name="uniq_item_presupuesto_proyecto_cotizacion_item",
+            ),
         ]
 
     def __str__(self):

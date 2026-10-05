@@ -146,6 +146,54 @@ def calcular_indicadores_financieros(proyecto):
 
 
 # ==============================================================================
+# CONTROL DE TIEMPO (Fase 3 - Ejecucion)
+# ==============================================================================
+
+
+def calcular_ejecucion_tiempo(proyecto) -> dict:
+    """
+    Clasificacion operacional del cronograma del Proyecto (PLAN_PROYECTOS_
+    FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES, Seccion 16/40). SSoT
+    unica -- vive aqui, no se replica en JavaScript. Usa `fecha_inicio` y
+    `fecha_fin_estimada` (ya existentes en el modelo, no se agrega ningun
+    campo de fecha nuevo) y `porcentaje_avance` (Seccion 17: SSoT del avance,
+    no se crea un `porcentaje_ejecucion` adicional).
+    """
+    hoy = date.today()
+    fecha_inicio = proyecto.fecha_inicio
+    fecha_fin = proyecto.fecha_fin_estimada
+
+    if not fecha_inicio or not fecha_fin:
+        estado_cronograma = "SIN_FECHAS"
+        dias_planificados = None
+        dias_transcurridos = None
+        dias_restantes = None
+    else:
+        dias_planificados = max((fecha_fin - fecha_inicio).days + 1, 0)
+        dias_transcurridos = max((hoy - fecha_inicio).days + 1, 0)
+        dias_restantes = (fecha_fin - hoy).days
+
+        if proyecto.fase_actual == "CIERRE" or proyecto.estado_tarea == "COMPLETADO":
+            estado_cronograma = "FINALIZADO"
+        elif dias_restantes < 0:
+            estado_cronograma = "ATRASADO"
+        elif dias_restantes <= 7:
+            estado_cronograma = "POR_VENCER"
+        else:
+            estado_cronograma = "EN_FECHA"
+
+    return {
+        "fecha_inicio": fecha_inicio.isoformat() if fecha_inicio else None,
+        "fecha_fin_estimada": fecha_fin.isoformat() if fecha_fin else None,
+        "dias_planificados": dias_planificados,
+        "dias_transcurridos": dias_transcurridos,
+        "dias_restantes": dias_restantes,
+        "estado_cronograma": estado_cronograma,
+        "porcentaje_avance": proyecto.porcentaje_avance,
+    }
+
+
+# ==============================================================================
 # GENERACIoN DE CoDIGO uNICO
 # ==============================================================================
 

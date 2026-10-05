@@ -223,6 +223,20 @@ class DocumentoSoporte(SintelTenantBaseModel):
         help_text="Vinculacion opcional al Proyecto (Pull Model, UUID opaco)",
     )
 
+    # PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES: distingue
+    # gastos que NO se facturan al cliente (combustible, viaticos, imprevistos
+    # de obra) de los que si forman parte del valor cotizado/facturado.
+    # default=False deliberado: todo gasto historico pre-existente a esta
+    # migracion se asume NO facturable (el dato real -- si de verdad se
+    # facturo o no -- no se puede inferir retroactivamente desde Gastos; un
+    # usuario puede corregirlo manualmente caso por caso si hace falta).
+    facturable = models.BooleanField(
+        _("Facturable"),
+        default=False,
+        db_index=True,
+        help_text="Indica si este gasto se factura al cliente (impacta el valor cotizado) o es un costo interno no facturable.",
+    )
+
     adjunto = models.FileField(upload_to="documentos_soporte/%Y/%m/", blank=True, null=True)
     activo = models.BooleanField(default=True, db_index=True)
     anulado = models.BooleanField(default=False)

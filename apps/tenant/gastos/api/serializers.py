@@ -250,6 +250,9 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
     proyecto_uuid = serializers.UUIDField(required=False, allow_null=True)
     proyecto_codigo = serializers.SerializerMethodField()
 
+    # PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES
+    facturable = serializers.BooleanField(required=False)
+
     # DT-SEDE-01
     sede_nombre = serializers.CharField(source="sede.nombre", read_only=True, allow_null=True)
 
@@ -290,6 +293,7 @@ class DocumentoSoporteListSerializer(serializers.ModelSerializer):
             "movimiento_referencia",
             "proyecto_uuid",  # GASTOS_PROYECTOS_01
             "proyecto_codigo",  # GASTOS_PROYECTOS_01
+            "facturable",  # PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES
             "sede_nombre",  # DT-SEDE-01
         )
         read_only_fields = fields
@@ -334,6 +338,9 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
     proyecto_uuid = serializers.UUIDField(required=False, allow_null=True)
     proyecto_codigo = serializers.SerializerMethodField()
 
+    # PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES
+    facturable = serializers.BooleanField(required=False)
+
     def get_proyecto_codigo(self, obj):
         return obj.proyecto_codigo
 
@@ -376,10 +383,29 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             if proyecto_uuid:
                 from apps.tenant.proyectos.models import Proyecto
 
-                if not Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa_id).exists():
+                proyecto = Proyecto.objects.filter(
+                    uuid=proyecto_uuid, empresa_id=empresa_id
+                ).only("id", "sede_id").first()
+                if not proyecto:
                     raise serializers.ValidationError(
                         {"proyecto_uuid": "El proyecto no existe o no pertenece a esta empresa."}
                     )
+                # [OSF] mismo criterio NULL-safe de 'sede' arriba: si el
+                # proyecto tiene sede asignada, debe estar dentro del alcance
+                # organizacional del usuario; si no tiene sede (NULL), no se
+                # restringe (PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_
+                # NO_FACTURABLES Seccion 43).
+                if proyecto.sede_id:
+                    from apps.tenant.core.services.organizational_scope import (
+                        sede_esta_en_alcance,
+                    )
+
+                    if not sede_esta_en_alcance(proyecto.sede_id, self.context.get("request")):
+                        raise serializers.ValidationError(
+                            {
+                                "proyecto_uuid": "No tiene permiso para asociar este proyecto (fuera de su alcance organizacional)."
+                            }
+                        )
         return attrs
 
     class Meta:
@@ -416,6 +442,7 @@ class DocumentoSoporteDetailSerializer(serializers.ModelSerializer):
             "movimiento_referencia",
             "proyecto_uuid",  # GASTOS_PROYECTOS_01 (writable)
             "proyecto_codigo",  # GASTOS_PROYECTOS_01 (read-only)
+            "facturable",  # PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES (writable)
             "sede",
             "sede_nombre",
             "created_at",

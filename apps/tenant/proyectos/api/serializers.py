@@ -27,6 +27,7 @@ from apps.tenant.proyectos.models import (
 )
 from apps.tenant.proyectos.services.business_service import TRANSICIONES_VALIDAS_FASE
 from apps.tenant.proyectos.services.documentos_service import resolver_requisitos_transicion
+from apps.tenant.proyectos.services.tareas_service import TareasDiariasBusinessService
 
 try:
     from apps.tenant.facturas.services.business_service import (
@@ -335,6 +336,7 @@ class ItemPresupuestoSerializer(NormalizationMixin, serializers.ModelSerializer)
     """
 
     categoria_display = serializers.CharField(source="get_categoria_display", read_only=True)
+    origen_display = serializers.CharField(source="get_origen_display", read_only=True)
 
     class Meta:
         model = ItemPresupuestoProyecto
@@ -349,8 +351,24 @@ class ItemPresupuestoSerializer(NormalizationMixin, serializers.ModelSerializer)
             "cantidad",
             "valor_unitario",
             "subtotal",
+            "origen",
+            "origen_display",
+            "cotizacion_item_uuid",
         ]
-        read_only_fields = ["id", "uuid", "empresa_id", "subtotal"]
+        # origen/cotizacion_item_uuid: read-only aqui a proposito (Fase 12/18
+        # del plan) -- solo PresupuestoBusinessService.sincronizar_desde_
+        # cotizacion() los asigna (origen=COTIZACION); la creacion manual
+        # via este serializer siempre fuerza origen=MANUAL en el service
+        # layer (crear_item() descarta estos 2 campos si vienen en el
+        # payload). Nunca se exponen como escribibles por API.
+        read_only_fields = [
+            "id",
+            "uuid",
+            "empresa_id",
+            "subtotal",
+            "origen",
+            "cotizacion_item_uuid",
+        ]
 
     def validate(self, attrs):
         """Zero Trust: Normalizacion de datos."""
@@ -477,6 +495,29 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     movimiento_referencia = serializers.DictField(read_only=True, allow_null=True)
     cotizacion_info = serializers.SerializerMethodField()
 
+    # Cotizacion vinculada (PLAN_PROYECTOS_FASE_2_COTIZACION_RECURSOS_
+    # PRESUPUESTO, Fase 39): vinculo DIRECTO Proyecto->Cotizacion, SSoT de
+    # Planeacion (reemplaza a cotizacion_info, que la resolvia indirecto via
+    # Factura -- ese sigue existiendo por compatibilidad historica, sin
+    # tocar). SerializerMethodField (no PrimaryKeyRelatedField) a proposito:
+    # expone UUID, nunca el PK entero interno (AGENTS.md Seccion 25.1), y
+    # queda SIEMPRE read-only -- "cotizacion" nunca se asigna por PATCH
+    # directo (Decision/Fase 19: solo via vincular-cotizacion/
+    # desvincular-cotizacion/sincronizar-costos-cotizacion).
+    cotizacion = serializers.SerializerMethodField()
+    cotizacion_numero = serializers.SerializerMethodField()
+    cotizacion_estado = serializers.SerializerMethodField()
+    cotizacion_fecha = serializers.SerializerMethodField()
+    cotizacion_valor_antes_iva = serializers.SerializerMethodField()
+    cotizacion_recursos = serializers.SerializerMethodField()
+
+    # PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES: bloque
+    # "Control de Tiempo" (Seccion 16/40) y "Gastos No Facturables" (Seccion
+    # 10/42) de la Fase 3 -- SerializerMethodField porque son derivados
+    # calculados server-side, nunca replicados en JavaScript.
+    ejecucion_tiempo = serializers.SerializerMethodField()
+    gastos_no_facturables = serializers.SerializerMethodField()
+
     # Ciclo de Vida Controlado v4.0: checklist de gate documental resuelto
     # server-side, listo para que el frontend (siguiente pasada) lo pinte
     # sin reimplementar la logica de REQUISITOS_TRANSICION en JS.
@@ -538,8 +579,65 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
                 "id", "uuid", "nombre"
             )
 
+    def get_cotizacion(self, obj):
+        return str(obj.cotizacion.uuid) if obj.cotizacion_id else None
+
+    def get_cotizacion_numero(self, obj):
+        return obj.cotizacion.numero_cotizacion if obj.cotizacion_id else None
+
+    def get_cotizacion_estado(self, obj):
+        return obj.cotizacion.estado if obj.cotizacion_id else None
+
+    def get_cotizacion_fecha(self, obj):
+        if not obj.cotizacion_id or not obj.cotizacion.fecha_emision:
+            return None
+        return obj.cotizacion.fecha_emision.isoformat()
+
+    def _resumen_cotizacion_cached(self, obj):
+        """Memoiza el resumen en el propio `obj` dentro de esta pasada de
+        serializacion -- get_cotizacion_valor_antes_iva() y
+        get_cotizacion_recursos() lo piden por separado, nunca se calcula
+        2 veces para el mismo objeto (Zero Waste)."""
+        if not obj.cotizacion_id:
+            return None
+        if not hasattr(obj, "_cotizacion_resumen_cache"):
+            from ..services.cotizacion_planeacion_service import (
+                ProyectoCotizacionPlaneacionService,
+            )
+
+            obj._cotizacion_resumen_cache = ProyectoCotizacionPlaneacionService.obtener_resumen_cotizacion(
+                obj
+            )
+        return obj._cotizacion_resumen_cache
+
+    def get_cotizacion_valor_antes_iva(self, obj):
+        resumen = self._resumen_cotizacion_cached(obj)
+        return resumen["cotizacion"]["valor_antes_iva"] if resumen else None
+
+    def get_cotizacion_recursos(self, obj):
+        """Fase 39 del plan: resumen Mano de Obra/Materiales/Equipos +
+        detalle de items, vía ProyectoCotizacionPlaneacionService -- SSoT
+        unica, reutilizada tambien por el endpoint dedicado GET
+        .../cotizacion-planeacion/."""
+        resumen = self._resumen_cotizacion_cached(obj)
+        return resumen["resumen"] if resumen else None
+
+    def get_ejecucion_tiempo(self, obj):
+        from ..services import calcular_ejecucion_tiempo
+
+        return calcular_ejecucion_tiempo(obj)
+
+    def get_gastos_no_facturables(self, obj):
+        from ..services import GastosProyectoService
+
+        return GastosProyectoService.get_resumen_gastos_no_facturables(obj)
+
     def get_cotizacion_info(self, obj):
-        """Resuelve la cotizacion vinculada via Factura.cotizacion_uuid (Zero-Waste)."""
+        """Resuelve la cotizacion vinculada via Factura.cotizacion_uuid (Zero-Waste).
+
+        Mantenido por compatibilidad historica (Decision A del plan: ya NO
+        es la SSoT de Planeacion, ver `cotizacion`/`cotizacion_recursos`
+        arriba, que resuelven el vinculo DIRECTO Proyecto->Cotizacion)."""
         if not obj.factura_costo_id or _FacturaInterAppAPI is None:
             return None
         try:
@@ -801,6 +899,11 @@ class TareaDiariaSerializer(NormalizationMixin, serializers.ModelSerializer):
 
     estado_display = serializers.CharField(source="get_estado_display", read_only=True)
     prioridad_display = serializers.CharField(source="get_prioridad_display", read_only=True)
+    # PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES Seccion
+    # 23: criterio de "atrasada" vive unicamente en
+    # TareasDiariasBusinessService, nunca se recalcula en JavaScript.
+    atrasada = serializers.SerializerMethodField()
+    dias_atraso = serializers.SerializerMethodField()
 
     class Meta:
         model = TareaDiariaProyecto
@@ -821,9 +924,25 @@ class TareaDiariaSerializer(NormalizationMixin, serializers.ModelSerializer):
             "avance",
             "bloqueos",
             "incidencias",
+            "atrasada",
+            "dias_atraso",
             "created_at",
         ]
-        read_only_fields = ["id", "uuid", "estado_display", "prioridad_display", "created_at"]
+        read_only_fields = [
+            "id",
+            "uuid",
+            "estado_display",
+            "prioridad_display",
+            "atrasada",
+            "dias_atraso",
+            "created_at",
+        ]
+
+    def get_atrasada(self, obj):
+        return TareasDiariasBusinessService.esta_atrasada(obj)
+
+    def get_dias_atraso(self, obj):
+        return TareasDiariasBusinessService.dias_atraso(obj)
 
     def validate(self, attrs):
         """

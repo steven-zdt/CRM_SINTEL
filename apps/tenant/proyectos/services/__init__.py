@@ -12,10 +12,15 @@ from .business_service import (
     TareasCortasBusinessService,
     asignar_snapshot_cliente,
     asignar_snapshot_responsable,
+    calcular_ejecucion_tiempo,
     calcular_indicadores_financieros,
     cambiar_fase_proyecto,
     orchestrate_create_proyecto,
     orchestrate_update_proyecto,
+)
+from .cotizacion_planeacion_service import (
+    ProyectoCotizacionPlaneacionService,
+    mapear_tipo_item_a_recurso,
 )
 from .crud_service import (
     delete_asignacion,
@@ -36,6 +41,7 @@ from .documentos_service import (
     resolver_requisitos_transicion,
     validar_archivo,
 )
+from .gastos_proyecto_service import GastosProyectoService
 from .presupuesto_service import ITEM_FIELDS as PRESUPUESTO_ITEM_FIELDS
 from .presupuesto_service import PresupuestoBusinessService
 from .selectors import (
@@ -62,10 +68,13 @@ __all__ = [
     "TareasCortasBusinessService",
     "asignar_snapshot_cliente",
     "asignar_snapshot_responsable",
+    "calcular_ejecucion_tiempo",
     "calcular_indicadores_financieros",
     "cambiar_fase_proyecto",
     "orchestrate_create_proyecto",
     "orchestrate_update_proyecto",
+    "ProyectoCotizacionPlaneacionService",
+    "mapear_tipo_item_a_recurso",
     "delete_asignacion",
     "delete_pedido",
     "delete_proyecto",
@@ -81,6 +90,7 @@ __all__ = [
     "documentos_obligatorios_faltantes",
     "resolver_requisitos_transicion",
     "validar_archivo",
+    "GastosProyectoService",
     "PRESUPUESTO_ITEM_FIELDS",
     "PresupuestoBusinessService",
     "DETAIL_FIELDS",
