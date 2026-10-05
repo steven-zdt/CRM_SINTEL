@@ -1,7 +1,46 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.75.0
-**Ultima actualizacion:** 2026-10-05 (DOC-M68) — **PLAN_AJUSTE_CICLO_
+**Version:** 3.77.0
+**Ultima actualizacion:** 2026-10-05 (DOC-M70) — **Pase de validacion de
+documentacion** ("actualiza documentacion general, valida estado actual
+del proyecto"). Recuento directo sobre codigo real (Django app registry +
+conteo de archivos de migracion), la primera pasada completa desde
+DOC-M50 (2026-09-03): **modelos tenant 82 -> 96** (+14), **migraciones
+239 (227 tenant + 12 public, antes 200)**, **modelos publicos 19 -> 23**
+(+4, LLM Provider Hub en `console` nunca documentado), **apps tenant
+registradas 18 -> 20** (faltaban `approvals` y `compras.requisiciones`
+en el encabezado), **archivos de test 269 -> 318**. La deriva venia de
+multiples misiones ya cerradas (conciliacion bancaria, Cotizaciones v2,
+`CarteraNota`, LLM Provider Hub, Fases 1-3 de Proyectos) que nunca
+actualizaron las tablas de §2.1/§2.2/§12 de este documento. Tablas
+reescritas con el detalle real por app; ver §12 para la metodologia
+completa. Tambien absorbe el cierre documental de DOC-M69 (abajo).
+
+**Actualizacion previa:** 2026-10-05 (DOC-M69) — **PLAN_REESTRUCTURACION_
+FASE_3_EJECUCION_FASE_4_CIERRE completo.** Regla fundamental: "FASE 3 =
+OPERAR, FASE 4 = CONSOLIDAR Y FORMALIZAR". Bug real corregido en
+`ProyectoDetailSerializer.validate()`: un carve-out `CIERRE_ALLOWED_
+FIELDS` permitia seguir editando avance/estado/actas INCLUSO estando ya
+en fase CIERRE -- justo lo opuesto a "Cierre read-only"; ahora CIERRE
+rechaza cualquier escritura. Nuevo gate duro `EJECUCION -> CIERRE`
+(`ProyectoCierreGateService`, `cierre_service.py`): bloquea si
+`estado_tarea != COMPLETADO`, avance `< 100`, hay tareas abiertas, o
+faltan Acta de Entrega/Informe Final -- evaluado desde `cambiar_fase_
+proyecto()`, cubre PATCH generico y `avanzar-fase` por igual. `porcentaje_
+avance`/`estado_tarea` ahora solo editables en fase EJECUCION (antes sin
+restriccion). UI: inputs editables (avance, estado, actas) movidos de
+Step4 a Step3 (Fase 3 opera, Fase 4 consolida); Step4 reemplaza su antiguo
+formulario "Configuracion de Cierre" por un Resumen Final 100% read-only
+(Rentabilidad con SSoT real de Fase 1 -- valor vendido de facturas, no el
+valor de contrato aspiracional --, Tareas, Desglose Administrativo,
+Documentacion). Checklist "Listo para Cierre" en Step3 + nuevo endpoint
+`GET /api/v1/proyectos/{uuid}/cierre/` ("Closure Summary", read model
+puro que consolida Fases 1-3 sin duplicar ningun calculo). Verificado
+end-to-end en navegador real (Playwright, tenant `admin`). Ver `apps/
+tenant/proyectos/.agent/AUDITORIA_FLUJO_COMPLETO.md` §"v4.1.0" para el
+detalle completo.
+
+**Actualizacion previa:** 2026-10-05 (DOC-M68) — **PLAN_AJUSTE_CICLO_
 PROYECTOS_FASE_1_VIABILIDAD_APROBACION completo.** Reestructuracion del
 ciclo de vida de Proyectos: Fase 1 (Inicio) pasa de etapa informativa a
 gate economico real de Planeacion. Nuevo: Supervisor (snapshot, empleados
@@ -2585,37 +2624,37 @@ empresa.sintel.net.co →  tenant schema    →  urls_tenant.py
 | `apps/public/accounts/` | `accounts` | User, DeletionAudit | 2 | Modelo `User` global (AbstractUser), gestion de usuarios |
 | `apps/public/tenants/` | `tenants` | Client, Domain, TenantMembership, FailedTenantTask | 2 | Registro de tenants, dominios, invitaciones OTT |
 | `apps/public/impuestos/` | `impuestos` | TipoImpuesto, TarifaIVA, ConceptoRetencion, CodigoTributario, ActividadEconomica, DocumentoFuente, IngestaLog, NormaTributaria, ContribuyenteTipo, RegimenRenta, ResponsabilidadRUT, PerfilTributario | 1 | Catalogo DIAN, tarifas, normativas tributarias |
-| `apps/public/console/` | `console` | ConsoleActionLog | 4 | Consola admin: crear tenants, gestionar membresias, JWT bridge |
+| `apps/public/console/` | `console` | ConsoleActionLog, LLMProviderConfig, LLMModelConfig, LLMActiveConfig, LLMProviderAuditLog | 6 | Consola admin: crear tenants, gestionar membresias, JWT bridge. **[DOC-M70]** +4 modelos (`LLMProviderConfig`/`LLMModelConfig`/`LLMActiveConfig`/`LLMProviderAuditLog`, LLM Provider Hub, ver `project_llm_provider_hub` en memoria) |
 | `apps/public/core/` | `core` (public) | (sin modelos) | — | Middleware de resolucion de tenant, infraestructura compartida |
 | `apps/db_extensions/` | `db_extensions` | (sin modelos) | 1 | **[DOC-M49]** Extensiones de PostgreSQL database-wide. `0001_vector_extension` = `CREATE EXTENSION vector` via `migrate_schemas --shared`, con guard por schema (§8.7). Fuera de `apps/public/` a proposito |
 
-**Total public models: 19** — **[DOC-M5, corregido]** recuento anterior (17) subestimaba `impuestos` (12 modelos reales, no 11). Total migraciones public: 2+2+1+4+1 = **10** (**[DOC-M49]** +1 por `db_extensions.0001`).
+**Total public models: 23** — **[DOC-M70, recontado 2026-10-05 via Django app registry]** 19 -> 23 (+4, LLM Provider Hub en `console`, no documentado en una pasada anterior). Total migraciones public: 2+6+1+2+1 = **12** (`accounts` 2, `console` 6, `impuestos` 1, `tenants` 2, `db_extensions` 1 — `core` sin migraciones).
 
-### 2.2. Esquema Tenant (`TENANT_APPS`) — 18 apps registradas, 16 con modelos de negocio
+### 2.2. Esquema Tenant (`TENANT_APPS`) — 20 apps registradas, 18 con modelos de negocio
 
-**[DOC-M5, corregido 2026-08-09; DOC-M49]** `TENANT_APPS` (`config/settings.py`) tiene **18** entradas `apps.tenant.*`. El numero real: **16 apps con modelos de negocio concretos** (todas las filas de abajo excepto `core`, que solo aporta las clases base abstractas) + `core` + `landing` (sin `models.py`, ver §2.3) = 18 apps registradas. **[DOC-M49]** +1 (`ai_knowledge`, Vector Store del AI Engine — es una app de DATOS, ver §8.7).
+**[DOC-M70, recontado 2026-10-05 via Django app registry + conteo directo de archivos de migracion]** `TENANT_APPS` (`config/settings.py`) tiene **20** entradas `apps.tenant.*` (antes documentadas como 18 — faltaban `approvals` y `compras.requisiciones`, ya existentes desde DOC-M58/61 pero nunca reflejadas en este encabezado). **18 apps con modelos de negocio concretos** (todas las filas de abajo excepto `core`) + `core` (solo clases base abstractas) + `landing` (sin `models.py`, ver §2.3) = 20 apps registradas.
 
 | App | App Label | Modelos | Migraciones | Responsabilidad |
 |---|---|---|---|---|
 | `apps/tenant/core/` | `tenant_core`¹ | SintelTenantBaseModel, SedeAwareModel (ambas abstractas) | 0 | UI Shell, bridge cross-schema, onboarding, auth JWT |
 | `apps/tenant/empresa/` | `empresa` | Empresa, MailInboxConfig, Sede, Area | 9 | Datos fiscales, logo, sedes y areas del tenant |
 | `apps/tenant/perfil/` | `perfil` | Departamento, TenantProfile (+ RolTenant, AlcanceOrganizacional como `TextChoices`, no modelos) | 8 | Roles y perfiles de usuario dentro del tenant |
-| `apps/tenant/facturas/` | `facturas` | Factura, ItemFactura, NotaCredito, ItemNotaCredito, MailIngestionRun, MailInboxState, FacturaAnexos, FacturaImpuesto | 33 | Facturacion electronica DIAN (XML, envio, estados) |
-| `apps/tenant/contabilidad/` | `contabilidad` | CatalogoMaestroNIIF, CuentaContable, TipoComprobante, AsientoContable, MovimientoContable, PeriodoContable, ReglaContable, TarifaImpuesto, ConfiguracionRetenciones, Retencion, PlantillaContable, LineaPlantilla, ImpuestoDocumento | 16 | PUC NIIF, asientos, extractores Pull, agente IA, Motor de Plantillas |
-| `apps/tenant/gastos/` | `tenant_gastos`¹ | ResolucionDIAN, DocumentoSoporte | 22 | Gastos operativos, documentos soporte, retenciones |
-| `apps/tenant/inventario/` | `tenant_inventario`¹ | CategoriaItem, Producto, Servicio, ActivoFijo, MovimientoInventario, TrasladoInventario (F21), HistorialServicio (+ TimeStampedModel abstract) | 11 | Productos, servicios, activos fijos, Kardex unificado, traslado de stock entre sedes (F21) |
-| `apps/tenant/empleados/` | `tenant_empleados`¹ | Empleado, Contrato, Devengo, ResolucionDIAN, TransmisionNominaDIAN, LiquidacionPrestacion | 13 | Nomina colombiana, devengos, contratos, liquidaciones |
-| `apps/tenant/cotizaciones/` | `tenant_cotizaciones`¹ | Cotizacion, CotizacionItem (+ Producto y Servicio propios) | 5 | Cotizaciones comerciales, vinculacion con facturas |
-| `apps/tenant/clientes/` | `tenant_clientes`¹ | Cliente, ContactoCliente, Cartera | 8 | CRM basico, terceros clientes, cartera, retenciones |
-| `apps/tenant/proveedores/` | `tenant_proveedores`¹ | Proveedor, CuentasPagar, Representante | 18 | Terceros proveedores, cartera unificada, documentos soporte |
-| `apps/tenant/proyectos/` | `tenant_proyectos`¹ | Proyecto, AsignacionPersonal, PedidoProyecto, ItemPedido, ItemPresupuestoProyecto, TareaCorta, TareaDiariaProyecto | 20 | Gestion de proyectos, presupuesto, tareas cortas |
+| `apps/tenant/facturas/` | `facturas` | Factura, ItemFactura, MailIngestionRun, MailInboxState, **[DOC-M70]** DocumentProcessing, FacturaAnexos, NotaCredito, ItemNotaCredito, **[DOC-M70]** TransmisionFactura, FacturaImpuesto | 42 | Facturacion electronica DIAN (XML, envio, estados) |
+| `apps/tenant/contabilidad/` | `contabilidad` | CatalogoMaestroNIIF, CuentaContable, TipoComprobante, AsientoContable, MovimientoContable, PeriodoContable, ReglaContable, TarifaImpuesto, ConfiguracionRetenciones, Retencion, PlantillaContable, LineaPlantilla, ImpuestoDocumento | 17 | PUC NIIF, asientos, extractores Pull, agente IA, Motor de Plantillas |
+| `apps/tenant/gastos/` | `tenant_gastos`¹ | ResolucionDIAN, DocumentoSoporte | 24 | Gastos operativos, documentos soporte, retenciones |
+| `apps/tenant/inventario/` | `tenant_inventario`¹ | CategoriaItem, ActivoFijo, Producto, Servicio, MovimientoInventario, TrasladoInventario (F21), HistorialServicio (+ TimeStampedModel abstract) | 12 | Productos, servicios, activos fijos, Kardex unificado, traslado de stock entre sedes (F21) |
+| `apps/tenant/empleados/` | `tenant_empleados`¹ | Empleado, Contrato, Devengo, ResolucionDIAN, TransmisionNominaDIAN, LiquidacionPrestacion, PeriodoNomina (DOC-M41) | 16 | Nomina colombiana, devengos, contratos, liquidaciones |
+| `apps/tenant/cotizaciones/` | `tenant_cotizaciones`¹ | Producto, Servicio, Cotizacion, CotizacionItem, **[DOC-M70]** CotizacionEstadoConfig, CotizacionHistorialEstado, ConfiguracionCotizacion | 10 | Cotizaciones comerciales, vinculacion con facturas |
+| `apps/tenant/clientes/` | `tenant_clientes`¹ | Cliente, ContactoCliente, Cartera, **[DOC-M70]** CarteraNota | 10 | CRM basico, terceros clientes, cartera, retenciones |
+| `apps/tenant/proveedores/` | `tenant_proveedores`¹ | Proveedor, CuentasPagar, Representante | 19 | Terceros proveedores, cartera unificada, documentos soporte |
+| `apps/tenant/proyectos/` | `tenant_proyectos`¹ | Proyecto, **[DOC-M70]** DocumentoProyecto, HistorialFaseProyecto, **[DOC-M68]** ProyectoFacturaVenta, AsignacionPersonal, PedidoProyecto, ItemPedido, ItemPresupuestoProyecto, **[DOC-M68]** CotizacionCostoProyecto, InversionProyectoInicio, TareaDiariaProyecto, TareaCorta | 24 | Gestion de proyectos: Borrador -> Inicio (viabilidad/aprobacion, DOC-M68) -> Planeacion -> Ejecucion -> Cierre (consolidado read-only, DOC-M69) |
 | `apps/tenant/dashboard/` | `dashboard` | SnapshotMetricaDiaria | 3 | Dashboard ejecutivo, metricas consolidadas |
-| `apps/tenant/bancos/` | `bancos` | CuentaBancaria, ExtractoBancario, TransaccionBancaria | 5 | Estados de cuenta bancarios, conciliacion manual via UUID soft-references |
-| `apps/tenant/compras/` | `tenant_compras`¹ | PlantillaOrdenCompra, OrdenCompra (hereda `SedeAwareModel`, ver §3.2/ADR-003), ItemOrdenCompra, RecepcionCompra (F21, hereda `SedeAwareModel`), RecepcionCompraItem (F21), **[DOC-M61]** OrdenCompraRequisicion (N:N con Requisicion) | 12 | Ordenes de compra a proveedores + Recepcion de Compras -> Inventario (F21, ver `documentacion/F21_RECEPCION_INVENTARIO.md`) |
-| `apps/tenant/compras/requisiciones/` | `tenant_compras_requisiciones` | **[DOC-M58]** RequisicionCompra (hereda `SedeAwareModel`), RequisicionCompraItem, RequisicionDocumento, RequisicionCotizacion, RequisicionFactura, RequisicionHistorialEstado (append-only) | 1 | Expediente de abastecimiento previo a la Orden de Compra (submodulo propio de `compras`, ver DOC-M58 arriba) |
-| `apps/tenant/approvals/` | `tenant_approvals` | **[DOC-M61]** SolicitudAprobacion, SolicitudAprobacionHistorial (append-only) | 1 | Motor generico de Solicitudes de Aprobacion (registry explicito, sin GenericForeignKey). **[DOC-M64]** API en `/api/v1/dashboard/aprobaciones/` (solo lectura + workflow, ADMIN-only). **[DOC-M65]** Centro de Aprobaciones completo en Dashboard (banner/KPIs/bandeja/offcanvas de revision) -- ver `docs/approvals/APPROVALS_DESIGN.md` |
-| `apps/tenant/ventas/` | `tenant_ventas`¹ | ResolucionFacturacion, Venta, ItemVenta | 3 | Ordenes de venta y su puente hacia `facturas` (agregada 2026-06-17, ver `.agent/ARQUITECTURA_VENTAS.md`) |
-| `apps/tenant/ai_knowledge/` | `tenant_ai_knowledge`¹ | AIKnowledgeDocument, AIKnowledgeChunk | 2 | **[DOC-M49, POC]** Vector Store tenant-scoped del AI Engine: texto de origen troceado + embeddings (pgvector `vector(768)`). Solo datos — orquestacion en `apps/services/ai/`. Ver §8.7 |
+| `apps/tenant/bancos/` | `bancos` | CuentaBancaria, ExtractoBancario, TransaccionBancaria, **[DOC-M70]** MovimientoBancarioAplicacion | 9 | Estados de cuenta bancarios, conciliacion manual via UUID soft-references |
+| `apps/tenant/compras/` | `tenant_compras`¹ | PlantillaOrdenCompra, OrdenCompra (hereda `SedeAwareModel`, ver §3.2/ADR-003), ItemOrdenCompra, RecepcionCompra (F21, hereda `SedeAwareModel`), RecepcionCompraItem (F21), OrdenCompraRequisicion (N:N con Requisicion, DOC-M61) | 13 | Ordenes de compra a proveedores + Recepcion de Compras -> Inventario (F21, ver `documentacion/F21_RECEPCION_INVENTARIO.md`) |
+| `apps/tenant/compras/requisiciones/` | `tenant_compras_requisiciones` | RequisicionCompra (hereda `SedeAwareModel`), RequisicionCompraItem, RequisicionDocumento, RequisicionCotizacion, RequisicionFactura, RequisicionHistorialEstado (append-only) (DOC-M58) | 2 | Expediente de abastecimiento previo a la Orden de Compra (submodulo propio de `compras`) |
+| `apps/tenant/approvals/` | `tenant_approvals` | SolicitudAprobacion, SolicitudAprobacionHistorial (append-only) (DOC-M61) | 2 | Motor generico de Solicitudes de Aprobacion (registry explicito, sin GenericForeignKey) -- registry incluye `REQUISICION_COMPRA` (DOC-M61), `PROYECTO_INICIO` (DOC-M68). API en `/api/v1/dashboard/aprobaciones/` (DOC-M64). Centro de Aprobaciones completo en Dashboard (DOC-M65) -- ver `docs/approvals/APPROVALS_DESIGN.md` |
+| `apps/tenant/ventas/` | `tenant_ventas`¹ | ResolucionFacturacion, Venta, ItemVenta | 4 | Ordenes de venta y su puente hacia `facturas` (agregada 2026-06-17, ver `.agent/ARQUITECTURA_VENTAS.md`) |
+| `apps/tenant/ai_knowledge/` | `tenant_ai_knowledge`¹ | AIKnowledgeDocument, AIKnowledgeChunk, **[DOC-M70]** AIKnowledgeSettings | 3 | Vector Store tenant-scoped del AI Engine: texto de origen troceado + embeddings (pgvector `vector(768)`). Solo datos — orquestacion en `apps/services/ai/`. Ver §8.7 |
 
 **¹ [DOC-M48, 2026-09-01] `DOCUMENTATION_DRIFT` corregido:** esta
 columna documentaba el App Label sin el prefijo `tenant_` para 10 de
@@ -2636,8 +2675,8 @@ con lo que este documento afirmaba.
 
 **Nota (`ResolucionDIAN` duplicado):** `gastos` y `empleados` tienen cada una su propia clase `ResolucionDIAN` — son dos modelos distintos, no un bug de referencia cruzada (hallazgo confirmado durante la auditoria EKG 2026-08-07, ver `documentacion/INFORME_FINAL_EKG_GOBERNANZA_2026-08-07.md` §4.1).
 
-**Total tenant models: 82 concretos + 3 abstractos** (`SintelTenantBaseModel`, `SedeAwareModel`, `TimeStampedModel`) — **[DOC-M9]** +3 (F21); **[DOC-M14]** +1 (`ItemNotaCredito`); **[DOC-M49]** +2 (`AIKnowledgeDocument`, `AIKnowledgeChunk`); **[DOC-M58]** +6 (`RequisicionCompra`, `RequisicionCompraItem`, `RequisicionDocumento`, `RequisicionCotizacion`, `RequisicionFactura`, `RequisicionHistorialEstado`); **[DOC-M61]** +3 (`OrdenCompraRequisicion`, `SolicitudAprobacion`, `SolicitudAprobacionHistorial`) — `OrdenCompra.requisicion`/`es_excepcional`/`motivo_excepcion` (DOC-M60, campos no modelos) se retiraron el mismo dia.
-**Total migraciones: 200 (189 tenant + 11 public)** — **[DOC-M9]** +2 (F21); **[DOC-M14 a DOC-M16]** +3; **[DOC-M49]** +2 tenant (`tenant_ai_knowledge` `0001_initial` + `0002_pin_embedding_dimension_768`) y +1 public (`db_extensions.0001_vector_extension`); **[DOC-M58]** +3 tenant (`tenant_compras_requisiciones.0001_requisiciones_compra` + `tenant_compras.0010`/`0011`, agregan `OrdenCompra.requisicion`/`es_excepcional`/`motivo_excepcion` nullable, FASE A); **[DOC-M61]** +2 tenant (`tenant_compras.0012_ordencomprarequisicion_and_more`, retira esos 3 campos y agrega el N:N; `tenant_approvals.0001_initial`). Todas aplicadas en los **3 tenants reales de este entorno** (`home`, `admin`, `adk_diag_test`), `makemigrations --check` limpio.
+**Total tenant models: 96 concretos + 3 abstractos** (`SintelTenantBaseModel`, `SedeAwareModel`, `TimeStampedModel`) — **[DOC-M70, recontado 2026-10-05]** 82 -> 96 (+14) via Django app registry (`django.apps.apps.get_models()`, excluyendo abstractos), reemplaza el conteo manual anterior que ya no reflejaba varias misiones no registradas aqui: +1 `bancos` (`MovimientoBancarioAplicacion`), +2 `facturas` (`DocumentProcessing` DOC-M45, `TransmisionFactura` DOC-M43 -- ya mencionado en la tabla de Metricas §12 pero nunca sumado aqui), +1 `tenant_ai_knowledge` (`AIKnowledgeSettings`), +1 `tenant_clientes` (`CarteraNota`), +3 `tenant_cotizaciones` (`CotizacionEstadoConfig`, `CotizacionHistorialEstado`, `ConfiguracionCotizacion`), +1 `tenant_empleados` (`PeriodoNomina`, DOC-M41, idem), +3 `tenant_proyectos` (`DocumentoProyecto`, `HistorialFaseProyecto` -- Ciclo de Vida Controlado v4.0 -- y `ProyectoFacturaVenta`/`CotizacionCostoProyecto` cuentan en DOC-M68 pero el conteo manual previo no los habia sumado) + 2 mas de DOC-M68 ya anotados abajo en §12.
+**Total migraciones: 239 (227 tenant + 12 public)** — **[DOC-M70, recontado 2026-10-05]** 200 -> 239 (+39) via conteo directo de archivos `migrations/*.py` (excluyendo `__init__.py`); la deriva acumulada corresponde a multiples misiones aplicadas sin actualizar esta fila (LLM Provider Hub en `console`, conciliacion bancaria, Cotizaciones v2, CarteraNota, Fase 1/2/3 de Proyectos, entre otras -- ver filas individuales arriba para el detalle por app). Todas aplicadas en los **3 tenants reales de este entorno** (`home`, `admin`, `adk_diag_test`), `makemigrations --check` limpio.
 
 ### 2.3. Apps de Infraestructura Tenant (sin modelos de negocio)
 
@@ -3383,13 +3422,15 @@ indice ANN, trigger de reindexado.
 
 ## 9. Endpoints API REST
 
-**SSoT de endpoints:** `config/api_urls.py` — **[DOC-M5, corregido]** 203 lineas, 17 modulos montados con try/except resiliente por app (antes reportado como "149 lineas, 14 modulos" — desactualizado; la tabla de abajo tambien omitia `bancos` por completo, ya corregido).
+**SSoT de endpoints:** `config/api_urls.py` — **[DOC-M70, recontado 2026-10-05]** 265 lineas (antes 203), 19 modulos montados con try/except resiliente por app (18 tenant + 1 public; antes reportado como "17 (16 tenant + 1 public)" — faltaban `ai/` y `reporting/` en la tabla de abajo).
 
 | Prefijo | App | Modelos Principales |
 |---|---|---|
 | `/api/v1/empresas/` | empresa | Empresa, Sede, Area |
 | `/api/v1/facturas/` | facturas | Factura, ItemFactura, NotaCredito |
 | `/api/v1/contabilidad/` | contabilidad | CuentaContable, AsientoContable, Retencion, ReglaContable, PlantillaContable |
+| `/api/v1/reporting/` | contabilidad (reporting) | **[DOC-M70]** Reportes financieros consolidados (provider registry, ver §8) |
+| `/api/v1/ai/` | servicio transversal (`apps/services/ai/`) | **[DOC-M70]** AI Engine (AI-06 Form Assistant + tools), no es una app `tenant`/`public` con modelos propios -- ver §8 |
 | `/api/v1/inventario/` | inventario | Producto, Servicio, ActivoFijo, MovimientoInventario, HistorialServicio, CategoriaItem, TrasladoInventario (F21, `/inventario/traslados/`) |
 | `/api/v1/perfil/` | perfil | TenantProfile |
 | `/api/v1/dashboard/` | dashboard | Metricas consolidadas |
@@ -3566,7 +3607,33 @@ python manage.py check
 
 ---
 
-## 12. Metricas del Proyecto (v3.63.0 — 2026-09-03, DOC-M50)
+## 12. Metricas del Proyecto (v3.77.0 — 2026-10-05, DOC-M70)
+
+**[DOC-M70]** Pase de validacion de documentacion ("actualiza documentacion
+general... valida estado actual del proyecto"): recuento directo sobre
+codigo real (no sobre notas de misiones previas), primero desde DOC-M50
+(2026-09-03). Metodologia: `django.apps.apps.get_models()` (excluyendo
+abstractos) para modelos, conteo directo de archivos `migrations/*.py`
+(excluyendo `__init__.py`) para migraciones, `find test_*.py` para
+archivos de test. Hallazgo principal: deriva acumulada real de **+14
+modelos tenant** y **+39 migraciones** no reflejados en las tablas de
+§2.1/§2.2 ni en esta tabla, repartida entre multiples misiones ya
+cerradas pero nunca sumadas aqui (LLM Provider Hub en `console` publico,
+`MovimientoBancarioAplicacion` en `bancos`, `CotizacionEstadoConfig`/
+`CotizacionHistorialEstado`/`ConfiguracionCotizacion` en `cotizaciones`,
+`CarteraNota` en `clientes`, `AIKnowledgeSettings` en `ai_knowledge`,
+`DocumentoProyecto`/`HistorialFaseProyecto` en `proyectos`, y las
+misiones DOC-M41/DOC-M43/DOC-M68 que ya se habian anotado como notas al
+pie pero no se habian sumado al total). Las tablas de §2.1 y §2.2 se
+reescribieron con los conteos reales por app. Tambien incluye el cierre
+de **PLAN_REESTRUCTURACION_FASE_3_EJECUCION_FASE_4_CIERRE** (DOC-M69,
+ver `apps/tenant/proyectos/.agent/AUDITORIA_FLUJO_COMPLETO.md` §"v4.1.0"
+para el detalle funcional completo) -- 0 modelos/migraciones nuevos (solo
+servicios + frontend). Endpoints API (§9) tambien recontados: `config/
+api_urls.py` paso de 203 a 265 lineas, 17 -> 19 modulos montados (faltaban
+`ai/` y `reporting/` en la tabla). No se re-verifico en esta pasada el
+detalle exacto de cada migracion individual mas alla del conteo por
+archivo.
 
 **[DOC-M50]** POC pgvector AI-VECTOR-06..10 (§8.7). **Sin migraciones ni
 modelos nuevos** (todo servicios + 1 tool + tooling). Archivos nuevos:
@@ -3914,13 +3981,13 @@ atribuidos a una app de negocio, no la suite completa incluyendo `tests/`.
 
 | Metrica | Cantidad |
 |---|---|
-| Apps publicas activas | 5 |
-| Apps tenant registradas (`TENANT_APPS`) | 17 (15 con modelos de negocio + `core` + `landing`, ver §2.2/§2.3) |
-| Modelos publicos | 19 |
-| Modelos tenant | 73 concretos + 3 abstractos [DOC-M43: 72+1, `TransmisionFactura` (`facturas`)] [DOC-M41: 71+1, `PeriodoNomina` (`empleados`)] [DOC-M14: 70+1, `ItemNotaCredito`] |
-| Total migraciones | 196 (187 tenant + 9 public) [DOC-M43: 192+4, `0034`/`0035`/`0036`/`0037` en `facturas` -- todas aditivas] [DOC-M41: 191+1, `0014_periodonomina_devengo_periodo_and_more` (`empleados`) -- aditiva] [DOC-M16: 190+1, `0033_alter_notacredito_cude` -- aditiva, `null=True` en `NotaCredito.cude`] |
-| Endpoints API (prefijos en `api_urls.py`) | 17 modulos (16 tenant + 1 public) + endpoint `/mcp/` separado |
-| Archivos de test (atribuidos por app) | 269 [DOC-M14: 268+1] (401 en todo el repo, excluyendo `venv/` — total de repo no re-verificado en esta pasada) |
+| Apps publicas activas | 6 (`accounts`, `tenants`, `impuestos`, `console` + `core` y `db_extensions` de infraestructura) [DOC-M70] |
+| Apps tenant registradas (`TENANT_APPS`) | 20 (18 con modelos de negocio + `core` + `landing`, ver §2.2/§2.3) [DOC-M70: 17->20] |
+| Modelos publicos | 23 [DOC-M70: 19->23, +4 LLM Provider Hub en `console`] |
+| Modelos tenant | 96 concretos + 3 abstractos [DOC-M70, recontado via Django app registry: 82->96, ver detalle por app en §2.2] |
+| Total migraciones | 239 (227 tenant + 12 public) [DOC-M70, recontado via conteo directo de archivos: 200->239, ver detalle por app en §2.2] |
+| Endpoints API (prefijos en `api_urls.py`) | 19 modulos (18 tenant + 1 public) + endpoint `/mcp/` separado [DOC-M70: 17->19, +`ai/` +`reporting/`] |
+| Archivos de test (atribuidos por app) | 318 [DOC-M70: 269->318] (583 en todo el repo, excluyendo `venv/`/`node_modules/` — ~1784 funciones `def test_`) |
 | Dependencias Python | 20+ |
 | Namespaces JS activos | 15 (`window.Sintel.*`) + 3 sub-namespaces de feature |
 | Campos contables eliminados (v3.10.2) | 15 en 6 apps |
