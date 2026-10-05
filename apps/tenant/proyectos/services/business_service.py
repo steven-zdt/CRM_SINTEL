@@ -87,14 +87,17 @@ def calcular_costo_gastos(proyecto):
     contable DEBE -- el gasto real reconocido -- usa subtotal, no total;
     `total` es el pasivo neto a pagar al proveedor tras retenciones, un
     concepto de tesoreria, no de costo).
-    """
-    from apps.tenant.gastos.models import DocumentoSoporte
 
-    total = DocumentoSoporte.objects.filter(
-        empresa_id=proyecto.empresa_id,
-        proyecto_uuid=proyecto.uuid,
-        activo=True,
-        anulado=False,
+    PLAN_INTER_APP_ESTABILIZACION_SSoT_RELACIONES_LOOP, Hallazgo H2 (Fase
+    3): antes filtraba `DocumentoSoporte` directo, duplicando exactamente
+    el filtro ya encapsulado en `DocumentoSelector.get_by_proyecto()`
+    (sincronizado solo por comentario cruzado entre los dos archivos).
+    Ahora reusa el selector -- una sola implementacion de la regla.
+    """
+    from apps.tenant.gastos.services.selectors import DocumentoSelector
+
+    total = DocumentoSelector.get_by_proyecto(
+        empresa_id=proyecto.empresa_id, proyecto_uuid=proyecto.uuid
     ).aggregate(total=Sum("subtotal"))["total"] or Decimal("0.00")
 
     return total

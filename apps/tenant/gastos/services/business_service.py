@@ -519,7 +519,23 @@ def materializar_gasto_desde_dto(dto: dict) -> tuple[dict, int]:
         )
 
     # 4. Obtener/Crear Proveedor (NIT es numero_documento en Proveedor)
-    from apps.tenant.proveedores.models import Proveedor
+    #
+    # PLAN_INTER_APP_ESTABILIZACION_SSoT_RELACIONES_LOOP, Hallazgo H1 (Fase
+    # 4): antes hacia Proveedor.objects.create() directo, saltandose por
+    # completo el Service Layer propietario de `proveedores` (sin pasar por
+    # ProveedorBusinessService.crear_proveedor(), sin el chequeo de
+    # duplicados "defensa-en-profundidad" que ese metodo ya aplica, sin
+    # ningun hook futuro de ese dominio). Ahora resuelve/crea via el
+    # Service Layer real, igual que ya hace `facturas` para sus XML de
+    # compra (resolver_o_crear_desde_factura_compra) -- MISMA convencion
+    # de almacenamiento de NIT que ya usaba este archivo (numero_documento/
+    # digito_verificacion separados), no se reutiliza literalmente ese
+    # metodo de facturas porque el normaliza el NIT fusionando el digito
+    # de verificacion en numero_documento (convencion distinta) y cambiar
+    # eso aqui arriesgaria duplicar Proveedores ya existentes creados con
+    # la convencion separada.
+    from apps.tenant.proveedores.services.business_service import ProveedorBusinessService
+    from apps.tenant.proveedores.services.selectors import ProveedorSelector
 
     # Clean / parse NIT
     def parse_nit(nit_str: str):
@@ -530,19 +546,25 @@ def materializar_gasto_desde_dto(dto: dict) -> tuple[dict, int]:
 
     doc_num, dv = parse_nit(emisor_nit)
 
-    proveedor = Proveedor.objects.filter(empresa=empresa, numero_documento=doc_num).first()
+    proveedor = ProveedorSelector.get_by_documento(
+        empresa_id=empresa.id, tipo_documento="NIT", numero_documento=doc_num
+    )
 
     if not proveedor:
         razon_social = emisor.get("razon_social") or f"Proveedor {doc_num}"
-        proveedor = Proveedor.objects.create(
-            empresa=empresa,
-            numero_documento=doc_num,
-            digito_verificacion=dv,
-            razon_social=razon_social,
-            tipo_persona="JURIDICA",
-            tipo_documento="NIT",
-            regimen_tributario="ORDINARIO",
-            activo=True,
+        proveedor = ProveedorBusinessService().crear_proveedor(
+            empresa_id=empresa.id,
+            data={
+                "numero_documento": doc_num,
+                "digito_verificacion": dv,
+                "razon_social": razon_social,
+                "tipo_persona": "JURIDICA",
+                "tipo_documento": "NIT",
+                "regimen_tributario": "ORDINARIO",
+                "activo": True,
+                "observaciones": "Creado automaticamente desde ingesta de gasto (documento soporte).",
+            },
+            exigir_representante=False,
         )
 
     # 5. Idempotencia: Verificar si el gasto ya fue materializado

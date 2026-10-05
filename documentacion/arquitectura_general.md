@@ -1,7 +1,37 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.77.0
-**Ultima actualizacion:** 2026-10-05 (DOC-M70) — **Pase de validacion de
+**Version:** 3.78.0
+**Ultima actualizacion:** 2026-10-05 (DOC-M71) — **INTER-APP-01
+completo** (`PLAN_INTER_APP_ESTABILIZACION_SSoT_RELACIONES_LOOP.md`).
+Mision de estabilizacion (no de nueva funcionalidad): auditoria real de
+codigo sobre los 15 dominios de negocio (Empresa/Clientes/Proveedores/
+Empleados, Cotizaciones/Ventas/Facturas, Proyectos/Gastos, Compras/
+Requisiciones/Inventario, Bancos/Contabilidad/Aprobaciones) via 5
+sub-auditorias paralelas con evidencia `archivo:linea`. Resultado: **0
+casos SSoT ambigua** (ningun campo de estado con dos dueños
+conceptuales), **0 violaciones del modelo Pull de Contabilidad**
+(verificado por grep repo-wide), idempotencia confirmada en los 4
+flujos criticos auditados (Proyectos/Ventas/Compras-Recepcion/
+Aprobaciones). 3 correcciones reales de codigo: (1) `gastos` creaba
+`Proveedor` directo al auto-registrar un NIT nuevo en ingesta XML,
+saltandose el Service Layer de `proveedores` -- ahora usa
+`ProveedorBusinessService.crear_proveedor()`; (2) `proyectos.
+calcular_costo_gastos()` duplicaba el filtro de `DocumentoSelector.
+get_by_proyecto()` -- ahora lo reusa; (3) `apps/tenant/approvals/`
+no tenia `test_organizational_context_adoption.py` (finding `TEST-001`
+del reporte de gobernanza) -- agregado. **Gobernanza
+(`tools/organizational_governance`): `WARN` -> `FINAL STATUS: PASS`.**
+Hallazgo relevante para la siguiente mision funcional: BANCOS-04
+("Extracto->Movimiento->Matching->Aplicacion->Conciliacion") ya esta
+sustancialmente implementado en codigo (matching real con 7 señales,
+aplicacion 1:N con guard anti-sobreaplicacion) -- el trabajo pendiente
+real es mas acotado (unificar el vinculo legado 1:1 con el nuevo path
+N:1, resolver el reverso de abonos en Cartera). 0 modelos/migraciones
+nuevos. Detalle completo, matriz SSoT de los 15 dominios y las 6
+decisiones DEFERRED documentadas: `docs/remediation/
+INTER_APP_01_BASELINE.md`.
+
+**Actualizacion previa:** 2026-10-05 (DOC-M70) — **Pase de validacion de
 documentacion** ("actualiza documentacion general, valida estado actual
 del proyecto"). Recuento directo sobre codigo real (Django app registry +
 conteo de archivos de migracion), la primera pasada completa desde

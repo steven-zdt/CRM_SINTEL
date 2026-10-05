@@ -717,3 +717,28 @@ Consecutivo: NUNCA reutilizable (constraint unique)
 [Response 200 + {detail: "Documento anulado"}]
   -> gasto_list.js: table.replaceData() -> fila con badge "Anulado"
 ```
+
+---
+
+## Addendum 2026-10-05 — PLAN_INTER_APP_ESTABILIZACION_SSoT_RELACIONES_LOOP (Fase 4)
+
+Auditoria inter-app (misión INTER-APP-01, ver `docs/remediation/
+INTER_APP_01_BASELINE.md`) encontró que `materializar_gasto_desde_dto()`
+(ingesta automatica de gastos via XML/email) creaba el `Proveedor`
+emisor directo (`Proveedor.objects.create(...)`), saltandose por
+completo el Service Layer propietario de `proveedores` -- sin el
+chequeo de duplicados "defensa-en-profundidad" de `ProveedorBusinessService.
+crear_proveedor()`, ni ningun hook futuro de ese dominio. Clasificado
+**P1** (riesgo funcional, no bloqueante hoy -- el guard de duplicado por
+NIT antes del `create` seguia protegiendo contra el caso obvio).
+
+**Corregido**: ahora resuelve/crea via `ProveedorSelector.get_by_documento()`
++ `ProveedorBusinessService().crear_proveedor(..., exigir_representante=False)`
+-- mismo patron ya usado por `facturas` para sus XML de compra
+(`resolver_o_crear_desde_factura_compra`), pero **sin** adoptar la
+convencion de NIT de ese metodo (que fusiona el digito de verificacion
+en `numero_documento`): `gastos` sigue guardando `numero_documento`/
+`digito_verificacion` por separado, la misma convencion que ya tenian
+los Proveedores existentes creados por este flujo -- cambiarla habria
+arriesgado duplicados por NIT con formato distinto. Verificado con
+smoke test manual (creacion real + rollback) contra el tenant `admin`.
