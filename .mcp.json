@@ -10,6 +10,10 @@
       "headers": {
         "Authorization": "Bearer ${SINTEL_MCP_JWT}"
       }
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"]
     }
   }
 }

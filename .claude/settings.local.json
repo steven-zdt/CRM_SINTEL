@@ -122,5 +122,9 @@
   },
   "disabledMcpjsonServers": [
     "gemini-api-docs-mcp"
+  ],
+  "enabledMcpjsonServers": [
+    "sintel-erp",
+    "chrome-devtools"
   ]
 }
