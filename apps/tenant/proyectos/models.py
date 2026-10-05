@@ -214,7 +214,12 @@ class Proyecto(SintelTenantBaseModel):
         max_length=150, blank=True, help_text=_("Snapshot responsable actual")
     )
 
-    # --- PROVEEDOR (Snapshot - Zero-Coupling) ---
+    # --- PROVEEDOR / CONTRATISTA PRINCIPAL (Snapshot - Zero-Coupling) ---
+    # PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION, Decision 02:
+    # "Contratista/Proveedor Principal" de Fase 1 REUTILIZA este campo ya
+    # existente (uno principal por proyecto) -- no se crea una FK/modelo
+    # nuevo. El nombre interno se conserva por compatibilidad; la UI/label
+    # de Fase 1 lo presenta como "Contratista / Proveedor Principal".
     proveedor_id = models.IntegerField(
         _("ID Proveedor"),
         null=True,
@@ -226,6 +231,25 @@ class Proyecto(SintelTenantBaseModel):
         max_length=200,
         blank=True,
         help_text=_("Snapshot del nombre del proveedor para evitar FK"),
+    )
+
+    # --- SUPERVISOR DEL PROYECTO (Snapshot - Zero-Coupling) ---
+    # PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION, Decision 01:
+    # viene de apps.tenant.empleados, limitado a empleados activos (DSV via
+    # EmpleadoSelector, mismo patron que responsable_*). Concepto distinto de
+    # responsable_operativo_id/responsable_tecnico_id -- no se reutilizan
+    # esos campos (Seccion 6.2 del plan).
+    supervisor_id = models.IntegerField(
+        _("ID Supervisor"),
+        null=True,
+        blank=True,
+        help_text=_("ID referencial del empleado supervisor (Soft Reference)"),
+    )
+    supervisor_nombre = models.CharField(
+        _("Nombre Supervisor"),
+        max_length=200,
+        blank=True,
+        help_text=_("Snapshot del nombre del supervisor para evitar FK"),
     )
 
     # --- DOCUMENTACIoN ---
@@ -516,6 +540,85 @@ class HistorialFaseProyecto(SintelTenantBaseModel):
 
     def __str__(self):
         return f"{self.proyecto.nombre}: {self.fase_anterior} -> {self.fase_nueva}"
+
+
+class ProyectoFacturaVenta(SintelTenantBaseModel):
+    """
+    Vinculo 1:N entre Proyecto y Factura de Venta (PLAN_AJUSTE_CICLO_
+    PROYECTOS_FASE_1_VIABILIDAD_APROBACION, Secciones 8-11). Reemplaza como
+    SSoT del "valor vendido" al vinculo singular historico `factura_costo`
+    (que se conserva intacto, solo por compatibilidad -- Seccion 9 del plan:
+    "NO repurposear factura_costo").
+
+    Soft-reference a Factura via `factura_uuid` (Pull Model, mismo patron
+    que `DocumentoSoporte.proyecto_uuid`/`cotizacion_item_uuid`) -- Proyectos
+    nunca FK directa a Facturas aqui. `factura_numero` es snapshot solo para
+    listados rapidos; los datos reales (estado, total, cliente) se resuelven
+    en vivo desde Facturas en el Service Layer, nunca se cachean en esta
+    tabla (evita que una Factura anulada/editada despues de vincularse quede
+    con datos obsoletos aqui).
+    """
+
+    uuid = models.UUIDField(
+        default=uuid_module.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
+
+    proyecto = models.ForeignKey(
+        Proyecto,
+        on_delete=models.CASCADE,
+        related_name="facturas_venta_proyecto",
+        verbose_name=_("Proyecto"),
+    )
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name="facturas_venta_proyecto",
+        verbose_name=_("Empresa"),
+        help_text=_("DSV: valida que el vinculo pertenezca al tenant"),
+    )
+
+    factura_uuid = models.UUIDField(
+        db_index=True,
+        verbose_name=_("Factura de Venta"),
+        help_text=_("Soft reference a facturas.Factura (naturaleza=VENTA, estado=ACEPTADA)."),
+    )
+    factura_numero = models.CharField(
+        _("Numero Factura (Snapshot)"),
+        max_length=200,
+        blank=True,
+        help_text=_("Snapshot del numero de factura para listados rapidos."),
+    )
+
+    vinculado_por = models.ForeignKey(
+        "perfil.TenantProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="facturas_venta_vinculadas",
+        verbose_name=_("Vinculado por"),
+    )
+    fecha_vinculacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Factura de Venta del Proyecto")
+        verbose_name_plural = _("Facturas de Venta del Proyecto")
+        ordering = ["-fecha_vinculacion"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["proyecto", "factura_uuid"],
+                name="uniq_proyecto_factura_venta",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["empresa", "proyecto"]),
+            models.Index(fields=["factura_uuid"]),
+        ]
+
+    def __str__(self):
+        return f"{self.proyecto.nombre}: {self.factura_numero or self.factura_uuid}"
 
 
 class AsignacionPersonal(SintelTenantBaseModel):
@@ -817,6 +920,165 @@ class ItemPresupuestoProyecto(SintelTenantBaseModel):
 
     def __str__(self):
         return f"{self.get_categoria_display()} - {self.descripcion} ({self.cantidad})"
+
+
+class CotizacionCostoProyecto(SintelTenantBaseModel):
+    """
+    Cotizacion de COSTO de Fase 1 (PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_
+    VIABILIDAD_APROBACION, Secciones 15-19). NO debe confundirse con
+    `tenant_cotizaciones.Cotizacion` (oferta comercial al CLIENTE, vinculada
+    en Fase 2/Planeacion via `Proyecto.cotizacion`) -- esta representa
+    cuanto cuesta EJECUTAR el proyecto segun un PROVEEDOR/contratista,
+    capturada manualmente con evidencia en PDF. Permite varias por
+    categoria (comparar proveedores) -- no se obliga una unica cotizacion.
+    """
+
+    # Mismas categorias que ItemPresupuestoProyecto.Categoria (Seccion 16.1
+    # del plan: "Estas son las categorias oficiales" -- se reutiliza el
+    # enum existente en vez de duplicarlo).
+    Categoria = ItemPresupuestoProyecto.Categoria
+
+    uuid = models.UUIDField(
+        default=uuid_module.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
+
+    proyecto = models.ForeignKey(
+        Proyecto,
+        on_delete=models.CASCADE,
+        related_name="cotizaciones_costo",
+        verbose_name=_("Proyecto"),
+    )
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name="cotizaciones_costo_proyecto",
+        verbose_name=_("Empresa"),
+        help_text=_("DSV: valida que la cotizacion de costo pertenezca al tenant"),
+    )
+
+    categoria = models.CharField(
+        _("Categoria"), max_length=20, choices=Categoria.choices
+    )
+    descripcion = models.CharField(_("Descripcion"), max_length=300, blank=True)
+
+    # Proveedor (Snapshot - Zero-Coupling, mismo patron que Proyecto.proveedor_*)
+    proveedor_id = models.IntegerField(
+        _("ID Proveedor"), null=True, blank=True, help_text=_("Soft Reference")
+    )
+    proveedor_nombre = models.CharField(_("Nombre Proveedor"), max_length=200, blank=True)
+
+    fecha = models.DateField(_("Fecha"), null=True, blank=True)
+    numero_documento = models.CharField(_("Numero de Documento"), max_length=100, blank=True)
+    valor = models.DecimalField(
+        _("Valor"),
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        help_text=_("Valor antes de IVA segun la cotizacion del proveedor."),
+    )
+    moneda = models.CharField(_("Moneda"), max_length=3, default="COP")
+
+    # PDF en storage privado (mismo PRIVATE_MEDIA_ROOT que DocumentoProyecto
+    # -- es evidencia documental de valores comerciales, no un dato publico).
+    # Seccion 19 del plan: evidencia documental, NUNCA fuente automatica de
+    # valores (sin OCR/IA en esta primera version).
+    archivo_pdf = models.FileField(
+        upload_to="proyectos/cotizaciones_costo/%Y/%m/",
+        storage=documentos_storage,
+        null=True,
+        blank=True,
+        verbose_name=_("PDF de la cotizacion"),
+    )
+
+    observaciones = models.TextField(_("Observaciones"), blank=True)
+    activo = models.BooleanField(default=True, db_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Cotizacion de Costo")
+        verbose_name_plural = _("Cotizaciones de Costo")
+        ordering = ["categoria", "-created_at"]
+        indexes = [
+            models.Index(fields=["empresa", "proyecto"]),
+            models.Index(fields=["proyecto", "categoria"]),
+        ]
+
+    def __str__(self):
+        return f"{self.proyecto.nombre}: {self.categoria} - {self.proveedor_nombre or 's/proveedor'}"
+
+
+class InversionProyectoInicio(SintelTenantBaseModel):
+    """
+    Inversion REAL (costo/compromiso ya incurrido, Decision 06 del plan --
+    NO necesariamente desembolsado) registrada en Fase 1 para el analisis
+    de viabilidad previo a Planeacion (PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_
+    VIABILIDAD_APROBACION, Secciones 20-22).
+
+    Conceptualmente distinta del "Gasto No Facturable" de Fase 3
+    (DocumentoSoporte, Seccion 45 del plan): esta representa el analisis
+    economico INICIAL que condiciona la aprobacion de Inicio; el gasto de
+    Fase 3 es el costo operativo real durante la Ejecucion. No escriben
+    sobre la misma tabla.
+    """
+
+    Categoria = ItemPresupuestoProyecto.Categoria
+
+    uuid = models.UUIDField(
+        default=uuid_module.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
+
+    proyecto = models.ForeignKey(
+        Proyecto,
+        on_delete=models.CASCADE,
+        related_name="inversiones_inicio",
+        verbose_name=_("Proyecto"),
+    )
+    empresa = models.ForeignKey(
+        Empresa,
+        on_delete=models.PROTECT,
+        related_name="inversiones_inicio_proyecto",
+        verbose_name=_("Empresa"),
+        help_text=_("DSV: valida que la inversion pertenezca al tenant"),
+    )
+
+    categoria = models.CharField(
+        _("Categoria"), max_length=20, choices=Categoria.choices
+    )
+    descripcion = models.CharField(_("Descripcion"), max_length=300, blank=True)
+    fecha = models.DateField(_("Fecha"), null=True, blank=True)
+    valor = models.DecimalField(_("Valor"), max_digits=15, decimal_places=2, default=0)
+
+    proveedor_id = models.IntegerField(
+        _("ID Proveedor"), null=True, blank=True, help_text=_("Soft Reference")
+    )
+    proveedor_nombre = models.CharField(_("Nombre Proveedor"), max_length=200, blank=True)
+
+    documento_referencia = models.CharField(_("Documento / Referencia"), max_length=200, blank=True)
+    observaciones = models.TextField(_("Observaciones"), blank=True)
+    activo = models.BooleanField(default=True, db_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Inversion de Inicio")
+        verbose_name_plural = _("Inversiones de Inicio")
+        ordering = ["categoria", "-created_at"]
+        indexes = [
+            models.Index(fields=["empresa", "proyecto"]),
+            models.Index(fields=["proyecto", "categoria"]),
+        ]
+
+    def __str__(self):
+        return f"{self.proyecto.nombre}: {self.categoria} - {self.valor}"
 
 
 class TareaDiariaProyecto(SintelTenantBaseModel):

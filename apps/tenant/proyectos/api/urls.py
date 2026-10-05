@@ -10,7 +10,14 @@ import logging
 
 from rest_framework.routers import DefaultRouter
 
-from .viewsets import ItemPresupuestoViewSet, ProyectoViewSet, TareaCortaViewSet, TareaDiariaViewSet
+from .viewsets import (
+    CotizacionCostoProyectoViewSet,
+    InversionProyectoInicioViewSet,
+    ItemPresupuestoViewSet,
+    ProyectoViewSet,
+    TareaCortaViewSet,
+    TareaDiariaViewSet,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +30,12 @@ router.register(r"", ProyectoViewSet, basename="proyecto")
 router.register(r"items-presupuesto", ItemPresupuestoViewSet, basename="items-presupuesto")
 router.register(r"tareas-diarias", TareaDiariaViewSet, basename="tareas-diarias")
 router.register(r"tareas-cortas", TareaCortaViewSet, basename="tareas-cortas")
+router.register(
+    r"cotizaciones-costos", CotizacionCostoProyectoViewSet, basename="cotizaciones-costos"
+)
+router.register(
+    r"inversiones-inicio", InversionProyectoInicioViewSet, basename="inversiones-inicio"
+)
 
 urlpatterns = router.urls
 

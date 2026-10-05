@@ -34,6 +34,12 @@ class SolicitudAprobacion(SintelTenantBaseModel):
 
     class TipoDocumento(models.TextChoices):
         REQUISICION = "REQUISICION", _("Requisicion de Compra")
+        # PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION: gate
+        # INICIO -> PLANEACION de Proyectos. `objeto_uuid` = Proyecto.uuid.
+        # Registry en apps/tenant/proyectos/services/inicio_service.py
+        # (resolver/aprobar/rechazar/snapshot), enganchado en
+        # TIPO_DOCUMENTO_REGISTRY de este mismo archivo mas abajo.
+        PROYECTO_INICIO = "PROYECTO_INICIO", _("Inicio de Proyecto (Viabilidad)")
 
     class Estado(models.TextChoices):
         PENDIENTE = "PENDIENTE", _("Pendiente")

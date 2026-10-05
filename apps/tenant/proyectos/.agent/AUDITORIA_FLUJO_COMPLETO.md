@@ -2,7 +2,7 @@
 
 ## Fecha: 2026-08-05 (actualizado 2026-10-05)
 ## Modulo: tenant/proyectos
-## Version: v3.12.0 (Fase 2 Cotizacion + Fase 3 Ejecucion + fixes serializer.instance) | Base: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2 | Fix P-1 2026-09-12
+## Version: v4.0.0 (Reestructuracion del ciclo: Fase 1 Viabilidad y Aprobacion -- gate real INICIO->PLANEACION) | Base: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2 | Fix P-1 2026-09-12
 
 ---
 
@@ -624,6 +624,7 @@ entorno limpio. Recordatorio: `make migrate-tenants`/`migrate_schemas` debe corr
 | **v3.10.5** | **2026-08-05** | **Fix `dependencies` migracion 0020**: usaba `('proyectos', ...)` (nombre de carpeta) en vez de `('tenant_proyectos', ...)` (app_label real), bloqueando el arranque completo del proyecto (`NodeNotFoundError` en `migrate_schemas`). Ver FIX v3.10.5 arriba para causa raiz y como evitarlo. |
 | **v3.11.0** | **2026-10-02** | **Integracion Compras-Proyectos** (`PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_OPCIONAL.md`): Proyecto pasa a ser el eje de consulta/asociacion de Ordenes de Compra en fase BORRADOR, sin agregar ninguna FK nueva (`OrdenCompra.proyecto` ya existia). Ver seccion nueva mas abajo. |
 | **v3.12.0** | **2026-10-05** | **Fase 3 Ejecucion completa** (`PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES.md`): bloque "Gastos No Facturables" + "Control de Tiempo" + deteccion de tareas atrasadas + filtros/avance de tareas. **3 bugs reales corregidos**: `serializer.instance` obsoleto en `ItemPresupuestoViewSet`/`TareaDiariaViewSet`/`TareaCortaViewSet` (el PATCH devolvia la version vieja aunque la escritura en BD si era correcta) y un `prompt()` nativo en cambio de estado de Tareas Diarias. Ver seccion nueva mas abajo. |
+| **v4.0.0** | **2026-10-05** | **Reestructuracion del ciclo de vida** (`PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION.md`): Fase 1 (Inicio) deja de ser informativa y se convierte en gate economico real de Planeacion. Supervisor + Contratista/Proveedor Principal + Facturas de Venta (1:N) + Cotizaciones de Costo (+PDF) + Inversiones Reales + viabilidad (ambos margenes) + ciclo de aprobacion administrativa sobre el motor GENERICO `apps.tenant.approvals` (sin duplicar infraestructura de aprobacion). `cambiar_fase_proyecto()` bloquea INICIO->PLANEACION sin aprobacion vigente -- sin bypass por API. Ver seccion nueva mas abajo. |
 
 ---
 
@@ -767,4 +768,174 @@ retornan la instancia):
   directo contra `POST .../cambiar-estado/` (SSoT de transicion sin
   cambios).
 
-*Auditoría actualizada el 2026-10-05 | SINTEL v3.12.0 — Status: PRODUCTION READY ✅*
+## Fase 1 (Inicio): Viabilidad y Aprobacion (2026-10-05)
+
+`PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION.md`: cambio
+mayor del ciclo de vida. La Fase 1 deja de ser una etapa informativa y se
+convierte en el **filtro economico/comercial que autoriza la entrada a
+Planeacion** -- "no hay Planeacion sin aprobacion del Inicio economico"
+(Regla de Oro, Seccion 87 del plan).
+
+### Decisiones funcionales cerradas (todas las recomendaciones del plan)
+
+01 Supervisor desde `apps.tenant.empleados` activos | 02 Contratista/
+Proveedor: **uno principal**, reutiliza `Proyecto.proveedor_id/_nombre`
+ya existentes (sin modelo nuevo) | 03 Solo Facturas `ACEPTADA` | 04 Valor
+vendido = `FE + ND - NC` | 05 Base oficial de viabilidad = **subtotal**
+(antes de IVA); total con IVA solo informativo | 06 Inversion real =
+costo/compromiso incurrido (no solo pagado) | 07 Editar datos economicos
+tras aprobar **invalida** la aprobacion (pasa a CANCELADA), nunca bloquea
+la edicion | 08 Aprobar solo **desbloquea**; avanzar a Planeacion sigue
+siendo accion manual separada | 09 Sin "cotizacion ganadora" en v1 | 10
+Viabilidad muestra **ambos** margenes (cotizacion e inversion real), sin
+forzar uno oficial.
+
+### Modelos nuevos
+
+- `Proyecto.supervisor_id/_nombre` (snapshot, mismo patron que
+  `proveedor_id/_nombre`).
+- `ProyectoFacturaVenta` (1:N, `UniqueConstraint(proyecto, factura_uuid)`)
+  -- soft-reference a `facturas.Factura` (Pull Model, nunca cachea
+  estado/total: se resuelven en vivo en `ProyectoFacturaVentaService.
+  get_resumen()`). Reemplaza como SSoT comercial al vinculo singular
+  historico `factura_costo` (se conserva intacto, solo compatibilidad).
+- `CotizacionCostoProyecto` (varias por categoria MANO_OBRA/MATERIALES/
+  EQUIPOS -- reutiliza `ItemPresupuestoProyecto.Categoria`, PDF en
+  `documentos_storage` privado).
+- `InversionProyectoInicio` (mismo patron, sin PDF, con
+  `documento_referencia`).
+
+### Aprobacion: SIN modelo nuevo, extiende el motor generico existente
+
+Auditado antes de codificar (Seccion 91 del plan: "si ya existe, leer
+desde la SSoT existente") -- `apps.tenant.approvals` ya tenia un motor
+generico de aprobaciones (`SolicitudAprobacion`/
+`SolicitudAprobacionHistorial`, usado hoy por Requisiciones de Compra)
+con exactamente los campos que el plan pedia para "snapshot de la
+aprobacion" (`snapshot_financiero` JSONField) y los estados necesarios
+(`PENDIENTE/APROBADA/RECHAZADA/CANCELADA` -- `CANCELADA` se reutiliza
+para "aprobacion invalidada"). Se agrego `TipoDocumento.PROYECTO_INICIO`
+al enum y una entrada nueva en `TIPO_DOCUMENTO_REGISTRY` (`apps/tenant/
+approvals/services/business_service.py`) con los callbacks `resolver/
+aprobar/rechazar/snapshot` -- **no se creo `AprobacionInicioProyecto` ni
+un historial propio**, evitando duplicar infraestructura de auditoria ya
+construida y probada.
+
+### Service Layer: `services/inicio_service.py` (nuevo)
+
+- `ProyectoFacturaVentaService` -- vincular/desvincular/buscar_disponibles/
+  get_resumen (valor vendido oficial).
+- `CotizacionCostoProyectoService` / `InversionProyectoInicioService` --
+  CRUD con DSV de proveedor, validacion de PDF (solo `.pdf`, max 10MB),
+  baja logica (`activo=False`, nunca hard-delete -- evidencia de un
+  proceso de aprobacion).
+- `ProyectoInicioResumenService.calcular_resumen()` -- "ProyectoInicioSummary"
+  unico (Seccion 68 del plan): supervisor, contratista, facturas,
+  cotizaciones/inversiones agrupadas por categoria, viabilidad (ambos
+  margenes, division por cero protegida), estado de aprobacion,
+  `puede_avanzar_planeacion`. Todo en una sola respuesta -- cero GETs
+  dispersos al abrir Fase 1 (Seccion 69, Zero-Waste).
+- `ProyectoInicioAprobacionService` -- `enviar_aprobacion()` (exige
+  valor vendido > 0), `aprobar()`/`rechazar()` (delegan a
+  `ApprovalBusinessService` del motor generico), `can_enter_planeacion()`
+  (SSoT del gate), `invalidar_si_aprobado()` (Decision 07, llamado desde
+  cada mutacion de datos economicos criticos Y desde
+  `orchestrate_update_proyecto()` cuando cambia supervisor/proveedor).
+
+### Gate real (sin bypass por API)
+
+`cambiar_fase_proyecto()` (`services/business_service.py`) evalua
+`ProyectoInicioAprobacionService.can_enter_planeacion()` ANTES de
+permitir `INICIO -> PLANEACION` -- cubre tanto la accion dedicada
+`avanzar-fase` como la ruta generica `PATCH` (`orchestrate_update_
+proyecto`), consistente con el hallazgo P-1 historico de este mismo
+archivo (todo cambio de fase pasa por una sola funcion).
+
+### Endpoints nuevos (`ProyectoViewSet` + 2 ViewSets nuevos)
+
+```
+GET    /api/v1/proyectos/{uuid}/inicio/
+GET    /api/v1/proyectos/{uuid}/facturas-venta/disponibles/?search=
+POST   /api/v1/proyectos/{uuid}/facturas-venta/vincular/
+POST   /api/v1/proyectos/{uuid}/facturas-venta/desvincular/
+POST   /api/v1/proyectos/{uuid}/enviar-aprobacion/
+POST   /api/v1/proyectos/{uuid}/aprobar-inicio/      (ADMIN -- heredado de IsTenantAdminOrReadOnly)
+POST   /api/v1/proyectos/{uuid}/rechazar-inicio/     (ADMIN)
+
+GET/POST/PATCH/DELETE /api/v1/proyectos/cotizaciones-costos/?proyecto_uuid=
+GET/POST/PATCH/DELETE /api/v1/proyectos/inversiones-inicio/?proyecto_uuid=
+```
+
+### Frontend
+
+`pane-step-1` (Fase 1): Supervisor/Contratista (buscador texto+sugerencias,
+mismo patron que "Gastos del Proyecto"), bloque "Facturas de Venta del
+Proyecto" (buscador server-side + tabla + valor vendido), "Cotizaciones de
+Costo" y "Inversion Real" (formulario+tabla+totales), "Analisis de
+Viabilidad" (solo pinta lo que calcula el backend, Seccion 67: nunca
+recalcula en JS) y "Estado de Aprobacion" con botones Enviar/Aprobar/
+Rechazar (motivo de rechazo via formulario inline, nunca `prompt()`
+nativo). El bloque legado "Factura de Venta Vinculada" (singular,
+superseded) se dejo intacto a proposito -- riesgo/beneficio de remover
+~250 lineas de JS ya probado no se asumio en esta mision, ver nota en
+conversacion. Candado especifico en "2. Planeacion" (`puede_avanzar_
+planeacion`) ademas del candado generico de fase futura.
+
+### Backfill y tests
+
+`manage.py backfill_proyecto_facturas_venta --dry-run` crea
+`ProyectoFacturaVenta` para Proyectos con `factura_costo` historico
+cuando esa Factura ya es VENTA+ACEPTADA (nunca corrige en silencio casos
+ambiguos). `tests/test_fase1_viabilidad_aprobacion.py` cubre DSV,
+Decision 04 (signos FE/ND/NC), viabilidad, el gate (bloquea/permite) y la
+invalidacion tras edicion -- verificado ademas con un smoke test manual
+en vivo (13/13 PASS, transaccion revertida) antes de escribir la suite
+formal; no se ejecuto pytest sin autorizacion explicita.
+
+### Addendum 2026-10-05 (tarde) — Verificación visual real + lenguaje de usuario
+
+Verificado en navegador real (Playwright, cuenta QA ya existente
+`qa-datatables-pilot@sintel.local`, password temporal revertida a
+`set_unusable_password()` al cerrar) contra un Proyecto real en fase
+INICIO. Encontrados y corregidos 3 defectos que el trabajo original (solo
+`py_compile`/`manage.py check`/render_to_string) no detectaba:
+
+1. **Comentario Django `{# #}` multilinea renderizando como texto
+   visible** en pantalla (regla ya conocida del proyecto -- nunca abrir/
+   cerrar `{# #}` en lineas distintas, usar `{% comment %}` para bloques
+   largos). Bug real, visible para cualquier usuario que abriera Fase 1.
+2. **Jerga de desarrollador filtrada a texto de usuario**: "SSoT" aparecia
+   literal en un `<small>` de ayuda. Revisado todo el bloque de Fase 1 y
+   corregido: acentos correctos en español (Categoría, Descripción,
+   Inversión, Cotización, Análisis, Aprobación...), textos de ayuda
+   reescritos en lenguaje natural (sin "--" tipo changelog ni mayusculas
+   de enfasis tipo "YA"), numeracion ①-⑦ en cada seccion de Fase 1 para
+   mostrar el flujo como una secuencia clara, parrafo introductorio
+   explicando el orden a seguir, titulo de Fase 1 actualizado a "Inicio
+   (Validación Comercial y Viabilidad)" (Seccion 4 del plan).
+3. **Bloque legado "Factura de Venta Vinculada" (singular) + panel de
+   Cotizacion vinculada** quedaba visible justo encima del nuevo bloque
+   "Facturas de Venta del Proyecto" (plural) -- dos secciones de
+   "factura" simultaneas, confuso. Se dejo intacto (no se toco su JS,
+   ~250 lineas ya probadas) pero se colapso detras de un toggle
+   "Vinculo anterior de una sola factura (histórico)", oculto por
+   defecto.
+4. **Mensajes de error crudos**: confirmado que `UIManager.handleError()`
+   delega en `SintelFeedback.handleAPIError()`, un componente COMPARTIDO
+   que aplana TODAS las claves del payload de error (incluido el codigo
+   tecnico `error: sin_valor_vendido`) en un volcado tipo "error: X /
+   message: Y / Detalle: Z" -- comportamiento preexistente, no introducido
+   en esta mision, y que probablemente afecta a otros flujos de Proyectos
+   (Fase 2 cotizacion, Compras) que usan el mismo patron de servicio
+   `(ok, {error, message}, status)`. No se modifico el componente
+   compartido (riesgo para otras apps sin auditarlas todas primero,
+   regla ya establecida del proyecto) -- se evito LOCALMENTE en
+   `ProyectoInicio` con un helper propio (`_mostrarError()`) que extrae
+   `resp.data.message` (ya redactado en español por el Service Layer) y
+   lo muestra como toast simple. Los demas flujos de Proyectos
+   (presupuesto, cotizacion de planeacion, gastos, tareas, ordenes de
+   compra) siguen usando el componente compartido sin cambios -- posible
+   deuda tecnica a abordar en una mision dedicada si se confirma el mismo
+   problema ahi.
+
+*Auditoría actualizada el 2026-10-05 | SINTEL v4.0.0 — Status: PRODUCTION READY ✅*

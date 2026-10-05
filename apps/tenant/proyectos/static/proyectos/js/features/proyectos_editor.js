@@ -468,6 +468,42 @@
             else if (currentFase === 'EJECUCION') badgeFase.classList.add('bg-warning', 'text-dark');
             else if (currentFase === 'CIERRE') badgeFase.classList.add('bg-success');
         }
+
+        // PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION: candado
+        // especifico de "2. Planeacion" cuando el Inicio todavia no tiene
+        // aprobacion vigente -- distinto del candado generico de fase futura
+        // (ese ya lo maneja el bloque de arriba via .locked). `puede_avanzar_
+        // planeacion` viene calculado del backend (serializer), nunca se
+        // recalcula aqui (Seccion 67 del plan).
+        const iconoPlaneacionBloqueada = d.getElementById('icono-planeacion-bloqueada');
+        const bloqueadaPorAprobacion = currentFase === 'INICIO' && !currentProyecto?.puede_avanzar_planeacion;
+        if (iconoPlaneacionBloqueada) {
+            iconoPlaneacionBloqueada.classList.toggle('d-none', !bloqueadaPorAprobacion);
+        }
+
+        // El overlay de "#locked-step-2" ya queda visible por el bucle de
+        // arriba (idx=2 > activeFaseIdx=1 mientras fase_actual=='INICIO') --
+        // aqui solo se decide CUAL de los 2 mensajes internos mostrar, para
+        // que el usuario entienda la causa real (pendiente de aprobacion)
+        // en vez de un candado generico "avance de fase" que termina en un
+        // error de sorpresa al hacer clic.
+        const overlayGenerico = d.getElementById('locked-step-2-generico');
+        const overlayPendiente = d.getElementById('locked-step-2-pendiente-aprobacion');
+        if (overlayGenerico && overlayPendiente) {
+            overlayGenerico.classList.toggle('d-none', bloqueadaPorAprobacion);
+            overlayPendiente.classList.toggle('d-none', !bloqueadaPorAprobacion);
+            if (bloqueadaPorAprobacion) {
+                const textos = {
+                    'SIN_ENVIAR': 'Complete la información económica y envíela a revisión en la Fase 1.',
+                    'PENDIENTE': 'Ya fue enviado a revisión y está esperando la decisión de un administrador.',
+                    'RECHAZADA': 'La última solicitud fue rechazada. Revise el motivo en la Fase 1 y envíela de nuevo.',
+                    'CANCELADA': 'Los datos económicos cambiaron después de la aprobación, así que quedó anulada. Envíela de nuevo desde la Fase 1.'
+                };
+                const estado = currentProyecto?.estado_aprobacion_inicio || 'SIN_ENVIAR';
+                const textoEl = d.getElementById('locked-step-2-estado-texto');
+                if (textoEl) textoEl.textContent = textos[estado] || textos['SIN_ENVIAR'];
+            }
+        }
     }
 
     /**
@@ -629,6 +665,12 @@
         // 1.75. Ordenes de Compra del Proyecto (PLAN_INTEGRACION_PROYECTOS_ORDENES_COMPRA_VENTA_OPCIONAL - Fase 0 Borrador)
         if (currentProyecto?.uuid) {
             w.Sintel.ProyectosOrdenesCompra.init(currentProyecto.uuid, currentProyecto.fase_actual);
+        }
+
+        // 1.78. Fase 1 (Inicio): Viabilidad y Aprobacion (PLAN_AJUSTE_CICLO_
+        // PROYECTOS_FASE_1_VIABILIDAD_APROBACION)
+        if (currentProyecto?.uuid) {
+            w.Sintel.ProyectoInicio.init(currentProyecto.uuid, currentProyecto);
         }
 
         // 2. Equipo de Trabajo (Fase 3)
@@ -2438,11 +2480,503 @@
     // FIN MÓDULO TAREAS DIARIAS
     // ============================================================================
 
+    // ============================================================================
+    // MÓDULO FASE 1 (INICIO): VIABILIDAD Y APROBACIÓN
+    // PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION
+    //
+    // El frontend NUNCA calcula viabilidad (Seccion 67 del plan) -- solo
+    // pinta lo que devuelve GET .../inicio/ (ProyectoInicioResumenService).
+    // Supervisor/Contratista se guardan via el formulario principal
+    // (hidden inputs con name= real, mismo patron que responsable_comercial);
+    // Facturas/Cotizaciones de Costo/Inversiones/Aprobacion usan sus propias
+    // acciones HTTP inmediatas (no esperan al boton "Guardar cambios").
+    // ============================================================================
+    const ProyectoInicio = {
+        _proyectoUuid: null,
+
+        /**
+         * Muestra el mensaje de error REAL del backend (resp.data.message,
+         * ya redactado en lenguaje de usuario por el Service Layer -- ver
+         * inicio_service.py) como un toast simple, en vez de
+         * `UIManager.handleError()` -- ese helper delega en
+         * `SintelFeedback.handleAPIError()`, que aplana TODAS las claves
+         * del payload (incluida `error`, el codigo tecnico) en un volcado
+         * crudo tipo "error: sin_valor_vendido / message: ... / Detalle:
+         * sin_valor_vendido" (confirmado en navegador real). Es un
+         * comportamiento preexistente de un componente compartido -- no se
+         * modifica aqui (riesgo para otras apps), se evita localmente.
+         */
+        _mostrarError(resp, fallback) {
+            const mensaje = resp?.data?.message || resp?.data?.detail || fallback;
+            w.SintelFeedback?.error(mensaje);
+        },
+
+        async init(proyectoUuid, _proyecto) {
+            if (!proyectoUuid) return;
+            this._proyectoUuid = proyectoUuid;
+            this._bindUI();
+            await this.refrescar();
+        },
+
+        async refrescar() {
+            const [resumenResp, cotResp, invResp] = await Promise.all([
+                w.proyectosAPI.inicio.get(this._proyectoUuid),
+                w.proyectosAPI.inicio.cotizacionesCosto.list(this._proyectoUuid),
+                w.proyectosAPI.inicio.inversiones.list(this._proyectoUuid)
+            ]);
+
+            const resumen = resumenResp.ok ? resumenResp.data : null;
+            this._renderFacturas(resumen?.facturas_venta?.facturas || []);
+            this._renderValorVendido(resumen?.facturas_venta?.valor_vendido_subtotal);
+            this._renderCotizaciones(cotResp.ok ? (cotResp.data.results || cotResp.data || []) : []);
+            this._renderInversiones(invResp.ok ? (invResp.data.results || invResp.data || []) : []);
+            this._renderViabilidad(resumen);
+            this._renderAprobacion(resumen);
+        },
+
+        // --- Supervisor / Contratista: buscador + hidden inputs del form principal ---
+        _bindUI() {
+            // [FIX] La bandera de "ya enlazado" DEBE vivir en el propio
+            // elemento del DOM (dataset), nunca en el modulo JS -- mismo
+            // patron que ProyectosGastos._bindSearch() (searchInput.
+            // dataset.gastosBound). El offcanvas se recarga via HTMX cada
+            // vez que se abre "Editar Proyecto" (DOM nuevo cada vez); una
+            // bandera a nivel de modulo (this._bound) quedaba en `true`
+            // desde la primera apertura y nunca volvia a enlazar los
+            // listeners sobre el DOM nuevo -- los buscadores de Supervisor/
+            // Contratista (y el resto de botones de Fase 1: facturas,
+            // cotizaciones de costo, inversiones, aprobacion) dejaban de
+            // responder a partir de la segunda apertura del offcanvas.
+            const anchor = d.getElementById('inicio-supervisor-search');
+            if (!anchor || anchor.dataset.inicioBound === 'true') return;
+            anchor.dataset.inicioBound = 'true';
+
+            this._bindBuscadorSimple({
+                inputId: 'inicio-supervisor-search',
+                suggestionsId: 'inicio-supervisor-suggestions',
+                hiddenIdId: 'inicio-supervisor-id',
+                hiddenNombreId: 'inicio-supervisor-nombre',
+                buscar: (q) => w.proyectosAPI.lookups.empleados(q),
+                extraer: (resp) => resp.data?.results || resp.data || [],
+                renderLabel: (e) => `${e.primer_nombre || ''} ${e.primer_apellido || ''}`.trim(),
+            });
+
+            this._bindBuscadorSimple({
+                inputId: 'inicio-contratista-search',
+                suggestionsId: 'inicio-contratista-suggestions',
+                hiddenIdId: 'inicio-contratista-id',
+                hiddenNombreId: 'inicio-contratista-nombre',
+                buscar: (q) => w.proyectosAPI.lookups.proveedores(q),
+                extraer: (resp) => resp.data?.results || resp.data || [],
+                renderLabel: (p) => p.razon_social || p.nombre_comercial || '',
+            });
+
+            // --- Facturas de Venta ---
+            const btnToggleFactura = d.getElementById('btn-mostrar-buscador-factura-venta');
+            const buscadorFactura = d.getElementById('inicio-factura-buscador');
+            btnToggleFactura?.addEventListener('click', () => {
+                buscadorFactura.classList.toggle('d-none');
+                if (!buscadorFactura.classList.contains('d-none')) d.getElementById('inicio-factura-search')?.focus();
+            });
+
+            const inputFactura = d.getElementById('inicio-factura-search');
+            const suggestionsFactura = d.getElementById('inicio-factura-suggestions');
+            let debounceFactura;
+            inputFactura?.addEventListener('input', (e) => {
+                clearTimeout(debounceFactura);
+                const q = e.target.value.trim();
+                if (q.length < 2) { suggestionsFactura.classList.add('d-none'); return; }
+                debounceFactura = setTimeout(async () => {
+                    const resp = await w.proyectosAPI.inicio.facturasVenta.buscarDisponibles(this._proyectoUuid, q);
+                    const items = resp.ok ? (resp.data || []) : [];
+                    if (items.length === 0) {
+                        suggestionsFactura.innerHTML = '<div class="list-group-item small text-muted">Sin facturas disponibles</div>';
+                    } else {
+                        suggestionsFactura.innerHTML = items.map(f => `
+                            <button type="button" class="list-group-item list-group-item-action small py-2" data-uuid="${f.uuid}">
+                                <div class="d-flex justify-content-between">
+                                    <span><strong>${f.numero}</strong> — ${f.cliente || ''}${f.nit ? ` <span class="text-muted">(NIT ${f.nit})</span>` : ''}</span>
+                                    <span>${w.proyectosAPI.formatCurrency(f.subtotal)}</span>
+                                </div>
+                            </button>`).join('');
+                        suggestionsFactura.querySelectorAll('button').forEach(btn => {
+                            btn.addEventListener('click', () => this.vincularFactura(btn.dataset.uuid));
+                        });
+                    }
+                    suggestionsFactura.classList.remove('d-none');
+                }, 300);
+            });
+            d.addEventListener('click', (e) => {
+                if (inputFactura && suggestionsFactura && !inputFactura.contains(e.target) && !suggestionsFactura.contains(e.target)) {
+                    suggestionsFactura.classList.add('d-none');
+                }
+            });
+
+            // --- Cotizaciones de Costo: toggle de formulario ---
+            d.getElementById('btn-mostrar-form-cotizacion-costo')?.addEventListener('click', () => {
+                d.getElementById('inicio-form-cotizacion-costo')?.classList.remove('d-none');
+            });
+            d.getElementById('btn-cancelar-cotizacion-costo')?.addEventListener('click', () => {
+                d.getElementById('inicio-form-cotizacion-costo')?.classList.add('d-none');
+            });
+            d.getElementById('btn-guardar-cotizacion-costo')?.addEventListener('click', () => this.guardarCotizacionCosto());
+
+            // --- Inversiones: toggle de formulario ---
+            d.getElementById('btn-mostrar-form-inversion')?.addEventListener('click', () => {
+                d.getElementById('inicio-form-inversion')?.classList.remove('d-none');
+            });
+            d.getElementById('btn-cancelar-inversion')?.addEventListener('click', () => {
+                d.getElementById('inicio-form-inversion')?.classList.add('d-none');
+            });
+            d.getElementById('btn-guardar-inversion')?.addEventListener('click', () => this.guardarInversion());
+
+            // --- Aprobacion ---
+            d.getElementById('btn-enviar-aprobacion-inicio')?.addEventListener('click', () => this.enviarAprobacion());
+            d.getElementById('btn-aprobar-inicio')?.addEventListener('click', () => this.aprobar());
+            // Rechazar: formulario inline (motivo), nunca prompt() nativo.
+            d.getElementById('btn-rechazar-inicio')?.addEventListener('click', () => {
+                d.getElementById('inicio-rechazo-form')?.classList.remove('d-none');
+            });
+            d.getElementById('btn-cancelar-rechazo-inicio')?.addEventListener('click', () => {
+                d.getElementById('inicio-rechazo-form')?.classList.add('d-none');
+                d.getElementById('inicio-rechazo-motivo').value = '';
+            });
+            d.getElementById('btn-confirmar-rechazo-inicio')?.addEventListener('click', () => this.rechazar());
+        },
+
+        /** Buscador generico texto+sugerencias que solo fija hidden inputs
+         * del formulario principal (sin API propia) -- Supervisor/Contratista
+         * se guardan junto con el resto del Proyecto. */
+        _bindBuscadorSimple({ inputId, suggestionsId, hiddenIdId, hiddenNombreId, buscar, extraer, renderLabel }) {
+            const input = d.getElementById(inputId);
+            const suggestions = d.getElementById(suggestionsId);
+            const hiddenId = d.getElementById(hiddenIdId);
+            const hiddenNombre = d.getElementById(hiddenNombreId);
+            if (!input || !suggestions || !hiddenId || !hiddenNombre) return;
+
+            let debounceTimer;
+            input.addEventListener('input', (e) => {
+                clearTimeout(debounceTimer);
+                hiddenId.value = '';
+                hiddenNombre.value = '';
+                const q = e.target.value.trim();
+                if (q.length < 2) { suggestions.classList.add('d-none'); return; }
+                debounceTimer = setTimeout(async () => {
+                    const resp = await buscar(q);
+                    const items = resp.ok ? extraer(resp) : [];
+                    if (items.length === 0) {
+                        suggestions.innerHTML = '<div class="list-group-item small text-muted">Sin resultados</div>';
+                    } else {
+                        suggestions.innerHTML = items.map((item, idx) => `
+                            <button type="button" class="list-group-item list-group-item-action small py-2" data-idx="${idx}">
+                                ${renderLabel(item)}
+                            </button>`).join('');
+                        suggestions.querySelectorAll('button').forEach(btn => {
+                            btn.addEventListener('click', () => {
+                                const item = items[parseInt(btn.dataset.idx, 10)];
+                                input.value = renderLabel(item);
+                                hiddenId.value = item.id;
+                                hiddenNombre.value = renderLabel(item);
+                                suggestions.classList.add('d-none');
+                            });
+                        });
+                    }
+                    suggestions.classList.remove('d-none');
+                }, 300);
+            });
+            d.addEventListener('click', (e) => {
+                if (!input.contains(e.target) && !suggestions.contains(e.target)) {
+                    suggestions.classList.add('d-none');
+                }
+            });
+        },
+
+        // --- Facturas de Venta ---
+        _renderFacturas(facturas) {
+            const tbody = d.getElementById('inicio-tbody-facturas');
+            if (!tbody) return;
+            if (facturas.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3"><small>Sin facturas de venta vinculadas.</small></td></tr>`;
+                return;
+            }
+            tbody.innerHTML = facturas.map(f => `
+                <tr>
+                    <td><small>${f.numero || '—'}</small></td>
+                    <td><small>${f.cliente || '—'}</small></td>
+                    <td class="text-end"><small>${w.proyectosAPI.formatCurrency(f.subtotal)}</small></td>
+                    <td class="text-end"><small>${w.proyectosAPI.formatCurrency(f.total)}</small></td>
+                    <td>
+                        <button type="button" class="btn btn-xs btn-outline-danger"
+                                onclick="window.Sintel.ProyectoInicio.desvincularFactura('${f.uuid}')" title="Desvincular">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                    </td>
+                </tr>`).join('');
+        },
+
+        _renderValorVendido(valor) {
+            const el = d.getElementById('inicio-valor-vendido');
+            if (el) el.textContent = w.proyectosAPI.formatCurrency(valor || 0);
+        },
+
+        async vincularFactura(facturaUuid) {
+            const resp = await w.proyectosAPI.inicio.facturasVenta.vincular(this._proyectoUuid, facturaUuid);
+            if (!resp.ok) { this._mostrarError(resp, 'Error al vincular la factura'); return; }
+            w.SintelFeedback?.success('Factura vinculada. Valor vendido actualizado.');
+            d.getElementById('inicio-factura-buscador')?.classList.add('d-none');
+            d.getElementById('inicio-factura-search').value = '';
+            await this.refrescar();
+        },
+
+        async desvincularFactura(facturaUuid) {
+            if (!(await w.UIManager?.confirm('¿Desvincular esta factura de venta del proyecto?'))) return;
+            const resp = await w.proyectosAPI.inicio.facturasVenta.desvincular(this._proyectoUuid, facturaUuid);
+            if (!resp.ok) { this._mostrarError(resp, 'Error al desvincular la factura'); return; }
+            w.SintelFeedback?.success('Factura desvinculada.');
+            await this.refrescar();
+        },
+
+        // --- Cotizaciones de Costo ---
+        _renderCotizaciones(items) {
+            const tbody = d.getElementById('inicio-tbody-cotizaciones-costo');
+            if (tbody) {
+                if (items.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3"><small>Sin cotizaciones de costo registradas.</small></td></tr>`;
+                } else {
+                    tbody.innerHTML = items.map(c => `
+                        <tr>
+                            <td><small>${c.categoria_display || c.categoria}</small></td>
+                            <td><small>${c.proveedor_nombre || '—'}</small></td>
+                            <td class="text-end"><small>${w.proyectosAPI.formatCurrency(c.valor)}</small></td>
+                            <td>${c.archivo_pdf ? `<a href="${c.archivo_pdf}" target="_blank" class="btn btn-xs btn-outline-secondary"><i class="bi bi-file-pdf"></i></a>` : '<span class="text-muted small">—</span>'}</td>
+                            <td>
+                                <button type="button" class="btn btn-xs btn-outline-danger"
+                                        onclick="window.Sintel.ProyectoInicio.eliminarCotizacionCosto('${c.uuid}')" title="Eliminar">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>`).join('');
+                }
+            }
+            const totalEl = d.getElementById('inicio-total-cotizado');
+            if (totalEl) {
+                const total = items.reduce((s, c) => s + (parseFloat(c.valor) || 0), 0);
+                totalEl.textContent = w.proyectosAPI.formatCurrency(total);
+            }
+        },
+
+        async guardarCotizacionCosto() {
+            const valor = d.getElementById('cc-valor')?.value;
+            const archivo = d.getElementById('cc-archivo-pdf')?.files?.[0];
+            if (!valor || parseFloat(valor) <= 0) { w.SintelFeedback?.error('El valor es requerido'); return; }
+            if (!archivo) { w.SintelFeedback?.error('El PDF de la cotización es requerido'); return; }
+
+            const fd = new FormData();
+            fd.append('proyecto_uuid', this._proyectoUuid);
+            fd.append('categoria', d.getElementById('cc-categoria').value);
+            fd.append('descripcion', d.getElementById('cc-descripcion')?.value || '');
+            fd.append('proveedor_nombre', d.getElementById('cc-proveedor-nombre')?.value || '');
+            fd.append('fecha', d.getElementById('cc-fecha')?.value || '');
+            fd.append('valor', valor);
+            fd.append('archivo_pdf', archivo);
+
+            const resp = await w.proyectosAPI.inicio.cotizacionesCosto.create(fd);
+            if (!resp.ok) { this._mostrarError(resp, 'Error al guardar la cotización de costo'); return; }
+            w.SintelFeedback?.success('Cotización de costo guardada.');
+            ['cc-proveedor-nombre', 'cc-descripcion', 'cc-fecha', 'cc-valor', 'cc-archivo-pdf'].forEach(id => {
+                const el = d.getElementById(id);
+                if (el) el.value = '';
+            });
+            d.getElementById('inicio-form-cotizacion-costo')?.classList.add('d-none');
+            await this.refrescar();
+        },
+
+        async eliminarCotizacionCosto(itemUuid) {
+            if (!(await w.UIManager?.confirm('¿Eliminar esta cotización de costo?'))) return;
+            const resp = await w.proyectosAPI.inicio.cotizacionesCosto.delete(itemUuid);
+            if (!resp.ok) { this._mostrarError(resp, 'Error al eliminar la cotización de costo'); return; }
+            w.SintelFeedback?.success('Cotización de costo eliminada.');
+            await this.refrescar();
+        },
+
+        // --- Inversiones Reales ---
+        _renderInversiones(items) {
+            const tbody = d.getElementById('inicio-tbody-inversiones');
+            if (tbody) {
+                if (items.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3"><small>Sin inversiones reales registradas.</small></td></tr>`;
+                } else {
+                    tbody.innerHTML = items.map(inv => `
+                        <tr>
+                            <td><small>${inv.categoria_display || inv.categoria}</small></td>
+                            <td><small>${inv.descripcion || '—'}</small></td>
+                            <td class="text-end"><small>${w.proyectosAPI.formatCurrency(inv.valor)}</small></td>
+                            <td><small>${inv.fecha || '—'}</small></td>
+                            <td>
+                                <button type="button" class="btn btn-xs btn-outline-danger"
+                                        onclick="window.Sintel.ProyectoInicio.eliminarInversion('${inv.uuid}')" title="Eliminar">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>`).join('');
+                }
+            }
+            const totalEl = d.getElementById('inicio-total-invertido');
+            if (totalEl) {
+                const total = items.reduce((s, inv) => s + (parseFloat(inv.valor) || 0), 0);
+                totalEl.textContent = w.proyectosAPI.formatCurrency(total);
+            }
+        },
+
+        async guardarInversion() {
+            const valor = d.getElementById('inv-valor')?.value;
+            const fecha = d.getElementById('inv-fecha')?.value;
+            if (!valor || parseFloat(valor) <= 0) { w.SintelFeedback?.error('El valor es requerido'); return; }
+            if (!fecha) { w.SintelFeedback?.error('La fecha es requerida'); return; }
+
+            const data = {
+                proyecto_uuid: this._proyectoUuid,
+                categoria: d.getElementById('inv-categoria').value,
+                descripcion: d.getElementById('inv-descripcion')?.value || '',
+                proveedor_nombre: d.getElementById('inv-proveedor-nombre')?.value || '',
+                fecha,
+                valor,
+                documento_referencia: d.getElementById('inv-documento-referencia')?.value || ''
+            };
+            const resp = await w.proyectosAPI.inicio.inversiones.create(data);
+            if (!resp.ok) { this._mostrarError(resp, 'Error al guardar la inversión'); return; }
+            w.SintelFeedback?.success('Inversión registrada.');
+            ['inv-proveedor-nombre', 'inv-descripcion', 'inv-fecha', 'inv-valor', 'inv-documento-referencia'].forEach(id => {
+                const el = d.getElementById(id);
+                if (el) el.value = '';
+            });
+            d.getElementById('inicio-form-inversion')?.classList.add('d-none');
+            await this.refrescar();
+        },
+
+        async eliminarInversion(itemUuid) {
+            if (!(await w.UIManager?.confirm('¿Eliminar esta inversión?'))) return;
+            const resp = await w.proyectosAPI.inicio.inversiones.delete(itemUuid);
+            if (!resp.ok) { this._mostrarError(resp, 'Error al eliminar la inversión'); return; }
+            w.SintelFeedback?.success('Inversión eliminada.');
+            await this.refrescar();
+        },
+
+        // --- Viabilidad (solo pinta lo que calcula el backend) ---
+        _renderViabilidad(resumen) {
+            const set = (id, text) => { const el = d.getElementById(id); if (el) el.textContent = text; };
+            if (!resumen) return;
+
+            set('via-valor-vendido', w.proyectosAPI.formatCurrency(resumen.facturas_venta?.valor_vendido_subtotal));
+            set('via-costo-cotizacion', w.proyectosAPI.formatCurrency(resumen.cotizaciones_costo?.total));
+            set('via-costo-inversion', w.proyectosAPI.formatCurrency(resumen.inversion_real?.total));
+            set('via-resultado-cotizacion', w.proyectosAPI.formatCurrency(resumen.viabilidad?.resultado_cotizacion));
+            set('via-resultado-inversion', w.proyectosAPI.formatCurrency(resumen.viabilidad?.resultado_inversion));
+
+            // Margen como badge verde/rojo segun sea positivo o negativo --
+            // de un vistazo, sin que el cliente tenga que interpretar el
+            // numero (Seccion 10 del plan: ambos margenes, sin forzar uno
+            // "oficial", pero cada uno debe leerse solo).
+            this._renderMargenBadge('via-margen-cotizacion', resumen.viabilidad?.margen_cotizacion_pct);
+            this._renderMargenBadge('via-margen-inversion', resumen.viabilidad?.margen_inversion_pct);
+        },
+
+        _renderMargenBadge(elId, margenPct) {
+            const el = d.getElementById(elId);
+            if (!el) return;
+            if (margenPct === null || margenPct === undefined) {
+                el.textContent = 'Sin datos (aún no hay valor vendido)';
+                el.className = 'badge bg-secondary';
+                return;
+            }
+            const valor = parseFloat(margenPct);
+            el.textContent = `${margenPct}%`;
+            el.className = `badge ${valor >= 0 ? 'bg-success' : 'bg-danger'}`;
+        },
+
+        // --- Aprobacion ---
+        _renderAprobacion(resumen) {
+            const badge = d.getElementById('inicio-estado-aprobacion-badge');
+            const motivoEl = d.getElementById('inicio-motivo-rechazo');
+            const btnEnviar = d.getElementById('btn-enviar-aprobacion-inicio');
+            const btnAprobar = d.getElementById('btn-aprobar-inicio');
+            const btnRechazar = d.getElementById('btn-rechazar-inicio');
+            if (!badge) return;
+
+            const estado = resumen?.estado_aprobacion || 'SIN_ENVIAR';
+            const estilos = {
+                'SIN_ENVIAR': ['bg-secondary', 'Sin enviar'],
+                'PENDIENTE': ['bg-warning text-dark', 'En revisión'],
+                'APROBADA': ['bg-success', 'Aprobado'],
+                'RECHAZADA': ['bg-danger', 'Rechazado'],
+                'CANCELADA': ['bg-secondary', 'Aprobación anulada: reenvíe para revisión']
+            };
+            const [clase, texto] = estilos[estado] || ['bg-secondary', estado];
+            badge.className = `badge ${clase}`;
+            badge.textContent = texto;
+
+            if (motivoEl) {
+                if (estado === 'RECHAZADA' && resumen?.motivo_rechazo) {
+                    motivoEl.textContent = `Motivo: ${resumen.motivo_rechazo}`;
+                    motivoEl.classList.remove('d-none');
+                } else {
+                    motivoEl.classList.add('d-none');
+                }
+            }
+
+            // "Enviar a aprobacion" disponible salvo que ya este PENDIENTE o APROBADA vigente.
+            const puedeEnviar = estado === 'SIN_ENVIAR' || estado === 'RECHAZADA' || estado === 'CANCELADA';
+            btnEnviar?.classList.toggle('d-none', !puedeEnviar);
+            // "Aprobar/Rechazar" solo tienen sentido con una solicitud PENDIENTE
+            // (el backend ya exige rol ADMIN -- esto es solo UX, no seguridad).
+            btnAprobar?.classList.toggle('d-none', estado !== 'PENDIENTE');
+            btnRechazar?.classList.toggle('d-none', estado !== 'PENDIENTE');
+        },
+
+        async enviarAprobacion() {
+            const resp = await w.proyectosAPI.inicio.enviarAprobacion(this._proyectoUuid);
+            if (!resp.ok) { this._mostrarError(resp, 'Error al enviar a aprobación'); return; }
+            w.SintelFeedback?.success('Inicio enviado a aprobación administrativa.');
+            await this.refrescar();
+            await refrescarProyectoActual();
+        },
+
+        async aprobar() {
+            if (!(await w.UIManager?.confirm('¿Aprobar el Inicio de este proyecto? Esto desbloqueará la Fase de Planeación.'))) return;
+            const resp = await w.proyectosAPI.inicio.aprobar(this._proyectoUuid);
+            if (!resp.ok) { this._mostrarError(resp, 'Error al aprobar'); return; }
+            w.SintelFeedback?.success('Inicio aprobado. Planeación desbloqueada.');
+            await this.refrescar();
+            await refrescarProyectoActual();
+        },
+
+        async rechazar() {
+            const motivoInput = d.getElementById('inicio-rechazo-motivo');
+            const motivo = (motivoInput?.value || '').trim();
+            if (!motivo) { w.SintelFeedback?.error('Debe indicar el motivo del rechazo'); return; }
+
+            const resp = await w.proyectosAPI.inicio.rechazar(this._proyectoUuid, motivo);
+            if (!resp.ok) { this._mostrarError(resp, 'Error al rechazar'); return; }
+            w.SintelFeedback?.success('Inicio rechazado.');
+            motivoInput.value = '';
+            d.getElementById('inicio-rechazo-form')?.classList.add('d-none');
+            await this.refrescar();
+            await refrescarProyectoActual();
+        }
+    };
+
+    w.Sintel.ProyectoInicio = ProyectoInicio;
+
+    // ============================================================================
+    // FIN MÓDULO FASE 1 (INICIO)
+    // ============================================================================
+
     w.ProyectosEditorModule = {
         init,
         guardarProyecto,
         avanzarFaseProyecto,
-        cargarDetallesProyecto
+        cargarDetallesProyecto,
+        irAFaseInicio: () => irAStep(1)
     };
 
     if (!w.ProyectosModule) {

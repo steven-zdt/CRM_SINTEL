@@ -26,11 +26,25 @@ from apps.tenant.api.permissions import IsTenantAdminOrReadOnly, IsTenantMember
 from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 from apps.tenant.empresa.models import Empresa
 
-from ..models import ItemPresupuestoProyecto, Proyecto, TareaCorta, TareaDiariaProyecto
+from ..models import (
+    CotizacionCostoProyecto,
+    InversionProyectoInicio,
+    ItemPresupuestoProyecto,
+    Proyecto,
+    TareaCorta,
+    TareaDiariaProyecto,
+)
 from ..services import (
+    COTIZACION_COSTO_FIELDS,
+    INVERSION_INICIO_FIELDS,
     PRESUPUESTO_ITEM_FIELDS,
     TAREA_FIELDS,
+    CotizacionCostoProyectoService,
+    InversionProyectoInicioService,
     PresupuestoBusinessService,
+    ProyectoFacturaVentaService,
+    ProyectoInicioAprobacionService,
+    ProyectoInicioResumenService,
     TareaCortaSelector,
     TareaCortaServiceMixin,
     TareasCortasBusinessService,
@@ -38,8 +52,10 @@ from ..services import (
 )
 from .mixins import ProyectoServiceMixin
 from .serializers import (
+    CotizacionCostoProyectoSerializer,
     DocumentoProyectoSerializer,
     HistorialFaseProyectoSerializer,
+    InversionProyectoInicioSerializer,
     ItemPresupuestoSerializer,
     ProyectoDetailSerializer,
     ProyectoListSerializer,
@@ -733,6 +749,130 @@ class ProyectoViewSet(
 
         return Response({"success": True, **result}, status=status_code)
 
+    # ==========================================================================
+    # FASE 1 (INICIO): PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION
+    # ==========================================================================
+
+    @action(detail=True, methods=["get"], url_path="inicio")
+    def inicio(self, request, uuid=None):
+        """
+        GET /api/v1/proyectos/{uuid}/inicio/ -- "ProyectoInicioSummary"
+        (Seccion 68 del plan): supervisor, contratista, facturas de venta,
+        cotizaciones de costo, inversiones reales, viabilidad y estado de
+        aprobacion, todo en una sola respuesta (Seccion 69: Zero-Waste, sin
+        GETs dispersos al abrir Fase 1).
+        """
+        proyecto = self.get_object()
+        return Response(ProyectoInicioResumenService.calcular_resumen(proyecto))
+
+    @action(detail=True, methods=["get"], url_path="facturas-venta/disponibles")
+    def facturas_venta_disponibles(self, request, uuid=None):
+        """
+        GET /api/v1/proyectos/{uuid}/facturas-venta/disponibles/?search= --
+        buscador server-side (Seccion 40 del plan) de Facturas VENTA+
+        ACEPTADA aun no vinculadas a este proyecto.
+        """
+        proyecto = self.get_object()
+        search = request.query_params.get("search", "")
+        facturas = ProyectoFacturaVentaService.buscar_disponibles(
+            proyecto=proyecto, empresa_id=proyecto.empresa_id, search=search
+        )
+        return Response(
+            [
+                {
+                    "uuid": str(f.uuid),
+                    "numero": f.numero,
+                    "tipo": f.tipo,
+                    "cliente": f.receptor_razon_social,
+                    "nit": f.receptor_nit,
+                    "subtotal": str(f.subtotal),
+                    "total": str(f.total),
+                    "fecha_emision": f.fecha_emision.isoformat() if f.fecha_emision else None,
+                }
+                for f in facturas
+            ]
+        )
+
+    @action(detail=True, methods=["post"], url_path="facturas-venta/vincular")
+    def facturas_venta_vincular(self, request, uuid=None):
+        """POST /api/v1/proyectos/{uuid}/facturas-venta/vincular/ -- Body: { "factura_uuid": "..." }"""
+        proyecto = self.get_object()
+        usuario = getattr(request.user, "tenant_profile", None)
+        ok, result, status_code = ProyectoFacturaVentaService.vincular_factura(
+            proyecto=proyecto,
+            factura_uuid=request.data.get("factura_uuid"),
+            empresa_id=proyecto.empresa_id,
+            usuario=usuario,
+        )
+        if not ok:
+            return Response(result, status=status_code)
+        return Response(ProyectoInicioResumenService.calcular_resumen(proyecto)["facturas_venta"], status=status_code)
+
+    @action(detail=True, methods=["post"], url_path="facturas-venta/desvincular")
+    def facturas_venta_desvincular(self, request, uuid=None):
+        """POST /api/v1/proyectos/{uuid}/facturas-venta/desvincular/ -- Body: { "factura_uuid": "..." }"""
+        proyecto = self.get_object()
+        ok, result, status_code = ProyectoFacturaVentaService.desvincular_factura(
+            proyecto=proyecto, factura_uuid=request.data.get("factura_uuid")
+        )
+        if not ok:
+            return Response(result, status=status_code)
+        return Response(ProyectoInicioResumenService.calcular_resumen(proyecto)["facturas_venta"], status=status_code)
+
+    @action(detail=True, methods=["post"], url_path="enviar-aprobacion")
+    def enviar_aprobacion_inicio(self, request, uuid=None):
+        """
+        POST /api/v1/proyectos/{uuid}/enviar-aprobacion/ -- Seccion 30 del
+        plan: usuario envia el conjunto economico de Inicio a revision
+        administrativa (crea una SolicitudAprobacion PENDIENTE via el motor
+        generico de apps.tenant.approvals).
+        """
+        proyecto = self.get_object()
+        usuario = getattr(request.user, "tenant_profile", None)
+        ok, result, status_code = ProyectoInicioAprobacionService.enviar_aprobacion(
+            proyecto=proyecto, usuario=usuario
+        )
+        if not ok:
+            return Response(result, status=status_code)
+        return Response(
+            {"detail": "Inicio enviado a aprobacion administrativa.", "estado": result.estado},
+            status=status_code,
+        )
+
+    @action(detail=True, methods=["post"], url_path="aprobar-inicio")
+    def aprobar_inicio(self, request, uuid=None):
+        """
+        POST /api/v1/proyectos/{uuid}/aprobar-inicio/ -- Seccion 55/56 del
+        plan: accion de dominio dedicada (nunca PATCH generico). Solo ADMIN
+        (via `IsTenantAdminOrReadOnly` ya heredado por este ViewSet).
+        """
+        proyecto = self.get_object()
+        usuario = getattr(request.user, "tenant_profile", None)
+        ok, result, status_code = ProyectoInicioAprobacionService.aprobar(
+            proyecto=proyecto,
+            empresa_id=proyecto.empresa_id,
+            usuario=usuario,
+            observacion=request.data.get("observacion", ""),
+        )
+        if not ok:
+            return Response(result, status=status_code)
+        return Response({"detail": "Inicio del proyecto aprobado. Planeacion desbloqueada."}, status=status_code)
+
+    @action(detail=True, methods=["post"], url_path="rechazar-inicio")
+    def rechazar_inicio(self, request, uuid=None):
+        """POST /api/v1/proyectos/{uuid}/rechazar-inicio/ -- Body: { "motivo": "..." } (requerido, Seccion 31)."""
+        proyecto = self.get_object()
+        usuario = getattr(request.user, "tenant_profile", None)
+        ok, result, status_code = ProyectoInicioAprobacionService.rechazar(
+            proyecto=proyecto,
+            empresa_id=proyecto.empresa_id,
+            usuario=usuario,
+            motivo=request.data.get("motivo", ""),
+        )
+        if not ok:
+            return Response(result, status=status_code)
+        return Response({"detail": "Inicio del proyecto rechazado."}, status=status_code)
+
     @action(
         detail=False,
         methods=["get"],
@@ -1033,6 +1173,161 @@ class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         Delegacion al service para recalculo de proyecto padre.
         """
         PresupuestoBusinessService.eliminar_item(instance)
+
+
+class CotizacionCostoProyectoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
+    """
+    Cotizaciones de Costo de Fase 1 (PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_
+    VIABILIDAD_APROBACION, Secciones 15-19).
+
+    Endpoints:
+    - GET    /api/v1/proyectos/cotizaciones-costos/?proyecto_uuid=<uuid>&categoria=<cat>
+    - POST   /api/v1/proyectos/cotizaciones-costos/
+    - PATCH  /api/v1/proyectos/cotizaciones-costos/<uuid>/
+    - DELETE /api/v1/proyectos/cotizaciones-costos/<uuid>/  (baja logica, activo=False)
+    """
+
+    serializer_class = CotizacionCostoProyectoSerializer
+    queryset = CotizacionCostoProyecto.objects.none()
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+    # WARNING: [ARQ-A1] lookup_field='uuid' se hereda de BaseTenantViewSet.
+
+    def get_queryset(self):
+        empresa_id = self._get_empresa_id()
+        qs = CotizacionCostoProyecto.objects.filter(empresa_id=empresa_id, activo=True)
+
+        sede_ids = self._get_sede_ids()
+        if sede_ids is not None:
+            qs = qs.filter(Q(proyecto__sede_id__isnull=True) | Q(proyecto__sede_id__in=sede_ids))
+
+        proyecto_uuid = self.request.query_params.get("proyecto_uuid")
+        if proyecto_uuid:
+            qs = qs.filter(proyecto__uuid=proyecto_uuid)
+
+        categoria = self.request.query_params.get("categoria")
+        if categoria:
+            qs = qs.filter(categoria=categoria)
+
+        return qs.only(*COTIZACION_COSTO_FIELDS)
+
+    def _get_empresa_id(self):
+        empresa = Empresa.objects.only("id").first()
+        if not empresa:
+            raise APIException(detail="No se encontro la empresa configurada en este tenant.")
+        return empresa.id
+
+    def _get_sede_ids(self):
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+
+        try:
+            return OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            return None
+
+    def _get_proyecto(self, proyecto_uuid):
+        empresa_id = self._get_empresa_id()
+        qs = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa_id)
+        sede_ids = self._get_sede_ids()
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
+        return get_object_or_404(qs)
+
+    def perform_create(self, serializer):
+        empresa_id = self._get_empresa_id()
+        proyecto_uuid = self.request.data.get("proyecto_uuid")
+        proyecto = self._get_proyecto(proyecto_uuid)
+
+        serializer.instance = CotizacionCostoProyectoService.crear(
+            proyecto=proyecto, empresa_id=empresa_id, data=serializer.validated_data
+        )
+
+    def perform_update(self, serializer):
+        serializer.instance = CotizacionCostoProyectoService.actualizar(
+            item=self.get_object(), data=serializer.validated_data
+        )
+
+    def perform_destroy(self, instance):
+        CotizacionCostoProyectoService.eliminar(item=instance)
+
+
+class InversionProyectoInicioViewSet(OrganizationalContextMixin, BaseTenantViewSet):
+    """
+    Inversiones Reales de Fase 1 (PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_
+    VIABILIDAD_APROBACION, Secciones 20-22).
+
+    Endpoints:
+    - GET    /api/v1/proyectos/inversiones-inicio/?proyecto_uuid=<uuid>&categoria=<cat>
+    - POST   /api/v1/proyectos/inversiones-inicio/
+    - PATCH  /api/v1/proyectos/inversiones-inicio/<uuid>/
+    - DELETE /api/v1/proyectos/inversiones-inicio/<uuid>/  (baja logica, activo=False)
+    """
+
+    serializer_class = InversionProyectoInicioSerializer
+    queryset = InversionProyectoInicio.objects.none()
+    permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
+
+    def get_queryset(self):
+        empresa_id = self._get_empresa_id()
+        qs = InversionProyectoInicio.objects.filter(empresa_id=empresa_id, activo=True)
+
+        sede_ids = self._get_sede_ids()
+        if sede_ids is not None:
+            qs = qs.filter(Q(proyecto__sede_id__isnull=True) | Q(proyecto__sede_id__in=sede_ids))
+
+        proyecto_uuid = self.request.query_params.get("proyecto_uuid")
+        if proyecto_uuid:
+            qs = qs.filter(proyecto__uuid=proyecto_uuid)
+
+        categoria = self.request.query_params.get("categoria")
+        if categoria:
+            qs = qs.filter(categoria=categoria)
+
+        return qs.only(*INVERSION_INICIO_FIELDS)
+
+    def _get_empresa_id(self):
+        empresa = Empresa.objects.only("id").first()
+        if not empresa:
+            raise APIException(detail="No se encontro la empresa configurada en este tenant.")
+        return empresa.id
+
+    def _get_sede_ids(self):
+        from apps.tenant.core.services.organizational_scope import (
+            OrganizationalScope,
+            OrganizationalScopeError,
+        )
+
+        try:
+            return OrganizationalScope.resolve(self.request).sede_ids
+        except OrganizationalScopeError:
+            return None
+
+    def _get_proyecto(self, proyecto_uuid):
+        empresa_id = self._get_empresa_id()
+        qs = Proyecto.objects.filter(uuid=proyecto_uuid, empresa_id=empresa_id)
+        sede_ids = self._get_sede_ids()
+        if sede_ids is not None:
+            qs = qs.filter(Q(sede_id__isnull=True) | Q(sede_id__in=sede_ids))
+        return get_object_or_404(qs)
+
+    def perform_create(self, serializer):
+        empresa_id = self._get_empresa_id()
+        proyecto_uuid = self.request.data.get("proyecto_uuid")
+        proyecto = self._get_proyecto(proyecto_uuid)
+
+        serializer.instance = InversionProyectoInicioService.crear(
+            proyecto=proyecto, empresa_id=empresa_id, data=serializer.validated_data
+        )
+
+    def perform_update(self, serializer):
+        serializer.instance = InversionProyectoInicioService.actualizar(
+            item=self.get_object(), data=serializer.validated_data
+        )
+
+    def perform_destroy(self, instance):
+        InversionProyectoInicioService.eliminar(item=instance)
 
 
 class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):

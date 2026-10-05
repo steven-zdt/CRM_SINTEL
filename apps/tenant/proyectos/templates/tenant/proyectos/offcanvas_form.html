@@ -162,7 +162,7 @@
       </div>
       <div class="step-node locked" data-step="2" id="node-step-2">
         <div class="step-circle"><i class="bi bi-pencil-square"></i></div>
-        <div class="step-label">2. Planeación</div>
+        <div class="step-label">2. Planeación <i class="bi bi-lock-fill text-danger d-none" id="icono-planeacion-bloqueada" title="Pendiente de aprobacion administrativa del Inicio"></i></div>
       </div>
       <div class="step-node locked" data-step="3" id="node-step-3">
         <div class="step-circle"><i class="bi bi-gear-fill"></i></div>
@@ -339,12 +339,19 @@
         
         <div class="unlocked-content" id="unlocked-step-1">
           <h5 class="text-primary border-bottom pb-2 mb-3">
-            <i class="bi bi-play-fill me-2"></i>Fase 1: Inicio (Comercial y Legal)
+            <i class="bi bi-play-fill me-2"></i>Fase 1: Inicio (Validación Comercial y Viabilidad)
           </h5>
-          
+          <p class="text-muted small mb-3">
+            Complete estos pasos en orden para enviar el proyecto a aprobación: asigne
+            responsables, vincule las facturas de venta, registre los costos estimados
+            y la inversión real, revise la viabilidad y finalmente envíe a revisión
+            administrativa. <strong>La Planeación se desbloquea solo cuando el Inicio
+            queda aprobado.</strong>
+          </p>
+
           <div class="row g-3">
             <div class="col-md-12">
-              <label for="proyecto-responsable-comercial-select" class="form-label fw-bold">Responsable Comercial (Nómina)</label>
+              <label for="proyecto-responsable-comercial-select" class="form-label fw-bold">① Responsable Comercial (Nómina)</label>
               <select class="form-select border-primary" id="proyecto-responsable-comercial-select">
                 <option value="">-- Seleccionar Responsable --</option>
                 {% for empleado in empleados %}
@@ -357,8 +364,21 @@
               <input type="hidden" id="proyecto-responsable-comercial-nombre" name="responsable_comercial_nombre" value="{% if proyecto %}{{ proyecto.responsable_comercial_nombre }}{% endif %}">
             </div>
 
-            {# === FACTURA DE VENTA + COTIZACION (Fase 1) === #}
+            {% comment %}
+            === FACTURA DE VENTA + COTIZACION (Fase 1) -- LEGADO.
+            PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION
+            reemplaza este vinculo de UNA sola factura por "Facturas
+            de Venta del Proyecto" (varias, mas abajo). Se conserva
+            colapsado por compatibilidad -- nunca se muestra junto a
+            la seccion nueva para no confundir al usuario con dos
+            bloques de "factura" simultaneos.
+            {% endcomment %}
             <div class="col-md-12 mt-4 pt-3 border-top">
+              <button type="button" class="btn btn-sm btn-link text-muted p-0 mb-2 text-decoration-none"
+                      data-bs-toggle="collapse" data-bs-target="#legado-factura-vinculo-unico" aria-expanded="false">
+                <i class="bi bi-clock-history me-1"></i>Vínculo anterior de una sola factura (histórico, ya reemplazado por "Facturas de Venta del Proyecto")
+              </button>
+              <div class="collapse" id="legado-factura-vinculo-unico">
               <h6 class="text-dark fw-bold mb-3">
                 <i class="bi bi-receipt me-2 text-primary"></i>Factura de Venta Vinculada
               </h6>
@@ -422,6 +442,316 @@
               <div id="panel-sin-cotizacion" class="mt-2 alert alert-secondary py-2 d-none" style="font-size:0.82rem;">
                 <i class="bi bi-info-circle me-1"></i>Esta factura no tiene cotización vinculada.
               </div>
+              </div>
+            </div>
+
+            {% comment %}
+            === FASE 1: VIABILIDAD Y APROBACION
+            (PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION) ===
+            {% endcomment %}
+            <div class="col-md-12 mt-4 pt-3 border-top">
+              <h6 class="text-dark fw-bold mb-3">
+                <i class="bi bi-clipboard-check me-2 text-primary"></i>② Supervisor y Contratista
+              </h6>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label for="inicio-supervisor-search" class="form-label small fw-bold">Supervisor del Proyecto</label>
+                  <input type="text" id="inicio-supervisor-search" class="form-control form-control-sm"
+                         placeholder="Buscar empleado activo..." autocomplete="off"
+                         value="{% if proyecto %}{{ proyecto.supervisor_nombre }}{% endif %}">
+                  <div id="inicio-supervisor-suggestions" class="list-group position-absolute shadow-sm d-none" style="z-index:1050;"></div>
+                  <input type="hidden" id="inicio-supervisor-id" name="supervisor_id" value="{% if proyecto %}{{ proyecto.supervisor_id }}{% endif %}">
+                  <input type="hidden" id="inicio-supervisor-nombre" name="supervisor_nombre" value="{% if proyecto %}{{ proyecto.supervisor_nombre }}{% endif %}">
+                </div>
+                <div class="col-md-6">
+                  <label for="inicio-contratista-search" class="form-label small fw-bold">Contratista / Proveedor Principal</label>
+                  <input type="text" id="inicio-contratista-search" class="form-control form-control-sm"
+                         placeholder="Buscar proveedor..." autocomplete="off"
+                         value="{% if proyecto %}{{ proyecto.proveedor_nombre }}{% endif %}">
+                  <div id="inicio-contratista-suggestions" class="list-group position-absolute shadow-sm d-none" style="z-index:1050;"></div>
+                  <input type="hidden" id="inicio-contratista-id" name="proveedor_id" value="{% if proyecto %}{{ proyecto.proveedor_id }}{% endif %}">
+                  <input type="hidden" id="inicio-contratista-nombre" name="proveedor_nombre" value="{% if proyecto %}{{ proyecto.proveedor_nombre }}{% endif %}">
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-12 mt-4 pt-3 border-top">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="text-dark fw-bold mb-0">
+                  <i class="bi bi-receipt-cutoff me-2 text-success"></i>③ Facturas de Venta del Proyecto
+                </h6>
+                <button type="button" id="btn-mostrar-buscador-factura-venta" class="btn btn-sm btn-outline-success">
+                  <i class="bi bi-plus"></i> Vincular factura
+                </button>
+              </div>
+              <small class="text-muted d-block mb-2">El valor vendido del proyecto se calcula automáticamente sumando las facturas que vincule aquí (antes de IVA).</small>
+
+              <div id="inicio-factura-buscador" class="d-none mb-3 p-2 bg-light border rounded position-relative">
+                <input type="text" id="inicio-factura-search" class="form-control form-control-sm"
+                       placeholder="Buscar por número, cliente o NIT..." autocomplete="off">
+                <div id="inicio-factura-suggestions" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1050; top:100%; left:0;"></div>
+              </div>
+
+              <div class="table-responsive border rounded mb-2">
+                <table class="table table-sm table-striped mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Número</th>
+                      <th>Cliente</th>
+                      <th class="text-end">Subtotal</th>
+                      <th class="text-end">Total</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="inicio-tbody-facturas">
+                    <tr><td colspan="5" class="text-center text-muted py-3">Cargando facturas de venta...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="d-flex justify-content-end">
+                <div class="card bg-success bg-opacity-10 border-0" style="min-width:240px;">
+                  <div class="card-body p-2 d-flex justify-content-between align-items-center">
+                    <small class="text-muted">Valor vendido (antes de IVA):</small>
+                    <span class="fw-bold text-success" id="inicio-valor-vendido">$ 0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-12 mt-4 pt-3 border-top">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="text-dark fw-bold mb-0">
+                  <i class="bi bi-file-earmark-text me-2 text-warning"></i>④ Cotizaciones de Costo
+                </h6>
+                <button type="button" id="btn-mostrar-form-cotizacion-costo" class="btn btn-sm btn-outline-warning">
+                  <i class="bi bi-plus"></i> Nueva cotización
+                </button>
+              </div>
+              <small class="text-muted d-block mb-2">Cuánto costaría ejecutar el proyecto según cada proveedor o contratista. Adjunte el PDF de la cotización como evidencia. (No es la Cotización Comercial que ya ofreció al cliente en la fase de Planeación.)</small>
+
+              <div id="inicio-form-cotizacion-costo" class="d-none row g-2 mb-3 p-3 bg-light rounded">
+                <div class="col-md-3">
+                  <label class="form-label form-label-sm fw-bold">Categoría</label>
+                  <select id="cc-categoria" class="form-select form-select-sm">
+                    <option value="MANO_OBRA">Mano de Obra</option>
+                    <option value="MATERIALES">Materiales</option>
+                    <option value="EQUIPOS">Equipos</option>
+                  </select>
+                </div>
+                <div class="col-md-5">
+                  <label class="form-label form-label-sm fw-bold">Proveedor</label>
+                  <input type="text" id="cc-proveedor-nombre" class="form-control form-control-sm" placeholder="Nombre del proveedor">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label form-label-sm fw-bold">Valor (antes de IVA) *</label>
+                  <input type="number" id="cc-valor" class="form-control form-control-sm" min="0" step="0.01">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label form-label-sm fw-bold">Descripción</label>
+                  <input type="text" id="cc-descripcion" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label form-label-sm fw-bold">Fecha</label>
+                  <input type="date" id="cc-fecha" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label form-label-sm fw-bold">PDF *</label>
+                  <input type="file" id="cc-archivo-pdf" class="form-control form-control-sm" accept="application/pdf">
+                </div>
+                <div class="col-12 d-flex justify-content-end gap-2">
+                  <button type="button" id="btn-cancelar-cotizacion-costo" class="btn btn-sm btn-outline-secondary">Cancelar</button>
+                  <button type="button" id="btn-guardar-cotizacion-costo" class="btn btn-sm btn-warning">Guardar cotización</button>
+                </div>
+              </div>
+
+              <div class="table-responsive border rounded mb-2">
+                <table class="table table-sm table-striped mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Categoría</th>
+                      <th>Proveedor</th>
+                      <th class="text-end">Valor</th>
+                      <th>PDF</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="inicio-tbody-cotizaciones-costo">
+                    <tr><td colspan="5" class="text-center text-muted py-3">Cargando cotizaciones de costo...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="d-flex justify-content-end">
+                <div class="card bg-warning bg-opacity-10 border-0" style="min-width:240px;">
+                  <div class="card-body p-2 d-flex justify-content-between align-items-center">
+                    <small class="text-muted">Total cotizado:</small>
+                    <span class="fw-bold text-warning-emphasis" id="inicio-total-cotizado">$ 0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-12 mt-4 pt-3 border-top">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="text-dark fw-bold mb-0">
+                  <i class="bi bi-cash-stack me-2 text-danger"></i>⑤ Inversión Real del Proyecto
+                </h6>
+                <button type="button" id="btn-mostrar-form-inversion" class="btn btn-sm btn-outline-danger">
+                  <i class="bi bi-plus"></i> Nueva inversión
+                </button>
+              </div>
+              <small class="text-muted d-block mb-2">Dinero o compromisos ya adquiridos para este proyecto, aunque todavía no estén pagados. Es un análisis inicial: no reemplaza los Gastos No Facturables que se registran más adelante, en la fase de Ejecución.</small>
+
+              <div id="inicio-form-inversion" class="d-none row g-2 mb-3 p-3 bg-light rounded">
+                <div class="col-md-3">
+                  <label class="form-label form-label-sm fw-bold">Categoría</label>
+                  <select id="inv-categoria" class="form-select form-select-sm">
+                    <option value="MANO_OBRA">Mano de Obra</option>
+                    <option value="MATERIALES">Materiales</option>
+                    <option value="EQUIPOS">Equipos</option>
+                  </select>
+                </div>
+                <div class="col-md-5">
+                  <label class="form-label form-label-sm fw-bold">Proveedor</label>
+                  <input type="text" id="inv-proveedor-nombre" class="form-control form-control-sm" placeholder="Nombre del proveedor">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label form-label-sm fw-bold">Valor *</label>
+                  <input type="number" id="inv-valor" class="form-control form-control-sm" min="0" step="0.01">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label form-label-sm fw-bold">Descripción</label>
+                  <input type="text" id="inv-descripcion" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label form-label-sm fw-bold">Fecha *</label>
+                  <input type="date" id="inv-fecha" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label form-label-sm fw-bold">Documento / Ref.</label>
+                  <input type="text" id="inv-documento-referencia" class="form-control form-control-sm">
+                </div>
+                <div class="col-12 d-flex justify-content-end gap-2">
+                  <button type="button" id="btn-cancelar-inversion" class="btn btn-sm btn-outline-secondary">Cancelar</button>
+                  <button type="button" id="btn-guardar-inversion" class="btn btn-sm btn-danger">Guardar inversión</button>
+                </div>
+              </div>
+
+              <div class="table-responsive border rounded mb-2">
+                <table class="table table-sm table-striped mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Categoría</th>
+                      <th>Descripción</th>
+                      <th class="text-end">Valor</th>
+                      <th>Fecha</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="inicio-tbody-inversiones">
+                    <tr><td colspan="5" class="text-center text-muted py-3">Cargando inversiones reales...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="d-flex justify-content-end">
+                <div class="card bg-danger bg-opacity-10 border-0" style="min-width:240px;">
+                  <div class="card-body p-2 d-flex justify-content-between align-items-center">
+                    <small class="text-muted">Total invertido:</small>
+                    <span class="fw-bold text-danger" id="inicio-total-invertido">$ 0</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-12 mt-4 pt-3 border-top">
+              <h6 class="text-dark fw-bold mb-3">
+                <i class="bi bi-graph-up-arrow me-2 text-info"></i>⑥ Análisis de Viabilidad
+              </h6>
+              <p class="text-muted small mb-3">Compara lo que se vendió contra los costos del proyecto, para saber si es rentable. El sistema calcula todo automáticamente a partir de lo registrado arriba — no necesita calcular nada manualmente.</p>
+
+              <div class="card bg-success bg-opacity-10 border-0 mb-3">
+                <div class="card-body p-3 text-center">
+                  <small class="text-muted d-block">Valor del Proyecto (vendido, antes de IVA)</small>
+                  <span class="fs-4 fw-bold text-success" id="via-valor-vendido">$ 0</span>
+                </div>
+              </div>
+
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <div class="card border-warning border-opacity-50 h-100">
+                    <div class="card-header bg-warning bg-opacity-10 py-2">
+                      <small class="fw-bold text-warning-emphasis"><i class="bi bi-file-earmark-text me-1"></i>Estimado (según Cotizaciones de Costo)</small>
+                    </div>
+                    <div class="card-body p-3">
+                      <div class="d-flex justify-content-between mb-2">
+                        <small class="text-muted">Costo total</small>
+                        <span class="fw-semibold font-monospace" id="via-costo-cotizacion">$ 0</span>
+                      </div>
+                      <div class="d-flex justify-content-between mb-2">
+                        <small class="text-muted">Utilidad estimada</small>
+                        <span class="fw-semibold font-monospace" id="via-resultado-cotizacion">$ 0</span>
+                      </div>
+                      <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                        <small class="text-muted">Margen de utilidad</small>
+                        <span class="badge" id="via-margen-cotizacion">--</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="card border-danger border-opacity-50 h-100">
+                    <div class="card-header bg-danger bg-opacity-10 py-2">
+                      <small class="fw-bold text-danger-emphasis"><i class="bi bi-cash-stack me-1"></i>Real (según Inversión Registrada)</small>
+                    </div>
+                    <div class="card-body p-3">
+                      <div class="d-flex justify-content-between mb-2">
+                        <small class="text-muted">Costo total</small>
+                        <span class="fw-semibold font-monospace" id="via-costo-inversion">$ 0</span>
+                      </div>
+                      <div class="d-flex justify-content-between mb-2">
+                        <small class="text-muted">Utilidad real</small>
+                        <span class="fw-semibold font-monospace" id="via-resultado-inversion">$ 0</span>
+                      </div>
+                      <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                        <small class="text-muted">Margen de utilidad</small>
+                        <span class="badge" id="via-margen-inversion">--</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-12 mt-4 pt-3 border-top">
+              <h6 class="text-dark fw-bold mb-3">
+                <i class="bi bi-person-check me-2"></i>⑦ Aprobación del Inicio
+              </h6>
+              <p class="text-muted small mb-2">Cuando termine de registrar la información anterior, envíela a revisión. Un administrador debe aprobarla antes de poder avanzar a la fase de Planeación.</p>
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                  <span class="badge" id="inicio-estado-aprobacion-badge">--</span>
+                  <small class="text-muted d-block mt-1 d-none" id="inicio-motivo-rechazo"></small>
+                </div>
+                <div class="d-flex gap-2">
+                  <button type="button" id="btn-enviar-aprobacion-inicio" class="btn btn-sm btn-primary">
+                    <i class="bi bi-send me-1"></i>Enviar a Aprobación
+                  </button>
+                  <button type="button" id="btn-aprobar-inicio" class="btn btn-sm btn-success d-none">
+                    <i class="bi bi-check-circle me-1"></i>Aprobar Inicio
+                  </button>
+                  <button type="button" id="btn-rechazar-inicio" class="btn btn-sm btn-outline-danger d-none">
+                    <i class="bi bi-x-circle me-1"></i>Rechazar
+                  </button>
+                </div>
+              </div>
+              {# Motivo de rechazo: input inline, nunca prompt() nativo (mismo criterio que Seccion 20 del plan Fase 3) #}
+              <div id="inicio-rechazo-form" class="d-none mt-2 p-2 bg-light border rounded">
+                <label for="inicio-rechazo-motivo" class="form-label small fw-bold">Motivo del rechazo *</label>
+                <textarea id="inicio-rechazo-motivo" class="form-control form-control-sm" rows="2"></textarea>
+                <div class="d-flex justify-content-end gap-2 mt-2">
+                  <button type="button" id="btn-cancelar-rechazo-inicio" class="btn btn-sm btn-outline-secondary">Cancelar</button>
+                  <button type="button" id="btn-confirmar-rechazo-inicio" class="btn btn-sm btn-danger">Confirmar Rechazo</button>
+                </div>
+              </div>
             </div>
 
             <div class="col-md-12 mt-4">
@@ -448,12 +778,35 @@
       <!-- STEP 2: Planeación (Diseño y Técnica) -->
       <div class="step-pane" id="pane-step-2">
         <div class="locked-container d-none" id="locked-step-2">
-          <div class="locked-overlay">
+          {% comment %}
+          PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION, Regla de
+          Oro: "No hay Planeacion sin aprobacion del Inicio economico." Dos
+          mensajes distintos segun la causa real del bloqueo (JS alterna
+          cual de los dos se muestra via toggleBloqueoPlaneacion()):
+          - fase aun no alcanzo INICIO -> mensaje generico de abajo.
+          - fase YA esta en INICIO pero sin aprobacion vigente -> mensaje
+            especifico que explica el motivo real, sin boton de avanzar
+            (evita que el usuario reciba un error de sorpresa al hacer clic).
+          {% endcomment %}
+          <div class="locked-overlay" id="locked-step-2-generico">
             <div class="locked-icon"><i class="bi bi-lock-fill text-danger"></i></div>
             <h4>Fase 2 Bloqueada</h4>
             <p class="text-muted mb-4">Esta fase requiere avanzar el proyecto formalmente a la Fase de Planeación.</p>
             <button type="button" class="btn btn-primary btn-avanzar-fase-action" data-target-fase="PLANEACION">
               <i class="bi bi-check2-circle me-1"></i>Avanzar a Fase de Planeación
+            </button>
+          </div>
+          <div class="locked-overlay d-none" id="locked-step-2-pendiente-aprobacion">
+            <div class="locked-icon"><i class="bi bi-hourglass-split text-warning"></i></div>
+            <h4>Planeación pendiente de aprobación</h4>
+            <p class="text-muted mb-1">
+              El Inicio de este proyecto todavía no tiene una aprobación administrativa vigente.
+            </p>
+            <p class="text-muted mb-4">
+              <span id="locked-step-2-estado-texto">Complete la información económica y envíela a revisión en la Fase 1.</span>
+            </p>
+            <button type="button" class="btn btn-outline-primary" onclick="window.ProyectosEditorModule.irAFaseInicio()">
+              <i class="bi bi-arrow-left-circle me-1"></i>Ir a Fase 1: Inicio
             </button>
           </div>
         </div>

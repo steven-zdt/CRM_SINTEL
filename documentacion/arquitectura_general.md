@@ -1,7 +1,32 @@
 # Arquitectura General — SINTEL ERP
 
-**Version:** 3.74.0
-**Ultima actualizacion:** 2026-10-02 (DOC-M67) — **PLAN_PROYECTOS_FASE_2_
+**Version:** 3.75.0
+**Ultima actualizacion:** 2026-10-05 (DOC-M68) — **PLAN_AJUSTE_CICLO_
+PROYECTOS_FASE_1_VIABILIDAD_APROBACION completo.** Reestructuracion del
+ciclo de vida de Proyectos: Fase 1 (Inicio) pasa de etapa informativa a
+gate economico real de Planeacion. Nuevo: Supervisor (snapshot, empleados
+activos), Contratista/Proveedor Principal (reutiliza `Proyecto.
+proveedor_id/_nombre` ya existentes -- sin modelo nuevo), `Proyecto
+FacturaVenta` (1:N, reemplaza el vinculo singular `factura_costo` como
+SSoT comercial), `CotizacionCostoProyecto` (+PDF) e
+`InversionProyectoInicio`. Viabilidad expone ambos margenes (cotizacion
+e inversion real) sin forzar un indicador oficial. **Decision de
+arquitectura clave**: el ciclo de aprobacion NO creo un modelo nuevo --
+se audito primero `apps.tenant.approvals` (motor generico ya usado por
+Requisiciones de Compra) y se extendio su `TIPO_DOCUMENTO_REGISTRY` con
+`PROYECTO_INICIO`, reutilizando `SolicitudAprobacion`/
+`SolicitudAprobacionHistorial` completos (incluye el estado `CANCELADA`
+para "aprobacion invalidada" tras editar datos economicos). `cambiar_
+fase_proyecto()` bloquea `INICIO -> PLANEACION` sin aprobacion vigente,
+cubriendo tanto `avanzar-fase` como el PATCH generico -- sin bypass por
+API. Verificado con smoke test manual en vivo (13/13 PASS, transaccion
+revertida) antes de escribir la suite pytest formal
+(`test_fase1_viabilidad_aprobacion.py`); migraciones aplicadas en los 3
+tenants reales. Ver `apps/tenant/proyectos/.agent/AUDITORIA_FLUJO_
+COMPLETO.md` §"Fase 1 (Inicio): Viabilidad y Aprobacion" para el detalle
+completo de endpoints, decisiones funcionales y archivos.
+
+**Actualizacion previa:** 2026-10-02 (DOC-M67) — **PLAN_PROYECTOS_FASE_2_
 COTIZACION_RECURSOS_PRESUPUESTO + PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_
 GASTOS_NO_FACTURABLES completos.** Fase 2: `Proyecto` gana FK real
 `cotizacion` (`unique=True`, `on_delete=PROTECT`) a

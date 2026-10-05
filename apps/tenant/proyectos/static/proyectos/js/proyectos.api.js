@@ -308,7 +308,65 @@
           ordering: 'primer_apellido'
         });
         return w.Sintel.Core.Http.request('GET', url);
+      },
+
+      /** GET /api/v1/proveedores/?search=<q> -- usado por Contratista/Proveedor
+       *  Principal (PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION). */
+      proveedores: async (search = '') => {
+        const url = buildUrlWithParams('/api/v1/proveedores/', { search, page_size: 20 });
+        return w.Sintel.Core.Http.request('GET', url);
       }
+    },
+
+    /** Fase 1 (Inicio): PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION */
+    inicio: {
+      /** GET /api/v1/proyectos/{uuid}/inicio/ -- resumen SSoT completo */
+      get: async (proyectoUuid) => {
+        console.log(`[${MOD}] inicio.get(${proyectoUuid})`);
+        if (!proyectoUuid) return { ok: false, status: 400, data: { detail: 'proyecto_uuid requerido' } };
+        return w.Sintel.Core.Http.request('GET', `${API_BASE}/${proyectoUuid}/inicio/`);
+      },
+
+      facturasVenta: {
+        buscarDisponibles: (proyectoUuid, search = '') =>
+          w.Sintel.Core.Http.request(
+            'GET',
+            buildUrlWithParams(`${API_BASE}/${proyectoUuid}/facturas-venta/disponibles/`, { search })
+          ),
+        vincular: async (proyectoUuid, facturaUuid) => {
+          if (!proyectoUuid || !facturaUuid) return { ok: false, status: 400, data: { detail: 'proyecto y factura requeridos' } };
+          return w.Sintel.Core.Http.request('POST', `${API_BASE}/${proyectoUuid}/facturas-venta/vincular/`, { factura_uuid: facturaUuid });
+        },
+        desvincular: async (proyectoUuid, facturaUuid) => {
+          if (!proyectoUuid || !facturaUuid) return { ok: false, status: 400, data: { detail: 'proyecto y factura requeridos' } };
+          return w.Sintel.Core.Http.request('POST', `${API_BASE}/${proyectoUuid}/facturas-venta/desvincular/`, { factura_uuid: facturaUuid });
+        }
+      },
+
+      cotizacionesCosto: {
+        list: async (proyectoUuid) => {
+          const url = buildUrlWithParams(`${API_BASE}/cotizaciones-costos/`, { proyecto_uuid: proyectoUuid });
+          return w.Sintel.Core.Http.request('GET', url);
+        },
+        create: async (formData) => w.Sintel.Core.Http.upload('POST', `${API_BASE}/cotizaciones-costos/`, formData),
+        delete: async (itemUuid) => w.Sintel.Core.Http.request('DELETE', `${API_BASE}/cotizaciones-costos/${itemUuid}/`)
+      },
+
+      inversiones: {
+        list: async (proyectoUuid) => {
+          const url = buildUrlWithParams(`${API_BASE}/inversiones-inicio/`, { proyecto_uuid: proyectoUuid });
+          return w.Sintel.Core.Http.request('GET', url);
+        },
+        create: async (data) => w.Sintel.Core.Http.request('POST', `${API_BASE}/inversiones-inicio/`, data),
+        delete: async (itemUuid) => w.Sintel.Core.Http.request('DELETE', `${API_BASE}/inversiones-inicio/${itemUuid}/`)
+      },
+
+      enviarAprobacion: async (proyectoUuid) =>
+        w.Sintel.Core.Http.request('POST', `${API_BASE}/${proyectoUuid}/enviar-aprobacion/`),
+      aprobar: async (proyectoUuid, observacion = '') =>
+        w.Sintel.Core.Http.request('POST', `${API_BASE}/${proyectoUuid}/aprobar-inicio/`, { observacion }),
+      rechazar: async (proyectoUuid, motivo) =>
+        w.Sintel.Core.Http.request('POST', `${API_BASE}/${proyectoUuid}/rechazar-inicio/`, { motivo })
     },
 
     formatCurrency: (value) => {

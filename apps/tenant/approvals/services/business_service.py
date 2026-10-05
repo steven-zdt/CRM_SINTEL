@@ -132,6 +132,40 @@ def _calcular_prioridad_requisicion(requisicion) -> str:
 # GenericForeignKey). Extensible a COTIZACION/ORDEN_COMPRA sin tocar el
 # modelo SolicitudAprobacion ni el resto de este servicio -- solo se agrega
 # una entrada nueva aqui.
+def _resolver_proyecto_inicio(objeto_uuid, empresa_id):
+    from apps.tenant.proyectos.services.inicio_service import ProyectoInicioAprobacionService
+
+    return ProyectoInicioAprobacionService.resolver_proyecto(objeto_uuid, empresa_id)
+
+
+def _aprobar_proyecto_inicio(objeto_uuid, empresa_id, usuario, observacion):
+    from apps.tenant.proyectos.services.inicio_service import ProyectoInicioAprobacionService
+
+    return ProyectoInicioAprobacionService.confirmar_aprobacion_dominio(
+        objeto_uuid, empresa_id, usuario, observacion
+    )
+
+
+def _rechazar_proyecto_inicio(objeto_uuid, empresa_id, usuario, motivo):
+    from apps.tenant.proyectos.services.inicio_service import ProyectoInicioAprobacionService
+
+    return ProyectoInicioAprobacionService.confirmar_rechazo_dominio(
+        objeto_uuid, empresa_id, usuario, motivo
+    )
+
+
+def _snapshot_proyecto_inicio(proyecto):
+    from apps.tenant.proyectos.services.inicio_service import ProyectoInicioAprobacionService
+
+    return ProyectoInicioAprobacionService.snapshot_proyecto(proyecto)
+
+
+# PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION: extiende el
+# registry existente (sin tocar el modelo SolicitudAprobacion ni el resto
+# de este servicio, tal como preve el comentario de arriba) para el gate
+# INICIO -> PLANEACION de Proyectos. `objeto_uuid` = Proyecto.uuid. Sin
+# `prioridad` explicita -- usa el default MEDIA del motor generico (esta
+# aprobacion no participa del Centro de Aprobaciones de riesgo/Compras).
 TIPO_DOCUMENTO_REGISTRY = {
     SolicitudAprobacion.TipoDocumento.REQUISICION: {
         "resolver": _resolver_requisicion,
@@ -139,6 +173,12 @@ TIPO_DOCUMENTO_REGISTRY = {
         "rechazar": _rechazar_requisicion,
         "snapshot": _snapshot_requisicion,
         "prioridad": _calcular_prioridad_requisicion,
+    },
+    SolicitudAprobacion.TipoDocumento.PROYECTO_INICIO: {
+        "resolver": _resolver_proyecto_inicio,
+        "aprobar": _aprobar_proyecto_inicio,
+        "rechazar": _rechazar_proyecto_inicio,
+        "snapshot": _snapshot_proyecto_inicio,
     },
 }
 

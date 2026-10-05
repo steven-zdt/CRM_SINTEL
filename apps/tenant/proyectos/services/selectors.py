@@ -10,7 +10,7 @@ WARNING: SINTEL v3.5: Capa de Lectura Optimizada
 from django.db import models
 from django.db.models import Avg, Count, OuterRef, Q, Subquery, Sum
 
-from ..models import Proyecto, TareaCorta
+from ..models import CotizacionCostoProyecto, InversionProyectoInicio, Proyecto, TareaCorta
 
 try:
     from apps.tenant.empleados.models import Empleado as _Empleado
@@ -37,6 +37,8 @@ LIST_FIELDS = [
     "responsable_actual_nombre",
     "proveedor_id",
     "proveedor_nombre",
+    "supervisor_id",
+    "supervisor_nombre",
     "valor_contrato_proyectado",
     "costo_mano_obra_real",
     "costo_materiales_real",
@@ -326,3 +328,84 @@ class TareaCortaSelector:
             )
         except TareaCorta.DoesNotExist:
             return None
+
+
+# PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION: campos .only()
+# compartidos por Cotizacion de Costo e Inversion Real -- mismos campos
+# base (uuid/categoria/descripcion/proveedor/fecha/valor/observaciones/
+# activo), solo difieren en 1-2 campos propios de cada modelo.
+COTIZACION_COSTO_FIELDS = [
+    "id",
+    "uuid",
+    "empresa_id",
+    "proyecto_id",
+    "categoria",
+    "descripcion",
+    "proveedor_id",
+    "proveedor_nombre",
+    "fecha",
+    "numero_documento",
+    "valor",
+    "moneda",
+    "archivo_pdf",
+    "observaciones",
+    "activo",
+    "created_at",
+    "updated_at",
+]
+
+INVERSION_INICIO_FIELDS = [
+    "id",
+    "uuid",
+    "empresa_id",
+    "proyecto_id",
+    "categoria",
+    "descripcion",
+    "fecha",
+    "valor",
+    "proveedor_id",
+    "proveedor_nombre",
+    "documento_referencia",
+    "observaciones",
+    "activo",
+    "created_at",
+    "updated_at",
+]
+
+
+class CotizacionCostoProyectoSelector:
+    @staticmethod
+    def get_by_proyecto(empresa_id, proyecto_uuid, categoria=None):
+        qs = CotizacionCostoProyecto.objects.filter(
+            empresa_id=empresa_id, proyecto__uuid=proyecto_uuid, activo=True
+        ).only(*COTIZACION_COSTO_FIELDS)
+        if categoria:
+            qs = qs.filter(categoria=categoria)
+        return qs.order_by("categoria", "-created_at")
+
+    @staticmethod
+    def get_item(empresa_id, item_uuid):
+        return (
+            CotizacionCostoProyecto.objects.filter(empresa_id=empresa_id, uuid=item_uuid)
+            .only(*COTIZACION_COSTO_FIELDS)
+            .first()
+        )
+
+
+class InversionProyectoInicioSelector:
+    @staticmethod
+    def get_by_proyecto(empresa_id, proyecto_uuid, categoria=None):
+        qs = InversionProyectoInicio.objects.filter(
+            empresa_id=empresa_id, proyecto__uuid=proyecto_uuid, activo=True
+        ).only(*INVERSION_INICIO_FIELDS)
+        if categoria:
+            qs = qs.filter(categoria=categoria)
+        return qs.order_by("categoria", "-created_at")
+
+    @staticmethod
+    def get_item(empresa_id, item_uuid):
+        return (
+            InversionProyectoInicio.objects.filter(empresa_id=empresa_id, uuid=item_uuid)
+            .only(*INVERSION_INICIO_FIELDS)
+            .first()
+        )

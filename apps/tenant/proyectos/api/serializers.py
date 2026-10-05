@@ -16,8 +16,10 @@ from apps.tenant.api.utils import NormalizationMixin
 from apps.tenant.empresa.models import Sede
 from apps.tenant.proyectos.models import (
     AsignacionPersonal,
+    CotizacionCostoProyecto,
     DocumentoProyecto,
     HistorialFaseProyecto,
+    InversionProyectoInicio,
     ItemPedido,
     ItemPresupuestoProyecto,
     PedidoProyecto,
@@ -376,6 +378,80 @@ class ItemPresupuestoSerializer(NormalizationMixin, serializers.ModelSerializer)
         return attrs
 
 
+class CotizacionCostoProyectoSerializer(NormalizationMixin, serializers.ModelSerializer):
+    """
+    Cotizacion de COSTO de Fase 1 (PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_
+    VIABILIDAD_APROBACION, Secciones 15-19). Usada en el endpoint
+    independiente /api/v1/proyectos/cotizaciones-costos/.
+    """
+
+    categoria_display = serializers.CharField(source="get_categoria_display", read_only=True)
+
+    class Meta:
+        model = CotizacionCostoProyecto
+        fields = [
+            "id",
+            "uuid",
+            "proyecto_id",
+            "empresa_id",
+            "categoria",
+            "categoria_display",
+            "descripcion",
+            "proveedor_id",
+            "proveedor_nombre",
+            "fecha",
+            "numero_documento",
+            "valor",
+            "moneda",
+            "archivo_pdf",
+            "observaciones",
+            "activo",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "uuid", "empresa_id", "activo", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        attrs = self.normalize_data(attrs)
+        return attrs
+
+
+class InversionProyectoInicioSerializer(NormalizationMixin, serializers.ModelSerializer):
+    """
+    Inversion Real de Fase 1 (PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_
+    VIABILIDAD_APROBACION, Secciones 20-22). Usada en el endpoint
+    independiente /api/v1/proyectos/inversiones-inicio/.
+    """
+
+    categoria_display = serializers.CharField(source="get_categoria_display", read_only=True)
+
+    class Meta:
+        model = InversionProyectoInicio
+        fields = [
+            "id",
+            "uuid",
+            "proyecto_id",
+            "empresa_id",
+            "categoria",
+            "categoria_display",
+            "descripcion",
+            "fecha",
+            "valor",
+            "proveedor_id",
+            "proveedor_nombre",
+            "documento_referencia",
+            "observaciones",
+            "activo",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "uuid", "empresa_id", "activo", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        attrs = self.normalize_data(attrs)
+        return attrs
+
+
 class DocumentoProyectoSerializer(serializers.ModelSerializer):
     """
     Serializer del expediente documental (Ciclo de Vida Controlado v4.0).
@@ -485,6 +561,15 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     cliente_info = serializers.SerializerMethodField()
     responsables_info = serializers.SerializerMethodField()
     proveedor_info = serializers.SerializerMethodField()
+    # PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION, Decision 01:
+    # "Supervisor del Proyecto", mismo patron snapshot que proveedor_info.
+    supervisor_info = serializers.SerializerMethodField()
+    # Ligeros (1 query) para que el frontend pueda pintar el candado de
+    # "2. Planeacion" sin esperar al GET completo de .../inicio/ (Seccion
+    # 68/69: el resumen pesado de Fase 1 -- facturas/cotizaciones/
+    # inversiones/viabilidad -- vive SOLO en ese endpoint dedicado).
+    estado_aprobacion_inicio = serializers.SerializerMethodField()
+    puede_avanzar_planeacion = serializers.SerializerMethodField()
     servicio_nombre = serializers.CharField(
         source="servicio_asociado.nombre", read_only=True, allow_null=True
     )
@@ -557,6 +642,8 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
             "cliente_nombre": {"write_only": True},
             "proveedor_id": {"write_only": True},
             "proveedor_nombre": {"write_only": True},
+            "supervisor_id": {"write_only": True},
+            "supervisor_nombre": {"write_only": True},
             "responsable_actual_id": {"write_only": True},
             "responsable_actual_nombre": {"write_only": True},
             "responsable_comercial_id": {"write_only": True},
@@ -877,13 +964,34 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         }
 
     def get_proveedor_info(self, obj):
-        """Informacion del proveedor (snapshot)."""
+        """Informacion del proveedor (snapshot). UI de Fase 1 lo presenta
+        como 'Contratista / Proveedor Principal' (Decision 02 del plan)."""
         if obj.proveedor_id:
             return {
                 "id": obj.proveedor_id,
                 "nombre": obj.proveedor_nombre or "N/A",
             }
         return None
+
+    def get_supervisor_info(self, obj):
+        """Informacion del supervisor (snapshot, Decision 01 del plan)."""
+        if obj.supervisor_id:
+            return {
+                "id": obj.supervisor_id,
+                "nombre": obj.supervisor_nombre or "N/A",
+            }
+        return None
+
+    def get_estado_aprobacion_inicio(self, obj):
+        from ..services.inicio_service import ProyectoInicioAprobacionService
+
+        solicitud = ProyectoInicioAprobacionService.get_ultima_solicitud(obj)
+        return solicitud.estado if solicitud else "SIN_ENVIAR"
+
+    def get_puede_avanzar_planeacion(self, obj):
+        from ..services.inicio_service import ProyectoInicioAprobacionService
+
+        return ProyectoInicioAprobacionService.can_enter_planeacion(obj)
 
 
 class TareaDiariaSerializer(NormalizationMixin, serializers.ModelSerializer):

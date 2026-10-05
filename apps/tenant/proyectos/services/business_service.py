@@ -360,6 +360,35 @@ def asignar_snapshot_proveedor(proyecto, proveedor_id=None, proveedor_nombre=Non
         proyecto.proveedor_nombre = proveedor_nombre
 
 
+def asignar_snapshot_supervisor(proyecto, supervisor_id=None, supervisor_nombre=None):
+    """
+    PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION, Decision 01:
+    Supervisor viene de apps.tenant.empleados, limitado a empleados
+    ACTIVOS -- mismo patron DSV que asignar_snapshot_proveedor().
+    """
+    if supervisor_id:
+        try:
+            if _Empleado is None:
+                raise ImportError
+            empleado = (
+                _Empleado.objects.filter(
+                    id=supervisor_id, empresa_id=proyecto.empresa_id, estado="ACTIVO"
+                )
+                .only("primer_nombre", "primer_apellido")
+                .first()
+            )
+            if not empleado:
+                return
+            proyecto.supervisor_id = supervisor_id
+            proyecto.supervisor_nombre = supervisor_nombre or empleado.nombre_completo
+        except ImportError:
+            proyecto.supervisor_id = supervisor_id
+            if supervisor_nombre:
+                proyecto.supervisor_nombre = supervisor_nombre
+    elif supervisor_nombre:
+        proyecto.supervisor_nombre = supervisor_nombre
+
+
 def validar_servicio_asociado_dsv(proyecto, servicio_asociado):
     """
     Validacion DSV (Double Semantic Verification) para servicio_asociado.
@@ -474,6 +503,28 @@ def cambiar_fase_proyecto(
             {"detail": f"Transicion no permitida: {fase_actual} -> {nueva_fase}."}
         )
 
+    # PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION, Seccion 34/
+    # 87 (Regla de Oro): "No hay Planeacion sin aprobacion del Inicio
+    # economico." Gate real en Service Layer -- nunca solo oculto en el
+    # frontend (Seccion 35: "un usuario podria llamar POST /avanzar-fase/
+    # directamente"). Decision 08: aprobar SOLO desbloquea; esta es la
+    # UNICA puerta de entrada real a PLANEACION, se evalua aqui para que
+    # tambien cubra la ruta generica PATCH/PUT (orchestrate_update_proyecto)
+    # y no solo la accion dedicada avanzar-fase.
+    if fase_actual == "INICIO" and nueva_fase == "PLANEACION":
+        from .inicio_service import ProyectoInicioAprobacionService
+
+        if not ProyectoInicioAprobacionService.can_enter_planeacion(proyecto_actual):
+            raise ValidationError(
+                {
+                    "detail": (
+                        "El proyecto debe tener una aprobacion administrativa vigente "
+                        "del Inicio (viabilidad economica) antes de pasar a Planeacion."
+                    ),
+                    "error": "aprobacion_inicio_requerida",
+                }
+            )
+
     # Decision de producto (2026-09-18): el checklist documental es
     # informativo, no bloqueante -- solo detienen la transicion los requisitos
     # marcados explicitamente como obligatorios (hoy ninguno). Antes CUALQUIER
@@ -552,6 +603,8 @@ def orchestrate_create_proyecto(empresa, data):
     factura_numero = data.pop("factura_costo_numero", None)
     proveedor_id = data.pop("proveedor_id", None)
     proveedor_nombre = data.pop("proveedor_nombre", None)
+    supervisor_id = data.pop("supervisor_id", None)
+    supervisor_nombre = data.pop("supervisor_nombre", None)
     servicio_asociado = data.pop("servicio_asociado", None)
 
     proyecto = Proyecto(empresa=empresa, **data)
@@ -565,6 +618,9 @@ def orchestrate_create_proyecto(empresa, data):
 
     if proveedor_id or proveedor_nombre:
         asignar_snapshot_proveedor(proyecto, proveedor_id, proveedor_nombre)
+
+    if supervisor_id or supervisor_nombre:
+        asignar_snapshot_supervisor(proyecto, supervisor_id, supervisor_nombre)
 
     if servicio_asociado:
         validar_servicio_asociado_dsv(proyecto, servicio_asociado)
@@ -610,8 +666,17 @@ def orchestrate_update_proyecto(proyecto, data):
     factura_numero = data.pop("factura_costo_numero", None)
     proveedor_id = data.pop("proveedor_id", None)
     proveedor_nombre = data.pop("proveedor_nombre", None)
+    supervisor_id = data.pop("supervisor_id", None)
+    supervisor_nombre = data.pop("supervisor_nombre", None)
     servicio_asociado = data.pop("servicio_asociado", None)
     nueva_fase = data.pop("fase_actual", None)
+
+    # PLAN_AJUSTE_CICLO_PROYECTOS_FASE_1_VIABILIDAD_APROBACION, Decision 07:
+    # cambiar el Contratista/Proveedor o el Supervisor despues de una
+    # aprobacion de Inicio vigente invalida esa aprobacion (requiere nueva
+    # revision) -- se comparan contra el valor PREVIO a mutar nada.
+    proveedor_id_previo = proyecto.proveedor_id
+    supervisor_id_previo = proyecto.supervisor_id
 
     for key, value in data.items():
         if hasattr(proyecto, key):
@@ -631,12 +696,23 @@ def orchestrate_update_proyecto(proyecto, data):
     if proveedor_id is not None or proveedor_nombre:
         asignar_snapshot_proveedor(proyecto, proveedor_id, proveedor_nombre)
 
+    if supervisor_id is not None or supervisor_nombre:
+        asignar_snapshot_supervisor(proyecto, supervisor_id, supervisor_nombre)
+
     if servicio_asociado is not None:
         validar_servicio_asociado_dsv(proyecto, servicio_asociado)
         proyecto.servicio_asociado = servicio_asociado
 
     proyecto = save_proyecto(proyecto)
     calcular_indicadores_financieros(proyecto)
+
+    if proyecto.proveedor_id != proveedor_id_previo or proyecto.supervisor_id != supervisor_id_previo:
+        from .inicio_service import ProyectoInicioAprobacionService
+
+        ProyectoInicioAprobacionService.invalidar_si_aprobado(
+            proyecto, motivo="Se modifico el supervisor o el contratista/proveedor del proyecto."
+        )
+
     return proyecto
 
 
