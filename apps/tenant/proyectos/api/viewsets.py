@@ -42,6 +42,7 @@ from ..services import (
     CotizacionCostoProyectoService,
     InversionProyectoInicioService,
     PresupuestoBusinessService,
+    ProyectoCierreResumenService,
     ProyectoFacturaVentaService,
     ProyectoInicioAprobacionService,
     ProyectoInicioResumenService,
@@ -764,6 +765,18 @@ class ProyectoViewSet(
         """
         proyecto = self.get_object()
         return Response(ProyectoInicioResumenService.calcular_resumen(proyecto))
+
+    @action(detail=True, methods=["get"], url_path="cierre")
+    def cierre(self, request, uuid=None):
+        """
+        GET /api/v1/proyectos/{uuid}/cierre/ -- "Closure Summary" (Seccion
+        45 del plan): consolida Fases 1-3 (inicio, planeacion, ejecucion,
+        rentabilidad final, administrativo, documentos, bloqueos de cierre)
+        en una sola respuesta de solo lectura. Usado tanto por el checklist
+        "Listo para Cierre" de Fase 3 como por el resumen final de Fase 4.
+        """
+        proyecto = self.get_object()
+        return Response(ProyectoCierreResumenService.calcular_resumen(proyecto))
 
     @action(detail=True, methods=["get"], url_path="facturas-venta/disponibles")
     def facturas_venta_disponibles(self, request, uuid=None):

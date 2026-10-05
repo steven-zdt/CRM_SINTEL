@@ -570,6 +570,11 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
     # inversiones/viabilidad -- vive SOLO en ese endpoint dedicado).
     estado_aprobacion_inicio = serializers.SerializerMethodField()
     puede_avanzar_planeacion = serializers.SerializerMethodField()
+    # PLAN_REESTRUCTURACION_FASE_3_EJECUCION_FASE_4_CIERRE, Seccion 51/52:
+    # mismo patron -- gate ligero para que el frontend pinte el checklist
+    # "Listo para Cierre" en Fase 3 sin esperar al GET pesado de .../cierre/.
+    puede_cerrar = serializers.SerializerMethodField()
+    bloqueos_cierre = serializers.SerializerMethodField()
     servicio_nombre = serializers.CharField(
         source="servicio_asociado.nombre", read_only=True, allow_null=True
     )
@@ -817,21 +822,15 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         # Bloqueo de edicion en fase CIERRE: mismo criterio ya aplicado a
         # asignaciones/pedidos/tareas/presupuesto (ver AsignacionPersonalSerializer,
         # PedidoProyectoSerializer, tareas_service.py, presupuesto_service.py).
-        # Solo se permite actualizar los campos de cierre administrativo
-        # (avance, estado, fecha de cierre, actas/informes de entrega).
-        if proyecto and proyecto.fase_actual == "CIERRE":
-            CIERRE_ALLOWED_FIELDS = {
-                "porcentaje_avance",
-                "estado_tarea",
-                "fecha_cierre_real",
-                "acta_entrega_archivo",
-                "informe_final_archivo",
-            }
-            campos_bloqueados = set(attrs.keys()) - CIERRE_ALLOWED_FIELDS
-            if campos_bloqueados:
-                raise serializers.ValidationError(
-                    "No se pueden modificar datos generales de un proyecto en fase de CIERRE."
-                )
+        # PLAN_REESTRUCTURACION_FASE_3_EJECUCION_FASE_4_CIERRE, Seccion 26/40:
+        # Fase 4 es un consolidado READ-ONLY -- ya NO existe un carve-out
+        # para avance/estado/actas (esos campos se completan ANTES de
+        # cerrar, en Fase 3). Antes este bloque permitia seguir editandolos
+        # incluso despues de CIERRE, contradiciendo "Cierre read-only".
+        if proyecto and proyecto.fase_actual == "CIERRE" and attrs:
+            raise serializers.ValidationError(
+                "El proyecto esta en fase de CIERRE: es un consolidado de solo lectura, no admite modificaciones."
+            )
 
         # Convert empty strings to None for responsable_*_id fields (avoid
         # "invalid integer" errors). WARNING: los campos _nombre companion
@@ -992,6 +991,16 @@ class ProyectoDetailSerializer(NormalizationMixin, serializers.ModelSerializer):
         from ..services.inicio_service import ProyectoInicioAprobacionService
 
         return ProyectoInicioAprobacionService.can_enter_planeacion(obj)
+
+    def get_puede_cerrar(self, obj):
+        from ..services.cierre_service import ProyectoCierreGateService
+
+        return ProyectoCierreGateService.puede_cerrar(obj)
+
+    def get_bloqueos_cierre(self, obj):
+        from ..services.cierre_service import ProyectoCierreGateService
+
+        return ProyectoCierreGateService.bloqueos(obj)
 
 
 class TareaDiariaSerializer(NormalizationMixin, serializers.ModelSerializer):

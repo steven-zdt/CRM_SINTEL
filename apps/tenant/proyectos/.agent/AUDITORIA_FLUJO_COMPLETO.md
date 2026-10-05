@@ -2,7 +2,7 @@
 
 ## Fecha: 2026-08-05 (actualizado 2026-10-05)
 ## Modulo: tenant/proyectos
-## Version: v4.0.0 (Reestructuracion del ciclo: Fase 1 Viabilidad y Aprobacion -- gate real INICIO->PLANEACION) | Base: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2 | Fix P-1 2026-09-12
+## Version: v4.1.0 (+ Reestructuracion Fase 3 Ejecucion / Fase 4 Cierre -- gate real EJECUCION->CIERRE, Cierre 100% read-only) | v4.0.0 base: Fase 1 Viabilidad y Aprobacion -- gate real INICIO->PLANEACION | Base: v3.5.2 + Roadmap M4 + Presupuesto Manual v3.5.2 | Fix P-1 2026-09-12
 
 ---
 
@@ -938,4 +938,58 @@ INICIO. Encontrados y corregidos 3 defectos que el trabajo original (solo
    deuda tecnica a abordar en una mision dedicada si se confirma el mismo
    problema ahi.
 
-*Auditoría actualizada el 2026-10-05 | SINTEL v4.0.0 — Status: PRODUCTION READY ✅*
+## 2026-10-05 — v4.1.0: PLAN_REESTRUCTURACION_FASE_3_EJECUCION_FASE_4_CIERRE
+
+Regla fundamental aplicada: "FASE 3 = OPERAR, FASE 4 = CONSOLIDAR Y
+FORMALIZAR". Base: casi toda la infraestructura ya existia de la mision
+previa `PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_GASTOS_NO_FACTURABLES`
+(Control de Tiempo, Tareas Diarias, Gastos No Facturables, inmutabilidad
+de Tareas/Presupuesto en CIERRE ya estaban implementadas) -- esta mision
+cerro las brechas reales que quedaban:
+
+1. **Bug real encontrado en el serializer**: `ProyectoDetailSerializer.
+   validate()` tenia un `CIERRE_ALLOWED_FIELDS` que permitia seguir
+   editando `porcentaje_avance`/`estado_tarea`/`fecha_cierre_real`/actas
+   INCLUSO estando ya en fase CIERRE -- exactamente lo opuesto a "Cierre
+   read-only" (Seccion 40 del plan). Corregido: CIERRE ahora rechaza
+   cualquier `attrs` no vacio.
+2. **Gate EJECUCION->CIERRE nuevo** (antes no existia ninguno -- solo el
+   checklist documental generico, informativo/no-bloqueante):
+   `ProyectoCierreGateService` (nuevo `cierre_service.py`) bloquea el
+   cierre si `estado_tarea != COMPLETADO`, `porcentaje_avance < 100`,
+   existen tareas PENDIENTE/EN_PROCESO, o faltan Acta de Entrega/Informe
+   Final. Se evalua desde `cambiar_fase_proyecto()` (cubre PATCH generico
+   Y la accion dedicada `avanzar-fase` por igual -- Seccion 41 del plan).
+3. **`porcentaje_avance`/`estado_tarea` ahora solo editables en EJECUCION**
+   (antes no tenian ninguna restriccion de fase): nuevo guard en
+   `orchestrate_update_proyecto()`.
+4. **UI**: los inputs editables (avance, estado, Acta de Entrega, Informe
+   Final) se movieron fisicamente de Step4 a Step3 (mismos IDs, el JS que
+   ya los manejaba no cambio). Step4 ("Configuracion de Cierre") se
+   elimino por completo y se reemplazo por un "Resumen Final" 100%
+   read-only (Estado Final, Tareas, Rentabilidad Final con SSoT real de
+   Fase 1 -- valor vendido de facturas, no `valor_contrato_proyectado`
+   aspiracional --, Desglose Administrativo, Documentacion Final).
+5. **Checklist "Listo para Cierre"** (Seccion 52 del plan) en Step3: usa
+   `puede_cerrar`/`bloqueos_cierre` ya incluidos en el detalle principal
+   del proyecto (sin GET extra) para mostrar en vivo que falta.
+6. **Nuevo endpoint** `GET /api/v1/proyectos/{uuid}/cierre/` ("Closure
+   Summary", Seccion 45 del plan) via `ProyectoCierreResumenService` --
+   consolida Fases 1-3 (reusa `ProyectoInicioResumenService`,
+   `ProyectoCotizacionPlaneacionService`, `TareasDiariasSelector`,
+   `GastosProyectoService`, `calcular_ejecucion_tiempo`; NO duplica
+   ningun calculo, es un read model puro -- Decision/Seccion 53).
+7. **`fecha_cierre_real`** ahora se asigna automaticamente al confirmar
+   el cierre (si no estaba ya seteada), nunca como campo libre editable
+   (Seccion 25 del plan).
+
+Verificado end-to-end en navegador real (Playwright, tenant `admin`,
+proyecto de prueba llevado por servicios hasta EJECUCION): checklist
+bloqueado con las 4 razones correctas -> edicion de avance/estado/Acta/
+Informe en Step3 -> checklist pasa a LISTO -> "Finalizar Ejecucion y
+Cerrar Proyecto" -> fase CIERRE -> Resumen Final muestra Rentabilidad
+($582.992 vendido, $0 costo real, 100% margen), Tareas (1 completada,
+100% completitud), Documentacion (Acta + Informe en verde) -- 0 inputs
+editables restantes en Step4, 0 errores de consola.
+
+*Auditoría actualizada el 2026-10-05 | SINTEL v4.1.0 — Status: PRODUCTION READY ✅*

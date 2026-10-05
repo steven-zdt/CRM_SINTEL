@@ -525,6 +525,17 @@ def cambiar_fase_proyecto(
                 }
             )
 
+    # PLAN_REESTRUCTURACION_FASE_3_EJECUCION_FASE_4_CIERRE, Seccion 22/44/69
+    # (Regla de Oro de Cierre): "No se puede cerrar el proyecto con
+    # ejecucion incompleta." Gate duro (NO informativo, a diferencia del
+    # checklist documental generico de mas abajo) evaluado aqui para cubrir
+    # tanto la accion dedicada avanzar-fase como la ruta PATCH generica
+    # (Seccion 41 del plan).
+    if fase_actual == "EJECUCION" and nueva_fase == "CIERRE":
+        from .cierre_service import ProyectoCierreGateService
+
+        ProyectoCierreGateService.validar_o_fallar(proyecto_actual)
+
     # Decision de producto (2026-09-18): el checklist documental es
     # informativo, no bloqueante -- solo detienen la transicion los requisitos
     # marcados explicitamente como obligatorios (hoy ninguno). Antes CUALQUIER
@@ -546,6 +557,13 @@ def cambiar_fase_proyecto(
     if responsable_id or responsable_nombre:
         asignar_snapshot_responsable(proyecto, responsable_id, responsable_nombre, nueva_fase)
         update_fields += RESPONSABLE_FIELDS
+
+    # Seccion 25 del plan: fecha_cierre_real representa el momento FINAL
+    # real del proyecto -- se asigna aqui, al confirmar el cierre, nunca
+    # como campo libre editable (evita "falsificar" la transicion).
+    if nueva_fase == "CIERRE" and not proyecto.fecha_cierre_real:
+        proyecto.fecha_cierre_real = date.today()
+        update_fields.append("fecha_cierre_real")
 
     # Persistencia dentro de la MISMA transaccion que valido todo lo anterior
     # (Fase 47 - la version anterior solo mutaba en memoria, dependia de que
@@ -677,6 +695,25 @@ def orchestrate_update_proyecto(proyecto, data):
     # revision) -- se comparan contra el valor PREVIO a mutar nada.
     proveedor_id_previo = proyecto.proveedor_id
     supervisor_id_previo = proyecto.supervisor_id
+
+    # PLAN_REESTRUCTURACION_FASE_3_EJECUCION_FASE_4_CIERRE, Seccion 4/5/40/
+    # 50: "porcentaje_avance"/"estado_tarea" son responsabilidad EXCLUSIVA
+    # de la Fase 3 (Ejecucion) -- no se editan antes (no tiene sentido
+    # operativo) ni despues (Fase 4 es consolidado read-only, Seccion 26).
+    # `nueva_fase` ya se extrajo arriba, asi que una transicion simultanea a
+    # EJECUCION en el mismo PATCH si se permite.
+    if "porcentaje_avance" in data or "estado_tarea" in data:
+        fase_efectiva = nueva_fase or proyecto.fase_actual
+        if fase_efectiva != "EJECUCION":
+            raise ValidationError(
+                {
+                    "detail": (
+                        "El avance y el estado operativo solo se pueden editar "
+                        "mientras el proyecto esta en Fase 3 (Ejecucion)."
+                    ),
+                    "error": "campo_fuera_de_fase",
+                }
+            )
 
     for key, value in data.items():
         if hasattr(proyecto, key):

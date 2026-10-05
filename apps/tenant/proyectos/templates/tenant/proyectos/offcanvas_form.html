@@ -1060,7 +1060,59 @@
               <input type="hidden" id="proyecto-responsable-operativo-id"     name="responsable_operativo_id"     value="{% if proyecto %}{{ proyecto.responsable_operativo_id }}{% endif %}">
               <input type="hidden" id="proyecto-responsable-operativo-nombre" name="responsable_operativo_nombre" value="{% if proyecto %}{{ proyecto.responsable_operativo_nombre }}{% endif %}">
             </div>
-            
+
+            <!-- Avance y Estado de Ejecucion (PLAN_REESTRUCTURACION_FASE_3_
+                 EJECUCION_FASE_4_CIERRE, Seccion 4/5/50: movidos desde Fase
+                 4 -- "Porcentaje de Avance"/"Estado de la Tarea" son
+                 responsabilidad de Fase 3, Fase 4 solo los MUESTRA en
+                 read-only. Mismos IDs de siempre (proyecto-porcentaje-
+                 avance/proyecto-estado-tarea): el JS que ya los maneja no
+                 cambia, solo cambio su ubicacion en el DOM.) -->
+            <div class="col-md-12 mt-2">
+              <label for="proyecto-porcentaje-avance" class="form-label fw-bold">
+                <i class="bi bi-percent me-1"></i>Porcentaje de Avance
+              </label>
+              <div class="d-flex align-items-center gap-3">
+                <input type="range" class="form-range flex-grow-1" id="proyecto-porcentaje-avance"
+                       name="porcentaje_avance" min="0" max="100"
+                       value="{% if proyecto %}{{ proyecto.porcentaje_avance }}{% else %}0{% endif %}">
+                <span class="badge bg-primary" id="porcentaje-avance-display">0%</span>
+              </div>
+            </div>
+            <div class="col-md-12">
+              <label for="proyecto-estado-tarea" class="form-label fw-bold">Estado Operativo</label>
+              <select class="form-select border-primary" id="proyecto-estado-tarea" name="estado_tarea">
+                <option value="PENDIENTE" {% if proyecto and proyecto.estado_tarea == 'PENDIENTE' %}selected{% endif %}>Pendiente</option>
+                <option value="EN_PROCESO" {% if proyecto and proyecto.estado_tarea == 'EN_PROCESO' %}selected{% endif %}>En Proceso</option>
+                <option value="DETENIDO" {% if proyecto and proyecto.estado_tarea == 'DETENIDO' %}selected{% endif %}>Detenido</option>
+                <option value="COMPLETADO" {% if proyecto and proyecto.estado_tarea == 'COMPLETADO' %}selected{% endif %}>Completado</option>
+              </select>
+            </div>
+
+            <!-- Documentos obligatorios de Cierre (Seccion 38 del plan: se
+                 cargan ANTES de cerrar, mientras el proyecto aun esta
+                 editable en Ejecucion -- Fase 4 solo los muestra). -->
+            <div class="col-md-6">
+              <label for="proyecto-acta-entrega-archivo" class="form-label fw-bold">
+                <i class="bi bi-file-earmark-pdf me-1"></i>Acta de Entrega Firmada
+              </label>
+              <div id="acta-entrega-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
+                <span class="badge bg-success p-2"><i class="bi bi-check-circle me-1"></i>Cargado</span>
+              </div>
+              <input type="file" class="form-control border-primary" id="proyecto-acta-entrega-archivo"
+                     name="acta_entrega_archivo">
+            </div>
+            <div class="col-md-6">
+              <label for="proyecto-informe-final-archivo" class="form-label fw-bold">
+                <i class="bi bi-file-earmark-text me-1"></i>Informe Final del Proyecto
+              </label>
+              <div id="informe-final-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
+                <span class="badge bg-success p-2"><i class="bi bi-check-circle me-1"></i>Cargado</span>
+              </div>
+              <input type="file" class="form-control border-primary" id="proyecto-informe-final-archivo"
+                     name="informe_final_archivo">
+            </div>
+
             <!-- Control de Tiempo (PLAN_PROYECTOS_FASE_3_EJECUCION_TIEMPOS_
                  GASTOS_NO_FACTURABLES, Seccion 16/40). Reemplaza el panel
                  financiero anterior (fin-*) en esta Fase 3 -- esos campos
@@ -1346,6 +1398,26 @@
                 </div>
               </div>
             </div>
+
+            <!-- "Listo para Cierre" (Seccion 52 del plan): checklist en
+                 vivo, resuelto 100% en backend (puede_cerrar/bloqueos_cierre
+                 del serializer) -- evita que el usuario descubra todos los
+                 errores de golpe al pulsar el boton de cierre. -->
+            <div class="col-md-12 mt-4 pt-3 border-top">
+              <div id="cierre-checklist-listo" class="alert alert-success d-none mb-3" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i><strong>Listo para cierre.</strong>
+                Puede finalizar la ejecución y pasar a Fase 4: Cierre.
+              </div>
+              <div id="cierre-checklist-bloqueado" class="alert alert-warning d-none mb-3" role="alert">
+                <strong><i class="bi bi-exclamation-triangle-fill me-2"></i>Aún no listo para cierre:</strong>
+                <ul id="cierre-checklist-lista" class="mb-0 mt-2"></ul>
+              </div>
+              <div class="d-flex justify-content-end">
+                <button type="button" class="btn btn-primary btn-avanzar-fase-action" data-target-fase="CIERRE">
+                  <i class="bi bi-flag-fill me-1"></i>Finalizar Ejecución y Cerrar Proyecto
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1356,9 +1428,9 @@
           <div class="locked-overlay">
             <div class="locked-icon"><i class="bi bi-lock-fill text-danger"></i></div>
             <h4>Fase 4 Bloqueada</h4>
-            <p class="text-muted mb-4">Esta fase requiere avanzar el proyecto formalmente a la Fase de Cierre.</p>
+            <p class="text-muted mb-4">Complete la ejecución en la Fase 3 (avance 100%, tareas finalizadas y documentos obligatorios) para formalizar el cierre.</p>
             <button type="button" class="btn btn-primary btn-avanzar-fase-action" data-target-fase="CIERRE">
-              <i class="bi bi-check2-circle me-1"></i>Avanzar a Fase de Cierre
+              <i class="bi bi-flag-fill me-1"></i>Finalizar Ejecución y Cerrar Proyecto
             </button>
           </div>
         </div>
@@ -1455,73 +1527,85 @@
             </div>
           </div>
 
-          <!-- SECCION 3: CONFIGURACION DE CIERRE (Editable Fields - 5 only) -->
-          <div class="mb-4">
-            <h6 class="text-dark fw-bold mb-3"><i class="bi bi-gear me-2 text-warning"></i>Configuración de Cierre</h6>
-
-            <div class="row g-3">
-              <!-- Campo 1: Porcentaje de Avance (Range Slider 0-100) -->
-              <div class="col-md-12">
-                <label for="proyecto-porcentaje-avance" class="form-label fw-bold">
-                  <i class="bi bi-percent me-1"></i>Porcentaje de Avance
-                </label>
-                <div class="d-flex align-items-center gap-3">
-                  <input type="range" class="form-range flex-grow-1" id="proyecto-porcentaje-avance"
-                         name="porcentaje_avance" min="0" max="100"
-                         value="{% if proyecto %}{{ proyecto.porcentaje_avance }}{% else %}0{% endif %}">
-                  <span class="badge bg-primary" id="porcentaje-avance-display">0%</span>
-                </div>
+          <!-- SECCION 3: RESUMEN FINAL (PLAN_REESTRUCTURACION_FASE_3_
+               EJECUCION_FASE_4_CIERRE, Seccion 26/27: Fase 4 deja de ser un
+               formulario operativo -- ya NO hay inputs editables aqui
+               (avance/estado/actas se completaron en Fase 3). Todo este
+               bloque es 100% read-only, poblado por JS desde el "Closure
+               Summary" GET .../cierre/ -- nunca recalculado en el navegador
+               (Seccion 36). -->
+          <div class="mb-4 pb-3 border-bottom">
+            <h6 class="text-dark fw-bold mb-3"><i class="bi bi-flag-fill me-2 text-success"></i>Estado Final del Proyecto</h6>
+            <div class="row g-2">
+              <div class="col-6 col-md-3">
+                <small class="text-muted d-block">Avance final</small>
+                <div class="fw-bold" id="cierre-avance-final">--</div>
               </div>
-
-              <!-- Campo 2: Estado de la Tarea (Select) -->
-              <div class="col-md-6">
-                <label for="proyecto-estado-tarea" class="form-label fw-bold">Estado de la Tarea</label>
-                <select class="form-select border-primary" id="proyecto-estado-tarea" name="estado_tarea">
-                  <option value="PENDIENTE" {% if proyecto and proyecto.estado_tarea == 'PENDIENTE' %}selected{% endif %}>Pendiente</option>
-                  <option value="EN_PROCESO" {% if proyecto and proyecto.estado_tarea == 'EN_PROCESO' %}selected{% endif %}>En Proceso</option>
-                  <option value="DETENIDO" {% if proyecto and proyecto.estado_tarea == 'DETENIDO' %}selected{% endif %}>Detenido</option>
-                  <option value="COMPLETADO" {% if proyecto and proyecto.estado_tarea == 'COMPLETADO' %}selected{% endif %}>Completado</option>
-                </select>
+              <div class="col-6 col-md-3">
+                <small class="text-muted d-block">Estado operativo</small>
+                <div class="fw-bold" id="cierre-estado-final">--</div>
               </div>
-
-              <!-- Campo 3: Fecha de Cierre Real (Date Input) -->
-              <div class="col-md-6">
-                <label for="proyecto-fecha-cierre-real" class="form-label fw-bold">Fecha de Cierre Real</label>
-                <input type="date" class="form-control border-primary" id="proyecto-fecha-cierre-real"
-                       name="fecha_cierre_real"
-                       value="{% if proyecto and proyecto.fecha_cierre_real %}{{ proyecto.fecha_cierre_real|date:'Y-m-d' }}{% endif %}">
+              <div class="col-6 col-md-3">
+                <small class="text-muted d-block">Fecha de cierre real</small>
+                <div class="fw-bold" id="cierre-fecha-real">--</div>
               </div>
-
-              <!-- Campo 4: Acta de Entrega Firmada (File Upload) -->
-              <div class="col-md-6">
-                <label for="proyecto-acta-entrega-archivo" class="form-label fw-bold">
-                  <i class="bi bi-file-earmark-pdf me-1"></i>Acta de Entrega Firmada
-                </label>
-                <div id="acta-entrega-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
-                  <span class="badge bg-success p-2"><i class="bi bi-check-circle me-1"></i>Cargado</span>
-                </div>
-                <input type="file" class="form-control border-primary" id="proyecto-acta-entrega-archivo"
-                       name="acta_entrega_archivo">
-              </div>
-
-              <!-- Campo 5: Informe Final del Proyecto (File Upload) -->
-              <div class="col-md-6">
-                <label for="proyecto-informe-final-archivo" class="form-label fw-bold">
-                  <i class="bi bi-file-earmark-text me-1"></i>Informe Final del Proyecto
-                </label>
-                <div id="informe-final-archivo-existing" class="mb-2 p-2 bg-light border rounded d-none">
-                  <span class="badge bg-success p-2"><i class="bi bi-check-circle me-1"></i>Cargado</span>
-                </div>
-                <input type="file" class="form-control border-primary" id="proyecto-informe-final-archivo"
-                       name="informe_final_archivo">
+              <div class="col-6 col-md-3">
+                <small class="text-muted d-block">Cronograma</small>
+                <div class="fw-bold" id="cierre-tiempo-estado">--</div>
               </div>
             </div>
           </div>
 
-          <!-- Nota informativa Fase 4 -->
-          <div class="alert alert-info alert-sm mb-0" role="alert">
-            <i class="bi bi-info-circle me-2"></i>
-            Los indicadores financieros son calculados automáticamente desde las tareas y el equipo registrado.
+          <div class="mb-4 pb-3 border-bottom">
+            <h6 class="text-dark fw-bold mb-3"><i class="bi bi-list-task me-2 text-primary"></i>Resumen de Tareas</h6>
+            <div class="row g-2 text-center">
+              <div class="col"><small class="text-muted d-block">Total</small><div class="fw-bold" id="cierre-tareas-total">0</div></div>
+              <div class="col"><small class="text-muted d-block">Completadas</small><div class="fw-bold text-success" id="cierre-tareas-completadas">0</div></div>
+              <div class="col"><small class="text-muted d-block">Canceladas</small><div class="fw-bold text-danger" id="cierre-tareas-canceladas">0</div></div>
+              <div class="col"><small class="text-muted d-block">Atrasadas</small><div class="fw-bold text-warning" id="cierre-tareas-atrasadas">0</div></div>
+              <div class="col"><small class="text-muted d-block">% Completitud</small><div class="fw-bold" id="cierre-tareas-pct">0%</div></div>
+            </div>
+          </div>
+
+          <div class="mb-4 pb-3 border-bottom">
+            <h6 class="text-dark fw-bold mb-3"><i class="bi bi-cash-coin me-2 text-success"></i>Rentabilidad Final</h6>
+            <p class="text-muted small mb-2">Valor realmente vendido (Facturas de Venta de Fase 1) contra el costo real total.</p>
+            <div class="row g-2">
+              <div class="col-6 col-md-3">
+                <small class="text-muted d-block">Valor vendido</small>
+                <div class="fw-bold text-success" id="cierre-rent-vendido">$ 0</div>
+              </div>
+              <div class="col-6 col-md-3">
+                <small class="text-muted d-block">Costo real</small>
+                <div class="fw-bold text-danger" id="cierre-rent-costo">$ 0</div>
+              </div>
+              <div class="col-6 col-md-3">
+                <small class="text-muted d-block">Resultado</small>
+                <div class="fw-bold" id="cierre-rent-resultado">$ 0</div>
+              </div>
+              <div class="col-6 col-md-3">
+                <small class="text-muted d-block">Margen</small>
+                <div><span class="badge bg-secondary" id="cierre-rent-margen">--</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-4 pb-3 border-bottom">
+            <h6 class="text-dark fw-bold mb-3"><i class="bi bi-receipt-cutoff me-2 text-secondary"></i>Desglose Administrativo</h6>
+            <div class="row g-2 text-center">
+              <div class="col"><small class="text-muted d-block">Facturas de venta</small><div class="fw-bold" id="cierre-admin-facturas">0</div></div>
+              <div class="col"><small class="text-muted d-block">Órdenes de compra</small><div class="fw-bold" id="cierre-admin-ordenes">0</div></div>
+              <div class="col"><small class="text-muted d-block">Gastos registrados</small><div class="fw-bold" id="cierre-admin-gastos">0</div></div>
+              <div class="col"><small class="text-muted d-block">Gastos no facturables</small><div class="fw-bold" id="cierre-admin-gastos-nf">$ 0</div></div>
+            </div>
+          </div>
+
+          <div class="mb-0">
+            <h6 class="text-dark fw-bold mb-3"><i class="bi bi-file-earmark-check me-2 text-primary"></i>Documentación Final</h6>
+            <div class="row g-2">
+              <div class="col-6"><i class="bi bi-check-circle-fill text-success me-1" id="cierre-doc-acta-icon"></i><span id="cierre-doc-acta-label">Acta de Entrega</span></div>
+              <div class="col-6"><i class="bi bi-check-circle-fill text-success me-1" id="cierre-doc-informe-icon"></i><span id="cierre-doc-informe-label">Informe Final</span></div>
+            </div>
           </div>
         </div>
       </div>

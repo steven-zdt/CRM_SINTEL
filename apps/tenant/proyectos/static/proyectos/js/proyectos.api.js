@@ -369,6 +369,13 @@
         w.Sintel.Core.Http.request('POST', `${API_BASE}/${proyectoUuid}/rechazar-inicio/`, { motivo })
     },
 
+    /** Fase 4 (Cierre): GET /api/v1/proyectos/{uuid}/cierre/ -- "Closure Summary" (PLAN_REESTRUCTURACION_FASE_3_EJECUCION_FASE_4_CIERRE) */
+    cierre: async (proyectoUuid) => {
+      console.log(`[${MOD}] cierre(${proyectoUuid})`);
+      if (!proyectoUuid) return { ok: false, status: 400, data: { detail: 'proyecto_uuid requerido' } };
+      return w.Sintel.Core.Http.request('GET', `${API_BASE}/${proyectoUuid}/cierre/`);
+    },
+
     formatCurrency: (value) => {
       if (value === null || value === undefined || value === '') return '$ 0,00';
       const num = parseFloat(value);

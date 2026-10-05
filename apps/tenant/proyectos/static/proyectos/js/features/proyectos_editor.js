@@ -673,6 +673,12 @@
             w.Sintel.ProyectoInicio.init(currentProyecto.uuid, currentProyecto);
         }
 
+        // 1.79. Fase 4 (Cierre): checklist "Listo para Cierre" + resumen
+        // final (PLAN_REESTRUCTURACION_FASE_3_EJECUCION_FASE_4_CIERRE)
+        if (currentProyecto?.uuid) {
+            w.Sintel.ProyectoCierre.init(currentProyecto.uuid, currentProyecto);
+        }
+
         // 2. Equipo de Trabajo (Fase 3)
         const equipoList = d.querySelector('#equipo-trabajo-list');
         if (equipoList) {
@@ -2559,6 +2565,8 @@
                 buscar: (q) => w.proyectosAPI.lookups.empleados(q),
                 extraer: (resp) => resp.data?.results || resp.data || [],
                 renderLabel: (e) => `${e.primer_nombre || ''} ${e.primer_apellido || ''}`.trim(),
+                campoIdApi: 'supervisor_id',
+                campoNombreApi: 'supervisor_nombre',
             });
 
             this._bindBuscadorSimple({
@@ -2569,6 +2577,8 @@
                 buscar: (q) => w.proyectosAPI.lookups.proveedores(q),
                 extraer: (resp) => resp.data?.results || resp.data || [],
                 renderLabel: (p) => p.razon_social || p.nombre_comercial || '',
+                campoIdApi: 'proveedor_id',
+                campoNombreApi: 'proveedor_nombre',
             });
 
             // --- Facturas de Venta ---
@@ -2647,7 +2657,7 @@
         /** Buscador generico texto+sugerencias que solo fija hidden inputs
          * del formulario principal (sin API propia) -- Supervisor/Contratista
          * se guardan junto con el resto del Proyecto. */
-        _bindBuscadorSimple({ inputId, suggestionsId, hiddenIdId, hiddenNombreId, buscar, extraer, renderLabel }) {
+        _bindBuscadorSimple({ inputId, suggestionsId, hiddenIdId, hiddenNombreId, buscar, extraer, renderLabel, campoIdApi, campoNombreApi }) {
             const input = d.getElementById(inputId);
             const suggestions = d.getElementById(suggestionsId);
             const hiddenId = d.getElementById(hiddenIdId);
@@ -2672,12 +2682,37 @@
                                 ${renderLabel(item)}
                             </button>`).join('');
                         suggestions.querySelectorAll('button').forEach(btn => {
-                            btn.addEventListener('click', () => {
+                            btn.addEventListener('click', async () => {
                                 const item = items[parseInt(btn.dataset.idx, 10)];
-                                input.value = renderLabel(item);
+                                const nombre = renderLabel(item);
+                                input.value = nombre;
                                 hiddenId.value = item.id;
-                                hiddenNombre.value = renderLabel(item);
+                                hiddenNombre.value = nombre;
                                 suggestions.classList.add('d-none');
+
+                                // [FIX] Guardado inmediato: los nodos del stepper
+                                // (#offcanvas-proyecto .step-node) navegan entre
+                                // fases SIN guardar nada -- si el usuario elige
+                                // Supervisor/Contratista y luego hace clic en otro
+                                // paso del stepper (en vez del boton "Guardar" o
+                                // "Continuar"), el cambio se perdia en silencio.
+                                // El resto de Fase 1 (factura/cotizacion/inversion)
+                                // ya persiste de inmediato via su propio endpoint;
+                                // Supervisor/Contratista ahora hacen lo mismo con un
+                                // PATCH directo, sin esperar al guardado general del
+                                // formulario (que ademas cierra el offcanvas).
+                                if (this._proyectoUuid && campoIdApi && campoNombreApi) {
+                                    // PATCH directo (parcial) -- proyectosAPI.update() usa PUT
+                                    // (reemplazo completo, exige campos requeridos como "nombre"
+                                    // que aqui no tenemos). Mismo verbo que guardarProyecto().
+                                    const resp2 = await w.Sintel.Core.Http.request(
+                                        'PATCH', `/api/v1/proyectos/${this._proyectoUuid}/`,
+                                        { [campoIdApi]: item.id, [campoNombreApi]: nombre }
+                                    );
+                                    if (!resp2.ok) {
+                                        this._mostrarError(resp2, 'Error al guardar la seleccion');
+                                    }
+                                }
                             });
                         });
                     }
@@ -2969,6 +3004,99 @@
 
     // ============================================================================
     // FIN MÓDULO FASE 1 (INICIO)
+    // ============================================================================
+
+    // ============================================================================
+    // MÓDULO FASE 4 (CIERRE) -- PLAN_REESTRUCTURACION_FASE_3_EJECUCION_
+    // FASE_4_CIERRE: checklist "Listo para Cierre" (en Fase 3, con los
+    // datos ya incluidos en el detalle principal del proyecto -- sin GET
+    // extra) + "Closure Summary" de solo lectura (en Fase 4, via GET
+    // .../cierre/, Seccion 45 del plan). El frontend SOLO pinta estos
+    // valores, nunca recalcula rentabilidad/tiempo/tareas (Seccion 36).
+    // ============================================================================
+    const ProyectoCierre = {
+        _proyectoUuid: null,
+
+        async init(proyectoUuid, proyecto) {
+            if (!proyectoUuid) return;
+            this._proyectoUuid = proyectoUuid;
+            this._renderChecklist(proyecto);
+            // El resumen consolidado solo se necesita una vez alcanzada la
+            // Fase 4 -- evita un GET pesado extra en cada apertura del editor
+            // mientras el proyecto aun esta en Ejecucion.
+            if (proyecto?.fase_actual === 'CIERRE') {
+                await this.refrescarResumen();
+            }
+        },
+
+        _renderChecklist(proyecto) {
+            const listoEl = d.querySelector('#cierre-checklist-listo');
+            const bloqueadoEl = d.querySelector('#cierre-checklist-bloqueado');
+            const listaEl = d.querySelector('#cierre-checklist-lista');
+            if (!listoEl || !bloqueadoEl || !listaEl) return;
+
+            const bloqueos = proyecto?.bloqueos_cierre || [];
+            if (bloqueos.length === 0) {
+                listoEl.classList.remove('d-none');
+                bloqueadoEl.classList.add('d-none');
+            } else {
+                listoEl.classList.add('d-none');
+                bloqueadoEl.classList.remove('d-none');
+                listaEl.innerHTML = bloqueos.map((b) => `<li>${b}</li>`).join('');
+            }
+        },
+
+        async refrescarResumen() {
+            const resp = await w.proyectosAPI.cierre(this._proyectoUuid);
+            if (!resp.ok) return;
+            this._renderResumen(resp.data);
+        },
+
+        _renderResumen(resumen) {
+            const setEl = (id, val) => {
+                const el = d.querySelector(`#${id}`);
+                if (el) el.textContent = val;
+            };
+            const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-CO')}`;
+
+            setEl('cierre-avance-final', `${resumen.ejecucion.porcentaje_avance}%`);
+            setEl('cierre-estado-final', resumen.ejecucion.estado_tarea_display);
+            setEl('cierre-fecha-real', currentProyecto?.fecha_cierre_real || '--');
+            setEl('cierre-tiempo-estado', resumen.ejecucion.tiempo?.estado_cronograma || '--');
+
+            setEl('cierre-tareas-total', resumen.ejecucion.tareas.total);
+            setEl('cierre-tareas-completadas', resumen.ejecucion.tareas.completadas);
+            setEl('cierre-tareas-canceladas', resumen.ejecucion.tareas.canceladas);
+            setEl('cierre-tareas-atrasadas', resumen.ejecucion.tareas.atrasadas);
+            setEl('cierre-tareas-pct', `${resumen.ejecucion.tareas.porcentaje_completitud}%`);
+
+            setEl('cierre-rent-vendido', fmt(resumen.rentabilidad_final.valor_vendido));
+            setEl('cierre-rent-costo', fmt(resumen.rentabilidad_final.costo_real));
+            setEl('cierre-rent-resultado', fmt(resumen.rentabilidad_final.resultado));
+            const margenEl = d.querySelector('#cierre-rent-margen');
+            if (margenEl) {
+                const m = resumen.rentabilidad_final.margen_pct;
+                margenEl.textContent = m !== null && m !== undefined ? `${m}%` : '--';
+                margenEl.className = 'badge ' + (m === null || m === undefined ? 'bg-secondary' : (Number(m) >= 0 ? 'bg-success' : 'bg-danger'));
+            }
+
+            setEl('cierre-admin-facturas', resumen.administrativo.facturas_venta_count);
+            setEl('cierre-admin-ordenes', resumen.administrativo.ordenes_compra?.cantidad_ordenes ?? 0);
+            setEl('cierre-admin-gastos', resumen.administrativo.gastos_count);
+            setEl('cierre-admin-gastos-nf', fmt(resumen.ejecucion.gastos_no_facturables?.total));
+
+            const docClase = (ok) => `bi ${ok ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger'} me-1`;
+            const actaIcon = d.querySelector('#cierre-doc-acta-icon');
+            if (actaIcon) actaIcon.className = docClase(resumen.documentos.acta_entrega);
+            const informeIcon = d.querySelector('#cierre-doc-informe-icon');
+            if (informeIcon) informeIcon.className = docClase(resumen.documentos.informe_final);
+        }
+    };
+
+    w.Sintel.ProyectoCierre = ProyectoCierre;
+
+    // ============================================================================
+    // FIN MÓDULO FASE 4 (CIERRE)
     // ============================================================================
 
     w.ProyectosEditorModule = {

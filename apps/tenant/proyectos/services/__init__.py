@@ -19,6 +19,10 @@ from .business_service import (
     orchestrate_create_proyecto,
     orchestrate_update_proyecto,
 )
+from .cierre_service import (
+    ProyectoCierreGateService,
+    ProyectoCierreResumenService,
+)
 from .cotizacion_planeacion_service import (
     ProyectoCotizacionPlaneacionService,
     mapear_tipo_item_a_recurso,
@@ -86,6 +90,8 @@ __all__ = [
     "cambiar_fase_proyecto",
     "orchestrate_create_proyecto",
     "orchestrate_update_proyecto",
+    "ProyectoCierreGateService",
+    "ProyectoCierreResumenService",
     "ProyectoCotizacionPlaneacionService",
     "mapear_tipo_item_a_recurso",
     "delete_asignacion",
