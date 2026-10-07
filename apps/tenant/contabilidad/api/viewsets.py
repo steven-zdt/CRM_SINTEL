@@ -132,7 +132,8 @@ class ContabilidadServiceMixin(SintelServiceMixin):
         return model_class.objects.filter(empresa_id=self.get_empresa_id()).only(*fields)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -306,7 +307,8 @@ class CuentaContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabil
 
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -529,7 +531,8 @@ class AsientoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabi
             return Response({'error': str(e)}, template_name='tenant/contabilidad/partials/asiento_offcanvas_detalle.html', status=500)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -596,7 +599,8 @@ class MovimientoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Cont
             return self.handle_service_error(e)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -661,7 +665,8 @@ class CatalogoMaestroNIIFViewSet(OrganizationalContextMixin, SintelDSVMixin, Con
             return self.handle_service_error(e)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -763,7 +768,8 @@ class PeriodoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabi
             return Response({"detail": [str(e)]}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -816,7 +822,8 @@ class TipoComprobanteViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabi
             return self.handle_service_error(e)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -1177,7 +1184,8 @@ class DocumentosPendientesViewSet(OrganizationalContextMixin, SintelDSVMixin, Co
             return self.handle_service_error(e)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -1217,7 +1225,8 @@ class ConfiguracionRetencionesViewSet(OrganizationalContextMixin, SintelDSVMixin
         serializer.save(empresa_id=empresa_id)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -1416,7 +1425,8 @@ class LibroDiarioViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabilida
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
