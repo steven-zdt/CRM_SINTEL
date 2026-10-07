@@ -38,7 +38,8 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -91,7 +92,8 @@ class ProductoViewSet(OrganizationalContextMixin, SintelDSVMixin, ProductoServic
         return Response({'instance': instance}, template_name='tenant/cotizaciones/offcanvas_crear_producto.html')
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -135,7 +137,8 @@ class ServicioViewSet(OrganizationalContextMixin, SintelDSVMixin, ServicioServic
         return Response({'instance': instance}, template_name='tenant/cotizaciones/offcanvas_crear_servicio.html')
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -291,7 +294,8 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
         return Response(payload, status=status.HTTP_200_OK if ya_existia else status.HTTP_201_CREATED)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
