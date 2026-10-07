@@ -1,6 +1,7 @@
 """
 ViewSet para Clientes - Tabulator Implementation + HTMX Offcanvas
 """
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 from django.db.utils import ProgrammingError
 from django.db.models import Prefetch
@@ -34,6 +35,10 @@ from apps.tenant.clientes.services.business_service import ClienteBusinessServic
 from apps.tenant.empresa.models import Empresa
 
 logger = logging.getLogger(__name__)
+
+
+@mcp_viewset()\n
+
 
 
 class ClienteViewSet(OrganizationalContextMixin, ClienteServiceMixin, ContactoClienteServiceMixin, CarteraServiceMixin, BaseTenantViewSet):
@@ -452,6 +457,10 @@ class ClienteViewSet(OrganizationalContextMixin, ClienteServiceMixin, ContactoCl
         )
 
 
+@mcp_viewset()\n
+
+
+
 class ContactoClienteViewSet(OrganizationalContextMixin, ContactoClienteServiceMixin, BaseTenantViewSet):
     """
     ViewSet para Contactos de Cliente con Zero Trust estricto.
@@ -691,6 +700,12 @@ class ContactoClienteViewSet(OrganizationalContextMixin, ContactoClienteServiceM
             'tenant/contactos/offcanvas_detalle_contacto_cliente.html',
             request=request
         )
+
+
+
+@mcp_viewset()\n
+
+
 
 
 
