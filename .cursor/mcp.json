@@ -1,7 +1,7 @@
 {
   "mcpServers": {
-    "gemini-api-docs-mcp": {
-      "url": "https://gemini-api-docs-mcp.dev"
+    "sintel": {
+      "url": "http://127.0.0.1:8000/mcp/"
     }
   }
 }
