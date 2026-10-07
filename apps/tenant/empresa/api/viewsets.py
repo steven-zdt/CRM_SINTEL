@@ -10,6 +10,7 @@ ViewSets y vistas auxiliares para la app empresa.
 - JSON-first: JSONParser (principal) + FormParser (legacy)
 - SessionAuthentication + CSRF para workspace
 """
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 from functools import cached_property
 
@@ -65,6 +66,9 @@ log_mailinbox = logging.getLogger("mailinbox.api")
 
 
 # ========= ViewSets =========
+
+@mcp_viewset()
+
 
 class EmpresaViewSet(OrganizationalContextMixin, viewsets.ModelViewSet):
     """
@@ -516,6 +520,11 @@ class EmpresaViewSet(OrganizationalContextMixin, viewsets.ModelViewSet):
 
         empresa.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@mcp_viewset()
+
+
 
 
 class MailInboxConfigViewSet(viewsets.ModelViewSet):
@@ -1110,6 +1119,11 @@ def actividades_lookup(request):
 ciiu_lookup = actividades_lookup
 
 
+@mcp_viewset()
+
+
+
+
 class SedeViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     ViewSet para Sedes (Sucursales).
@@ -1220,6 +1234,11 @@ class SedeViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         )
         html = render_to_string(template, context, request=request)
         return HttpResponse(html, content_type='text/html')
+
+
+@mcp_viewset()
+
+
 
 
 class AreaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
