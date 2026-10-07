@@ -1,6 +1,7 @@
 """
 ViewSets para Cotizaciones v2.62.0 - SINTEL FSD
 """
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 
 from django.http import HttpResponse
@@ -35,6 +36,10 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@mcp_viewset()\n
+
 
 
 class ProductoViewSet(OrganizationalContextMixin, SintelDSVMixin, ProductoServiceMixin, BaseTenantViewSet):
@@ -86,6 +91,10 @@ class ProductoViewSet(OrganizationalContextMixin, SintelDSVMixin, ProductoServic
         return Response({'instance': instance}, template_name='tenant/cotizaciones/offcanvas_crear_producto.html')
 
 
+@mcp_viewset()\n
+
+
+
 class ServicioViewSet(OrganizationalContextMixin, SintelDSVMixin, ServicioServiceMixin, BaseTenantViewSet):
     serializer_class = ServicioSerializer
     permission_classes = [IsTenantMember, IsTenantAdminOrReadOnly]
@@ -124,6 +133,10 @@ class ServicioViewSet(OrganizationalContextMixin, SintelDSVMixin, ServicioServic
         mismo fix (boton 'Editar' era un stub sin vista de edicion)."""
         instance = self.get_object()
         return Response({'instance': instance}, template_name='tenant/cotizaciones/offcanvas_crear_servicio.html')
+
+
+@mcp_viewset()\n
+
 
 
 class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionServiceMixin, BaseTenantViewSet):
@@ -276,6 +289,10 @@ class CotizacionViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionSe
             "cotizacion_uuid": str(venta.cotizacion_uuid),
         }
         return Response(payload, status=status.HTTP_200_OK if ya_existia else status.HTTP_201_CREATED)
+
+
+@mcp_viewset()\n
+
 
 
 class CotizacionItemViewSet(OrganizationalContextMixin, SintelDSVMixin, CotizacionItemServiceMixin, BaseTenantViewSet):
