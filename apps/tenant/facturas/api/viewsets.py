@@ -9,6 +9,7 @@ ViewSets para la app facturas.
 
 Referencia: https://www.django-rest-framework.org/api-guide/viewsets/
 """
+from djangorestframework_mcp.decorators import mcp_viewset
 import base64
 import logging
 from decimal import Decimal
@@ -117,6 +118,11 @@ def resolve_empresa_id_from_request(request: Request) -> int:
         return empresa_id
 
     raise ValidationError({"empresa": "No se pudo resolver la empresa activa del tenant."})
+
+
+@mcp_viewset()
+
+
 
 
 class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMixin, FacturaXMLMixin, FacturaServiceMixin, BaseTenantViewSet):
@@ -1234,6 +1240,9 @@ class FacturaViewSet(OrganizationalContextMixin, FacturaUBLMixin, FacturaMailMix
 
         return Response(resultados, status=status.HTTP_200_OK)
 
+@mcp_viewset()
+
+
 class ItemFacturaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     Endpoints para ítems de factura.
@@ -1279,6 +1288,11 @@ class ItemFacturaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
             qs = qs.filter(factura_id=factura_id)
 
         return qs.order_by('orden')
+
+
+@mcp_viewset()
+
+
 
 
 class NotaCreditoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
