@@ -12,7 +12,7 @@ Rutas públicas disponibles:
 - sintel.net.co/api/admin/v1/ -> APIs REST de administración (requiere staff)
 - sintel.net.co/api/token/ -> Autenticación JWT
 """
-from apps.services.mcp.views import SintelPublicMCPView, SintelTenantMCPView
+from apps.services.mcp.views import SintelPublicMCPView
 from django.contrib import admin
 from django.contrib.auth import logout as auth_logout
 from django.http import JsonResponse
