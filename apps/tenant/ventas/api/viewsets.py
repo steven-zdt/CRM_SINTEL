@@ -1,3 +1,4 @@
+from djangorestframework_mcp.decorators import mcp_viewset
 import datetime
 import logging
 
@@ -23,6 +24,11 @@ from apps.tenant.ventas.services.api_mixins import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@mcp_viewset()
+
+
 
 
 class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantViewSet):
@@ -204,6 +210,11 @@ class VentaViewSet(OrganizationalContextMixin, VentaServiceMixin, BaseTenantView
             {"venta": venta},
             template_name="tenant/ventas/offcanvas_detalle_venta.html",
         )
+
+
+@mcp_viewset()
+
+
 
 
 class ResolucionFacturacionViewSet(OrganizationalContextMixin, ResolucionFacturacionServiceMixin, BaseTenantViewSet):
