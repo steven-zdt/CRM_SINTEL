@@ -104,7 +104,8 @@ class BaseReadWrite(viewsets.ModelViewSet):
             pass
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -118,7 +119,8 @@ class TipoImpuestoViewSet(BaseReadOnly):
     ordering = ["codigo"]
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -132,7 +134,8 @@ class TarifaIVAViewSet(BaseReadOnly):
     ordering = ["-fecha_vigencia"]
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -146,7 +149,8 @@ class ConceptoRetencionViewSet(BaseReadOnly):
     ordering = ["codigo"]
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -160,7 +164,8 @@ class CodigoTributarioViewSet(BaseReadOnly):
     ordering = ["codigo"]
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -174,7 +179,8 @@ class ActividadEconomicaViewSet(BaseReadOnly):
     ordering = ["codigo"]
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -264,7 +270,8 @@ class SearchView(APIView):
 # ============================================================================
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -282,7 +289,8 @@ class ContribuyenteTipoViewSet(BaseReadWrite):
     ordering = ["clase", "segmento_dian", "nombre"]
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -300,7 +308,8 @@ class RegimenRentaViewSet(BaseReadWrite):
     ordering = ["codigo"]
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -328,7 +337,8 @@ class ResponsabilidadRUTViewSet(BaseReadWrite):
     ordering = ["codigo"]
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
