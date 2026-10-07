@@ -37,7 +37,8 @@ from apps.tenant.empresa.models import Empresa
 logger = logging.getLogger(__name__)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -457,7 +458,8 @@ class ClienteViewSet(OrganizationalContextMixin, ClienteServiceMixin, ContactoCl
         )
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -703,7 +705,8 @@ class ContactoClienteViewSet(OrganizationalContextMixin, ContactoClienteServiceM
 
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
