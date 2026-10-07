@@ -27,6 +27,7 @@ WARNING: SEGURIDAD:
 - El Admin de Django solo está disponible en el esquema público (ROOT_URLCONF)
 - Manejadores de error personalizados (404, 403) para mantener la identidad visual
 """
+from apps.services.mcp.views import SintelPublicMCPView, SintelTenantMCPView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
@@ -163,7 +164,7 @@ urlpatterns = [
     # MCP endpoint (django-rest-framework-mcp): expone ViewSets anotados como herramientas MCP
     # Accesible en: http://<tenant>/mcp/
     # Conectar desde Antigravity via mcp-remote apuntando a esta URL con Bearer token
-    path('mcp/', include('djangorestframework_mcp.urls')),
+    path('mcp/', SintelTenantMCPView.as_view()),,
     
     # UI Routes (partials HTML sin datos, API-First)
     # Workspace compositor
