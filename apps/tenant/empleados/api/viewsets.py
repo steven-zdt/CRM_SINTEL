@@ -1,3 +1,4 @@
+from djangorestframework_mcp.decorators import mcp_viewset
 import calendar
 import logging
 import uuid
@@ -51,6 +52,11 @@ from apps.tenant.empleados.services.selectors import ContratoSelector, EmpleadoS
 from apps.tenant.empleados.services.business_service import NominaCalculationService
 
 logger = logging.getLogger(__name__)
+
+
+@mcp_viewset()
+
+
 
 
 class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
@@ -476,6 +482,9 @@ class EmpleadoViewSet(SintelDSVMixin, EmpleadoServiceMixin, BaseTenantViewSet):
             },
             "periodo_mes": periodo_mes
         }, status=status.HTTP_200_OK)
+
+@mcp_viewset()
+
 
 class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
     """
@@ -922,6 +931,11 @@ class ContratoViewSet(SintelDSVMixin, ContratoServiceMixin, BaseTenantViewSet):
                 {"error": "Ocurrio un error al simular la liquidacion.", "detail": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+@mcp_viewset()
+
+
 
 
 class DevengoViewSet(SintelDSVMixin, DevengoServiceMixin, BaseTenantViewSet):
@@ -1665,6 +1679,11 @@ _RESOLUCION_LIST_FIELDS = (
 )
 
 
+@mcp_viewset()
+
+
+
+
 class ResolucionDIANViewSet(SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet para configuracion de Resoluciones DIAN para nomina electronica.
@@ -1729,6 +1748,11 @@ _LIQUIDACION_LIST_TRAVERSALS = (
     'empleado__primer_nombre', 'empleado__primer_apellido',
     'contrato__id', 'contrato__uuid', 'contrato__cargo', 'contrato__tipo',
 )
+
+
+@mcp_viewset()
+
+
 
 
 class LiquidacionPrestacionViewSet(SintelDSVMixin, BaseTenantViewSet):
@@ -2174,6 +2198,13 @@ class LiquidacionPrestacionViewSet(SintelDSVMixin, BaseTenantViewSet):
             'desglose':    liquidacion.desglose_conceptos or {},
         }
         return Response(context, template_name='tenant/empleados/liquidacion_pdf.html')
+
+
+
+@mcp_viewset()
+
+
+
 
 
 
