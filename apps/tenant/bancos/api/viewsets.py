@@ -56,7 +56,8 @@ TIPOS_CUENTA_CHOICES = [
     ("CORRIENTE", "Corriente"),
 ]
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     """
@@ -155,7 +156,8 @@ class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMix
 
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -302,7 +304,8 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
         return Response(context, template_name="tenant/bancos/offcanvas_detalle_extracto.html")
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -570,7 +573,8 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
         return Response({'results': results}, status=status.HTTP_200_OK)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
