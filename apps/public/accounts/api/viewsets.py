@@ -11,6 +11,7 @@ WARNING: IMPORTANTE:
 Referencia: https://www.django-rest-framework.org/api-guide/viewsets/
 """
 
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 
 from django.contrib.auth import get_user_model
@@ -36,6 +37,10 @@ from apps.public.accounts.api.services.user_service import (
 from apps.public.accounts.services.delete_user_service import delete_user_service
 
 User = get_user_model()
+
+
+@mcp_viewset()\n
+
 
 
 class UserAdminViewSet(
