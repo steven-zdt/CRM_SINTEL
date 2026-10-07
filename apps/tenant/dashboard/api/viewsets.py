@@ -20,7 +20,8 @@ from apps.tenant.dashboard.services.business_service import DashboardBusinessSer
 logger = logging.getLogger(__name__)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
