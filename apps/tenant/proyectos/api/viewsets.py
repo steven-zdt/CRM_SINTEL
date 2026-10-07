@@ -6,6 +6,7 @@ WARNING: SINTEL v3.5: API-First & Zero-Coupling
 - Zero Trust: Aislamiento estricto por empresa_id
 - Performance: Queries optimizadas (Zero Waste) via Selectors
 """
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 
 from django.db.models import Q
@@ -62,6 +63,9 @@ except ImportError:
     _CotizacionProyecto = None
 
 logger = logging.getLogger(__name__)
+
+@mcp_viewset()
+
 
 class ProyectoViewSet(
     OrganizationalContextMixin,
@@ -424,6 +428,11 @@ class ProyectoViewSet(
         return Response({'status': 'vinculado_exitosamente'})
 
 
+@mcp_viewset()
+
+
+
+
 class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
     """
     ViewSet para items de presupuesto planeado (v3.5.2).
@@ -523,6 +532,11 @@ class ItemPresupuestoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         Delegacion al service para recalculo de proyecto padre.
         """
         PresupuestoBusinessService.eliminar_item(instance)
+
+
+@mcp_viewset()
+
+
 
 
 class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
@@ -669,6 +683,11 @@ class TareaDiariaViewSet(OrganizationalContextMixin, BaseTenantViewSet):
                 {'detail': str(e.detail) if hasattr(e, 'detail') else str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+@mcp_viewset()
+
+
 
 
 class TareaCortaViewSet(OrganizationalContextMixin, TareaCortaServiceMixin, BaseTenantViewSet):
