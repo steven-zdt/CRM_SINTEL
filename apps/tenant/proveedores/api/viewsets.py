@@ -1,3 +1,4 @@
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 from django.http import Http404
 from django.shortcuts import get_object_or_404
@@ -34,6 +35,9 @@ from apps.tenant.proveedores.models import Proveedor, CuentasPagar, Representant
 from apps.config.api.pagination import StandardResultsSetPagination
 
 logger = logging.getLogger(__name__)
+
+@mcp_viewset()
+
 
 class ProveedorViewSet(OrganizationalContextMixin, ProveedorServiceMixin, BaseTenantViewSet):
     """
@@ -229,6 +233,9 @@ class ProveedorViewSet(OrganizationalContextMixin, ProveedorServiceMixin, BaseTe
 # CuentasPagar ViewSet
 # ==============================================================================
 
+@mcp_viewset()
+
+
 class CuentasPagarViewSet(OrganizationalContextMixin, CuentasPagarServiceMixin, BaseTenantViewSet):
     """
     ViewSet para el sub-modulo de Cuentas por Pagar (Control de Deudas a Proveedores).
@@ -417,6 +424,9 @@ class CuentasPagarViewSet(OrganizationalContextMixin, CuentasPagarServiceMixin, 
 # ==============================================================================
 # REPRESENTANTE VIEWSET — v3.17.0 (nueva entidad)
 # ==============================================================================
+
+@mcp_viewset()
+
 
 class RepresentanteViewSet(OrganizationalContextMixin, RepresentanteServiceMixin, BaseTenantViewSet):
     """
