@@ -1,3 +1,4 @@
+from djangorestframework_mcp.decorators import mcp_viewset
 import re
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -136,6 +137,11 @@ class BaseViewSet(OrganizationalContextMixin, BaseTenantViewSet):
         return super().destroy(request, *args, **kwargs)
 
 
+@mcp_viewset()
+
+
+
+
 class CategoriaItemViewSet(BaseViewSet, inv_services.CategoriaItemServiceMixin):
     """
     v2.61: ViewSet para CATEGORIAS de Inventario con Inyeccion de Servicio.
@@ -198,6 +204,11 @@ class CategoriaItemViewSet(BaseViewSet, inv_services.CategoriaItemServiceMixin):
         id_instancia = request.query_params.get('id')
         context = self.service_categoria_get_offcanvas_context(empresa, id_instancia)
         return Response(context, template_name='tenant/inventario/offcanvas_categoria.html')
+
+
+@mcp_viewset()
+
+
 
 
 class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
@@ -408,6 +419,11 @@ class ProductoViewSet(BaseViewSet, inv_services.ProductoServiceMixin):
         return Response(context, template_name='tenant/inventario/offcanvas_producto.html')
 
 
+@mcp_viewset()
+
+
+
+
 class ServicioViewSet(BaseViewSet, inv_services.ServicioServiceMixin):
     """
     v2.61: ViewSet para SERVICIOS con Inyeccion de Servicio.
@@ -473,6 +489,11 @@ class ServicioViewSet(BaseViewSet, inv_services.ServicioServiceMixin):
         return Response(context, template_name='tenant/inventario/offcanvas_historial_servicio.html')
 
 
+@mcp_viewset()
+
+
+
+
 class ActivoFijoViewSet(BaseViewSet, inv_services.ActivoFijoServiceMixin):
     """
     v2.61: ViewSet para ACTIVOS FIJOS con Inyeccion de Servicio.
@@ -534,6 +555,11 @@ class ActivoFijoViewSet(BaseViewSet, inv_services.ActivoFijoServiceMixin):
         id_instancia = request.query_params.get('id')
         context = self.service_activo_get_offcanvas_context(empresa, id_instancia)
         return Response(context, template_name='tenant/inventario/offcanvas_activo.html')
+
+
+@mcp_viewset()
+
+
 
 
 class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMixin):
@@ -685,6 +711,11 @@ class MovimientoInventarioViewSet(BaseViewSet, inv_services.MovimientoServiceMix
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@mcp_viewset()
+
+
+
+
 class HistorialServicioViewSet(BaseViewSet, inv_services.HistorialServiceMixin):
     """
     ViewSet para Historial de Servicios via Service Layer.
@@ -744,6 +775,11 @@ class HistorialServicioViewSet(BaseViewSet, inv_services.HistorialServiceMixin):
         instance.proyecto_nombre = proyecto_nombre or ''
         instance.save(update_fields=['proyecto_uuid', 'proyecto_nombre'])
         return Response({'status': 'ok', 'proyecto_uuid': str(proyecto_uuid_val)})
+
+
+@mcp_viewset()
+
+
 
 
 class TrasladoInventarioViewSet(BaseViewSet, inv_services.TrasladoInventarioServiceMixin):
