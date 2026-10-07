@@ -1,3 +1,4 @@
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 
 from django_filters.rest_framework import DjangoFilterBackend
@@ -54,6 +55,8 @@ TIPOS_CUENTA_CHOICES = [
     ("AHORROS", "Ahorros"),
     ("CORRIENTE", "Corriente"),
 ]
+
+@mcp_viewset()\n
 
 class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     """
@@ -148,6 +151,14 @@ class CuentaBancariaViewSet(OrganizationalContextMixin, CuentaBancariaServiceMix
             "tipos_cuenta": TIPOS_CUENTA_CHOICES,
         }
         return Response(context, template_name="tenant/bancos/offcanvas_editar_cuenta.html")
+
+
+
+
+@mcp_viewset()\n
+
+
+
 
 
 
@@ -289,6 +300,10 @@ class ExtractoBancarioViewSet(OrganizationalContextMixin, ExtractoBancarioServic
             "kpis": kpis,
         }
         return Response(context, template_name="tenant/bancos/offcanvas_detalle_extracto.html")
+
+
+@mcp_viewset()\n
+
 
 
 class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancariaServiceMixin, SintelDSVMixin, BaseTenantViewSet):
@@ -553,6 +568,10 @@ class TransaccionBancariaViewSet(OrganizationalContextMixin, TransaccionBancaria
             for c in qs[:page_size]
         ]
         return Response({'results': results}, status=status.HTTP_200_OK)
+
+
+@mcp_viewset()\n
+
 
 
 class MovimientoBancarioAplicacionViewSet(
