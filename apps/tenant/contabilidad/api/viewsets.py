@@ -10,6 +10,7 @@ WARNING: IMPORTANTE:
 
 Referencia: https://www.django-rest-framework.org/api-guide/viewsets/
 """
+from djangorestframework_mcp.decorators import mcp_viewset
 import calendar
 import logging
 import traceback
@@ -129,6 +130,10 @@ class ContabilidadServiceMixin(SintelServiceMixin):
         fields = list(self.mutation_lookup_fields)
         fields.extend(extra_fields)
         return model_class.objects.filter(empresa_id=self.get_empresa_id()).only(*fields)
+
+
+@mcp_viewset()\n
+
 
 
 class CuentaContableViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
@@ -296,6 +301,16 @@ class CuentaContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabil
         except Exception as e:
             logger.error(f"Error en cuentas_proveedor: {e}")
             return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+
+@mcp_viewset()\n
+
+
+
+
 
 
 
@@ -514,6 +529,10 @@ class AsientoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabi
             return Response({'error': str(e)}, template_name='tenant/contabilidad/partials/asiento_offcanvas_detalle.html', status=500)
 
 
+@mcp_viewset()\n
+
+
+
 class MovimientoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
     """
     ViewSet para MovimientoContable.
@@ -577,6 +596,10 @@ class MovimientoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Cont
             return self.handle_service_error(e)
 
 
+@mcp_viewset()\n
+
+
+
 class CatalogoMaestroNIIFViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
     """
     ViewSet para CatalogoMaestroNIIF (Catálogo oficial NIIF Colombia).
@@ -636,6 +659,10 @@ class CatalogoMaestroNIIFViewSet(OrganizationalContextMixin, SintelDSVMixin, Con
             return Response(resultados, status=status.HTTP_200_OK)
         except Exception as e:
             return self.handle_service_error(e)
+
+
+@mcp_viewset()\n
+
 
 
 class PeriodoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
@@ -736,6 +763,10 @@ class PeriodoContableViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabi
             return Response({"detail": [str(e)]}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@mcp_viewset()\n
+
+
+
 class TipoComprobanteViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
     """
     ViewSet para TipoComprobante.
@@ -783,6 +814,10 @@ class TipoComprobanteViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabi
             return Response(serializer.data)
         except Exception as e:
             return self.handle_service_error(e)
+
+
+@mcp_viewset()\n
+
 
 
 class DocumentosPendientesViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
@@ -1142,6 +1177,10 @@ class DocumentosPendientesViewSet(OrganizationalContextMixin, SintelDSVMixin, Co
             return self.handle_service_error(e)
 
 
+@mcp_viewset()\n
+
+
+
 class ConfiguracionRetencionesViewSet(OrganizationalContextMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet para ConfiguracionRetenciones (v3.7.1).
@@ -1176,6 +1215,10 @@ class ConfiguracionRetencionesViewSet(OrganizationalContextMixin, SintelDSVMixin
         """Asigna automáticamente la empresa del tenant al crear."""
         empresa_id = self.get_empresa_id()
         serializer.save(empresa_id=empresa_id)
+
+
+@mcp_viewset()\n
+
 
 
 class RetencionViewSet(OrganizationalContextMixin, SintelDSVMixin, BaseTenantViewSet):
@@ -1371,6 +1414,10 @@ class LibroDiarioViewSet(OrganizationalContextMixin, SintelDSVMixin, Contabilida
         resultado = get_libro_diario_periodo(empresa_id, fecha_inicio, fecha_fin)
         serializer = LibroDiarioSerializer(resultado)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@mcp_viewset()\n
+
 
 
 class PlantillaContableViewSet(OrganizationalContextMixin, SintelDSVMixin, ContabilidadServiceMixin, BaseTenantViewSet):
