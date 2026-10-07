@@ -27,7 +27,7 @@ WARNING: SEGURIDAD:
 - El Admin de Django solo está disponible en el esquema público (ROOT_URLCONF)
 - Manejadores de error personalizados (404, 403) para mantener la identidad visual
 """
-from apps.services.mcp.views import SintelPublicMCPView, SintelTenantMCPView
+from apps.services.mcp.views import SintelTenantMCPView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
