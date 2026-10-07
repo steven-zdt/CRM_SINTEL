@@ -1,3 +1,4 @@
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 
 from django.shortcuts import get_object_or_404
@@ -38,6 +39,10 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@mcp_viewset()\n
+
 
 
 class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet):
@@ -273,6 +278,10 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
         return Response({'instance': instance, 'offcanvas_id': 'offcanvas-compra-detalle'}, template_name='tenant/compras/offcanvas_detalle_compras.html')
 
 
+@mcp_viewset()\n
+
+
+
 class PlantillaOrdenCompraViewSet(OrganizationalContextMixin, PlantillaOrdenCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     """
     ViewSet para la gestion de Plantillas de Orden de Compra.
@@ -347,6 +356,10 @@ class PlantillaOrdenCompraViewSet(OrganizationalContextMixin, PlantillaOrdenComp
             {'offcanvas_id': 'offcanvas-plantilla-crear'},
             template_name='tenant/compras/offcanvas_crear_plantilla.html'
         )
+
+
+@mcp_viewset()\n
+
 
 
 class RecepcionCompraViewSet(OrganizationalContextMixin, RecepcionCompraServiceMixin, SintelDSVMixin, BaseTenantViewSet):
