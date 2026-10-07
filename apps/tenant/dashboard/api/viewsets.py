@@ -2,6 +2,7 @@
 ViewSet para Dashboard v3.9.4 — Endpoints de métricas consolidadas.
 FSD Architecture: hereda BaseTenantViewSet + ServiceMixin
 """
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 
 from django.utils.dateparse import parse_date
@@ -17,6 +18,10 @@ from apps.tenant.dashboard.api.serializers import DashboardMetricasSerializer, K
 from apps.tenant.dashboard.services.business_service import DashboardBusinessService
 
 logger = logging.getLogger(__name__)
+
+
+@mcp_viewset()\n
+
 
 
 class DashboardViewSet(OrganizationalContextMixin, SintelDSVMixin, BaseTenantViewSet):
