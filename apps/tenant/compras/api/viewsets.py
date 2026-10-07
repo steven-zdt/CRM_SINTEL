@@ -41,7 +41,8 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -278,7 +279,8 @@ class OrdenCompraViewSet(OrganizationalContextMixin, OrdenCompraServiceMixin, Si
         return Response({'instance': instance, 'offcanvas_id': 'offcanvas-compra-detalle'}, template_name='tenant/compras/offcanvas_detalle_compras.html')
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -358,7 +360,8 @@ class PlantillaOrdenCompraViewSet(OrganizationalContextMixin, PlantillaOrdenComp
         )
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
