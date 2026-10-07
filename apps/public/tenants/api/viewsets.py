@@ -7,6 +7,7 @@ WARNING: IMPORTANTE: Solo administradores pueden gestionar tenants.
 Referencia: https://www.django-rest-framework.org/api-guide/viewsets/
 """
 
+from djangorestframework_mcp.decorators import mcp_viewset
 from django.core.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import permissions, status, viewsets
@@ -19,6 +20,10 @@ from apps.config.api.pagination import StandardResultsSetPagination
 from apps.public.tenants.api.filters import ClientFilter
 from apps.public.tenants.api.serializers import ClientSerializer, DomainSerializer
 from apps.public.tenants.models import Client, Domain
+
+
+@mcp_viewset()\n
+
 
 
 class ClientViewSet(viewsets.ModelViewSet):
@@ -837,6 +842,10 @@ class ClientViewSet(viewsets.ModelViewSet):
                 {"error": f"Error al eliminar el tenant: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@mcp_viewset()\n
+
 
 
 class DomainViewSet(viewsets.ReadOnlyModelViewSet):
