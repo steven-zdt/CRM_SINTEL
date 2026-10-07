@@ -7,6 +7,7 @@ este es un catálogo de solo lectura disponible para todos los tenants.
 Referencia: https://www.django-rest-framework.org/api-guide/viewsets/
 """
 
+from djangorestframework_mcp.decorators import mcp_viewset
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import permissions, status, viewsets
 from rest_framework.filters import OrderingFilter, SearchFilter
@@ -103,6 +104,10 @@ class BaseReadWrite(viewsets.ModelViewSet):
             pass
 
 
+@mcp_viewset()\n
+
+
+
 class TipoImpuestoViewSet(BaseReadOnly):
     """ViewSet de solo lectura para TipoImpuesto."""
 
@@ -111,6 +116,10 @@ class TipoImpuestoViewSet(BaseReadOnly):
     filterset_fields = ["activo", "fecha_vigencia"]
     search_fields = ["codigo", "nombre", "descripcion"]
     ordering = ["codigo"]
+
+
+@mcp_viewset()\n
+
 
 
 class TarifaIVAViewSet(BaseReadOnly):
@@ -123,6 +132,10 @@ class TarifaIVAViewSet(BaseReadOnly):
     ordering = ["-fecha_vigencia"]
 
 
+@mcp_viewset()\n
+
+
+
 class ConceptoRetencionViewSet(BaseReadOnly):
     """ViewSet de solo lectura para ConceptoRetencion."""
 
@@ -131,6 +144,10 @@ class ConceptoRetencionViewSet(BaseReadOnly):
     filterset_fields = ["activo", "tipo_retencion", "fecha_vigencia"]
     search_fields = ["codigo", "nombre", "descripcion"]
     ordering = ["codigo"]
+
+
+@mcp_viewset()\n
+
 
 
 class CodigoTributarioViewSet(BaseReadOnly):
@@ -143,6 +160,10 @@ class CodigoTributarioViewSet(BaseReadOnly):
     ordering = ["codigo"]
 
 
+@mcp_viewset()\n
+
+
+
 class ActividadEconomicaViewSet(BaseReadOnly):
     """ViewSet de solo lectura para ActividadEconomica."""
 
@@ -151,6 +172,10 @@ class ActividadEconomicaViewSet(BaseReadOnly):
     filterset_fields = ["activo"]
     search_fields = ["codigo", "nombre", "descripcion"]
     ordering = ["codigo"]
+
+
+@mcp_viewset()\n
+
 
 
 class NormaTributariaViewSet(BaseReadOnly):
@@ -239,6 +264,10 @@ class SearchView(APIView):
 # ============================================================================
 
 
+@mcp_viewset()\n
+
+
+
 class ContribuyenteTipoViewSet(BaseReadWrite):
     """
     ViewSet para ContribuyenteTipo.
@@ -253,6 +282,10 @@ class ContribuyenteTipoViewSet(BaseReadWrite):
     ordering = ["clase", "segmento_dian", "nombre"]
 
 
+@mcp_viewset()\n
+
+
+
 class RegimenRentaViewSet(BaseReadWrite):
     """
     ViewSet para RegimenRenta.
@@ -265,6 +298,10 @@ class RegimenRentaViewSet(BaseReadWrite):
     filterset_fields = ["activo", "codigo", "vigente_desde", "vigente_hasta"]
     search_fields = ["nombre", "descripcion", "base_legal"]
     ordering = ["codigo"]
+
+
+@mcp_viewset()\n
+
 
 
 class ResponsabilidadRUTViewSet(BaseReadWrite):
@@ -289,6 +326,10 @@ class ResponsabilidadRUTViewSet(BaseReadWrite):
     ]
     search_fields = ["codigo", "nombre", "descripcion", "base_legal"]
     ordering = ["codigo"]
+
+
+@mcp_viewset()\n
+
 
 
 class PerfilTributarioViewSet(BaseReadWrite):
