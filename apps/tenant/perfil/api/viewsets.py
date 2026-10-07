@@ -18,6 +18,7 @@ completamente en PerfilServiceMixin (Service Layer). Expone:
   - assign_rol            : IsAuthenticated + IsTenantProfileAdmin
 """
 
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -46,6 +47,11 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@mcp_viewset()
+
+
 
 
 class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.GenericViewSet):
@@ -398,6 +404,11 @@ class PerfilViewSet(OrganizationalContextMixin, PerfilServiceMixin, viewsets.Gen
 
         serializer = self.get_serializer(updated_profile)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@mcp_viewset()
+
+
 
 
 class DepartamentoViewSet(OrganizationalContextMixin, BaseTenantViewSet):
