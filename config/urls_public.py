@@ -12,6 +12,7 @@ Rutas públicas disponibles:
 - sintel.net.co/api/admin/v1/ -> APIs REST de administración (requiere staff)
 - sintel.net.co/api/token/ -> Autenticación JWT
 """
+from apps.services.mcp.views import SintelPublicMCPView, SintelTenantMCPView
 from django.contrib import admin
 from django.contrib.auth import logout as auth_logout
 from django.http import JsonResponse
@@ -114,7 +115,7 @@ urlpatterns = [
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
     # MCP server: expone ViewSets anotados como herramientas MCP
-    path('mcp/', include('djangorestframework_mcp.urls')),
+    path('mcp/', SintelPublicMCPView.as_view()),,
 ]
 
 # Add a deterministic explicit users create endpoint at the top-level so
