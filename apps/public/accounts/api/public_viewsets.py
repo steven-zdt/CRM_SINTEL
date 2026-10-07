@@ -1,3 +1,4 @@
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 
 from django.contrib.auth import get_user_model
@@ -24,6 +25,10 @@ from apps.public.accounts.services.delete_user_service import delete_user_servic
 User = get_user_model()
 
 logger = logging.getLogger(__name__)
+
+
+@mcp_viewset()\n
+
 
 
 class PublicUserViewSet(
