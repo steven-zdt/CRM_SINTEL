@@ -22,7 +22,8 @@ from apps.public.tenants.api.serializers import ClientSerializer, DomainSerializ
 from apps.public.tenants.models import Client, Domain
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
@@ -844,7 +845,8 @@ class ClientViewSet(viewsets.ModelViewSet):
             )
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
