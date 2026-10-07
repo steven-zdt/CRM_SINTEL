@@ -39,7 +39,8 @@ from apps.public.accounts.services.delete_user_service import delete_user_servic
 User = get_user_model()
 
 
-@mcp_viewset()\n
+@mcp_viewset()
+
 
 
 
