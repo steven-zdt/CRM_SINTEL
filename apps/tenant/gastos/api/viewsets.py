@@ -6,6 +6,7 @@ v2.62.0: ARQUITECTURA ESTABILIZADA.
 - Deprecacion formal de endpoints legacy (410 Gone).
 - Integracion con TabulatorFactory y UIManager.
 """
+from djangorestframework_mcp.decorators import mcp_viewset
 import logging
 from decimal import Decimal
 
@@ -43,6 +44,9 @@ from apps.tenant.api.base import BaseTenantViewSet
 from apps.tenant.core.services.organizational_context import OrganizationalContextMixin
 
 logger = logging.getLogger(__name__)
+
+@mcp_viewset()
+
 
 class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin, BaseTenantViewSet):
     """
@@ -318,6 +322,13 @@ class GastoViewSet(OrganizationalContextMixin, GastoServiceMixin, SintelDSVMixin
             context['mode'] = 'create'
 
         return Response(context, template_name='tenant/gastos/offcanvas_resolucion.html')
+
+
+
+@mcp_viewset()
+
+
+
 
 
 
